@@ -33,8 +33,42 @@ customAxios.interceptors.response.use(function (response) {
         return Promise.reject(response.data);
     }
     const statusCode = response.data.status_code
+    const statusMessage = String(response.data.status_message || "")
     const i18Msg = i18next.t(`errors.${statusCode}`, response.data.data)
-    const errorMessage = i18Msg === `errors.${statusCode}` ? response.data.status_message : i18Msg
+
+    const statusMessageKeyMap: Record<string, string> = {
+        "person id already exists": "errors.personIdAlreadyExists",
+        "department name already exists at this level": "errors.21001",
+        "department not found": "errors.21000",
+        "cannot delete department with children": "errors.21002",
+        "cannot delete department with members": "errors.21003",
+        "cannot move department to its own subtree": "errors.21004",
+        "third-party synced department is read-only": "errors.21005",
+        "root department already exists for this tenant": "errors.21006",
+        "user is already a member of this department": "errors.21007",
+        "user is not a member of this department": "errors.21008",
+        "no permission for this department operation": "errors.21009",
+        "password must be at least 8 characters and include upper, lower, digit and symbol": "errors.21010",
+        "one or more roles are not assignable in this department": "errors.21011",
+        "cannot delete user while data assets exist": "errors.21014",
+        "only local accounts may be deleted from organization management": "errors.21015",
+        "only archived departments can be permanently deleted": "errors.21016",
+        "archived departments cannot be modified": "errors.21017",
+        "cannot restore department while parent department is archived": "errors.21018",
+    }
+
+    const normalizedStatusMessage = statusMessage.trim().toLowerCase()
+    const mappedStatusMessageKey = statusMessageKeyMap[normalizedStatusMessage]
+    const i18MsgFromStatus = mappedStatusMessageKey
+        ? i18next.t(mappedStatusMessageKey, response.data.data)
+        : null
+
+    const errorMessage =
+        i18Msg !== `errors.${statusCode}`
+            ? i18Msg
+            : (i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
+                ? i18MsgFromStatus
+                : statusMessage)
 
     // 密码过期，标记后透传给业务层处理
     if (statusCode === 10601) {

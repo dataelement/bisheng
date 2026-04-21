@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useState } from "react"
+import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
@@ -20,6 +20,9 @@ export default function Departments() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
+  const [leftPaneWidth, setLeftPaneWidth] = useState(280)
+  const isResizingRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
   const loadTree = useCallback(() => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
@@ -76,10 +79,41 @@ export default function Departments() {
     }
   }, [tree, selectedDeptId, findNode])
 
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizingRef.current) return
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const relativeX = event.clientX - rect.left
+      const MIN_WIDTH = 240
+      // Keep enough width for right content and operation buttons.
+      const MAX_WIDTH = Math.min(520, Math.max(MIN_WIDTH, rect.width - 320))
+      setLeftPaneWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, relativeX)))
+    }
+
+    const stopResizing = () => {
+      isResizingRef.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", stopResizing)
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", stopResizing)
+    }
+  }, [])
+
   return (
-    <div className="flex h-[calc(100vh-140px)]">
+    <div ref={containerRef} className="flex h-[calc(100vh-140px)]">
       {/* Left tree panel */}
-      <div className="flex w-[280px] min-w-[240px] flex-col border-r pr-4 pt-2">
+      <div
+        className="flex min-w-[240px] flex-col border-r pr-4 pt-2"
+        style={{ width: leftPaneWidth }}
+      >
         <DepartmentTree
           data={tree}
           selectedDeptId={selectedDeptId}
@@ -94,8 +128,19 @@ export default function Departments() {
         </button>
       </div>
 
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        className="w-1 cursor-col-resize bg-transparent hover:bg-border"
+        onMouseDown={() => {
+          isResizingRef.current = true
+          document.body.style.cursor = "col-resize"
+          document.body.style.userSelect = "none"
+        }}
+      />
+
       {/* Right panel */}
-      <div className="flex-1 overflow-auto pl-4 pt-2">
+      <div className="min-w-0 flex-1 overflow-auto pl-4 pt-2">
         {selectedDept ? (
           <Tabs defaultValue="members" className="w-full">
             <div className="mb-4 flex items-center justify-between">

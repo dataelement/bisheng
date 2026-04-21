@@ -54,7 +54,7 @@ class UserGroupNotDeleteError(BaseErrorCode):
 
 class UserForbiddenError(BaseErrorCode):
     Code: int = 10620
-    Msg: str = 'The user is disabled, please contact the administrator'
+    Msg: str = 'Account cannot be used, please contact the administrator'
 
 
 class UserPasswordMaxTryError(BaseErrorCode):

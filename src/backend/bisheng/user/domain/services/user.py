@@ -10,6 +10,7 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (
     CaptchaError,
+    UserForbiddenError,
     UserValidateError,
     UserPasswordMaxTryError,
     UserPasswordExpireError,
@@ -270,6 +271,9 @@ class UserService:
         # 支持用户名或 external_id；重名时对候选用户依次校验密码
         candidates = await UserDao.aget_login_candidates_by_account(user.user_name)
         if not candidates:
+            # 禁用账号不会进入候选列表；单独提示，避免与「账号或密码错误」混淆
+            if await UserDao.aexists_disabled_login_account(user.user_name):
+                return UserForbiddenError.return_resp()
             return UserValidateError.return_resp()
 
         password = cls.decrypt_md5_password(user.password)

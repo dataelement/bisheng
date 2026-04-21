@@ -68,7 +68,11 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       updateDepartmentApi(dept.dept_id, { name })
     ).then((res) => {
       if (res !== null) {
-        toast({ title: t("prompt"), variant: "success" })
+        toast({
+          title: t("prompt"),
+          description: t("saved"),
+          variant: "success",
+        })
         onChanged()
       }
     })
@@ -82,7 +86,11 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       ).then((res) => {
         if (Array.isArray(res)) {
           setAdmins(res)
-          toast({ title: t("prompt"), variant: "success" })
+          toast({
+            title: t("prompt"),
+            description: t("saved"),
+            variant: "success",
+          })
         }
       })
     },
@@ -109,7 +117,11 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       if (Array.isArray(res)) {
         setAdmins(res)
         setPendingAdminPick([])
-        toast({ title: t("prompt"), variant: "success" })
+        toast({
+          title: t("prompt"),
+          description: t("saved"),
+          variant: "success",
+        })
         onChanged()
       }
     })
@@ -120,7 +132,11 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       updateDepartmentApi(dept.dept_id, { default_role_ids: defaultRoleIds.map(Number) })
     ).then((res) => {
       if (res !== null) {
-        toast({ title: t("prompt"), variant: "success" })
+        toast({
+          title: t("prompt"),
+          description: t("saved"),
+          variant: "success",
+        })
       }
     })
   }, [dept.dept_id, defaultRoleIds, t])

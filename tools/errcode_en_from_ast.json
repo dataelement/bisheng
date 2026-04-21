@@ -1,0 +1,1522 @@
+{
+  "403": {
+    "en": "No permission to operate",
+    "class": "UnAuthorizedError",
+    "file": "http_error.py"
+  },
+  "404": {
+    "en": "This role does not exist -",
+    "class": "NotFoundError",
+    "file": "http_error.py"
+  },
+  "500": {
+    "en": "Server error",
+    "class": "ServerError",
+    "file": "http_error.py"
+  },
+  "10001": {
+    "en": "not foundSFTSERVICES",
+    "class": "NoSftServerError",
+    "file": "server.py"
+  },
+  "10002": {
+    "en": "Invalid nonce",
+    "class": "InvalidOperationError",
+    "file": "server.py"
+  },
+  "10003": {
+    "en": "Resource download failed",
+    "class": "ResourceDownloadError",
+    "file": "server.py"
+  },
+  "10004": {
+    "en": "Knowledge Base Not Configuredembeddingmodel, please set from workbench configuration",
+    "class": "NoEmbeddingModelError",
+    "file": "server.py"
+  },
+  "10005": {
+    "en": "The knowledge base uponembeddingModel does not exist, please set from workbench configuration",
+    "class": "EmbeddingModelNotExistError",
+    "file": "server.py"
+  },
+  "10006": {
+    "en": "The knowledge base uponembeddingWrong model type, please set from workbench configuration",
+    "class": "EmbeddingModelTypeError",
+    "file": "server.py"
+  },
+  "10007": {
+    "en": "Please contact the administrator to check the status of the workbench vector retrieval model",
+    "class": "EmbeddingModelStatusError",
+    "file": "server.py"
+  },
+  "10008": {
+    "en": "No bulkpost found in Trashllmmodel config",
+    "class": "NoLlmModelConfigError",
+    "file": "server.py"
+  },
+  "10009": {
+    "en": "llmModel configuration has been deleted, please reconfigure the model",
+    "class": "LlmModelConfigDeletedError",
+    "file": "server.py"
+  },
+  "10010": {
+    "en": "Service provider configuration has been deleted, please reconfigurellmModels",
+    "class": "LlmProviderDeletedError",
+    "file": "server.py"
+  },
+  "10011": {
+    "en": "Support onlyLLMModel of type, not supported{model_type}Type of model",
+    "class": "LlmModelTypeError",
+    "file": "server.py"
+  },
+  "10012": {
+    "en": "{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model",
+    "class": "LlmModelOfflineError",
+    "file": "server.py"
+  },
+  "10013": {
+    "en": "InisialisasillmFailed, please check the configuration or contact the administrator.Error message:{exception}",
+    "class": "InitLlmError",
+    "file": "server.py"
+  },
+  "10014": {
+    "en": "No bulkpost found in Trashasrmodel config",
+    "class": "NoAsrModelConfigError",
+    "file": "server.py"
+  },
+  "10015": {
+    "en": "asrModel configuration has been deleted, please reconfigure the model",
+    "class": "AsrModelConfigDeletedError",
+    "file": "server.py"
+  },
+  "10016": {
+    "en": "Service provider configuration has been deleted, please reconfigureasrModels",
+    "class": "AsrProviderDeletedError",
+    "file": "server.py"
+  },
+  "10017": {
+    "en": "Support onlyASRModel of type, not supported{model_type}Type of model",
+    "class": "AsrModelTypeError",
+    "file": "server.py"
+  },
+  "10018": {
+    "en": "{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model",
+    "class": "AsrModelOfflineError",
+    "file": "server.py"
+  },
+  "10019": {
+    "en": "InisialisasiasrFailed, please check the configuration or contact the administrator.Error message:{exception}",
+    "class": "InitAsrError",
+    "file": "server.py"
+  },
+  "10020": {
+    "en": "No bulkpost found in Trashttsmodel config",
+    "class": "NoTtsModelConfigError",
+    "file": "server.py"
+  },
+  "10021": {
+    "en": "ttsModel configuration has been deleted, please reconfigure the model",
+    "class": "TtsModelConfigDeletedError",
+    "file": "server.py"
+  },
+  "10022": {
+    "en": "Service provider configuration has been deleted, please reconfigurettsModels",
+    "class": "TtsProviderDeletedError",
+    "file": "server.py"
+  },
+  "10023": {
+    "en": "Support onlyTTSModel of type, not supported{model_type}Type of model",
+    "class": "TtsModelTypeError",
+    "file": "server.py"
+  },
+  "10024": {
+    "en": "{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model",
+    "class": "TtsModelOfflineError",
+    "file": "server.py"
+  },
+  "10025": {
+    "en": "InisialisasittsFailed, please check the configuration or contact the administrator.Error message:{exception}",
+    "class": "InitTtsError",
+    "file": "server.py"
+  },
+  "10030": {
+    "en": "System configuration cannot be empty",
+    "class": "SystemConfigEmptyError",
+    "file": "server.py"
+  },
+  "10031": {
+    "en": "The system configuration format is incorrect, please check the configuration content:{exception}",
+    "class": "SystemConfigInvalidError",
+    "file": "server.py"
+  },
+  "10040": {
+    "en": "Uploaded file cannot be empty",
+    "class": "UploadFileEmptyError",
+    "file": "server.py"
+  },
+  "10041": {
+    "en": "The upload file format is not supported, please upload a file in the correct format",
+    "class": "UploadFileExtError",
+    "file": "server.py"
+  },
+  "10100": {
+    "en": "Failed to create training task",
+    "class": "CreateFinetuneError",
+    "file": "finetune.py"
+  },
+  "10101": {
+    "en": "Individual Training Sets and Preset Training Sets Select at least one",
+    "class": "TrainDataNoneError",
+    "file": "finetune.py"
+  },
+  "10102": {
+    "en": "Quest does not exist",
+    "class": "NotFoundJobError",
+    "file": "finetune.py"
+  },
+  "10103": {
+    "en": "Task status error",
+    "class": "JobStatusError",
+    "file": "finetune.py"
+  },
+  "10104": {
+    "en": "Task cancellation failed",
+    "class": "CancelJobError",
+    "file": "finetune.py"
+  },
+  "10105": {
+    "en": "Task deletion failed",
+    "class": "DeleteJobError",
+    "file": "finetune.py"
+  },
+  "10106": {
+    "en": "Task publishing failed",
+    "class": "ExportJobError",
+    "file": "finetune.py"
+  },
+  "10107": {
+    "en": "Model name interface modification failed",
+    "class": "ChangeModelNameError",
+    "file": "finetune.py"
+  },
+  "10108": {
+    "en": "Failed to unpublish",
+    "class": "UnExportJobError",
+    "file": "finetune.py"
+  },
+  "10109": {
+    "en": "Invalid training parameters",
+    "class": "InvalidExtraParamsError",
+    "file": "finetune.py"
+  },
+  "10110": {
+    "en": "Model name already exists",
+    "class": "ModelNameExistsError",
+    "file": "finetune.py"
+  },
+  "10120": {
+    "en": "Training file does not exist",
+    "class": "TrainFileNotExistError",
+    "file": "finetune.py"
+  },
+  "10125": {
+    "en": "DapatkanGPUMessage failed",
+    "class": "GetGPUInfoError",
+    "file": "finetune.py"
+  },
+  "10126": {
+    "en": "Access to model list failed",
+    "class": "GetModelError",
+    "file": "finetune.py"
+  },
+  "10200": {
+    "en": "Model does not exist",
+    "class": "NotFoundModelError",
+    "file": "model_deploy.py"
+  },
+  "10300": {
+    "en": "Component Exists",
+    "class": "ComponentExistError",
+    "file": "component.py"
+  },
+  "10301": {
+    "en": "Component does not exist",
+    "class": "ComponentNotExistError",
+    "file": "component.py"
+  },
+  "10400": {
+    "en": "Assistant does not exist",
+    "class": "AssistantNotExistsError",
+    "file": "assistant.py"
+  },
+  "10401": {
+    "en": "Assistant onboarding failed: {exception}",
+    "class": "AssistantInitError",
+    "file": "assistant.py"
+  },
+  "10402": {
+    "en": "Duplicate assistant name",
+    "class": "AssistantNameRepeatError",
+    "file": "assistant.py"
+  },
+  "10403": {
+    "en": "Assistant is live and not editable",
+    "class": "AssistantNotEditError",
+    "file": "assistant.py"
+  },
+  "10420": {
+    "en": "The assistant has been deleted",
+    "class": "AssistantDeletedError",
+    "file": "assistant.py"
+  },
+  "10421": {
+    "en": "The assistant is currently not online and cannot talk directly",
+    "class": "AssistantNotOnlineError",
+    "file": "assistant.py"
+  },
+  "10422": {
+    "en": "Assistant reasoning model list is empty",
+    "class": "AssistantModelEmptyError",
+    "file": "assistant.py"
+  },
+  "10423": {
+    "en": "No assistant inference model configured",
+    "class": "AssistantModelNotConfigError",
+    "file": "assistant.py"
+  },
+  "10424": {
+    "en": "Assistant portrait auto-optimization model is not configured",
+    "class": "AssistantAutoLLMError",
+    "file": "assistant.py"
+  },
+  "10499": {
+    "en": "Assistant Service Exception",
+    "class": "AssistantOtherError",
+    "file": "assistant.py"
+  },
+  "10500": {
+    "en": "Skill version information not found",
+    "class": "NotFoundVersionError",
+    "file": "flow.py"
+  },
+  "10501": {
+    "en": "Version currently in use cannot be deleted",
+    "class": "CurVersionDelError",
+    "file": "flow.py"
+  },
+  "10502": {
+    "en": "Version name already exists",
+    "class": "VersionNameExistsError",
+    "file": "flow.py"
+  },
+  "10525": {
+    "en": "Workflow is live and not editable",
+    "class": "WorkFlowOnlineEditError",
+    "file": "flow.py"
+  },
+  "10526": {
+    "en": "Workflow initialization failed",
+    "class": "WorkFlowInitError",
+    "file": "flow.py"
+  },
+  "10527": {
+    "en": "Workflow timed out waiting for user input",
+    "class": "WorkFlowWaitUserTimeoutError",
+    "file": "flow.py"
+  },
+  "10528": {
+    "en": "Node exceeds maximum number of executions",
+    "class": "WorkFlowNodeRunMaxTimesError",
+    "file": "flow.py"
+  },
+  "10529": {
+    "en": "Duplicate workflow name",
+    "class": "WorkflowNameExistsError",
+    "file": "flow.py"
+  },
+  "10530": {
+    "en": "Template Name Already Exists",
+    "class": "FlowTemplateNameError",
+    "file": "flow.py"
+  },
+  "10531": {
+    "en": "<Node name>The feature has been upgraded and needs to be deleted and dragged back in.",
+    "class": "WorkFlowNodeUpdateError",
+    "file": "flow.py"
+  },
+  "10532": {
+    "en": "The workflow version has been upgraded, please contact the creator to reschedule",
+    "class": "WorkFlowVersionUpdateError",
+    "file": "flow.py"
+  },
+  "10540": {
+    "en": "Server thread count is full, please try again later",
+    "class": "WorkFlowTaskBusyError",
+    "file": "flow.py"
+  },
+  "10541": {
+    "en": "Workflow task execution failed",
+    "class": "WorkFlowTaskOtherError",
+    "file": "flow.py"
+  },
+  "10599": {
+    "en": "No Apply Write Permission",
+    "class": "AppWriteAuthError",
+    "file": "flow.py"
+  },
+  "10600": {
+    "en": "Account or password error",
+    "class": "UserValidateError",
+    "file": "user.py"
+  },
+  "10601": {
+    "en": "Your password has expired, please change it in time",
+    "class": "UserPasswordExpireError",
+    "file": "user.py"
+  },
+  "10602": {
+    "en": "The user has not set a password, please contact the administrator to reset the password first",
+    "class": "UserNotPasswordError",
+    "file": "user.py"
+  },
+  "10603": {
+    "en": "wrong current password",
+    "class": "UserPasswordError",
+    "file": "user.py"
+  },
+  "10604": {
+    "en": "Your account is logged in on another device and the session on this device has been logged out. If this wasn't you, please change your account password as soon as possible.",
+    "class": "UserLoginOfflineError",
+    "file": "user.py"
+  },
+  "10605": {
+    "en": "User Name already exist",
+    "class": "UserNameAlreadyExistError",
+    "file": "user.py"
+  },
+  "10606": {
+    "en": "User group and role cannot be empty",
+    "class": "UserNeedGroupAndRoleError",
+    "file": "user.py"
+  },
+  "10607": {
+    "en": "Kode verifikasi salah",
+    "class": "CaptchaError",
+    "file": "user.py"
+  },
+  "10608": {
+    "en": "Username length cannot exceed30characters",
+    "class": "UserNameTooLongError",
+    "file": "user.py"
+  },
+  "10610": {
+    "en": "There are still users in the user group and cannot be deleted",
+    "class": "UserGroupNotDeleteError",
+    "file": "user.py"
+  },
+  "10620": {
+    "en": "The user is disabled, please contact the administrator",
+    "class": "UserForbiddenError",
+    "file": "user.py"
+  },
+  "10621": {
+    "en": "The account has been automatically disabled due to too many failed login attempts, please contact your administrator",
+    "class": "UserPasswordMaxTryError",
+    "file": "user.py"
+  },
+  "10630": {
+    "en": "User group cannot be empty",
+    "class": "UserGroupEmptyError",
+    "file": "user.py"
+  },
+  "10640": {
+    "en": "Administrator user information cannot be modified",
+    "class": "AdminUserUpdateForbiddenError",
+    "file": "user.py"
+  },
+  "10700": {
+    "en": "Tag already exist",
+    "class": "TagExistError",
+    "file": "tag.py"
+  },
+  "10701": {
+    "en": "No tags found",
+    "class": "TagNotExistError",
+    "file": "tag.py"
+  },
+  "10800": {
+    "en": "Service provider name is duplicated, please modify",
+    "class": "ServerExistError",
+    "file": "llm.py"
+  },
+  "10801": {
+    "en": "Model is not repeatable",
+    "class": "ModelNameRepeatError",
+    "file": "llm.py"
+  },
+  "10802": {
+    "en": "Failed to add service provider, failed to initialize all models",
+    "class": "ServerAddAllError",
+    "file": "llm.py"
+  },
+  "10803": {
+    "en": "Failed to add service provider, some models failed to initialize",
+    "class": "ServerAddError",
+    "file": "llm.py"
+  },
+  "10810": {
+    "en": "Please configure the workbench embedding model.",
+    "class": "WorkbenchEmbeddingError",
+    "file": "llm.py"
+  },
+  "10900": {
+    "en": "Duplicate Knowledge Base Name",
+    "class": "KnowledgeExistError",
+    "file": "knowledge.py"
+  },
+  "10901": {
+    "en": "Knowledge Base must select oneembeddingModels",
+    "class": "KnowledgeNoEmbeddingError",
+    "file": "knowledge.py"
+  },
+  "10902": {
+    "en": "Documentation Knowledge Base Summary Model is no longer valid, please go to Model Management-Configure in System Model Settings.{exception}",
+    "class": "KnowledgeLLMError",
+    "file": "knowledge.py"
+  },
+  "10910": {
+    "en": "The current Knowledge Base version does not support modifying segments, please create a new Knowledge Base and modify segments",
+    "class": "KnowledgeChunkError",
+    "file": "knowledge.py"
+  },
+  "10911": {
+    "en": "File resolution is empty",
+    "class": "KnowledgeFileEmptyError",
+    "file": "knowledge.py"
+  },
+  "10912": {
+    "en": "Segmentation results are too long, try using more splitters in your custom strategy (ex. \\n、。、\\.) for segmentation",
+    "class": "KnowledgeFileChunkMaxError",
+    "file": "knowledge.py"
+  },
+  "10913": {
+    "en": "The file may be corrupted and cannot be parsed, please check and upload again",
+    "class": "KnowledgeFileDamagedError",
+    "file": "knowledge.py"
+  },
+  "10914": {
+    "en": "Parsing of this type of file is not supported, please check and upload again",
+    "class": "KnowledgeFileNotSupportedError",
+    "file": "knowledge.py"
+  },
+  "10915": {
+    "en": "etl4lmService busy, please upgradeetl4lmComputing power of the service",
+    "class": "KnowledgeEtl4lmTimeoutError",
+    "file": "knowledge.py"
+  },
+  "10916": {
+    "en": "Segmentation results are too long, try reducing the number of table segmentation rows in your custom strategy",
+    "class": "KnowledgeExcelChunkMaxError",
+    "file": "knowledge.py"
+  },
+  "10920": {
+    "en": "Not configuredQAKnowledge Base Similarity Question Model",
+    "class": "KnowledgeSimilarError",
+    "file": "knowledge.py"
+  },
+  "10930": {
+    "en": "This issue already exists",
+    "class": "KnowledgeQAError",
+    "file": "knowledge.py"
+  },
+  "10940": {
+    "en": "A file is currently being parsed and cannot be copied",
+    "class": "KnowledgeCPError",
+    "file": "knowledge.py"
+  },
+  "10941": {
+    "en": "Knowledge Base content is empty and cannot be copied",
+    "class": "KnowledgeCPEmptyError",
+    "file": "knowledge.py"
+  },
+  "10950": {
+    "en": "Multiple knowledge base files are not supported for simultaneous deletion",
+    "class": "KnowledgeFileDeleteError",
+    "file": "knowledge.py"
+  },
+  "10951": {
+    "en": "Knowledge base is being rebuilt, modifications are not allowedembeddingModels",
+    "class": "KnowledgeRebuildingError",
+    "file": "knowledge.py"
+  },
+  "10952": {
+    "en": "Document parsing failed",
+    "class": "KnowledgePreviewError",
+    "file": "knowledge.py"
+  },
+  "10953": {
+    "en": "File parsing failed: {exception}",
+    "class": "KnowledgeFileFailedError",
+    "file": "knowledge.py"
+  },
+  "10960": {
+    "en": "Is notQAThe knowledge base upon",
+    "class": "KnowledgeNotQAError",
+    "file": "knowledge.py"
+  },
+  "10961": {
+    "en": "The model returned an incorrect format: {message}",
+    "class": "KnowledgeRecommendQuestionError",
+    "file": "knowledge.py"
+  },
+  "10970": {
+    "en": "Knowledge base does not exist",
+    "class": "KnowledgeNotExistError",
+    "file": "knowledge.py"
+  },
+  "10971": {
+    "en": "Knowledge base file does not exist",
+    "class": "KnowledgeFileNotExistError",
+    "file": "knowledge.py"
+  },
+  "10980": {
+    "en": "{field_name} Conflicts with built-in metadata field name",
+    "class": "KnowledgeMetadataFieldConflictError",
+    "file": "knowledge.py"
+  },
+  "10981": {
+    "en": "Meta data fields {field_name} already exists",
+    "class": "KnowledgeMetadataFieldExistError",
+    "file": "knowledge.py"
+  },
+  "10982": {
+    "en": "Meta data fields {field_name} Does not exist",
+    "class": "KnowledgeMetadataFieldNotExistError",
+    "file": "knowledge.py"
+  },
+  "10983": {
+    "en": "Built-in metadata fields {field_name} Cannot be modified",
+    "class": "KnowledgeMetadataFieldImmutableError",
+    "file": "knowledge.py"
+  },
+  "10984": {
+    "en": "Meta data fields {field_name} Value type conversion error: {error_msg}",
+    "class": "KnowledgeMetadataValueTypeConvertError",
+    "file": "knowledge.py"
+  },
+  "10985": {
+    "en": "标签已存在",
+    "class": "KnowledgeTagExistError",
+    "file": "knowledge.py"
+  },
+  "10986": {
+    "en": "标签不存在",
+    "class": "KnowledgeTagNotExistError",
+    "file": "knowledge.py"
+  },
+  "10987": {
+    "en": "每个文件最多只能关联 5 个标签",
+    "class": "KnowledgeFileTagLimitError",
+    "file": "knowledge.py"
+  },
+  "10990": {
+    "en": "Processing in the background, try again later",
+    "class": "BackendProcessingError",
+    "file": "knowledge.py"
+  },
+  "11010": {
+    "en": "SOPFile format does not meet requirements",
+    "class": "SopFileError",
+    "file": "linsight.py"
+  },
+  "11011": {
+    "en": "SOPFailed to set featured case",
+    "class": "SopShowcaseError",
+    "file": "linsight.py"
+  },
+  "11020": {
+    "en": "Upload Failed",
+    "class": "FileUploadError",
+    "file": "linsight.py"
+  },
+  "11030": {
+    "en": "Your Idea has run out of uses, please use the new invite code to activate the Idea feature",
+    "class": "LinsightUseUpError",
+    "file": "linsight.py"
+  },
+  "11040": {
+    "en": "Failed to submit Idea User Issue",
+    "class": "LinsightQuestionError",
+    "file": "linsight.py"
+  },
+  "11050": {
+    "en": "Please contact the administrator to check the status of the workbench vector retrieval model",
+    "class": "LinsightVectorModelError",
+    "file": "linsight.py"
+  },
+  "11060": {
+    "en": "Instruction manual retrieval failed, vector retrieval and keyword retrieval are not available",
+    "class": "LinsightDocSearchError",
+    "file": "linsight.py"
+  },
+  "11070": {
+    "en": "Guidebook retrieval failed",
+    "class": "LinsightDocNotFoundError",
+    "file": "linsight.py"
+  },
+  "11080": {
+    "en": "Failed to initialize the Inspiration Workbench tool",
+    "class": "LinsightToolInitError",
+    "file": "linsight.py"
+  },
+  "11090": {
+    "en": "InspirationBisheng LLMRelated Errors",
+    "class": "LinsightBishengLLMError",
+    "file": "linsight.py"
+  },
+  "11100": {
+    "en": "BuatSOPContent failed",
+    "class": "LinsightGenerateSopError",
+    "file": "linsight.py"
+  },
+  "11110": {
+    "en": "ChangeSOPContent failed",
+    "class": "LinsightModifySopError",
+    "file": "linsight.py"
+  },
+  "11120": {
+    "en": "The Inspiration session version has been completed or is being executed and cannot be executed again",
+    "class": "LinsightSessionVersionRunningError",
+    "file": "linsight.py"
+  },
+  "11130": {
+    "en": "Failed to start the Ideas task",
+    "class": "LinsightStartTaskError",
+    "file": "linsight.py"
+  },
+  "11140": {
+    "en": "Failed to get Ideas queue queue status",
+    "class": "LinsightQueueStatusError",
+    "file": "linsight.py"
+  },
+  "11150": {
+    "en": "Failed to add instruction manual, failed to add data for vector store",
+    "class": "LinsightAddSopError",
+    "file": "linsight.py"
+  },
+  "11160": {
+    "en": "Failed to update the instruction manual, vector store update data failed",
+    "class": "LinsightUpdateSopError",
+    "file": "linsight.py"
+  },
+  "11170": {
+    "en": "Failed to delete instruction manual, failed to delete data in vector store",
+    "class": "LinsightDeleteSopError",
+    "file": "linsight.py"
+  },
+  "11171": {
+    "en": "{sop_name}The content is too long",
+    "class": "SopContentOverLimitError",
+    "file": "linsight.py"
+  },
+  "11180": {
+    "en": "The invite code you entered is invalid",
+    "class": "InviteCodeInvalidError",
+    "file": "linsight.py"
+  },
+  "11190": {
+    "en": "Additional invite codes bound",
+    "class": "InviteCodeBindError",
+    "file": "linsight.py"
+  },
+  "12040": {
+    "en": "not foundweb_searchTools",
+    "class": "WebSearchToolNotFoundError",
+    "file": "workstation.py"
+  },
+  "12041": {
+    "en": "Session does not exist",
+    "class": "ConversationNotFoundError",
+    "file": "workstation.py"
+  },
+  "12042": {
+    "en": "This agent has been added",
+    "class": "AgentAlreadyExistsError",
+    "file": "workstation.py"
+  },
+  "12043": {
+    "en": "Used app not found",
+    "class": "UsedAppNotFoundError",
+    "file": "workstation.py"
+  },
+  "12044": {
+    "en": "Used app not online",
+    "class": "UsedAppNotOnlineError",
+    "file": "workstation.py"
+  },
+  "13004": {
+    "en": "Backend Service Exception",
+    "class": "ChatServiceError",
+    "file": "chat.py"
+  },
+  "13005": {
+    "en": "LLM Skill execution error. error={error}",
+    "class": "LLMExecutionError",
+    "file": "chat.py"
+  },
+  "13006": {
+    "en": "Document parsing failed, click the input upload button to upload again {error}",
+    "class": "DocumentParseError",
+    "file": "chat.py"
+  },
+  "13007": {
+    "en": "Input data is parsed fail. error={error}",
+    "class": "InputDataParseError",
+    "file": "chat.py"
+  },
+  "13010": {
+    "en": "The current workflow is not online and cannot be chatted directly",
+    "class": "WorkflowOfflineError",
+    "file": "chat.py"
+  },
+  "14001": {
+    "en": "Message not found",
+    "class": "MessageNotFoundError",
+    "file": "message.py"
+  },
+  "14002": {
+    "en": "Permission denied for this message operation",
+    "class": "MessagePermissionDeniedError",
+    "file": "message.py"
+  },
+  "14003": {
+    "en": "Message has already been approved or rejected",
+    "class": "MessageAlreadyApprovedError",
+    "file": "message.py"
+  },
+  "15000": {
+    "en": "Tool name already exists",
+    "class": "ToolTypeRepeatError",
+    "file": "tool.py"
+  },
+  "15001": {
+    "en": "Under the toolAPITidak boleh kosong.",
+    "class": "ToolTypeEmptyError",
+    "file": "tool.py"
+  },
+  "15002": {
+    "en": "Tool does not exist.",
+    "class": "ToolTypeNotExistsError",
+    "file": "tool.py"
+  },
+  "15003": {
+    "en": "Name does not meet specification: at least1characters, cannot exceed1000characters",
+    "class": "ToolTypeNameError",
+    "file": "tool.py"
+  },
+  "15010": {
+    "en": "Preset tool category cannot be deleted",
+    "class": "ToolTypeIsPresetError",
+    "file": "tool.py"
+  },
+  "15020": {
+    "en": "ToolsSchemaright of privacyurlDownload failed",
+    "class": "ToolSchemaDownloadError",
+    "file": "tool.py"
+  },
+  "15021": {
+    "en": "ToolsSchemaTidak boleh kosong.",
+    "class": "ToolSchemaEmptyError",
+    "file": "tool.py"
+  },
+  "15022": {
+    "en": "openapi schemaError parsing, please check if the content matchesjsonoryamlFormat: {exception}",
+    "class": "ToolSchemaParseError",
+    "file": "tool.py"
+  },
+  "15023": {
+    "en": "serverhitting the nail on the headurlMust start withhttporhttpsWhat/the beginning?: {url}",
+    "class": "ToolSchemaServerError",
+    "file": "tool.py"
+  },
+  "15024": {
+    "en": "mcpTool configuration parsing failed, please check if the content matchesmcpConfigure Format: {exception}",
+    "class": "ToolMcpSchemaError",
+    "file": "tool.py"
+  },
+  "15025": {
+    "en": "mcpTool not support stdio mode",
+    "class": "ToolMcpStdioError",
+    "file": "tool.py"
+  },
+  "16000": {
+    "en": "Dataset name already exists",
+    "class": "DatasetNameExistsError",
+    "file": "dataset.py"
+  },
+  "17000": {
+    "en": "Creation is allowed at most 20 kanban boards",
+    "class": "DashboardMaxError",
+    "file": "telemetry.py"
+  },
+  "17005": {
+    "en": "No Kanban sharing permissions",
+    "class": "DashBoardShareAuthError",
+    "file": "telemetry.py"
+  },
+  "17010": {
+    "en": "Corresponding dataset configuration not found",
+    "class": "QueryDatasetNotFoundError",
+    "file": "telemetry.py"
+  },
+  "17011": {
+    "en": "Virtual indicators can only be queried individually",
+    "class": "QueryVirtualMaxError",
+    "file": "telemetry.py"
+  },
+  "17012": {
+    "en": "No corresponding metric configurations found",
+    "class": "QueryMetricNotFoundError",
+    "file": "telemetry.py"
+  },
+  "17013": {
+    "en": "No corresponding summary method found",
+    "class": "QueryAggregationNotFoundError",
+    "file": "telemetry.py"
+  },
+  "17014": {
+    "en": "No corresponding dimension configurations found",
+    "class": "QueryDimensionNotFoundError",
+    "file": "telemetry.py"
+  },
+  "17015": {
+    "en": "Corresponding operator configuration not found",
+    "class": "QueryOperatorNotFoundError",
+    "file": "telemetry.py"
+  },
+  "18000": {
+    "en": "Knowledge Space does not exist",
+    "class": "SpaceNotFoundError",
+    "file": "knowledge_space.py"
+  },
+  "18001": {
+    "en": "You can create a maximum of 30 Knowledge Spaces",
+    "class": "SpaceLimitError",
+    "file": "knowledge_space.py"
+  },
+  "18010": {
+    "en": "Folder does not exist",
+    "class": "SpaceFolderNotFoundError",
+    "file": "knowledge_space.py"
+  },
+  "18011": {
+    "en": "Directory depth cannot exceed 10 levels",
+    "class": "SpaceFolderDepthError",
+    "file": "knowledge_space.py"
+  },
+  "18012": {
+    "en": "Folder name already exists in this directory",
+    "class": "SpaceFolderDuplicateError",
+    "file": "knowledge_space.py"
+  },
+  "18020": {
+    "en": "File does not exist",
+    "class": "SpaceFileNotFoundError",
+    "file": "knowledge_space.py"
+  },
+  "18021": {
+    "en": "A file with the same name or content already exists in this space",
+    "class": "SpaceFileDuplicateError",
+    "file": "knowledge_space.py"
+  },
+  "18022": {
+    "en": "File extension cannot be changed during rename",
+    "class": "SpaceFileExtensionError",
+    "file": "knowledge_space.py"
+  },
+  "18023": {
+    "en": "File name already exists in this space",
+    "class": "SpaceFileNameDuplicateError",
+    "file": "knowledge_space.py"
+  },
+  "18024": {
+    "en": "File size limit exceeded",
+    "class": "SpaceFileSizeLimitError",
+    "file": "knowledge_space.py"
+  },
+  "18030": {
+    "en": "Private knowledge spaces cannot be subscribed to",
+    "class": "SpaceSubscribePrivateError",
+    "file": "knowledge_space.py"
+  },
+  "18031": {
+    "en": "You have already subscribed to or applied for this knowledge space",
+    "class": "SpaceAlreadySubscribedError",
+    "file": "knowledge_space.py"
+  },
+  "18032": {
+    "en": "You can subscribe to a maximum of 50 knowledge spaces",
+    "class": "SpaceSubscribeLimitError",
+    "file": "knowledge_space.py"
+  },
+  "18040": {
+    "en": "Permission denied: only the creator or admin can perform this operation",
+    "class": "SpacePermissionDeniedError",
+    "file": "knowledge_space.py"
+  },
+  "18050": {
+    "en": "Tag already exists in this space",
+    "class": "SpaceTagExistsError",
+    "file": "knowledge_space.py"
+  },
+  "19000": {
+    "en": "Permission denied",
+    "class": "PermissionDeniedError",
+    "file": "permission.py"
+  },
+  "19001": {
+    "en": "Permission check failed",
+    "class": "PermissionCheckFailedError",
+    "file": "permission.py"
+  },
+  "19002": {
+    "en": "Authorization service unavailable",
+    "class": "PermissionFGAUnavailableError",
+    "file": "permission.py"
+  },
+  "19003": {
+    "en": "Invalid resource type or ID",
+    "class": "PermissionInvalidResourceError",
+    "file": "permission.py"
+  },
+  "19004": {
+    "en": "Failed to write authorization tuple",
+    "class": "PermissionTupleWriteError",
+    "file": "permission.py"
+  },
+  "19005": {
+    "en": "Invalid permission relation",
+    "class": "PermissionInvalidRelationError",
+    "file": "permission.py"
+  },
+  "19010": {
+    "en": "Channel not found",
+    "class": "ChannelNotFoundError",
+    "file": "channel.py"
+  },
+  "19011": {
+    "en": "Access denied to private channel",
+    "class": "ChannelAccessDeniedError",
+    "file": "channel.py"
+  },
+  "19012": {
+    "en": "Already subscribed to this channel or application is pending",
+    "class": "ChannelAlreadySubscribedError",
+    "file": "channel.py"
+  },
+  "19013": {
+    "en": "Permission denied for this channel operation",
+    "class": "ChannelPermissionDeniedError",
+    "file": "channel.py"
+  },
+  "19040": {
+    "en": "Article not found",
+    "class": "ArticleNotFoundError",
+    "file": "channel.py"
+  },
+  "19041": {
+    "en": "Chat conversation not found",
+    "class": "ChannelChatConversationNotFoundError",
+    "file": "channel.py"
+  },
+  "19050": {
+    "en": "Maximum limit for creating channels reached (up to 10 channels)",
+    "class": "ChannelCreateLimitExceededError",
+    "file": "channel.py"
+  },
+  "19051": {
+    "en": "Maximum limit for administrators reached (up to 5 admins)",
+    "class": "ChannelAdminLimitExceededError",
+    "file": "channel.py"
+  },
+  "19052": {
+    "en": "Maximum limit for subscribing channels reached (up to 20 channels)",
+    "class": "ChannelSubscribeLimitExceededError",
+    "file": "channel.py"
+  },
+  "19053": {
+    "en": "Knowledge space LLM is not configured. Please configure it in workbench settings first",
+    "class": "KnowledgeSpaceLLMNotConfiguredError",
+    "file": "channel.py"
+  },
+  "19101": {
+    "en": "Primary department change blocked: user still owns resources under the old tenant; transfer resources first or disable user_tenant_sync.enforce_transfer_before_relocate",
+    "class": "TenantRelocateBlockedError",
+    "file": "tenant_resolver.py"
+  },
+  "19102": {
+    "en": "Failed to resolve leaf tenant: no primary department and no default tenant available",
+    "class": "TenantResolveFailedError",
+    "file": "tenant_resolver.py"
+  },
+  "19103": {
+    "en": "JWT token_version does not match the current user state; please re-login",
+    "class": "TokenVersionMismatchError",
+    "file": "tenant_resolver.py"
+  },
+  "19104": {
+    "en": "Tenant cycle detected while resolving leaf tenant: primary department path contains a self-referential mount point",
+    "class": "TenantCycleDetectedError",
+    "file": "tenant_resolver.py"
+  },
+  "19201": {
+    "en": "OpenFGA service unreachable",
+    "class": "OpenFGAConnectionError",
+    "file": "tenant_fga.py"
+  },
+  "19202": {
+    "en": "OpenFGA authorization model not found for given model_id",
+    "class": "OpenFGAModelNotFoundError",
+    "file": "tenant_fga.py"
+  },
+  "19203": {
+    "en": "Failed to compensate FGA tuple write after max retries",
+    "class": "OpenFGATupleCompensationFailedError",
+    "file": "tenant_fga.py"
+  },
+  "19204": {
+    "en": "Root tenant admin granting is forbidden; use system:global#super_admin instead",
+    "class": "RootTenantAdminNotAllowedError",
+    "file": "tenant_fga.py"
+  },
+  "19301": {
+    "en": "HMAC signature missing or invalid; reject request",
+    "class": "SsoHmacInvalidError",
+    "file": "sso_sync.py"
+  },
+  "19302": {
+    "en": "tenant_mapping cannot mount department: parent chain already carries a mount point (INV-T1: only 2-level tenant tree is supported)",
+    "class": "SsoDeptMountConflictError",
+    "file": "sso_sync.py"
+  },
+  "19303": {
+    "en": "Leaf tenant is not active (disabled/archived/orphaned); login blocked",
+    "class": "SsoTenantDisabledError",
+    "file": "sso_sync.py"
+  },
+  "19304": {
+    "en": "Existing user with conflicting source cannot be reused for SSO",
+    "class": "SsoCrossSourceUserError",
+    "file": "sso_sync.py"
+  },
+  "19310": {
+    "en": "Incoming ts is older than last_sync_ts; operation skipped (INV-T12)",
+    "class": "SsoTsConflictSkippedError",
+    "file": "sso_sync.py"
+  },
+  "19311": {
+    "en": "Another SSO login for the same external_user_id is in progress",
+    "class": "SsoUserLockBusyError",
+    "file": "sso_sync.py"
+  },
+  "19312": {
+    "en": "Department parent chain missing in bisheng; Gateway must push parents via /api/v1/departments/sync before login-sync",
+    "class": "SsoDeptParentMissingError",
+    "file": "sso_sync.py"
+  },
+  "19313": {
+    "en": "primary_dept_external_id is required for SSO login-sync",
+    "class": "SsoPrimaryDeptMissingError",
+    "file": "sso_sync.py"
+  },
+  "19314": {
+    "en": "Another reconcile run for the same org_sync_config is in progress; skip this trigger (Redis SETNX lock busy)",
+    "class": "SsoReconcileLockBusyError",
+    "file": "sso_sync.py"
+  },
+  "19315": {
+    "en": "Unknown relink matching_strategy; expected external_id_map or path_plus_name",
+    "class": "SsoRelinkStrategyUnsupportedError",
+    "file": "sso_sync.py"
+  },
+  "19316": {
+    "en": "relink conflict candidate list is empty or the chosen new_external_id is not among stored candidates",
+    "class": "SsoRelinkConflictUnresolvedError",
+    "file": "sso_sync.py"
+  },
+  "19317": {
+    "en": "Same-ts upsert/remove collision resolved by applying remove (INV-T12 AC-11); audit_log written, admin notified",
+    "class": "SsoSameTsRemoveAppliedWarnError",
+    "file": "sso_sync.py"
+  },
+  "19318": {
+    "en": "Reserved for future reconcile error paths",
+    "class": "SsoReconcileReservedError",
+    "file": "sso_sync.py"
+  },
+  "19401": {
+    "en": "Tenant quota exceeded",
+    "class": "TenantQuotaExceededError",
+    "file": "tenant_quota.py"
+  },
+  "19402": {
+    "en": "Role quota exceeded",
+    "class": "TenantRoleQuotaExceededError",
+    "file": "tenant_quota.py"
+  },
+  "19403": {
+    "en": "Storage quota exceeded",
+    "class": "TenantStorageQuotaExceededError",
+    "file": "tenant_quota.py"
+  },
+  "19501": {
+    "en": "Only Root Tenant can share resources",
+    "class": "RootOnlyShareError",
+    "file": "tenant_sharing.py"
+  },
+  "19502": {
+    "en": "Resource type does not support sharing",
+    "class": "ResourceTypeNotShareableError",
+    "file": "tenant_sharing.py"
+  },
+  "19503": {
+    "en": "Cross-tenant storage fallback failed",
+    "class": "StorageSharingFallbackError",
+    "file": "tenant_sharing.py"
+  },
+  "19504": {
+    "en": "Tenant context missing; cannot write derived data",
+    "class": "TenantContextMissingError",
+    "file": "tenant_sharing.py"
+  },
+  "19601": {
+    "en": "Only the resource owner or a tenant admin may transfer ownership",
+    "class": "ResourceTransferPermissionError",
+    "file": "resource_owner_transfer.py"
+  },
+  "19602": {
+    "en": "Transfer batch exceeds 500 items; split into smaller requests",
+    "class": "ResourceTransferBatchLimitError",
+    "file": "resource_owner_transfer.py"
+  },
+  "19603": {
+    "en": "to_user leaf tenant must lie within the resource tenant visible set",
+    "class": "ResourceTransferReceiverOutOfTenantError",
+    "file": "resource_owner_transfer.py"
+  },
+  "19604": {
+    "en": "Unsupported resource type for transfer",
+    "class": "ResourceTransferUnsupportedTypeError",
+    "file": "resource_owner_transfer.py"
+  },
+  "19605": {
+    "en": "MySQL/OpenFGA transaction failed; all changes rolled back",
+    "class": "ResourceTransferTxFailedError",
+    "file": "resource_owner_transfer.py"
+  },
+  "19606": {
+    "en": "from_user_id and to_user_id must be different",
+    "class": "ResourceTransferSelfError",
+    "file": "resource_owner_transfer.py"
+  },
+  "19701": {
+    "en": "Only the global super admin may set an admin tenant-scope (INV-T14); caller is not a super admin",
+    "class": "AdminScopeForbiddenError",
+    "file": "admin_scope.py"
+  },
+  "19702": {
+    "en": "Target tenant for admin scope does not exist",
+    "class": "AdminScopeTenantNotFoundError",
+    "file": "admin_scope.py"
+  },
+  "19801": {
+    "en": "Root-shared LLM server/model is read-only for Child Admins; only global super admin may modify",
+    "class": "LLMModelSharedReadonlyError",
+    "file": "llm_tenant.py"
+  },
+  "19802": {
+    "en": "Target LLM model is not in the current visible tenant set (cross-tenant reference or deleted)",
+    "class": "LLMModelNotAccessibleError",
+    "file": "llm_tenant.py"
+  },
+  "19803": {
+    "en": "System-level LLM configuration (workbench / knowledge / assistant / evaluation defaults) is restricted to the global super admin",
+    "class": "LLMSystemConfigForbiddenError",
+    "file": "llm_tenant.py"
+  },
+  "19804": {
+    "en": "LLM server endpoint does not match any prefix in settings.llm.endpoint_whitelist",
+    "class": "LLMEndpointNotWhitelistedError",
+    "file": "llm_tenant.py"
+  },
+  "20000": {
+    "en": "Tenant not found",
+    "class": "TenantNotFoundError",
+    "file": "tenant.py"
+  },
+  "20001": {
+    "en": "Tenant is disabled",
+    "class": "TenantDisabledError",
+    "file": "tenant.py"
+  },
+  "20002": {
+    "en": "User does not belong to this tenant",
+    "class": "UserNotInTenantError",
+    "file": "tenant.py"
+  },
+  "20003": {
+    "en": "Tenant code already exists",
+    "class": "TenantCodeDuplicateError",
+    "file": "tenant.py"
+  },
+  "20004": {
+    "en": "Missing tenant context",
+    "class": "NoTenantContextError",
+    "file": "tenant.py"
+  },
+  "20005": {
+    "en": "Cannot delete tenant with active users",
+    "class": "TenantHasUsersError",
+    "file": "tenant.py"
+  },
+  "20006": {
+    "en": "Cannot remove the last admin of a tenant",
+    "class": "TenantAdminRequiredError",
+    "file": "tenant.py"
+  },
+  "20007": {
+    "en": "User does not belong to the target tenant",
+    "class": "TenantSwitchForbiddenError",
+    "file": "tenant.py"
+  },
+  "20008": {
+    "en": "Tenant creation failed",
+    "class": "TenantCreationFailedError",
+    "file": "tenant.py"
+  },
+  "20009": {
+    "en": "No available tenants for user",
+    "class": "NoTenantsAvailableError",
+    "file": "tenant.py"
+  },
+  "21000": {
+    "en": "Department not found",
+    "class": "DepartmentNotFoundError",
+    "file": "department.py"
+  },
+  "21001": {
+    "en": "Department name already exists at this level",
+    "class": "DepartmentNameDuplicateError",
+    "file": "department.py"
+  },
+  "21002": {
+    "en": "Cannot delete department with children",
+    "class": "DepartmentHasChildrenError",
+    "file": "department.py"
+  },
+  "21003": {
+    "en": "Cannot delete department with members",
+    "class": "DepartmentHasMembersError",
+    "file": "department.py"
+  },
+  "21004": {
+    "en": "Cannot move department to its own subtree",
+    "class": "DepartmentCircularMoveError",
+    "file": "department.py"
+  },
+  "21005": {
+    "en": "Third-party synced department is read-only",
+    "class": "DepartmentSourceReadonlyError",
+    "file": "department.py"
+  },
+  "21006": {
+    "en": "Root department already exists for this tenant",
+    "class": "DepartmentRootExistsError",
+    "file": "department.py"
+  },
+  "21007": {
+    "en": "User is already a member of this department",
+    "class": "DepartmentMemberExistsError",
+    "file": "department.py"
+  },
+  "21008": {
+    "en": "User is not a member of this department",
+    "class": "DepartmentMemberNotFoundError",
+    "file": "department.py"
+  },
+  "21009": {
+    "en": "No permission for this department operation",
+    "class": "DepartmentPermissionDeniedError",
+    "file": "department.py"
+  },
+  "21010": {
+    "en": "Password must be at least 8 characters and include upper, lower, digit and symbol",
+    "class": "DepartmentInvalidPasswordError",
+    "file": "department.py"
+  },
+  "21011": {
+    "en": "One or more roles are not assignable in this department",
+    "class": "DepartmentInvalidRolesError",
+    "file": "department.py"
+  },
+  "21012": {
+    "en": "OpenFGA is not available; department admin changes cannot be persisted. Ensure OpenFGA is deployed and the backend connected successfully.",
+    "class": "DepartmentOpenFGAUnavailableError",
+    "file": "department.py"
+  },
+  "21014": {
+    "en": "Cannot delete user while data assets exist",
+    "class": "DepartmentMemberDeleteBlockedError",
+    "file": "department.py"
+  },
+  "21015": {
+    "en": "Only local accounts may be deleted from organization management",
+    "class": "DepartmentMemberDeleteForbiddenError",
+    "file": "department.py"
+  },
+  "21016": {
+    "en": "Only archived departments can be permanently deleted",
+    "class": "DepartmentNotArchivedError",
+    "file": "department.py"
+  },
+  "21017": {
+    "en": "Archived departments cannot be modified",
+    "class": "DepartmentArchivedReadonlyError",
+    "file": "department.py"
+  },
+  "21018": {
+    "en": "Cannot restore department while parent department is archived",
+    "class": "DepartmentParentArchivedError",
+    "file": "department.py"
+  },
+  "22000": {
+    "en": "Org sync config not found",
+    "class": "OrgSyncConfigNotFoundError",
+    "file": "org_sync.py"
+  },
+  "22001": {
+    "en": "MVP locked to 2-layer tree; cannot mount a tenant under a child tenant",
+    "class": "TenantTreeNestingForbiddenError",
+    "file": "tenant_tree.py"
+  },
+  "22002": {
+    "en": "Target department is already a mount point or lies under one",
+    "class": "TenantTreeMountConflictError",
+    "file": "tenant_tree.py"
+  },
+  "22003": {
+    "en": "Root department cannot be mounted as a child tenant",
+    "class": "TenantTreeRootDeptMountError",
+    "file": "tenant_tree.py"
+  },
+  "22004": {
+    "en": "Invalid parent tenant: parent does not exist or is not root",
+    "class": "TenantTreeInvalidParentError",
+    "file": "tenant_tree.py"
+  },
+  "22005": {
+    "en": "Cannot physically delete a tenant that has child tenants",
+    "class": "TenantTreeHasChildrenError",
+    "file": "tenant_tree.py"
+  },
+  "22006": {
+    "en": "tenant_id conflict while migrating child tenant resources",
+    "class": "TenantTreeMigrateConflictError",
+    "file": "tenant_tree.py"
+  },
+  "22007": {
+    "en": "Orphaned tenant already exists for this department",
+    "class": "TenantTreeOrphanAlreadyExistsError",
+    "file": "tenant_tree.py"
+  },
+  "22008": {
+    "en": "Root tenant is system-protected; disable/archive/delete forbidden",
+    "class": "TenantTreeRootProtectedError",
+    "file": "tenant_tree.py"
+  },
+  "22009": {
+    "en": "Failed to write audit_log entry",
+    "class": "TenantTreeAuditLogWriteError",
+    "file": "tenant_tree.py"
+  },
+  "22010": {
+    "en": "Only global super admin may call migrate-from-root",
+    "class": "TenantTreeMigratePermissionError",
+    "file": "tenant_tree.py"
+  },
+  "22011": {
+    "en": "migrate-from-root requires resource.tenant_id == 1 (Root)",
+    "class": "TenantTreeMigrateSourceError",
+    "file": "tenant_tree.py"
+  },
+  "23000": {
+    "en": "User group not found",
+    "class": "UserGroupNotFoundError",
+    "file": "user_group.py"
+  },
+  "23001": {
+    "en": "User group name already exists in this tenant",
+    "class": "UserGroupNameDuplicateError",
+    "file": "user_group.py"
+  },
+  "23002": {
+    "en": "Cannot delete or rename default user group",
+    "class": "UserGroupDefaultProtectedError",
+    "file": "user_group.py"
+  },
+  "23003": {
+    "en": "Cannot delete user group with members",
+    "class": "UserGroupHasMembersError",
+    "file": "user_group.py"
+  },
+  "23004": {
+    "en": "User is already a member of this group",
+    "class": "UserGroupMemberExistsError",
+    "file": "user_group.py"
+  },
+  "23005": {
+    "en": "User is not a member of this group",
+    "class": "UserGroupMemberNotFoundError",
+    "file": "user_group.py"
+  },
+  "23006": {
+    "en": "No permission for this user group operation",
+    "class": "UserGroupPermissionDeniedError",
+    "file": "user_group.py"
+  },
+  "23007": {
+    "en": "User groups no longer have separate admins; only the creator can manage the group",
+    "class": "UserGroupNoSeparateAdminsError",
+    "file": "user_group.py"
+  },
+  "24000": {
+    "en": "Role not found",
+    "class": "RoleNotFoundError",
+    "file": "role.py"
+  },
+  "24001": {
+    "en": "Resource quota exceeded",
+    "class": "QuotaExceededError",
+    "file": "role.py"
+  },
+  "24002": {
+    "en": "Role name already exists in this scope",
+    "class": "RoleNameDuplicateError",
+    "file": "role.py"
+  },
+  "24003": {
+    "en": "No permission for this role operation",
+    "class": "RolePermissionDeniedError",
+    "file": "role.py"
+  },
+  "24004": {
+    "en": "Built-in role cannot be deleted or have its core attributes modified",
+    "class": "RoleBuiltinProtectedError",
+    "file": "role.py"
+  },
+  "24005": {
+    "en": "Invalid quota_config or department_id value",
+    "class": "QuotaConfigInvalidError",
+    "file": "role.py"
+  }
+}

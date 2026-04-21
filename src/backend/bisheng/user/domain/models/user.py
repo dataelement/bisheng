@@ -197,6 +197,21 @@ class UserDao(UserBase):
             return list(result.all())
 
     @classmethod
+    async def aexists_disabled_login_account(cls, account: str) -> bool:
+        """与登录账号字段一致（external_id），且 delete=1 的禁用用户是否存在。"""
+        acc = (account or "").strip()
+        if not acc:
+            return False
+        async with get_async_db_session() as session:
+            statement = (
+                select(User.user_id)
+                .where(User.delete == 1, User.external_id == acc)
+                .limit(1)
+            )
+            result = await session.exec(statement)
+            return result.first() is not None
+
+    @classmethod
     async def aget_user_for_login(cls, account: str) -> User | None:
         """兼容旧调用：仅返回首条；登录请用 ``aget_login_candidates_by_account``。"""
         rows = await cls.aget_login_candidates_by_account(account)
