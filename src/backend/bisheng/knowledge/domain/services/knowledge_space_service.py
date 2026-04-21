@@ -32,6 +32,7 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -132,6 +133,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         result.subscription_status = subscription_status
         result.is_followed = subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
         result.is_pending = subscription_status == SpaceSubscriptionStatusEnum.PENDING
+
+    async def _decorate_department_metadata(
+        self,
+        spaces: List[KnowledgeSpaceInfoResp],
+    ) -> List[KnowledgeSpaceInfoResp]:
+        if not spaces:
+            return spaces
+        space_ids = [int(space.id) for space in spaces]
+        space_to_department = await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(space_ids)
+        if not space_to_department:
+            return spaces
+        departments = await DepartmentDao.aget_by_ids(list(space_to_department.values()))
+        department_name_map = {dept.id: dept.name for dept in departments}
+        for space in spaces:
+            department_id = space_to_department.get(int(space.id))
+            if department_id is None:
+                continue
+            space.space_kind = 'department'
+            space.department_id = department_id
+            space.department_name = department_name_map.get(department_id)
+        return spaces
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -687,6 +709,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
         is_released: bool = False,
         share_to_children: Optional[bool] = None,
+        skip_user_limit: bool = False,
     ) -> Knowledge:
         """ Create a new knowledge space (max 30 per user).
 
@@ -696,9 +719,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         override. Child-tenant creators never share (caller value ignored).
         """
 
-        count = await KnowledgeDao.async_count_spaces_by_user(self.login_user.user_id)
-        if count >= _MAX_SPACE_PER_USER:
-            raise SpaceLimitError()
+        if not skip_user_limit:
+            count = await KnowledgeDao.async_count_spaces_by_user(self.login_user.user_id)
+            if count >= _MAX_SPACE_PER_USER:
+                raise SpaceLimitError()
 
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
@@ -777,6 +801,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
         result.follower_num = follower_num
         result.file_num = total_file_num
+        await self._decorate_department_metadata([result])
 
         if space.state != KnowledgeState.PUBLISHED.value:
             rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
@@ -806,7 +831,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.channel.domain.models.channel_knowledge_sync import (
             ChannelKnowledgeSyncDao,
         )
-        await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
+        try:
+            await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
+        except Exception as e:
+            _logger.warning(
+                'Failed to cleanup channel knowledge sync bindings for space %s: %s',
+                space_id, e,
+            )
 
         # Audit log and telemetry
         await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
@@ -911,7 +942,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
                     ))
-        return pinned_spaces + normal_spaces
+        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
 
     async def get_my_created_spaces(
         self, order_by: str = 'update_time'
@@ -1010,6 +1041,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             )
 
+        await self._decorate_department_metadata(result_list)
         return {"total": total, "page": page, "page_size": page_size, "data": result_list}
 
     # ──────────────────────────── Members ─────────────────────────────────────
