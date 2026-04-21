@@ -293,7 +293,6 @@ export function FileCard({
                                 </DropdownMenu>
                             )}
                         </div>
-                    )}
                 </div>
 
                 {/* 底部内容区域 */}

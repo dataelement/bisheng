@@ -650,13 +650,13 @@ export function KnowledgeSpaceContent({
                                         onEditTags={() => handleOpenEditTags(file.id)}
                                         onRetry={() => handleSingleRetry(file.id)}
                                         onNavigateFolder={() => onNavigateFolder(file.id)}
-                                    onPreview={handlePreviewFile}
-                                    onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
-                                    onCancelCreate={onCancelCreateFolder}
-                                    onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
-                                    mobileListMode={isH5 && viewMode === "list"}
-                                />
-                            ))}
+                                        onPreview={handlePreviewFile}
+                                        onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
+                                        onCancelCreate={onCancelCreateFolder}
+                                        onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                        mobileListMode={isH5 && viewMode === "list"}
+                                    />
+                                ))}
                             </div>
                         </div>
                     ) : (
@@ -682,6 +682,9 @@ export function KnowledgeSpaceContent({
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
                                 />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

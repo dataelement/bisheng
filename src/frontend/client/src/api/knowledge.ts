@@ -437,6 +437,9 @@ export function fileStatusToNumber(status: FileStatus): number {
     }
 }
 
+/** Default member filter: include non-failed visible states. */
+export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED = [1, 2, 4, 5];
+
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
     const isFolder = raw.file_type === 0;
