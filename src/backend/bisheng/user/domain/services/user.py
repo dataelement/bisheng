@@ -5,11 +5,12 @@ from urllib.parse import unquote, urlsplit
 
 import rsa
 from fastapi import Request, Depends, UploadFile, HTTPException
+from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (
-    UserForbiddenError,
     CaptchaError,
+    UserForbiddenError,
     UserValidateError,
     UserPasswordMaxTryError,
     UserPasswordExpireError,
@@ -20,10 +21,11 @@ from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventDat
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
-from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
 from bisheng.database.constants import DefaultRole
+from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
 from bisheng.utils import md5_hash, get_request_ip, generate_uuid
 from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
@@ -269,6 +271,9 @@ class UserService:
         # 支持用户名或 external_id；重名时对候选用户依次校验密码
         candidates = await UserDao.aget_login_candidates_by_account(user.user_name)
         if not candidates:
+            # 禁用账号不会进入候选列表；单独提示，避免与「账号或密码错误」混淆
+            if await UserDao.aexists_disabled_login_account(user.user_name):
+                return UserForbiddenError.return_resp()
             return UserValidateError.return_resp()
 
         password = cls.decrypt_md5_password(user.password)

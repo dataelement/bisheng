@@ -271,3 +271,6 @@ bisheng-sync.sh
 
 # Local installers / stray root files (do not commit)
 *.msi
+
+# Permission migration checkpoint (per-deployment local state)
+src/backend/bisheng/permission/migration/migration_f006_checkpoint.json

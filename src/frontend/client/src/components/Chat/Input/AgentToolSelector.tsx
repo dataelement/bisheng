@@ -114,13 +114,13 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-8 border-none bg-transparent shadow-none hover:bg-black/5 px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
+          "h-8 min-w-0 max-w-[min(52vw,220px)] border-none bg-transparent shadow-none hover:bg-black/5 px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
           isActive && "border border-primary",
         )}
       >
-        <div className="flex gap-1.5 items-center">
-          <ApiAppIcon size="15" className={cn("text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
-          <span className="text-[14px] font-normal touch-mobile:sr-only">
+        <div className="flex min-w-0 gap-1.5 items-center">
+          <ApiAppIcon size="15" className={cn("shrink-0 text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
+          <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(40vw,160px)]">
             {localize("com_tools_title")}
             {/* {isActive ? ` (${activeCount})` : ""} */}
           </span>

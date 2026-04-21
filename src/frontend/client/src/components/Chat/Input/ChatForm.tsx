@@ -676,10 +676,10 @@ const ModelSelect = ({
       disabled={disabled}
       onValueChange={onChange}
     >
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent touch-mobile:px-1.5">
-        <div className="flex gap-2">
-          <Rotate3DIcon size="16" />
-          <span className="text-xs font-normal touch-mobile:sr-only">{label}</span>
+      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent touch-mobile:px-1.5 min-w-0 max-w-[min(52vw,200px)]">
+        <div className="flex min-w-0 gap-2">
+          <Rotate3DIcon size="16" className="shrink-0" />
+          <span className="text-xs font-normal truncate">{label}</span>
         </div>
       </SelectTrigger>
       <SelectContent className="bg-white">

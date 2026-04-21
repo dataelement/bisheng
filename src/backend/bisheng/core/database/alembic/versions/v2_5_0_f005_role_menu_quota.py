@@ -9,6 +9,10 @@ Changes:
   - ADD COLUMN department_id INT NULL (indexed)
   - ADD COLUMN quota_config JSON NULL
   - DROP INDEX group_role_name_uniq
+  - Pre-dedupe legacy (tenant_id, role_type, role_name) collisions before
+    building the new unique index (rename non-oldest rows to
+    ``<role_name>-dup-<id>``); keeps pre-v2.5 installations migrateable
+    when historical data contains same-named roles.
   - CREATE UNIQUE INDEX uk_tenant_roletype_rolename ON role(tenant_id, role_type, role_name)
   - Backfill: AdminRole(1) and DefaultRole(2) set role_type='global'
   - Migrate: knowledge_space_file_limit > 0 values into quota_config
@@ -74,7 +78,41 @@ def upgrade() -> None:
     # 4. Drop old unique constraint and create new one
     if _index_exists('role', 'group_role_name_uniq'):
         op.drop_index('group_role_name_uniq', table_name='role')
+
+    # 4a. Pre-dedupe legacy collisions so the new UNIQUE can be built.
+    # Keep the oldest row's role_name intact; rename the rest to
+    # ``<role_name>-dup-<id>`` (id is globally unique, so the new names
+    # will not collide with each other). Idempotent: runs only when the
+    # target unique index is not yet present.
     if not _index_exists('role', 'uk_tenant_roletype_rolename'):
+        conn = op.get_bind()
+        conflicts = conn.execute(sa.text("""
+            SELECT tenant_id, role_type, role_name, COUNT(*) AS cnt
+            FROM role
+            GROUP BY tenant_id, role_type, role_name
+            HAVING cnt > 1
+        """)).fetchall()
+        for row in conflicts:
+            print(
+                f'[f005] dedupe role_name collision: tenant_id={row[0]} '
+                f'role_type={row[1]!r} role_name={row[2]!r} count={row[3]}'
+            )
+        if conflicts:
+            # MySQL 8.0 window functions — see docs/architecture/08-deployment.md
+            op.execute("""
+                UPDATE role AS r
+                JOIN (
+                    SELECT id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY tenant_id, role_type, role_name
+                               ORDER BY id
+                           ) AS rn
+                    FROM role
+                ) AS t ON r.id = t.id
+                SET r.role_name = CONCAT(r.role_name, '-dup-', r.id)
+                WHERE t.rn > 1
+            """)
+
         op.create_unique_constraint(
             'uk_tenant_roletype_rolename', 'role',
             ['tenant_id', 'role_type', 'role_name'],

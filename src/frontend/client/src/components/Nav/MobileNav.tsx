@@ -6,8 +6,17 @@ import { useNavigate } from 'react-router-dom';
 import { QueryKeys, Constants } from '~/types/chat';
 import type { TMessage } from '~/types/chat';
 import type { Dispatch, SetStateAction } from 'react';
+import ShareChat from '~/components/Share/ShareChat';
 import { useLocalize, useNewConvo } from '~/hooks';
+import { cn } from '~/utils';
 import store from '~/store';
+
+const shareChatTypes = {
+  1: 'skill',
+  5: 'assistant',
+  10: 'workflow',
+  15: 'workbench_chat',
+} as const;
 
 type MobileNavProps = {
   variant?: 'chat' | 'app';
@@ -36,6 +45,9 @@ export default function MobileNav({
   const { newConversation } = useNewConvo();
   const conversation = useRecoilValue(store.conversationByIndex(0));
   const { title = 'New Chat' } = conversation || {};
+  const chatMobileHeader = useRecoilValue(store.chatMobileHeaderState);
+  const showWorkbenchMergedBar =
+    variant === 'chat' && chatMobileHeader !== null;
 
   const toggleSidebar = () => {
     setNavVisible((prev) => {
@@ -47,8 +59,18 @@ export default function MobileNav({
     });
   };
 
+  const shareType =
+    showWorkbenchMergedBar && chatMobileHeader
+      ? shareChatTypes[chatMobileHeader.flowType as keyof typeof shareChatTypes]
+      : undefined;
+
   return (
-    <div className="bg-token-main-surface-primary sticky top-0 z-10 flex h-10 w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white touch-mobile:border-b touch-mobile:border-[#f0f1f3]">
+    <div
+      className={cn(
+        'bg-token-main-surface-primary sticky top-0 z-10 flex w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white touch-mobile:border-b touch-mobile:border-[#f0f1f3]',
+        showWorkbenchMergedBar ? 'min-h-11 h-11' : 'h-10',
+      )}
+    >
       <button
         type="button"
         data-testid="mobile-header-toggle-sidebar"
@@ -63,36 +85,78 @@ export default function MobileNav({
           <Menu className="size-4" strokeWidth={2} />
         )}
       </button>
-      {variant === 'app' ? (
+      {showWorkbenchMergedBar && chatMobileHeader ? (
         <>
-          {/* 应用会话标题由 ChatView/HeaderTitle 展示；此处勿用主站会话列表首条标题，否则会误显「首页」等 */}
-          <div className="min-w-0 flex-1" aria-hidden />
-          <span className="sr-only">{localize('com_ui_new_chat')}</span>
+          <div className="min-w-0 flex-1 px-1 flex justify-center">
+            <span
+              id="app-title"
+              className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"
+              title={chatMobileHeader.title}
+            >
+              {chatMobileHeader.title}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {!chatMobileHeader.readOnly && !chatMobileHeader.hideShare && shareType && (
+              <ShareChat
+                type={shareType}
+                flowId={chatMobileHeader.flowId || undefined}
+                chatId={chatMobileHeader.conversationId}
+              />
+            )}
+            <button
+              type="button"
+              data-testid="mobile-header-new-chat-button"
+              aria-label={localize('com_ui_new_chat')}
+              className={mobileHeadIconBtnClassName}
+              onClick={() => {
+                queryClient.setQueryData<TMessage[]>(
+                  [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
+                  [],
+                );
+                newConversation();
+                if (navigateToNewChatPath !== false) {
+                  navigate(navigateToNewChatPath);
+                }
+              }}
+            >
+              <Plus className="size-4" strokeWidth={2} />
+            </button>
+          </div>
         </>
       ) : (
         <>
-          <div className="min-w-0 flex-1" aria-hidden />
-          <span className="sr-only">{title ?? localize('com_ui_new_chat')}</span>
+          {variant === 'app' ? (
+            <>
+              <div className="min-w-0 flex-1" aria-hidden />
+              <span className="sr-only">{localize('com_ui_new_chat')}</span>
+            </>
+          ) : (
+            <>
+              <div className="min-w-0 flex-1" aria-hidden />
+              <span className="sr-only">{title ?? localize('com_ui_new_chat')}</span>
+            </>
+          )}
+          <button
+            type="button"
+            data-testid="mobile-header-new-chat-button"
+            aria-label={localize('com_ui_new_chat')}
+            className={mobileHeadIconBtnClassName}
+            onClick={() => {
+              queryClient.setQueryData<TMessage[]>(
+                [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
+                [],
+              );
+              newConversation();
+              if (navigateToNewChatPath !== false) {
+                navigate(navigateToNewChatPath);
+              }
+            }}
+          >
+            <Plus className="size-4" strokeWidth={2} />
+          </button>
         </>
       )}
-      <button
-        type="button"
-        data-testid="mobile-header-new-chat-button"
-        aria-label={localize('com_ui_new_chat')}
-        className={mobileHeadIconBtnClassName}
-        onClick={() => {
-          queryClient.setQueryData<TMessage[]>(
-            [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
-            [],
-          );
-          newConversation();
-          if (navigateToNewChatPath !== false) {
-            navigate(navigateToNewChatPath);
-          }
-        }}
-      >
-        <Plus className="size-4" strokeWidth={2} />
-      </button>
     </div>
   );
 }

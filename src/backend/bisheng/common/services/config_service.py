@@ -90,8 +90,6 @@ class ConfigService(Settings):
         with open(file_path, 'r', encoding='utf-8') as f:
             settings_dict = yaml.safe_load(f)
 
-        with open(os.path.join(current_path, 'default_node.yaml'), 'r', encoding='utf-8') as node:
-            settings_dict.update(yaml.safe_load(node))
         for key in settings_dict:
             if key not in Settings.model_fields.keys():
                 raise KeyError(f'Key {key} not found in settings')

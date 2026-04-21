@@ -258,8 +258,7 @@ export default function Conversation({
             : isPopoverActive || isActiveConvo
               ? "flex"
               : "hidden group-focus-within:flex group-hover:flex",
-          // Ensure consistent rendering on hoverless devices
-          "[@media(hover:none)]:flex",
+          "coarse-pointer:flex",
         )}
       >
         {!renaming && (

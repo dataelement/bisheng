@@ -130,7 +130,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full min-h-0 w-full flex-col px-3 py-5"
+                  className="flex h-full min-h-0 w-full flex-col px-3"
                 >
                   {/* 新建 */}
                   <NewChat

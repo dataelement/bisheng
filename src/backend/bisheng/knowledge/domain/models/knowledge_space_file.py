@@ -11,6 +11,15 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, Kno
 class SpaceFileDao(KnowledgeFileDao):
     """ DAO for space folder and file operations in the knowledge_file table """
 
+    @staticmethod
+    def _root_path_filter():
+        # Treat both empty string and NULL as root-level items. Some historical
+        # rows and upload paths persist NULL, while newer writes use "".
+        return or_(
+            KnowledgeFile.file_level_path == '',
+            KnowledgeFile.file_level_path.is_(None),
+        )
+
     @classmethod
     async def count_folder_by_name(cls, knowledge_id: int, folder_name: str, file_level_path: str,
                                    exclude_id: Optional[int] = None) -> int:
@@ -61,6 +70,7 @@ class SpaceFileDao(KnowledgeFileDao):
             cls,
             knowledge_id: int,
             parent_id: Optional[int],
+            file_ids: Optional[List[int]] = None,
             order_field: str = "file_type",
             order_sort: str = "desc",
             file_status: List[int] = None,
@@ -73,16 +83,17 @@ class SpaceFileDao(KnowledgeFileDao):
         Paginated: page is 1-indexed.
         """
         if parent_id is None:
-            exact_path = ''
+            path_filter = cls._root_path_filter()
         else:
             parent = await KnowledgeFileDao.query_by_id(parent_id)
             if parent:
                 exact_path = f"{parent.file_level_path}/{parent_id}" if parent.file_level_path else f"/{parent_id}"
             else:
                 exact_path = f"/{parent_id}"
-
-        path_filter = KnowledgeFile.file_level_path == exact_path
+            path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
+        if file_ids:
+            filters.append(KnowledgeFile.id.in_(file_ids))
 
         if file_status:
             from sqlalchemy.orm import aliased
@@ -155,6 +166,7 @@ class SpaceFileDao(KnowledgeFileDao):
             cls,
             knowledge_id: int,
             parent_id: Optional[int],
+            file_ids: Optional[List[int]] = None,
             file_status: List[int] = None,
     ) -> int:
         """
@@ -162,16 +174,17 @@ class SpaceFileDao(KnowledgeFileDao):
         When parent_id is None, counts root-level items.
         """
         if parent_id is None:
-            exact_path = ''
+            path_filter = cls._root_path_filter()
         else:
             parent = await KnowledgeFileDao.query_by_id(parent_id)
             if parent:
                 exact_path = f"{parent.file_level_path}/{parent_id}" if parent.file_level_path else f"/{parent_id}"
             else:
                 exact_path = f"/{parent_id}"
-
-        path_filter = KnowledgeFile.file_level_path == exact_path
+            path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
+        if file_ids:
+            filters.append(KnowledgeFile.id.in_(file_ids))
 
         if file_status:
             from sqlalchemy.orm import aliased

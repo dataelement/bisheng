@@ -100,8 +100,8 @@ export default function HoverButtons({
     return (
       <button
         className={cn(
-          "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:invisible touch-desktop:group-hover:visible touch-desktop:group-[.final-completion]:visible",
-          !isLast ? "touch-desktop:opacity-0 touch-desktop:group-hover:opacity-100" : ""
+          "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:invisible fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible",
+          !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
         )}
         onClick={regenerate}
         type="button"
@@ -161,7 +161,7 @@ export default function HoverButtons({
           content={message.content ?? message.text}
           isLast={isLast}
           className={cn(
-            'ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:group-hover:visible touch-desktop:group-[.final-completion]:visible',
+            'ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible',
           )}
         />
       )} */}
@@ -170,11 +170,11 @@ export default function HoverButtons({
         <button
           id={`edit-${message.messageId}`}
           className={cn(
-            'hover-button rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:group-hover:visible touch-desktop:group-[.final-completion]:visible',
+            'hover-button rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible',
             isCreatedByUser ? '' : 'active',
             hideEditButton ? 'opacity-0' : '',
             isEditing ? 'active text-gray-700 dark:text-gray-200' : '',
-            !isLast ? 'touch-desktop:opacity-0 touch-desktop:group-hover:opacity-100' : '',
+            !isLast ? 'fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100' : '',
           )}
           onClick={onEdit}
           type="button"
@@ -186,11 +186,11 @@ export default function HoverButtons({
       )} */}
       <button
         className={cn(
-          "ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:group-hover:visible touch-desktop:group-[.final-completion]:visible",
+          "ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible",
           isSubmitting && isCreatedByUser
-            ? "touch-desktop:opacity-0 touch-desktop:group-hover:opacity-100"
+            ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"
             : "",
-          !isLast ? "touch-desktop:opacity-0 touch-desktop:group-hover:opacity-100" : ""
+          !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
         )}
         onClick={() => copyToClipboard(setIsCopied)}
         type="button"
@@ -217,8 +217,8 @@ export default function HoverButtons({
       {continueSupported === true ? (
         <button
           className={cn(
-            "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:invisible touch-desktop:group-hover:visible",
-            !isLast ? "touch-desktop:opacity-0 touch-desktop:group-hover:opacity-100" : ""
+            "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:invisible fine-pointer:group-hover:visible",
+            !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
           )}
           onClick={handleContinue}
           type="button"
@@ -229,7 +229,7 @@ export default function HoverButtons({
       ) : null}
       {regenerateEnabled && message.text && (
         <TextToSpeechButton
-          className={!isLast ? "touch-desktop:opacity-0 touch-desktop:group-hover:opacity-100" : ""}
+          className={!isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""}
           messageId={message.messageId}
           text={message.text.replace(/:::([\s\S]*?):::/g, "")}
         />

@@ -1,4 +1,10 @@
 import { SearchInput } from "@/components/bs-ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/bs-ui/tooltip"
 import { cn } from "@/utils"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Plus } from "lucide-react"
@@ -139,10 +145,19 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
               )}
             </span>
             <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="flex-1 truncate">
-              {node.name}
-              {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
-            </span>
+            <TooltipProvider delayDuration={250}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex-1 truncate">
+                    {node.name}
+                    {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md break-all">
+                  {node.name}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <span className="mr-1 text-xs text-muted-foreground tabular-nums">{node.member_count}</span>
             {/* Quick create child button — hidden for archived departments */}
             {!isArchived && (

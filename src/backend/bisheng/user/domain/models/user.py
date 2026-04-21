@@ -35,7 +35,7 @@ class UserBase(SQLModelSerializable):
     external_id: Optional[str] = Field(
         default=None,
         sa_column=Column(
-            String(128), nullable=True,
+            String(255), nullable=True,
             comment='External employee ID for sync',
         ),
     )
@@ -195,6 +195,21 @@ class UserDao(UserBase):
             )
             result = await session.exec(statement)
             return list(result.all())
+
+    @classmethod
+    async def aexists_disabled_login_account(cls, account: str) -> bool:
+        """与登录账号字段一致（external_id），且 delete=1 的禁用用户是否存在。"""
+        acc = (account or "").strip()
+        if not acc:
+            return False
+        async with get_async_db_session() as session:
+            statement = (
+                select(User.user_id)
+                .where(User.delete == 1, User.external_id == acc)
+                .limit(1)
+            )
+            result = await session.exec(statement)
+            return result.first() is not None
 
     @classmethod
     async def aget_user_for_login(cls, account: str) -> User | None:

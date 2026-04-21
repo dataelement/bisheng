@@ -285,14 +285,18 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     image: appleboy/drone-ssh
     pull: if-not-exists
     settings:
-      host: 192.168.106.114
+      host: 192.168.106.109
       username: root
       password:
         from_secret: sshpwd
       port: 22
       command_timeout: 10m
       script:
-       - bash /opt/bisheng/deploy.sh
+       - echo =======找到目录=======
+       - cd /opt/server/bisheng-dev/docker
+       - echo =======直接启动=======
+       - git pull
+       - sh deploy.sh restart
 
   - name: notify-start # notify
     pull: if-not-exists
@@ -328,7 +332,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         - failure
 trigger:
   branch:
-  - 2.5.0-PM
+  - feat/2.5.0
   event:
   - push
 

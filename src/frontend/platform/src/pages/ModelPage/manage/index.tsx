@@ -18,18 +18,19 @@ import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
 import { useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
+import { canManageModelSettings } from "./permissions"
 import SystemModelConfig from "./SystemModelConfig"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
     const [expand, setExpand] = useState(false)
+    const canManage = canManageModelSettings(user)
 
     // Root-shared rows are read-only for the current caller; the backend
     // sets `is_root_shared_readonly` on the list API so Child Admins do
     // not hit the 403 + 19801 write path.
     const isRootShared = !!data.is_root_shared_readonly
-    const isAdmin = !!(user?.is_global_super || user?.is_child_admin)
-    const canEdit = !isRootShared && isAdmin
+    const canEdit = !isRootShared && canManage
 
     return <div className="text-sm bs-table-row">
         <div className={`grid grid-cols-2 transition-colors hover:bg-muted/50 items-center mt-1 mx-2 h-[52px] rounded-sm`}>
@@ -110,6 +111,7 @@ export default function Management() {
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
+    const canManage = canManageModelSettings(user)
 
     const [searchParams, setSearchParams] = useSearchParams()
     useEffect(() => {
@@ -218,11 +220,11 @@ export default function Management() {
             {/* System-level config stays super-admin only regardless of
                 active scope; Child Admins never see the button. */}
             <div className="flex justify-end gap-4">
-                {isSuper && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
                     <SettingIcon className="text-red-500" />
                     {t('model.systemModelSettings')}
                 </Button>}
-                {(isSuper || user?.is_child_admin) && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
                 <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
             </div>
             <div className="h-[85%]">

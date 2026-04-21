@@ -1,4 +1,4 @@
-import { useLocalize } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import ShareChat from '../Share/ShareChat';
 
 const types = {
@@ -10,6 +10,12 @@ const types = {
 
 export default function HeaderTitle({ conversation, readOnly, hideShare = false }) {
   const localize = useLocalize();
+  const isNarrowViewport = usePrefersMobileLayout();
+
+  // Title + share are merged into MobileNav on H5; avoid a second full-width row.
+  if (isNarrowViewport) {
+    return null;
+  }
 
   return (
     <div className="sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-white px-4 border-b border-[#ebecf0] text-[#212121]">

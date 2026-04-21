@@ -182,9 +182,9 @@ export function MemberTable({
         <TableHeader>
           <TableRow>
             <TableHead>{t("system.username")}</TableHead>
-            <TableHead>{t("bs:department.memberType")}</TableHead>
-            <TableHead>{t("bs:department.userGroups")}</TableHead>
+            <TableHead>{t("bs:department.memberType", "所属关系")}</TableHead>
             <TableHead>{t("bs:department.roles")}</TableHead>
+            <TableHead>{t("bs:department.userGroups")}</TableHead>
             <TableHead>{t("bs:department.updateTime")}</TableHead>
             <TableHead>{t("bs:department.enabled")}</TableHead>
             <TableHead className="min-w-[140px] text-right">{t("operations")}</TableHead>
@@ -212,8 +212,12 @@ export function MemberTable({
                 </TableCell>
                 <TableCell className="max-w-[150px]">
                   {(() => {
-                    const text =
-                      m.user_groups.map((g) => g.group_name).join(", ") || "-"
+                    const roleNames: string[] = []
+                    if (m.is_department_admin) {
+                      roleNames.push(t("bs:department.deptAdminRoleName"))
+                    }
+                    roleNames.push(...m.roles.map((r) => r.role_name))
+                    const text = roleNames.join(", ") || "-"
                     return (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -228,12 +232,8 @@ export function MemberTable({
                 </TableCell>
                 <TableCell className="max-w-[150px]">
                   {(() => {
-                    const roleNames: string[] = []
-                    if (m.is_department_admin) {
-                      roleNames.push(t("bs:department.deptAdminRoleName"))
-                    }
-                    roleNames.push(...m.roles.map((r) => r.role_name))
-                    const text = roleNames.join(", ") || "-"
+                    const text =
+                      m.user_groups.map((g) => g.group_name).join(", ") || "-"
                     return (
                       <Tooltip>
                         <TooltipTrigger asChild>

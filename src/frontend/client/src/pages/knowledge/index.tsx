@@ -468,11 +468,18 @@ export default function Knowledge() {
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
                 showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
             }
-        } catch {
+            return true;
+        } catch (error) {
+            const message = error instanceof Error && error.message
+                ? error.message
+                : (editingSpace
+                    ? localize("com_knowledge.update_space_failed")
+                    : localize("com_knowledge.create_space_failed"));
             showToast({
-                message: editingSpace ? localize("com_knowledge.update_space_failed") : localize("com_knowledge.create_space_failed"),
+                message,
                 severity: NotificationSeverity.ERROR
             });
+            return false;
         }
     };
 

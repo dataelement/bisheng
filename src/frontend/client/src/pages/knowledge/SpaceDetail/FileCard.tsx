@@ -61,9 +61,9 @@ export function FileCard({
     hideDownloadActions = false,
 }: FileCardProps) {
     const localize = useLocalize();
-    /** True only for desktop + mouse: actions reveal on card hover. Otherwise keep actions visible (touch / narrow / no-hover). */
+    /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
     const revealCardActionsOnHoverOnly = useMediaQuery(
-        "(min-width: 768px) and (hover: hover) and (pointer: fine)",
+        "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
@@ -406,7 +406,16 @@ export function FileCard({
                 </div>
 
                 {mobileListMode && (
-                    <div className="touch-mobile:flex touch-mobile:shrink-0 touch-mobile:items-center touch-mobile:gap-1 touch-mobile:pr-1">
+                    <div
+                        className={cn(
+                            "flex shrink-0 items-center gap-1 pr-1 transition-opacity",
+                            !revealCardActionsOnHoverOnly
+                                ? "pointer-events-auto opacity-100"
+                                : showCardActions
+                                  ? "pointer-events-auto opacity-100"
+                                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+                        )}
+                    >
                     {showMenuDownloadItem && (
                         <Button
                             variant="outline"

@@ -7,7 +7,7 @@ from bisheng.finetune.domain.models.server import Server, ServerCreate, ServerDa
 from ...common.errcode.http_error import NotFoundError
 
 # build router
-router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(UserPayload.get_login_user)])
+router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(UserPayload.get_model_admin_user)])
 
 
 @router.post('/add')

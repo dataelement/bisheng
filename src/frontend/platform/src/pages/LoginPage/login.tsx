@@ -131,9 +131,11 @@ export const LoginPage = () => {
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
                 } else {
-                    const path = import.meta.env.DEV ? '/admin' : '/workspace/'
-                    const rootUrl = `${location.origin}${__APP_ENV__.BASE_URL}${path}`
-                    location.href = `${__APP_ENV__.BASE_URL}${location.pathname}` === '/' ? rootUrl : location.href
+                    // Always enter admin router entry after login, then let
+                    // userContext dispatch to the first permitted route.
+                    // This avoids staying on a stale URL (e.g. /sys) from the
+                    // previous user session and falling into /404.
+                    location.href = `${__APP_ENV__.BASE_URL}/admin`
                 }
             }), (error) => {
                 if (error?.code === 10601) { // 密码过期
