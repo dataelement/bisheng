@@ -156,6 +156,10 @@ export interface KnowledgeFile {
     fileSource?: string;
     /** Path of the existing duplicate file (when status is DUPLICATE) */
     oldFileLevelPath?: string;
+    approvalRequestId?: number;
+    approvalStatus?: string;
+    approvalReason?: string;
+    isPendingApproval?: boolean;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -207,6 +211,10 @@ interface RawSpaceChild {
     error_message?: string;
     remark?: string;
     file_source?: string;
+    approval_request_id?: number;
+    approval_status?: string;
+    approval_reason?: string;
+    is_pending_approval?: boolean;
 }
 
 /** Raw file record returned by addFiles / knowledge file APIs */
@@ -407,6 +415,10 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
+        approvalRequestId: raw?.approval_request_id !== undefined ? Number(raw.approval_request_id) : undefined,
+        approvalStatus: raw?.approval_status ?? undefined,
+        approvalReason: raw?.approval_reason ?? undefined,
+        isPendingApproval: Boolean(raw?.is_pending_approval),
     };
 }
 

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
     KnowledgeSpace,
-    SortType,
+    SpaceSortType,
     updateSpaceApi,
     deleteSpaceApi,
     unsubscribeSpaceApi,
@@ -13,9 +13,9 @@ import { useLocalize } from "~/hooks";
 
 interface UseSpaceActionsOptions {
     activeSpaceId?: string;
-    createdSortBy: SortType;
-    joinedSortBy: SortType;
-    departmentSortBy: SortType;
+    createdSortBy: SpaceSortType;
+    joinedSortBy: SpaceSortType;
+    departmentSortBy: SpaceSortType;
     createdSpaces: KnowledgeSpace[];
     joinedSpaces: KnowledgeSpace[];
     departmentSpaces: KnowledgeSpace[];

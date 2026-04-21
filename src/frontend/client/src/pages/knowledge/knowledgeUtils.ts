@@ -7,6 +7,40 @@ export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
     return file.status === FileStatus.SUCCESS;
 }
 
+export function getKnowledgeApprovalStatusLabel(file: KnowledgeFile): string | null {
+    if (!file.approvalStatus) return null;
+    switch (file.approvalStatus) {
+        case "pending_review":
+            return i18next.t("com_knowledge.approval_pending_status");
+        case "sensitive_rejected":
+            return i18next.t("com_knowledge.sensitive_rejected_status");
+        case "rejected":
+            return i18next.t("com_knowledge.approval_rejected_status");
+        case "finalize_failed":
+            return i18next.t("com_knowledge.approval_finalize_failed_status");
+        default:
+            return null;
+    }
+}
+
+export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
+    return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
+}
+
+export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
+    if (file.approvalStatus) {
+        return file.approvalStatus === "pending_review";
+    }
+    return Boolean(
+        file.status && [
+            FileStatus.PROCESSING,
+            FileStatus.WAITING,
+            FileStatus.REBUILDING,
+            FileStatus.UPLOADING,
+        ].includes(file.status)
+    );
+}
+
 // ─── File upload constants ──────────────────────────────────────────
 /** Allowed file extensions for upload (shared across drag-drop, file input, and validation) */
 export const ALLOWED_EXTENSIONS = [

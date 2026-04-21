@@ -20,6 +20,7 @@ from bisheng.approval.domain.schemas.approval_schema import (
     ApprovalRequestResp,
     DepartmentKnowledgeSpaceApprovalSettings,
 )
+from bisheng.core.database import get_async_db_session
 from bisheng.common.errcode.approval import (
     ApprovalRejectReasonRequiredError,
     ApprovalRequestAlreadyProcessedError,
@@ -35,6 +36,10 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTyp
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, FileType
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceFileResponse
 from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.message.domain.models.inbox_message import MessageStatusEnum
+from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
+    InboxMessageRepositoryImpl,
+)
 
 
 _SETTINGS_KEY = 'department_knowledge_space_approval'
@@ -42,6 +47,38 @@ _MESSAGE_ACTION_CODE = 'request_department_knowledge_space_upload'
 
 
 class ApprovalService:
+    @classmethod
+    async def _sync_message_after_decision(
+        cls,
+        *,
+        message_id: Optional[int],
+        operator_user_id: int,
+        action: ApprovalDecisionActionEnum,
+    ) -> None:
+        if not message_id:
+            return
+        async with get_async_db_session() as session:
+            repo = InboxMessageRepositoryImpl(session)
+            message = await repo.find_by_id(message_id)
+            if not message:
+                return
+            updated_content = []
+            for item in message.content or []:
+                new_item = dict(item)
+                if item.get('type') == 'agree_reject_button':
+                    new_item['content'] = 'agree' if action == ApprovalDecisionActionEnum.APPROVE else 'reject'
+                updated_content.append(new_item)
+            await repo.update_message_after_approval(
+                message_id=message_id,
+                status=(
+                    MessageStatusEnum.APPROVED
+                    if action == ApprovalDecisionActionEnum.APPROVE
+                    else MessageStatusEnum.REJECTED
+                ),
+                content=updated_content,
+                operator_user_id=operator_user_id,
+            )
+
     @classmethod
     async def get_department_knowledge_space_settings(
         cls,
@@ -519,6 +556,11 @@ class ApprovalService:
         row = await ApprovalRequestDao.aget_by_id(request_id)
         if not row:
             raise ApprovalRequestNotFoundError()
+        await cls._sync_message_after_decision(
+            message_id=row.message_id,
+            operator_user_id=operator_user_id,
+            action=action,
+        )
 
         space = await KnowledgeDao.aquery_by_id(row.space_id)
         business_name = space.name if space else f'space:{row.space_id}'

@@ -14,6 +14,8 @@ import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { DepartmentKnowledgeSpaceApprovalDialog } from "./DepartmentKnowledgeSpaceApprovalDialog";
+import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
 
 interface KnowledgeConfigForm {
     /** 系统提示词，对应接口 system_prompt */
@@ -27,6 +29,8 @@ interface KnowledgeConfigForm {
 export default function KnowledgeSpace() {
     const { t } = useTranslation();
     const { formData, setFormData, errors, setErrors, handleSave } = useKnowledgeConfig();
+    const [managerOpen, setManagerOpen] = useState(false);
+    const [approvalOpen, setApprovalOpen] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate();
 
@@ -114,6 +118,35 @@ export default function KnowledgeSpace() {
                                     <span className="mt-3 ml-2">{t('chatConfig.character')}</span>
                                 </div>
                             </>
+
+                            <div className="mt-8 border-t border-[#ECECEC] pt-6">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-lg font-bold">
+                                            {t("bench.departmentKnowledgeSpace", "部门知识空间")}
+                                        </p>
+                                        <p className="mt-1 text-sm text-[#86909C]">
+                                            {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建和上传审批策略。")}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Button
+                                            variant="outline"
+                                            className="bg-gray-50"
+                                            onClick={() => setApprovalOpen(true)}
+                                        >
+                                            {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="bg-gray-50"
+                                            onClick={() => setManagerOpen(true)}
+                                        >
+                                            {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
@@ -122,6 +155,15 @@ export default function KnowledgeSpace() {
                     </div>
                 </CardContent>
             </div>
+
+            <DepartmentKnowledgeSpaceManagerDialog
+                open={managerOpen}
+                onOpenChange={setManagerOpen}
+            />
+            <DepartmentKnowledgeSpaceApprovalDialog
+                open={approvalOpen}
+                onOpenChange={setApprovalOpen}
+            />
         </div>
     );
 }

@@ -30,7 +30,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize } from "~/hooks";
 
@@ -156,8 +156,23 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 // 辅助组件：状态标签渲染
 // ============================================================
-const StatusBadge = ({ status }: { status: FileStatus }) => {
+const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFile }) => {
     const localize = useLocalize();
+    const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
+    if (approvalStatusLabel) {
+        const rejected = file ? isKnowledgeApprovalRejected(file) : false;
+        return (
+            <div
+                className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
+                    rejected ? "bg-[#fff2f0] text-[#f53f3f]" : "bg-[#e8f3ff] text-[#165dff]"
+                )}
+            >
+                <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
+                {approvalStatusLabel}
+            </div>
+        );
+    }
     const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
         [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
         [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
@@ -595,6 +610,7 @@ function FileRow({
     ) && file.errorMessage?.trim()
         ? file.errorMessage.trim()
         : null;
+    const approvalReason = file.approvalReason?.trim() || null;
 
     const {
         isRenaming,
@@ -789,12 +805,12 @@ function FileRow({
                         </span>
                     )}
                 </div>
-                {failureMessage && !isRenaming && (
+                {(failureMessage || approvalReason) && !isRenaming && (
                     <p
                         className="mt-1 truncate text-xs leading-5 text-[#f53f3f]"
-                        title={failureMessage}
+                        title={failureMessage || approvalReason || undefined}
                     >
-                        {localize("com_knowledge.failure_reason")}: {failureMessage}
+                        {localize("com_knowledge.failure_reason")}: {failureMessage || approvalReason}
                     </p>
                 )}
                 {/* 固定列右侧阴影 */}
@@ -870,7 +886,7 @@ function FileRow({
                             <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
                         </span>
                     ) : (
-                        <StatusBadge status={file.status ?? FileStatus.WAITING} />
+                        <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
                     )}
                 </TableCell>
             )}

@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 
 interface FileCardProps {
@@ -73,6 +73,8 @@ export function FileCard({
     ) && file.errorMessage?.trim()
         ? file.errorMessage.trim()
         : null;
+    const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
+    const approvalReason = file.approvalReason?.trim() || null;
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
@@ -141,6 +143,15 @@ export function FileCard({
                     </div>
                 );
             case FileStatus.WAITING:
+                if (approvalStatusLabel) {
+                    return (
+                        <div className="flex items-center flex-1 min-w-0">
+                            <Circle className={`size-1.5 shrink-0 mr-1.5 ${isKnowledgeApprovalRejected(file) ? "fill-[#f53f3f] text-[#f53f3f]" : "fill-[#165dff] text-[#165dff]"}`} />
+                            <span className={cn("truncate", nameToneClass)}>{file.name}</span>
+                            <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{approvalStatusLabel}</span>
+                        </div>
+                    );
+                }
                 return (
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
@@ -375,12 +386,12 @@ export function FileCard({
                     <div className="flex items-center text-sm font-medium min-w-0">
                         {getStatusText()}
                     </div>
-                    {failureMessage && (
+                    {(failureMessage || approvalReason) && (
                         <p
                             className="mt-1 text-xs leading-[16px] text-[#f53f3f] line-clamp-2 break-words"
-                            title={failureMessage}
+                            title={failureMessage || approvalReason || undefined}
                         >
-                            {localize("com_knowledge.failure_reason")}: {failureMessage}
+                            {localize("com_knowledge.failure_reason")}: {failureMessage || approvalReason}
                         </p>
                     )}
 
