@@ -54,14 +54,18 @@ class Etl4lmLoader(BaseBishengLoader):
 
     def load(self) -> List[Document]:
         b64_data = base64.b64encode(open(self.file_path, "rb").read()).decode()
-        parameters = {"start": self.start, "n": self.n}
-        # TODO: add filter_page_header_footer into payload when elt4llm is ready.
+        parameters = {
+            "start": self.start,
+            "n": self.n,
+            "filter_page_header_footer": self.filter_page_header_footer,
+        }
         payload = dict(
             filename=self.file_name,
             b64_data=[b64_data],
             mode="partition",
             force_ocr=self.force_ocr,
             enable_formula=self.enable_formular,
+            filter_page_header_footer=self.filter_page_header_footer,
             ocr_sdk_url=self.ocr_sdk_url,
             parameters=parameters,
         )

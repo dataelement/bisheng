@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar, Union
 
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -10,6 +10,7 @@ from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.flow import FlowCreate, FlowRead, FlowType
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.tool.domain.models.gpts_tools import GptsToolsRead
@@ -170,6 +171,8 @@ class ChatResponse(ChatMessage):
     intermediate_steps: Optional[str] = ''
     is_bot: bool | int = True
     category: str = 'processing'
+    citations: Optional[List[CitationRegistryItemSchema]] = None
+    citation_registry_items: Optional[List[CitationRegistryItemSchema]] = None
 
     @field_validator('type')
     @classmethod
@@ -255,6 +258,9 @@ class AssistantCreateReq(BaseModel):
     name: str = Field(max_length=50, description='The assistant name.')
     prompt: str = Field(min_length=20, max_length=1000, description='Helper Prompt')
     logo: str = Field(description='logoRelative address of the file')
+    # F017: Root→Child sharing intent; None → Root.share_default_to_children
+    share_to_children: Optional[bool] = Field(default=None,
+                                              description='F017: share with children (Root only)')
 
 
 class AssistantUpdateReq(BaseModel):
@@ -333,7 +339,10 @@ class GroupAndRoles(BaseModel):
 class CreateUserReq(BaseModel):
     user_name: str = Field(max_length=30, description='Username')
     password: str = Field(description='Passwords')
-    group_roles: List[GroupAndRoles] = Field(description='List of user groups and roles to join')
+    group_roles: List[GroupAndRoles] = Field(
+        default_factory=list,
+        description='Optional user groups and roles; roles default to normal user when empty',
+    )
 
 
 class OpenAIChatCompletionReq(BaseModel):
@@ -385,6 +394,29 @@ class WSPrompt(BaseModel):
     prompt: Optional[str] = None
 
 
+# v2.5 Agent Mode: Available Tool Group (shape mirrors LinSight linsight_config.tools).
+# The daily-chat input bar resolves individual tools from `children[]`; the parent
+# row only stores display metadata and per-group `default_checked`.
+class ToolConfig(BaseModel):
+    """Available tool group item for the daily-chat Agent input bar."""
+    id: int = Field(description='GptsToolsType.id (parent type id)')
+    name: str = Field(description='Display name shown in the UI')
+    is_preset: Optional[int] = Field(default=None, description='0=custom, 1=builtin, 2=mcp')
+    description: Optional[str] = Field(default=None)
+    default_checked: bool = Field(default=False, description='Initial checked state for new sessions')
+    children: List[Dict] = Field(default_factory=list, description='Selected leaf tools: [{id, name, tool_key, desc}]')
+
+
+# v2.5 Agent Mode: Configured Organizational Knowledge Base Items
+class OrgKbConfig(BaseModel):
+    """Organization knowledge-base item surfaced in the PlusMenu."""
+    id: int = Field(description='Knowledge.id')
+    name: str = Field(description='Knowledge-base display name')
+    type: Optional[int] = Field(default=None, description='Knowledge type: 0=doc, 1=qa')
+    default_checked: bool = Field(default=False, description='Initial checked state for new sessions')
+    sort_order: int = Field(default=0, description='Display order (ascending)')
+
+
 # linsight Configuration
 class LinsightConfig(BaseModel):
     """
@@ -411,16 +443,27 @@ class WorkstationConfig(BaseModel):
     functionDescription: Optional[str] = Field(default='')
     inputPlaceholder: Optional[str] = ''
     models: Optional[Union[List[WSModel], str]] = None
-    webSearch: Optional[WSPrompt] = None
+    # --- Legacy: kept for backward compatibility during rollout ---
+    webSearch: Optional[WSPrompt] = None  # DEPRECATED, superseded by `tools`
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
+    # --- v2.5 Agent-mode additions ---
+    tools: Optional[List[ToolConfig]] = Field(
+        default=None,
+        description='Available tools for the chat input bar (max 20 enforced by UI)',
+    )
+    orgKbs: Optional[List[OrgKbConfig]] = Field(
+        default=None,
+        description='Configured organization knowledge bases surfaced in the PlusMenu',
+    )
     applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000,
                                                            pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                            description='App Center Welcome Message')
     applicationCenterDescription: Optional[str] = Field(default='', max_length=1000,
                                                         pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                         description='App Center Description')
+    recommendedApps: Optional[List[str]] = Field(default=None, description='Ordered list of recommended app IDs configured by admin')
 
 
 class SubscriptionConfig(BaseModel):
@@ -446,12 +489,19 @@ class ExcelRule(BaseModel):
 # File Split Request Base Parameters
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='The knowledge base uponID')
+    split_mode: Literal['auto', 'custom', 'hierarchical'] = Field(
+        default='auto',
+        description='Document split mode: auto/custom/hierarchical'
+    )
     separator: Optional[List[str]] = Field(default=None,
                                            description='Split text rule, If not passed on, it is the default')
     separator_rule: Optional[List[str]] = Field(default=None,
                                                 description='Segmentation before or after the segmentation rule;before/after')
     chunk_size: Optional[int] = Field(default=1000, description='Split text length, default if not passed')
     chunk_overlap: Optional[int] = Field(default=100, description='Split text overlap length, default if not passed')
+    hierarchy_level: Optional[int] = Field(default=3, ge=1, le=6, description='Max hierarchy level to retain')
+    append_title: Optional[bool] = Field(default=False, description='Whether to prepend title path to chunk text')
+    max_chunk_size: Optional[int] = Field(default=1000, ge=1, description='Max chunk size for hierarchical mode')
     retain_images: Optional[int] = Field(default=1, description='Keep document image')
     force_ocr: Optional[int] = Field(default=0, description='EnableOCR')
     enable_formula: Optional[int] = Field(default=1, description='latexFormula Recognition')
@@ -463,6 +513,8 @@ class FileProcessBase(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def check_separator_rule(cls, values: Any):
+        if values.get('split_mode') is None:
+            values['split_mode'] = 'auto'
         if not values.get('separator', None):
             values['separator'] = ['\n\n', '\n']
         if not values.get('separator_rule', None):
@@ -471,6 +523,12 @@ class FileProcessBase(BaseModel):
             values['chunk_size'] = 1000
         if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
+        if values.get('hierarchy_level') is None:
+            values['hierarchy_level'] = 3
+        if values.get('append_title') is None:
+            values['append_title'] = False
+        if values.get('max_chunk_size') is None:
+            values['max_chunk_size'] = 1000
         if values.get('filter_page_header_footer') is None:
             values['filter_page_header_footer'] = 0
         if values.get('force_ocr') is None:

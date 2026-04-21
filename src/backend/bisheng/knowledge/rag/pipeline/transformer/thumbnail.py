@@ -31,7 +31,7 @@ class ThumbnailTransformer(BaseDocumentTransformer):
         file_ext = self.loader.file_extension
 
         # Exclude specified types
-        excluded_exts = ["doc", "docx", "xls", "xlsx", "csv", "ppt", "pptx"]
+        excluded_exts = ["doc", "docx", "wps", "xls", "xlsx", "csv", "et", "ppt", "pptx", "dps"]
         if file_ext in excluded_exts:
             return documents
 

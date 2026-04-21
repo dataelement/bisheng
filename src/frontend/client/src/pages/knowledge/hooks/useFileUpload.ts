@@ -4,7 +4,6 @@ import {
     FileType,
     KnowledgeFile,
     KnowledgeSpace,
-    SpaceRole,
     createFolderApi,
     renameFolderApi,
     deleteFolderApi,
@@ -27,6 +26,45 @@ export interface DuplicateFileEntry {
     oldFileLevelPath: string;
     /** Raw object from addFiles response, passed to retry API as-is */
     rawObj: any;
+}
+
+const PENDING_REGISTERED_FILE_STATUSES = new Set<FileStatus>([
+    FileStatus.UPLOADING,
+    FileStatus.WAITING,
+    FileStatus.PROCESSING,
+    FileStatus.REBUILDING,
+]);
+
+export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): DuplicateFileEntry[] {
+    return registeredFiles
+        .filter((file) => (
+            file.status === FileStatus.FAILED &&
+            Boolean(file.oldFileLevelPath?.trim()) &&
+            Boolean((file as any)._raw)
+        ))
+        .map((file) => ({
+            fileId: file.id,
+            fileName: file.name,
+            oldFileLevelPath: file.oldFileLevelPath || "",
+            rawObj: (file as any)._raw,
+        }));
+}
+
+export function mergeVisibleRegisteredFiles(
+    existingFiles: KnowledgeFile[],
+    registeredFiles: KnowledgeFile[],
+): { files: KnowledgeFile[]; addedCount: number } {
+    if (registeredFiles.length === 0) {
+        return { files: existingFiles, addedCount: 0 };
+    }
+
+    const existingIds = new Set(existingFiles.map((file) => file.id));
+    const uniqueRegisteredFiles = registeredFiles.filter((file) => !existingIds.has(file.id));
+
+    return {
+        files: [...uniqueRegisteredFiles, ...existingFiles],
+        addedCount: uniqueRegisteredFiles.length,
+    };
 }
 
 interface UseFileUploadOptions {
@@ -115,19 +153,28 @@ export function useFileUpload({
                     file_path: uploadedPaths,
                     parent_id: currentFolderId ? Number(currentFolderId) : null,
                 });
-                // Detect duplicates: failed files with old_file_level_path indicate name conflict
-                const dupes = registeredFiles
-                    .filter(f => f.status === FileStatus.FAILED)
-                    .map(f => ({
-                        fileId: f.id,
-                        fileName: f.name,
-                        oldFileLevelPath: f.oldFileLevelPath || "",
-                        rawObj: (f as any)._raw,
-                    }));
+                const dupes = extractDuplicateFileEntries(registeredFiles);
                 if (dupes.length > 0) {
                     setDuplicateFiles(dupes);
                 }
-                await loadFiles(currentPage);
+
+                const duplicateIds = new Set(dupes.map((file) => file.fileId));
+                const visibleRegisteredFiles = registeredFiles.filter((file) => !duplicateIds.has(file.id));
+                const { files: mergedFiles, addedCount } = mergeVisibleRegisteredFiles(files, visibleRegisteredFiles);
+
+                if (visibleRegisteredFiles.length > 0) {
+                    setFiles(mergedFiles);
+                    if (addedCount > 0) {
+                        setTotal((prev) => prev + addedCount);
+                    }
+                }
+
+                const hasPendingRegisteredFiles = visibleRegisteredFiles.some((file) =>
+                    file.status && PENDING_REGISTERED_FILE_STATUSES.has(file.status)
+                );
+                if (!hasPendingRegisteredFiles) {
+                    await loadFiles(currentPage);
+                }
             } catch (e) {
                 // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
             }
@@ -137,7 +184,7 @@ export function useFileUpload({
                 prev.filter(f => !placeholders.some(p => p.id === f.id))
             );
         },
-        [activeSpace, currentFolderId, currentPage, loadFiles, showToast]
+        [activeSpace, currentFolderId, currentPage, files, loadFiles, localize, setFiles, setTotal, showToast]
     );
 
     /** User chose to replace duplicate files */

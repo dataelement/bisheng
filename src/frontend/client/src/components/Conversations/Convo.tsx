@@ -12,7 +12,7 @@ import {
 } from "~/hooks/queries/data-provider";
 import type { TConversation } from "~/types/chat";
 import { Constants } from "~/types/chat";
-import { useLocalize, useMediaQuery, useNavigateToConvo } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useNavigateToConvo } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import store from "~/store";
 import { cn } from "~/utils";
@@ -51,7 +51,7 @@ export default function Conversation({
   const [titleInput, setTitleInput] = useState(title);
   const [renaming, setRenaming] = useState(false);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
-  const isSmallScreen = useMediaQuery("(max-width: 768px)");
+  const isSmallScreen = usePrefersMobileLayout();
   const localize = useLocalize();
   const navigate = useNavigate();
 
@@ -253,9 +253,13 @@ export default function Conversation({
       )}
       <div
         className={cn(
-          isPopoverActive || isActiveConvo
-            ? "flex"
-            : "hidden group-focus-within:flex group-hover:flex"
+          isSmallScreen
+            ? "flex w-[48px] justify-end items-center shrink-0"
+            : isPopoverActive || isActiveConvo
+              ? "flex"
+              : "hidden group-focus-within:flex group-hover:flex",
+          // Ensure consistent rendering on hoverless devices
+          "[@media(hover:none)]:flex",
         )}
       >
         {!renaming && (

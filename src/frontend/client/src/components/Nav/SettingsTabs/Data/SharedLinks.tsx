@@ -15,7 +15,7 @@ import {
 } from '~/components/ui';
 import { useDeleteSharedLinkMutation, useSharedLinksQuery } from '~/hooks/queries/data-provider';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { useLocalize, useMediaQuery } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import DataTable from '~/components/ui/DataTable';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';
@@ -35,7 +35,7 @@ const DEFAULT_PARAMS: SharedLinksListParams = {
 export default function SharedLinks() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [queryParams, setQueryParams] = useState<SharedLinksListParams>(DEFAULT_PARAMS);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(false);

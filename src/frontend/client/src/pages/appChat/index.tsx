@@ -6,7 +6,7 @@ import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi,
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
-import { chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
+import { chatApiVersionState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
 import { AppLostMessage } from "./useWebsocket";
 
 const API_VERSION = 'v1';
@@ -16,12 +16,20 @@ export const enum FLOW_TYPES {
     SKILL = 1,
 }
 
-export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '' }) {
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '' }) {
     const { conversationId: _cid, fid: _fid, type: _type } = useParams();
     const cid = _cid || chatId;
     const fid = _fid || flowId;
     const type = _type || flowType;
+    const effectiveApiVersion = apiVersion || API_VERSION;
     const [readOnly] = useState(shareToken);
+    const setApiVersion = useRecoilState(chatApiVersionState)[1];
+
+    // Sync apiVersion into Recoil so useChatHelpers picks up v2 WS URLs
+    useEffect(() => {
+        setApiVersion(effectiveApiVersion as 'v1' | 'v2');
+        return () => { setApiVersion('v1'); };
+    }, [effectiveApiVersion, setApiVersion]);
     const [chats, setChats] = useRecoilState(chatsState)
     const [__, setRunningState] = useRecoilState(runningState)
     const [_, setChatId] = useRecoilState(chatIdState)
@@ -67,8 +75,8 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             case FLOW_TYPES.WORK_FLOW:
                 // Fetch detail and chat history, skip global 403 redirect
                 const [flowRes, msgRes] = await Promise.all([
-                    getFlowApi(fid!, API_VERSION, shareToken, true),
-                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
+                    getFlowApi(fid!, effectiveApiVersion, shareToken, true),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken, apiVersion: effectiveApiVersion })
                 ])
 
                 // Handle 403: no permission, redirect to app center
@@ -109,8 +117,8 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             case FLOW_TYPES.ASSISTANT:
                 // Fetch assistant detail, skip global 403 redirect
                 const [assistantRes, historyRes] = await Promise.all([
-                    getAssistantDetailApi(fid, shareToken, true),
-                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
+                    getAssistantDetailApi(fid, shareToken, true, effectiveApiVersion),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken, apiVersion: effectiveApiVersion })
                 ]);
 
                 // Handle 403: no permission, redirect to app center
@@ -173,7 +181,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} cid={cid} v={API_VERSION} readOnly={readOnly} />
+    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} />
 };
 
 /**

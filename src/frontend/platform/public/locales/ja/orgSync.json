@@ -1,0 +1,126 @@
+{
+  "title": "組織同期",
+  "description": "WeChat Work や Feishu などの外部システムから部門とメンバー情報を自動同期します。",
+  "loading": "読み込み中...",
+  "emptyHint": "同期ソースが未設定です。右上のボタンから作成してください。",
+  "providers": {
+    "wecom": "WeChat Work",
+    "feishu": "Feishu",
+    "dingtalk": "DingTalk",
+    "generic_api": "汎用 REST API"
+  },
+  "runStatus": {
+    "running": "実行中",
+    "success": "成功",
+    "partial": "一部成功",
+    "failed": "失敗"
+  },
+  "syncStatus": {
+    "idle": "待機中",
+    "running": "実行中"
+  },
+  "triggerType": {
+    "manual": "手動",
+    "scheduled": "スケジュール"
+  },
+  "columns": {
+    "configName": "名称",
+    "provider": "種類",
+    "syncStatus": "同期状態",
+    "lastSync": "最終同期",
+    "lastResult": "最終結果",
+    "actions": "操作"
+  },
+  "actions": {
+    "create": "新規作成",
+    "edit": "編集",
+    "delete": "削除",
+    "test": "接続テスト",
+    "execute": "今すぐ同期",
+    "viewLogs": "ログ",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "add": "追加",
+    "remove": "削除"
+  },
+  "form": {
+    "configName": "構成名",
+    "configNamePlaceholder": "例: WeChat Work 本番環境",
+    "provider": "プロバイダー",
+    "providerImmutable": "作成後にプロバイダーは変更できません。"
+  },
+  "dialog": {
+    "createTitle": "新しい同期設定",
+    "editTitle": "同期設定の編集"
+  },
+  "wecom": {
+    "corpid": "Corp ID",
+    "corpidPlaceholder": "WeChat Work の CorpID（先頭は ww）",
+    "corpidRequired": "Corp ID は必須です",
+    "corpsecret": "Corp Secret",
+    "corpsecretPlaceholder": "アプリケーションのシークレット",
+    "corpsecretMaskedHint": "空欄または **** のまま保存すると既存の値を維持します",
+    "corpsecretRequired": "Corp Secret は必須です",
+    "corpsecretEditHint": "現在の値はマスク表示です。保存しても既存のシークレットが維持されます。",
+    "corpsecretCannotBeMasked": "新規作成時には実際のシークレットが必要です",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "管理コンソールから取得した AgentId",
+    "agentIdRequired": "Agent ID は必須です",
+    "allowDeptIds": "同期許可ルート部門 ID",
+    "allowDeptIdsHint": "空欄の場合は WeChat Work のルート (id=1) を使用します。整数のみ、複数は個別に追加してください。",
+    "allowDeptIdsPlaceholder": "整数を入力して「追加」をクリック",
+    "allowDeptIdsDefault": "（デフォルト [1]）"
+  },
+  "feishu": {
+    "appId": "App ID",
+    "appIdPlaceholder": "Feishu 自作アプリの App ID",
+    "appIdRequired": "App ID は必須です",
+    "appSecret": "App Secret",
+    "appSecretPlaceholder": "Feishu アプリのシークレット",
+    "appSecretMaskedHint": "空欄または **** のまま保存すると既存の値を維持します",
+    "appSecretRequired": "App Secret は必須です",
+    "appSecretCannotBeMasked": "新規作成時には実際のシークレットが必要です"
+  },
+  "generic": {
+    "endpointUrl": "API アドレス",
+    "endpointUrlPlaceholder": "https://example.com/org-sync",
+    "endpointUrlRequired": "API アドレスは必須です",
+    "endpointUrlInvalid": "http:// または https:// で始まる URL を指定してください",
+    "apiKey": "API Key（任意）",
+    "apiKeyPlaceholder": "認証キーが必要な場合に入力",
+    "apiKeyMaskedHint": "空欄または **** のまま保存すると既存の値を維持します"
+  },
+  "validation": {
+    "nameRequired": "構成名は必須です"
+  },
+  "testConnection": {
+    "successTitle": "接続成功",
+    "successDesc": "{{org}} — 部門 {{depts}} / メンバー {{members}}"
+  },
+  "confirmExecute": {
+    "title": "今すぐ同期しますか？",
+    "desc": "「{{name}}」を同期すると最新の部門とメンバーを取得します。関連データが変化する場合があります。"
+  },
+  "confirmDelete": {
+    "title": "この構成を削除しますか？",
+    "desc": "「{{name}}」を削除すると今後の同期は停止しますが、既存のデータは保持されます。"
+  },
+  "executeSuccess": {
+    "title": "同期タスクを送信しました",
+    "desc": "バックグラウンドで実行中です。進捗は同期ログで確認できます。"
+  },
+  "createSuccess": "構成を作成しました",
+  "updateSuccess": "構成を更新しました",
+  "deleteSuccess": "構成を削除しました",
+  "syncLog": {
+    "title": "同期ログ · {{name}}",
+    "status": "ステータス",
+    "triggerType": "トリガー",
+    "deptChanges": "部門変動",
+    "memberChanges": "メンバー変動",
+    "startTime": "開始",
+    "endTime": "終了",
+    "empty": "同期ログはまだありません"
+  }
+}

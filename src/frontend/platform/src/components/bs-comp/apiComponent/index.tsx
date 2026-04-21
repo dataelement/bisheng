@@ -1,5 +1,9 @@
-import { useState, useMemo } from 'react';
+import { LoadingIcon } from '@/components/bs-icons/loading';
+import { Alert, AlertDescription } from '@/components/bs-ui/alert';
+import { usePermissionLevels } from '@/components/bs-comp/permission/usePermissionLevels';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 import ApiAccess from './ApiAccess';
 import ApiAccessFlow from './ApiAccessFlow';
 import ApiAccessSkill from './ApiAccessSkill';
@@ -28,6 +32,12 @@ interface ApiMainPageProps {
 const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
     const { t } = useTranslation();
     const [activeMenu, setActiveMenu] = useState('api-access');
+    const { id } = useParams();
+    const permissionType = type === API_TYPE.ASSISTANT ? 'assistant' : 'workflow';
+    const resourceIds = id ? [String(id)] : [];
+    const { levels, loading } = usePermissionLevels(permissionType as any, resourceIds);
+    const level = id ? levels[String(id)] : undefined;
+    const canManageShare = level === 'owner' || level === 'manager';
 
     // 菜单配置项
     const menuItems = useMemo((): MenuItem[] => [
@@ -53,6 +63,24 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
         () => menuItems.find(item => item.key === activeMenu)?.component,
         [activeMenu, menuItems]
     );
+
+    if (loading) {
+        return (
+            <div className="flex size-full items-center justify-center">
+                <LoadingIcon />
+            </div>
+        );
+    }
+
+    if (!canManageShare) {
+        return (
+            <div className="p-4">
+                <Alert>
+                    <AlertDescription>{t('noOperationPermission', { ns: 'knowledge' })}</AlertDescription>
+                </Alert>
+            </div>
+        );
+    }
 
     return (
         <div className="flex size-full bg-background-main">

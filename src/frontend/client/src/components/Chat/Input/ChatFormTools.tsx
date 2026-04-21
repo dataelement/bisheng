@@ -16,7 +16,13 @@ import store from "~/store";
 import { BsConfig } from "~/types/chat";
 import { cn } from "~/utils";
 
-// 工具
+/**
+ * @deprecated v2.5 — use `AgentToolSelector` instead.
+ * ChatToolDown only knows how to flip web-search on/off via the legacy
+ * `searchType` atom. It is still rendered by `AiChatInput` when `bsConfig.tools`
+ * is empty (pre-v2.5 admin configs); once the workstation config migration is
+ * complete everywhere this component + the `searchType` atom can be deleted.
+ */
 export const ChatToolDown = ({
   config,
   searchType,
@@ -41,7 +47,7 @@ export const ChatToolDown = ({
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
+          "h-7 rounded-full px-2 data-[state=open]:border-blue-500 touch-mobile:px-1.5",
           searchType === "netSearch" && "bg-blue-100"
         )}
       >
@@ -52,7 +58,7 @@ export const ChatToolDown = ({
           )}
         >
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal">
+          <span className="text-xs font-normal touch-mobile:sr-only">
             {localize("com_tools_title")}
           </span>
         </div>
@@ -122,10 +128,10 @@ export const LinsiTools = ({ tools, setTools }) => {
 
   return (
     <Select>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
+      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 touch-mobile:px-1.5">
         <div className={cn("flex gap-2", active && "text-blue-600")}>
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal">
+          <span className="text-xs font-normal touch-mobile:sr-only">
             {localize("com_tools_title")}
           </span>
         </div>

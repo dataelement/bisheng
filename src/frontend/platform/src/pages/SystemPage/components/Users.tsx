@@ -123,7 +123,7 @@ export default function Users(params) {
     const [userGroups, setUserGroups] = useState([])
     const getUserGoups = async () => {
         const res: any = await getUserGroupsApi()
-        setUserGroups(res.records)
+        setUserGroups(res)
     }
     // 获取角色类型数据
     const [roles, setRoles] = useState([])
@@ -161,7 +161,7 @@ export default function Users(params) {
             {/* 编辑 */}
             <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>
             {/* 重置密码 */}
-            {(user.role === 'admin' || user.role === 'group_admin') &&
+            {user.role === 'admin' &&
                 <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
             {/* 禁用 */}
             {
@@ -243,13 +243,16 @@ export default function Users(params) {
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer bg-background-login">
-            <p className="desc">{t('system.userList')}</p>
+        <div className="bisheng-table-footer px-6 bg-background-login">
+            <div className="flex items-center gap-2">
+                <p className="desc">{t('system.userList')}</p>
+            </div>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}
                 pageSize={pageSize}
                 total={total}
+                showTotal={true}
                 onChange={(newPage) => setPage(newPage)}
             />
         </div>

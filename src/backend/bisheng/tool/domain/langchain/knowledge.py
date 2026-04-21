@@ -130,20 +130,22 @@ class KnowledgeRagTool(BaseTool):
 
     def _run(self, query: str) -> Any:
         # 1. retrieve documents
-        finally_docs = self.knowledge_retriever_tool.invoke({"query": query})
-        llm_inputs = self._get_llm_inputs(query, finally_docs)
+        retrieval_result = self.knowledge_retriever_tool.invoke({"query": query})
+        llm_inputs = self._get_llm_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
         return qa_chain.invoke(llm_inputs)
 
     async def _arun(self, query: str) -> Any:
-        finally_docs = await self.knowledge_retriever_tool.ainvoke({"query": query})
-        llm_inputs = self._get_llm_inputs(query, finally_docs)
+        retrieval_result = await self.knowledge_retriever_tool.ainvoke({"query": query})
+        llm_inputs = self._get_llm_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
         return await qa_chain.ainvoke(llm_inputs)
 
-    def _get_llm_inputs(self, query: str, finally_docs: List[Document]) -> Any:
+    def _get_llm_inputs(self, query: str, retrieval_result: Any) -> Any:
+        """Build prompt inputs from retrieved documents."""
+        source_documents = list(retrieval_result or [])
         inputs = {
-            "context": finally_docs,
+            "context": source_documents,
         }
         if "question" in self.chat_prompt.input_variables:
             inputs["question"] = query

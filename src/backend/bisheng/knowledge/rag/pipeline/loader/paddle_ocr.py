@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from loguru import logger
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
+from bisheng.knowledge.rag.pipeline.loader.utils.pdf_header_footer import filter_repeated_header_footer_blocks
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 from bisheng.utils.exceptions import EtlException
 
@@ -34,6 +35,7 @@ class PaddleOcrLoader(BaseBishengLoader):
             headers: Optional[Dict] = None,
             timeout: int = 120,
             retain_images: bool = True,
+            filter_page_header_footer: bool = False,
             request_kwargs: Optional[Dict] = None,
             *args,
             **kwargs,
@@ -46,6 +48,7 @@ class PaddleOcrLoader(BaseBishengLoader):
 
         self.timeout = timeout
         self.retain_images = retain_images
+        self.filter_page_header_footer = filter_page_header_footer
 
         if headers:
             self.headers = headers
@@ -150,6 +153,8 @@ class PaddleOcrLoader(BaseBishengLoader):
         """Check if a block should be skipped (decorative images, empty content)."""
         block_label = item.get("block_label", "text")
         block_order = item.get("block_order")
+        if self.filter_page_header_footer and block_label in {"header", "footer"}:
+            return True
         if block_label == "image" and not item.get("block_content"):
             return True
         if block_order is None and block_label == "image":
@@ -188,6 +193,13 @@ class PaddleOcrLoader(BaseBishengLoader):
         markdown_texts = []
         for page_result in layout_results:
             md_text = page_result.get("markdown", {}).get("text", "")
+            if self.filter_page_header_footer and md_text:
+                parsing_list = page_result.get("prunedResult", {}).get("parsing_res_list", [])
+                for item in parsing_list:
+                    if self._is_skip_block(item):
+                        block_content = item.get("block_content", "")
+                        if block_content:
+                            md_text = md_text.replace(block_content, "", 1)
             if md_text:
                 markdown_texts.append(md_text)
         merged_text = "\n\n".join(markdown_texts)

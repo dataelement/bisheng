@@ -20,25 +20,27 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
-from bisheng.common.errcode.server import NoLlmModelConfigError
+from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
-from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
-    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
+from bisheng.knowledge.domain.schemas.knowledge_schema import (
+    AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
+    ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, calc_data_sha256
 from bisheng.worker.knowledge.qa import insert_qa_celery
@@ -70,6 +72,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.post('/upload/{knowledge_id}')
+@require_quota(QuotaResourceType.KNOWLEDGE_SPACE_FILE)
 async def upload_knowledge_file(*,
                                 request: Request,
                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -213,11 +216,13 @@ async def rebuild_knowledge_file(*,
 
 
 @router.post('/create')
-def create_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user),
-                     knowledge: KnowledgeCreate):
+async def create_knowledge(*,
+                           request: Request,
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
+                           knowledge: KnowledgeCreate):
     """ Create Knowledge Base. """
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
     return resp_200(db_knowledge)
 
@@ -231,8 +236,13 @@ async def copy_knowledge(*,
                          knowledge_name: str = Body(default=None, embed=True)):
     """ Copy Knowledge Base. """
     knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not knowledge:
+        return KnowledgeNotExistError.return_resp()
 
-    if not login_user.is_admin and knowledge.user_id != login_user.user_id:
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    if not await login_user.async_access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
 
     knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
@@ -261,7 +271,13 @@ async def copy_qa_knowledge(*,
     """
 
     qa_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-    if not login_user.is_admin and qa_knowledge.user_id != login_user.user_id:
+    if not qa_knowledge:
+        return KnowledgeNotExistError.return_resp()
+
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    if not await login_user.async_access_check(
+            qa_knowledge.user_id, str(qa_knowledge.id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
 
     if qa_knowledge.type != KnowledgeTypeEnum.QA.value:
@@ -842,9 +858,12 @@ def update_knowledge_model(*,
     3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
     """
     # 1. Verify that isembeddingModels
+    # Cross-tenant references surface as "not found" via the tenant_filter
+    # event layer; raise the dedicated 19802 so the UI renders the
+    # "model not accessible" toast instead of "model config missing".
     model_info = LLMDao.get_model_by_id(req_data.model_id)
     if not model_info:
-        return NoLlmModelConfigError.return_resp()
+        return LLMModelNotAccessibleError.return_resp()
 
     # If the front-end does not passmodel_type, using themodel_type
     model_type = req_data.model_type if req_data.model_type else model_info.model_type
@@ -897,6 +916,106 @@ def update_knowledge_model(*,
 
     return resp_200()
 
+
+@router.post("/file/batch_download", description="Batch download knowledge base files",
+             response_model=UnifiedResponseModel)
+async def batch_download_knowledge_files(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
+        file_ids: List[int] = Body(..., embed=True, description="List of file IDs to download"),
+):
+    """Batch download files from a document knowledge base.
+
+    - **1 file**: returns a presigned URL pointing directly to the original object in MinIO.
+    - **≥ 2 files**: packs all files into a ZIP archive (named ``{kb_name}{YYYYMMDD_HHMM}.zip``),
+      uploads it to the MinIO tmp bucket, and returns a presigned URL valid for **7 days**.
+
+    The caller must have at least read (``KNOWLEDGE``) access to the knowledge base.
+    """
+    download_url = await KnowledgeService.batch_download_files(
+        login_user=login_user,
+        knowledge_id=knowledge_id,
+        file_ids=file_ids,
+    )
+    return resp_200(data={"url": download_url})
+
+
+@router.get("/{knowledge_id}/tags", description="获取知识库下所有标签", response_model=UnifiedResponseModel)
+async def get_knowledge_tags(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        knowledge_id: int,
+        keyword: str = Query(default=None, description="标签名称模糊搜索"),
+        page: int = Query(default=1, ge=1, description="页码"),
+        limit: int = Query(default=10, ge=1, le=100, description="每页数量"),
+):
+    tags, total = await KnowledgeService.get_knowledge_tags(
+        login_user,
+        knowledge_id,
+        keyword,
+        page,
+        limit,
+    )
+    return resp_200(data={"data": tags, "total": total})
+
+
+@router.post("/tags", description="创建知识库标签", response_model=UnifiedResponseModel)
+async def add_knowledge_tag(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
+        tag_name: str = Body(..., embed=True, description="标签名称"),
+):
+    tag = await KnowledgeService.add_knowledge_tag(login_user, knowledge_id, tag_name)
+    return resp_200(data=tag)
+
+
+@router.put("/tags/{tag_id}", description="编辑知识库标签名", response_model=UnifiedResponseModel)
+async def update_knowledge_tag(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        tag_id: int,
+        knowledge_id: int = Body(..., embed=True),
+        tag_name: str = Body(..., embed=True, description="新的标签名称"),
+):
+    tag = await KnowledgeService.update_knowledge_tag(login_user, knowledge_id, tag_id, tag_name)
+    return resp_200(data=tag)
+
+
+@router.delete("/tags/{tag_id}", description="删除知识库标签", response_model=UnifiedResponseModel)
+async def delete_knowledge_tag(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        tag_id: int,
+        knowledge_id: int = Body(..., embed=True),
+):
+    await KnowledgeService.delete_knowledge_tag(login_user, knowledge_id, tag_id)
+    return resp_200()
+
+
+@router.post("/file/tags", description="设置文件标签(全量替换)", response_model=UnifiedResponseModel)
+async def update_file_tags(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        req_data: UpdateFileTagsReq,
+):
+    await KnowledgeService.update_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_id, req_data.tag_ids
+    )
+    return resp_200()
+
+
+@router.post("/file/tags/batch", description="批量给文件追加标签", response_model=UnifiedResponseModel)
+async def batch_add_file_tags(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        req_data: BatchAddFileTagsReq,
+):
+    await KnowledgeService.batch_add_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids
+    )
+    return resp_200()
 
 @router.get("/file/info/{file_id}", description="Get knowledge base file information",
             response_model=UnifiedResponseModel)

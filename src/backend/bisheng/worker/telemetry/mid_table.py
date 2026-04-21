@@ -5,7 +5,7 @@ from loguru import logger
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo
+from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -76,6 +76,8 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
                                   for group in user.groups],
                 user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
                                  for role in user.roles],
+                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                                       for dept in getattr(user, 'departments', []) or []],
                 timestamp=int(user.create_time.timestamp())
             ))
         mid_table.insert_records_sync(records)
@@ -129,6 +131,8 @@ def sync_mid_app_increment(start_date: str = None, end_date: str = None):
                                   for group in user.groups] if user else [],
                 user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
                                  for role in user.roles] if user else [],
+                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                                       for dept in getattr(user, 'departments', []) or []] if user else [],
                 app_id=app['id'],
                 app_name=app['name'],
                 app_type=convert_flow_type(app['flow_type']),
@@ -176,6 +180,8 @@ def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
                                   for group in user.groups] if user else [],
                 user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
                                  for role in user.roles] if user else [],
+                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                                       for dept in getattr(user, 'departments', []) or []] if user else [],
                 knowledge_id=knowledge.id,
                 knowledge_name=knowledge.name,
                 knowledge_type=knowledge.type,
@@ -220,6 +226,9 @@ def sync_mid_user_interact_dtl(start_date: str = None, end_date: str = None):
                                               role_name=role['role_name'],
                                               group_id=role.get('group_id', 0))
                                  for role in record['user_context'].get('user_role_infos', [])],
+                user_department_infos=[UserDepartmentInfo(department_id=d['department_id'],
+                                                          department_name=d['department_name'])
+                                       for d in record['user_context'].get('user_department_infos', [])],
                 event_id=record['event_id'],
                 timestamp=record['timestamp'],
 

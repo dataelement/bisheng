@@ -285,15 +285,11 @@ class FlowService(BaseService):
     @classmethod
     def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
-        user_group = UserGroupDao.get_user_group(login_user.user_id)
-        if user_group:
-            batch_resource = []
-            for one in user_group:
-                batch_resource.append(
-                    GroupResource(group_id=one.group_id,
-                                  third_id=flow_info.id,
-                                  type=ResourceTypeEnum.WORK_FLOW.value))
-            GroupResourceDao.insert_group_batch(batch_resource)
+
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.write_owner_tuple_sync(login_user.user_id, 'workflow', str(flow_info.id))
+
         AuditLogService.create_build_workflow(login_user, get_request_ip(request), flow_info.id)
 
         cls.get_logo_share_link(flow_info.logo)

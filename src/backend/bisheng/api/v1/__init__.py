@@ -12,9 +12,9 @@ from bisheng.api.v1.tag import router as tag_router
 from bisheng.api.v1.usergroup import router as group_router
 from bisheng.api.v1.variable import router as variable_router
 from bisheng.api.v1.workflow import router as workflow_router
-from bisheng.workstation.api import router as workstation_router
 from bisheng.tool.api.tool import router as tool_router
 from bisheng.user.api.user import router as user_router
+from bisheng.workstation.api import router as workstation_router
 
 __all__ = [
     'chat_router',
@@ -35,3 +35,4 @@ __all__ = [
     "invite_code_router",
     "workstation_router",
 ]
+

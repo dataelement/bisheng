@@ -9,6 +9,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="description" content="Deepseek - An open source chat application with support for multiple AI models" />
   <title>BISHENG</title>
+  <script>
+    // Polyfill Object.hasOwn (ES2022) — must run before any other script.
+    if (!Object.hasOwn) {
+      Object.hasOwn = function (obj, prop) {
+        if (obj == null) throw new TypeError('Cannot convert undefined or null to object');
+        return Object.prototype.hasOwnProperty.call(Object(obj), prop);
+      };
+    }
+  </script>
   <script src="PROTOCAL_IGNORE/assets/bisheng/config.js?v=<%= Date.now() %>"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <meta name="referrer" content="never">
@@ -22,12 +31,6 @@
   </style>
   <!-- <script src="http://192.168.2.224:9000/vditor.js" defer></script> -->
   <script>
-    // Polyfill Object.hasOwn for browsers that do not support ES2022
-    if (!Object.hasOwn) {
-      Object.hasOwn = function (obj, prop) {
-        return Object.prototype.hasOwnProperty.call(obj, prop);
-      };
-    }
     document.title = window.BRAND_CONFIG.brandName.en
 
     const theme = localStorage.getItem('color-theme');

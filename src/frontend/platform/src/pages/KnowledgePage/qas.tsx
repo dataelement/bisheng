@@ -613,6 +613,7 @@ export default function QasPage() {
                         page={page}
                         pageSize={pageSize}
                         total={total}
+                        showTotal={true}
                         onChange={(newPage) => setPage(newPage)}
                     />
                 </div>

@@ -1,10 +1,12 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import Integer, String
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.utils import generate_uuid
 
@@ -94,6 +96,55 @@ class AuditLogBase(SQLModelSerializable):
     note: Optional[str] = Field(sa_column=Column(Text), description="Action notes")
     ip_address: Optional[str] = Field(index=True,
                                       description="Client's at time of operationIP<g id='Bold'>Address:</g>")
+    # v2.5.1 F011: structured audit fields.
+    # Coexist with legacy system_id/event_type/object_* columns — old callers
+    # keep writing legacy fields (new columns NULL); new callers use the
+    # structured fields below. See spec §5.4 "字段填值规则".
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True, index=True,
+            comment='v2.5.1: leaf tenant of the resource being acted on',
+        ),
+    )
+    operator_tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True,
+            comment='v2.5.1: operator leaf (may differ from tenant_id for super-admin cross-child ops)',
+        ),
+    )
+    action: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(64), nullable=True, index=True,
+            comment='v2.5.1: structured action name; see spec §5.4.2 allowlist',
+        ),
+    )
+    target_type: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(32), nullable=True,
+            comment='v2.5.1: tenant/department/resource/user/llm_server/llm_model/...',
+        ),
+    )
+    target_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
+    # SQL column name stays `metadata`; Python attribute is `audit_metadata`
+    # to avoid clashing with SQLModel's declarative `metadata` attribute.
+    audit_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(
+            'metadata', JSON, nullable=True,
+            comment='v2.5.1: extended fields (from/to values, affected ids, etc.)',
+        ),
+    )
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -167,3 +218,116 @@ class AuditLogDao(AuditLogBase):
 
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F011: structured audit_log API.
+    # Callers: F011 mount/unmount/migrate, F012 relocate, F016 quota,
+    # F017 share, F018 transfer, F019 scope_switch, F020 llm.* — all
+    # structured actions listed in spec §5.4.2.
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def ainsert_v2(
+        cls,
+        tenant_id: Optional[int],
+        operator_id: int,
+        operator_tenant_id: Optional[int],
+        action: str,
+        target_type: Optional[str] = None,
+        target_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+    ) -> AuditLog:
+        """Structured audit_log insert (v2.5.1 schema).
+
+        Callers must supply ``operator_tenant_id`` per spec §5.4 rules:
+          - ordinary user / Child Admin → operator.leaf_tenant_id
+          - global super (no F019 scope)   → ROOT_TENANT_ID (=1)
+          - global super (F019 scope=X)    → X (current management view)
+          - system trigger (operator_id=0) → ROOT_TENANT_ID
+        """
+        entry = AuditLog(
+            tenant_id=tenant_id,
+            operator_id=operator_id,
+            operator_tenant_id=operator_tenant_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            reason=reason,
+            audit_metadata=metadata,
+            ip_address=ip_address,
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                session.add(entry)
+                await session.commit()
+                await session.refresh(entry)
+                return entry
+
+    @classmethod
+    async def aget_by_action(
+        cls,
+        action: str,
+        tenant_id: Optional[int] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Tuple[List[AuditLog], int]:
+        """Paginated lookup by structured ``action`` (v2.5.1 schema).
+
+        Uses ``bypass_tenant_filter()`` to prevent the auto-injected
+        ``auditlog.tenant_id = <ctx>`` WHERE clause from clashing with
+        the explicit tenant_id filter here. See spec §5.4.
+        """
+        offset = max(0, (page - 1) * limit)
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(AuditLog).where(AuditLog.action == action)
+                count_stmt = (
+                    select(func.count())
+                    .select_from(AuditLog)
+                    .where(AuditLog.action == action)
+                )
+                if tenant_id is not None:
+                    stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+                    count_stmt = count_stmt.where(AuditLog.tenant_id == tenant_id)
+                total = (await session.exec(count_stmt)).one()
+                stmt = (
+                    stmt.order_by(AuditLog.create_time.desc())
+                    .offset(offset).limit(limit)
+                )
+                rows = (await session.exec(stmt)).all()
+                return list(rows), total
+
+    @classmethod
+    async def aget_visible_for_child_admin(
+        cls,
+        tenant_id: int,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Tuple[List[AuditLog], int]:
+        """Child Admin visibility (spec §5.4 "可见性规则").
+
+        A Child Admin sees rows where:
+          - ``tenant_id`` equals their tenant (operations ON their resources), OR
+          - ``operator_tenant_id`` equals their tenant (operations BY ops inside
+            their tenant — catches global super ops that targeted this child).
+        """
+        offset = max(0, (page - 1) * limit)
+        predicate = or_(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.operator_tenant_id == tenant_id,
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(AuditLog).where(predicate)
+                count_stmt = (
+                    select(func.count()).select_from(AuditLog).where(predicate)
+                )
+                total = (await session.exec(count_stmt)).one()
+                stmt = (
+                    stmt.order_by(AuditLog.create_time.desc())
+                    .offset(offset).limit(limit)
+                )
+                rows = (await session.exec(stmt)).all()
+                return list(rows), total

@@ -9,7 +9,7 @@ import { baseMsgItem } from "~/api/apps"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
 import { SkillMethod } from "./appUtils/skillMethod"
-import { bishengConfState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
+import { bishengConfState, chatApiVersionState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
 
 export default function useChatHelpers() {
@@ -19,6 +19,7 @@ export default function useChatHelpers() {
     const [_, setChats] = useRecoilState(chatsState)
     const [__, setRunningState] = useRecoilState(runningState)
     const [chatId] = useRecoilState(chatIdState)
+    const apiVersion = useRecoilValue(chatApiVersionState)
 
     const wsUrl = useMemo(() => {
         if (!chatState) return ""
@@ -27,15 +28,16 @@ export default function useChatHelpers() {
         const type = Number(flow.flow_type)
         const host = bishengConfig?.websocket_url || window.location.host;
         const basePath = __APP_ENV__.BASE_URL;
+        const v = apiVersion;
 
         const routeConfig = {
-            [FLOW_TYPES.SKILL]: `${host}${basePath}/api/v1/chat/${flow.id}?type=L1`,
-            [FLOW_TYPES.ASSISTANT]: `${window.location.host}${basePath}/api/v1/assistant/chat/${flow.id}`,
-            [FLOW_TYPES.WORK_FLOW]: `${host}${basePath}/api/v1/workflow/chat/${flow.id}?chat_id=${chatId}`
+            [FLOW_TYPES.SKILL]: `${host}${basePath}/api/${v}/chat/${flow.id}?type=L1`,
+            [FLOW_TYPES.ASSISTANT]: `${window.location.host}${basePath}/api/${v}/assistant/chat/${flow.id}`,
+            [FLOW_TYPES.WORK_FLOW]: `${host}${basePath}/api/${v}/workflow/chat/${flow.id}?chat_id=${chatId}`
         };
 
         return routeConfig[type] || '';
-    }, [chatState, chatId, bishengConfig])
+    }, [chatState, chatId, bishengConfig, apiVersion])
 
     const appLost = useMemo(() => {
         return runState?.error?.code
@@ -183,6 +185,7 @@ export default function useChatHelpers() {
                         receiver,
                         type,
                         source,
+                        citations,
                         user_id,
                         reasoning_log,
                         thought
@@ -209,6 +212,7 @@ export default function useChatHelpers() {
                             message: msg,
                             receiver,
                             source,
+                            citations,
                             user_id,
                             liked: !!liked,
                             end: type === "over",
@@ -233,6 +237,7 @@ export default function useChatHelpers() {
                     if (currentMessageIndex === -1) {
                         // Create new message
                         const { category, flow_id, chat_id, files, is_bot, extra, liked, receiver, type, source, user_id } = data
+                        const { citations } = data
                         const message = data.message.msg
                         const reasoning_log = reasoning_content || ""
 
@@ -249,6 +254,7 @@ export default function useChatHelpers() {
                                 message,
                                 receiver,
                                 source,
+                                citations,
                                 user_id,
                                 liked: !!liked,
                                 end: type === "over",
@@ -272,6 +278,7 @@ export default function useChatHelpers() {
                                 : currentMsg.reasoning_log,
                             create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                             source: data.source,
+                            citations: data.citations ?? currentMsg.citations,
                             end: data.type === "end",
                             extra: data.extra,
                         }

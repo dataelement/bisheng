@@ -1,16 +1,20 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, MousePointerClick } from 'lucide-react';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
+import { getRecommendedAppsApi } from '~/api/apps';
 import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { Spinner } from '~/components/svg';
+import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
-import { cn } from '~/utils';
+import { addConversation, cn, generateUUID } from '~/utils';
 import { Button } from '../ui';
 import { Card, CardContent } from '../ui/Card';
 import { sameSopLabelState } from './Input/SameSopSpan';
@@ -18,6 +22,8 @@ import InvitationCodeForm from './InviteCode';
 import Landing from './Landing';
 import LinsightChatInput from './LinsightChatInput';
 import Presentation from './Presentation';
+import { ConversationData, QueryKeys } from '~/types/chat';
+import AppAvator from '../Avator';
 
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
@@ -30,9 +36,80 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [inputText, setInputText] = useState('');
 
   const { data: bsConfig } = useGetBsConfig();
+  const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
+  const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
+  const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
+
+  // v2.5 interaction memory — per-user localStorage snapshots for the input
+  // bar (model, kb selection, tools). Rules:
+  //  - model: default = latest backend model; if user-saved model was deleted,
+  //    fall back to latest again
+  //  - KB space: default empty; remember user toggles
+  //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
+  //  - tools: default per bsConfig.tools[].default_checked; remember toggles
+  const memoReadyRef = useRef(false);
+  useEffect(() => {
+    if (!bsConfig || !user?.id) return;
+    if (memoReadyRef.current) return;
+    const prefix = `bs:${user.id}:`;
+
+    // Model: stored id wins if still present; otherwise latest configured model.
+    try {
+      const savedModelId = localStorage.getItem(`${prefix}chatModel`);
+      const models = (bsConfig as any)?.models || [];
+      let target = savedModelId
+        ? models.find((m: any) => String(m.id) === savedModelId)
+        : null;
+      if (!target && models.length) target = models[models.length - 1];
+      if (target) {
+        setChatModel({ id: Number(target.id), name: target.displayName || target.name });
+      }
+    } catch { /* ignore */ }
+
+    // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
+    try {
+      const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
+      if (raw) {
+        setSelectedOrgKbs(JSON.parse(raw));
+      } else {
+        const defaults = ((bsConfig as any)?.orgKbs || [])
+          .filter((k: any) => k.default_checked)
+          .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
+        setSelectedOrgKbs(defaults);
+      }
+    } catch { /* ignore */ }
+
+    // Agent tool groups (parent-level). AgentToolSelector still seeds from
+    // default_checked on first run; localStorage overrides that when present.
+    try {
+      const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
+      if (raw) {
+        setSelectedAgentTools(JSON.parse(raw));
+        setAgentToolsInitialized(true);
+      }
+    } catch { /* ignore */ }
+
+    memoReadyRef.current = true;
+  }, [bsConfig, user?.id, setChatModel, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
+
+  // Persist on change (after initial hydrate completes).
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id || !chatModel.id) return;
+    localStorage.setItem(`bs:${user.id}:chatModel`, String(chatModel.id));
+  }, [chatModel.id, user?.id]);
+
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id) return;
+    localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));
+  }, [selectedOrgKbs, user?.id]);
+
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id || !agentToolsInitialized) return;
+    localStorage.setItem(`bs:${user.id}:selectedAgentTools`, JSON.stringify(selectedAgentTools));
+  }, [selectedAgentTools, user?.id, agentToolsInitialized]);
 
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
@@ -132,9 +209,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         </video>
 
         <div ref={chatContainerRef} className="relative z-10 h-full overflow-y-auto noscrollbar">
+          {/* Layout: treat "loading an existing conversation" the same as
+              "has messages" so the input stays pinned to the bottom during
+              sidebar navigation (otherwise the centered welcome-page layout
+              briefly floats the input up before messages arrive). */}
+          {(() => {
+            const loadingExistingConvo = isLoading && conversationId !== 'new';
+            const useMessagesLayout = hasMessages || loadingExistingConvo;
+            return (
           <div className={cn(
             showCode ? 'hidden' : 'flex flex-col relative',
-            hasMessages ? 'h-full' : 'h-[calc(100vh-200px)] justify-center'
+            useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
           )}>
             {/* Content area */}
             {isLoading && conversationId !== 'new' ? (
@@ -142,7 +227,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 <Spinner className="opacity-0" />
               </div>
             ) : hasMessages ? (
-              /* Messages — using new AiChatMessages */
+              /* Messages — using new AiChatMessages (v2.5: flat, no sibling tree) */
               <AiChatMessages
                 messages={messages}
                 conversationId={activeConvoId}
@@ -153,19 +238,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 knowledgeChatLayout
                 contentWidthClassName="max-w-[768px] mx-auto"
                 onRegenerate={regenerate}
+                flatMode
               />
             ) : (
               /* Landing page — preserved for welcome + Lingsi mode switch */
               <Landing
                 lingsi={isLingsi}
-                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry || true}
+                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
                 setLingsi={setIsLingsi}
                 isNew={isNew}
               />
             )}
 
             {/* Input area — using new AiChatInput */}
-            {!shareToken && <div className="w-full max-w-[768px] mx-auto">
+            {!shareToken && <div className="w-full max-w-[800px] mx-auto touch-mobile:max-w-full touch-mobile:px-3 shrink-0">
               {isLingsi ?
                 <LinsightChatInput
                   disabled={!!shareToken}
@@ -212,9 +298,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 />}
             </div>}
           </div>
+            );
+          })()}
 
           {/* Lingsi Cases */}
           <Cases ref={casesRef} t={t} isLingsi={isLingsi} setIsLingsi={setIsLingsi} />
+          {/* Recommended apps — welcome page only. Also suppress while a
+              sidebar-nav is loading the new conversation, otherwise the chips
+              flicker into view for one frame before messages arrive. */}
+          {!hasMessages && !(isLoading && conversationId !== 'new') && (
+            <DailyFeaturedApps t={t} isLingsi={isLingsi} />
+          )}
         </div>
 
         {/* Invitation Code */}
@@ -223,6 +317,115 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     </Presentation>
   );
 };
+
+const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi: boolean }) => {
+  const [expanded, setExpanded] = useState(false)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { setConversation } = store.useCreateConversationAtom(0)
+  const isH5 = usePrefersMobileLayout()
+
+  // H5: 2 cols × 2 rows default (4), expand adds 2 rows → 8 total.
+  // PC: 4 cols × 2 rows default (8), expand adds 2 rows → 16 total.
+  const defaultCount = isH5 ? 4 : 8
+  const expandedCount = isH5 ? 8 : 16
+
+  const { data: dailyApps = [] } = useQuery<any[]>(
+    ['recommendedApps'],
+    () => getRecommendedAppsApi().then((res: any) => res?.data ?? []),
+    { enabled: !isLingsi, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false },
+  )
+
+  const handleCardClick = (agent: any) => {
+    const _chatId = generateUUID(32)
+    const flowId = agent.id
+    const flowType = agent.flow_type || agent.type
+    queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
+      if (!convoData) return convoData;
+      return addConversation(convoData, {
+        conversationId: _chatId,
+        createdAt: "",
+        endpoint: null,
+        endpointType: null,
+        model: "",
+        flowId,
+        flowType,
+        title: agent.name,
+        tools: [],
+        updatedAt: ""
+      } as any);
+    });
+    setConversation((prevState: any) => ({ ...prevState, conversationId: _chatId }))
+    navigate(`/chat/${_chatId}/${flowId}/${flowType}`)
+  }
+
+  if (isLingsi || dailyApps.length === 0) return null
+
+  const displayApps = expanded
+    ? dailyApps.slice(0, expandedCount)
+    : dailyApps.slice(0, defaultCount)
+  // Show button only when collapsed AND there are hidden items — hide after expanding.
+  const canExpand = !expanded && dailyApps.length > defaultCount
+
+  return (
+    <div className="relative w-full -mt-2 touch-desktop:-mt-40 pb-24 z-10">
+      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4 sm:px-0">
+        <h2 className="text-sm text-gray-400">平台推荐应用</h2>
+      </div>
+      <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3 max-w-[800px] mx-auto px-4 sm:px-0">
+        {displayApps.map((appItem) => (
+          <Card
+            key={appItem.id}
+            className="group flex flex-col py-0 rounded-[6px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-[#335cff] hover:shadow-[0_4px_14px_rgba(51,92,255,0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+            style={{ background: 'linear-gradient(135deg, #f9fbfe 0%, #fff 50%, #f9fbfe 100%)' }}
+            onClick={() => handleCardClick(appItem)}
+          >
+            <CardContent className="h-full p-2 flex flex-col relative w-full">
+              <div className="flex items-center gap-2.5 mb-2 shrink-0">
+                <AppAvator
+                  id={appItem.name}
+                  url={appItem.logo}
+                  flowType={appItem.flow_type || appItem.type}
+                  className={`size-[32px] min-w-[32px] !rounded-[8px]`}
+                  iconClassName="w-5 h-5"
+                />
+                <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
+              </div>
+              <div className="text-[13px] text-[#86909C] line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
+
+              <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
+                <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 group-hover:opacity-0 transition-opacity duration-200 pointer-events-none">
+                  {appItem.tags && appItem.tags.map((tag: any) => (
+                    <div
+                      key={tag.id || tag.name || tag}
+                      className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
+                    >
+                      {tag.name || tag}
+                    </div>
+                  ))}
+                </div>
+                <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-[#335cff] rounded-[6px] text-white text-[13px] font-medium opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                  开始对话
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      {canExpand && (
+        <div className="flex justify-center mt-2 pb-6">
+          <Button
+            variant="outline"
+            className="rounded-full text-xs h-8 text-blue-500 border-blue-200 bg-white shadow-sm"
+            onClick={() => setExpanded(true)}
+          >
+            展示更多
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default memo(ChatView);
 

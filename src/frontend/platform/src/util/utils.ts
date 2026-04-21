@@ -94,6 +94,20 @@ export function formatDate(date: Date, format: string): string {
     return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
 }
 
+// Parse an ISO-8601 string and render via toLocaleString; returns "-" for null,
+// original input for unparseable strings. Used by admin tables that show
+// backend-provided timestamps without a fixed format spec.
+export function formatIsoDateTime(iso: string | null | undefined): string {
+    if (!iso) return "-"
+    try {
+        const d = new Date(iso)
+        if (Number.isNaN(d.getTime())) return iso
+        return d.toLocaleString()
+    } catch {
+        return iso
+    }
+}
+
 // param time: yyyy-mm-ddTxxxx
 export function formatStrTime(time: string, notSameDayFormat: string): string {
     if (!time) return ''

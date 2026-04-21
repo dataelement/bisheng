@@ -1,15 +1,17 @@
-import { ChevronLeft, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
-import { currentChatState } from '~/pages/appChat/store/atoms';
-import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
-import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
-import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
-import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
+import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
+import { SideNavModuleTabs } from '~/pages/appChat/components/SideNavModuleTabs';
+import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
+import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
+import { currentChatState } from '~/pages/appChat/store/atoms';
+import { cn } from '~/utils';
 
 function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
     return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
@@ -66,11 +68,9 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 
 export function SideNav() {
     const navigate = useNavigate();
-    const location = useLocation();
     const localize = useLocalize();
     const { fid: flowId, type: flowType } = useParams();
-    const from = new URLSearchParams(location.search).get('from');
-    const backPath = from === 'explore' ? '/apps/explore' : '/apps';
+    const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -92,16 +92,35 @@ export function SideNav() {
     const flowData = chatState?.flow ?? currentApp;
 
     return (
-        <div className="w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-3 py-5 overflow-hidden text-[#212121]">
-            {/* Top back button */}
-            <div className="flex items-center gap-[8px] shrink-0">
+        <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+            {/* H5 overlay: close sidebar — PC uses NavToggle to collapse */}
+            <button
+                type="button"
+                onClick={() => setSidebarVisible(false)}
+                className="absolute right-2 top-2 z-20 hidden shrink-0 touch-mobile:flex items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
+                aria-label={localize('com_nav_close_sidebar')}
+            >
+                <X size={16} className="text-[#4E5969]" />
+            </button>
+
+            {/* PC: back + title — original desktop sidebar chrome */}
+            <div className="hidden touch-desktop:flex shrink-0 items-center gap-2 pt-1">
                 <button
-                    onClick={() => navigate(backPath)}
-                    className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-[rgba(255,255,255,0.5)] border border-[#ebecf0] backdrop-blur-[4px] hover:bg-gray-50 transition-colors"
+                    type="button"
+                    onClick={() => navigate('/apps')}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[#212121] transition-colors hover:bg-[#f7f8fa]"
+                    aria-label={localize('com_ui_go_back')}
                 >
-                    <ChevronLeft size={16} className="text-[#212121]" />
+                    <ChevronLeft className="size-4" />
                 </button>
-                <span className="text-[14px] font-medium leading-[22px]">{localize('com_app_chat_sidebar_title')}</span>
+                <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                    {localize('com_app_chat_sidebar_title')}
+                </span>
+            </div>
+
+            {/* Top module tabs — H5 only (MainLayout hub nav handles PC) */}
+            <div className="hidden touch-mobile:block pt-8">
+                <SideNavModuleTabs />
             </div>
 
             {/* App card */}
@@ -138,13 +157,15 @@ export function SideNav() {
                     <div className="flex items-center justify-center gap-[4px]">
                         <button
                             onClick={shareApp}
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                            type="button"
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors touch-mobile:px-2"
                         >
                             {localize('com_app_share_app')}
                         </button>
                         <button
                             onClick={createNewChat}
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                            type="button"
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[576px]:px-2"
                         >
                             {localize('com_knowledge_start_new_chat')}
                         </button>
@@ -186,8 +207,7 @@ export function SideNav() {
                                                     switchConversation(list[0]);
                                                 } else if (flowId && flowType) {
                                                     // Last conversation deleted — land on empty state, don't auto-create
-                                                    const qs = from ? `?from=${from}` : '';
-                                                    navigate(`/app/${flowId}/${flowType}${qs}`, {
+                                                    navigate(`/app/${flowId}/${flowType}`, {
                                                         state: { fromDelete: true },
                                                     });
                                                 }

@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, List, Awaitable, Tuple, Any
 
 from bisheng.common.models.space_channel_member import (
@@ -10,6 +11,8 @@ from bisheng.message.domain.models.inbox_message import InboxMessage
 from bisheng.message.domain.schemas.message_schema import MessageContentItem, UserContentItem, BusinessContentItem
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.user.domain.models.user import UserDao, User
+
+_logger = logging.getLogger(__name__)
 
 
 class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
@@ -45,6 +48,23 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
 
         memory_info.status = MembershipStatusEnum.ACTIVE
         await SpaceChannelMemberDao.update(memory_info)
+
+        # F008: Write FGA viewer tuple for the approved member
+        try:
+            from bisheng.permission.domain.services.permission_service import PermissionService
+            from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+            await PermissionService.authorize(
+                object_type='knowledge_space', object_id=str(space_info.id),
+                grants=[AuthorizeGrantItem(
+                    subject_type='user', subject_id=memory_info.user_id,
+                    relation='viewer', include_children=False,
+                )],
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to write FGA viewer tuple for space %s member %s: %s',
+                space_info.id, memory_info.user_id, e,
+            )
 
         await self.notify_sender(
             operator_user_id,

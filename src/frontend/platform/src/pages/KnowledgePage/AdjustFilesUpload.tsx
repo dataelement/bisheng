@@ -50,10 +50,14 @@ export default function AdjustFilesUpload() {
         separator_rule: ["after", "after"],
         chunk_size: 1000,
         chunk_overlap: 100,
-        retain_images: false,
+        retain_images: true,
         force_ocr: true,
         enable_formula: true,
         filter_page_header_footer: false,
+        split_mode: "auto",
+        hierarchy_level: 3,
+        append_title: false,
+        max_chunk_size: 1000,
         excel_rule: {
           slice_length: 10,
           append_header: true,
@@ -65,7 +69,7 @@ export default function AdjustFilesUpload() {
 
     try {
       // Parse JSON string
-      const parsed = JSON.parse(rawSplitRule);
+      const parsed = typeof rawSplitRule === 'string' ? JSON.parse(rawSplitRule) : rawSplitRule;
       // Format adaptation: Unify field format to avoid child component processing
       return {
         knowledge_id: parsed.knowledge_id || "", // Knowledge base ID
@@ -80,14 +84,18 @@ export default function AdjustFilesUpload() {
         // Overlap size: Default 100
         chunk_overlap: parsed.chunk_overlap ?? 100,
         // Boolean conversion: 0→false, 1→true, default false
-        retain_images: parsed.retain_images === 1,
-        force_ocr: parsed.force_ocr === 1,
-        enable_formula: parsed.enable_formula === 1,
+        retain_images: parsed.retain_images !== 0,
+        force_ocr: parsed.force_ocr !== 0,
+        enable_formula: parsed.enable_formula !== 0,
         filter_page_header_footer: parsed.filter_page_header_footer === 1,
+        split_mode: parsed.split_mode || "auto",
+        hierarchy_level: parsed.hierarchy_level ?? 3,
+        append_title: parsed.append_title === 1 || parsed.append_title === true,
+        max_chunk_size: parsed.max_chunk_size ?? 1000,
         // Table rules: Default value fallback
         excel_rule: {
           slice_length: parsed.excel_rule?.slice_length || 10,
-          append_header: parsed.excel_rule?.append_header === 1,
+          append_header: parsed.excel_rule?.append_header !== 0,
           header_start_row: parsed.excel_rule?.header_start_row || 1,
           header_end_row: parsed.excel_rule?.header_end_row || 1
         }
@@ -101,10 +109,14 @@ export default function AdjustFilesUpload() {
         separator_rule: ["after", "after"],
         chunk_size: 1000,
         chunk_overlap: 100,
-        retain_images: false,
+        retain_images: true,
         force_ocr: true,
         enable_formula: true,
         filter_page_header_footer: false,
+        split_mode: "auto",
+        hierarchy_level: 3,
+        append_title: false,
+        max_chunk_size: 1000,
         excel_rule: {
           slice_length: 10,
           append_header: true,
@@ -116,7 +128,7 @@ export default function AdjustFilesUpload() {
   };
   const fileName = initFileData.name || initFileData.file_name || '';
   const fileSuffix = fileName.split('.').pop()?.toLowerCase() || 'txt';
-  const fileType = ['xlsx', 'xls', 'csv'].includes(fileSuffix) ? 'table' : 'file';
+  const fileType = ['xlsx', 'xls', 'csv', 'et'].includes(fileSuffix) ? 'table' : 'file';
 
   const [resultFiles, setResultFiles] = useState([
     {
@@ -210,15 +222,19 @@ export default function AdjustFilesUpload() {
       knowledge_id: Number(_config.rules.knowledgeId || initFileData.knowledgeId || knowledgeId),
       separator: normalizeSeparators(_config.rules.separator),
       separator_rule: _config.rules.separatorRule,
-      chunk_size: _config.rules.chunkSize,
-      chunk_overlap: _config.rules.chunkOverlap,
+      chunk_size: Number(_config.rules.chunkSize),
+      chunk_overlap: Number(_config.rules.chunkOverlap),
       excel_rule: _config.cellGeneralConfig,
       kb_file_id: _config.rules.fileList[0].id,
       retain_images: _config.rules.retainImages,
       enable_formula: _config.rules.enableFormula,
       force_ocr: _config.rules.forceOcr,
-      fileter_page_header_footer: _config.rules.pageHeaderFooter,
-      file_path: _config.rules.fileList[0].filePath
+      filter_page_header_footer: _config.rules.pageHeaderFooter ? 1 : 0,
+      file_path: _config.rules.fileList[0].filePath,
+      split_mode: _config.rules.splitMode,
+      hierarchy_level: Number(_config.rules.hierarchyLevel),
+      append_title: _config.rules.appendTitle,
+      max_chunk_size: Number(_config.rules.maxChunkSize)
     };
 
     captureAndAlertRequestErrorHoc(

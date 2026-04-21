@@ -3,6 +3,7 @@ import { ChatMessageType } from '@/types/chat';
 import { formatDate } from '@/util/utils';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
+import { normalizeCitationItems } from './citationUtils';
 
 /**
  * 会话消息管理
@@ -82,6 +83,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
             isSend: !is_bot,
             message,
             thought: intermediate_steps,
+            citations: normalizeCitationItems(other),
             noAccess: true
         }
     })
@@ -178,6 +180,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 end: false,
                 user_name: '',
                 extra: data.extra,
+                citations: normalizeCitationItems(data),
                 reasoning_log: ''
             })
             return { messages: newChat }
@@ -237,7 +240,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
             files: wsdata.files || [],
             category: wsdata.category || '',
-            source: wsdata.source
+            source: wsdata.source,
+            citations: normalizeCitationItems(wsdata) || currentMessage.citations || null
         }
         // 无id补上（如文件解析完成消息，后端无返回messageid）
         if (!newCurrentMessage.id) {

@@ -12,6 +12,7 @@ from .embeddings.fake_embedding import FakeEmbeddings
 from .embeddings.volcengine_embedding import VolcengineEmbeddings
 from .llm.chat_openai_compatible import ChatOpenAICompatible
 from .llm.chat_voiceengine import ChatVoiceEngine
+from .llm.chat_openai_reasoning import ChatOpenAIReasoning
 from .rerank.common_rerank import CommonRerank
 from .rerank.xinference_rerank import XinferenceRerank
 from .tts import OpenAITTSClient, AliyunTTSClient, AzureOpenAITTSClient
@@ -38,6 +39,7 @@ __all__ = [
     'MoonshotChat',
     'ChatOpenAICompatible',
     'ChatVoiceEngine',
+    'ChatOpenAIReasoning',
 
     'OllamaEmbeddings',
     'OpenAIEmbeddings',

@@ -1,7 +1,6 @@
 // src/features/chat-config/ChatConfig.tsx
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
@@ -10,18 +9,18 @@ import { userContext } from "@/contexts/userContext";
 import { getDailyConfigApi, setDailyConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { t } from "i18next";
-import { Settings } from "lucide-react";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { FormInput } from "./FormInput";
+import { resolveConfigString } from "./configValue";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
+import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
-import { WebSearchConfig } from "./WebSearchConfig";
-
+import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
+import RecommendedAppsConfig from "./RecommendedAppsConfig";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -30,7 +29,6 @@ export interface FormErrors {
     tabDisplayName: string;
     inputPlaceholder: string;
     modelNames: string[] | string[][];
-    webSearch?: Record<string, string>;
     systemPrompt: string;
     model: string;
     kownledgeBase: string;
@@ -63,43 +61,6 @@ export interface ChatConfigForm {
         enabled: boolean;
         model: string;
     };
-    webSearch: {
-        enabled: boolean;
-        tool: string;
-        bing: {
-            type: string;
-            config: {
-                api_key: string;
-                base_url: string;
-            };
-        };
-        bocha: {
-            type: string;
-            config: {
-                api_key: string;
-            };
-        };
-        jina: {
-            type: string;
-            config: {
-                api_key: string;
-            };
-        };
-        serp: {
-            type: string;
-            config: {
-                api_key: string;
-                engine: string;
-            };
-        };
-        tavily: {
-            type: string;
-            config: {
-                api_key: string;
-            };
-        };
-        prompt: string;
-    };
     knowledgeBase: {
         enabled: boolean;
         prompt: string;
@@ -108,8 +69,12 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
+    recommendedApps: string[];
     /** 日常模式 Tab 名称，对应接口 tabDisplayName */
     tabDisplayName?: string;
+    // v2.5 Agent-mode additions
+    tools: ToolConfigType[];
+    orgKbs: OrgKbConfigType[];
 }
 export default function index() {
     const sidebarSloganRef = useRef<HTMLDivElement>(null);
@@ -119,7 +84,6 @@ export default function index() {
     const tabDisplayNameRef = useRef<HTMLDivElement>(null);
     const knowledgeBaseRef = useRef<HTMLDivElement>(null);
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
-    const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
@@ -142,7 +106,6 @@ export default function index() {
         tabDisplayNameRef,
         knowledgeBaseRef,
         modelRefs,
-        webSearchRef,
         systemPromptRef,
         appCenterWelcomeRef,
         appCenterDescriptionRef,
@@ -152,7 +115,6 @@ export default function index() {
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
     }, [formData.models]);
-    const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
     // Redirect non-admin users
     const { user } = useContext(userContext);
     const navigate = useNavigate()
@@ -186,23 +148,6 @@ export default function index() {
             models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }]
         }));
     };
-    const handleOpenWebSearchSettings = () => {
-        setWebSearchDialogOpen(true);
-    };
-    // Add this method in the parent component
-    const handleWebSearchChange = useCallback((field: string, value: any) => {
-        console.log('Updating field:', field, 'New value:', value);
-
-        // Update local state
-        setFormData(prev => ({
-            ...prev,
-            webSearch: {
-                ...prev.webSearch,
-                [field]: value
-            }
-        }));
-
-    }, [setFormData]);
     const handleVisualToggle = (index: number, enabled: boolean) => {
         const newModels = [...formData.models];
         newModels[index] = {
@@ -375,42 +320,20 @@ export default function index() {
                                 </Select>
                             </div>
                         </ToggleSection> */}
-                        <ToggleSection
-                            title={t('chatConfig.webSea')}
-                            enabled={formData.webSearch.enabled}
-                            onToggle={(enabled) => toggleFeature('webSearch', enabled)}
-                            extra={
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleOpenWebSearchSettings}
-                                    className="p-1 h-auto"
-                                >
-                                    <Settings className="-ml-2 h-4 w-4" />
-                                </Button>
-                            }
-                        >
-                            <WebSearchConfig
-                                config={formData.webSearch.prompt}
-                                onChange={handleWebSearchChange}
-                            />
-                        </ToggleSection>
+                        {/* v2.5 Agent-mode: available tools configuration (replaces 联网搜索 toggle) */}
+                        <ToolsConfig
+                            tools={formData.tools}
+                            onChange={(tools) => setFormData(prev => ({ ...prev, tools }))}
+                        />
+
                         <ToggleSection
                             title={t('chatConfig.knowledgeBase')}
                             enabled={formData.knowledgeBase.enabled}
                             onToggle={(enabled) => toggleFeature('knowledgeBase', enabled)}
                         >
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.knowledgeBasePrompt')}</Label>}
-                                isTextarea
-                                value={formData.knowledgeBase.prompt}
-                                error={errors.kownledgeBase}
-                                placeholder=""
-                                maxLength={30000}
-                                onChange={(val) => setFormData(prev => ({
-                                    ...prev,
-                                    knowledgeBase: { ...prev.knowledgeBase, prompt: val }
-                                }))}
+                            <OrgKbConfig
+                                orgKbs={formData.orgKbs}
+                                onChange={(orgKbs) => setFormData(prev => ({ ...prev, orgKbs }))}
                             />
                         </ToggleSection>
 
@@ -419,19 +342,16 @@ export default function index() {
                             enabled={formData.fileUpload.enabled}
                             onToggle={(enabled) => toggleFeature('fileUpload', enabled)}
                         >
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.fileUploadPrompt')}</Label>}
-                                isTextarea
-                                value={formData.fileUpload.prompt}
-                                error={''}
-                                maxLength={9999}
-                                onChange={(val) => setFormData(prev => ({
-                                    ...prev,
-                                    fileUpload: { ...prev.fileUpload, prompt: val }
-                                }))}
-                            />
+                            {null}
                         </ToggleSection>
 
+                        {/* Recommended Apps */}
+                        <RecommendedAppsConfig
+                            selectedAppIds={formData.recommendedApps || []}
+                            onSelectedAppsChange={(ids) =>
+                                setFormData((prev) => ({ ...prev, recommendedApps: ids }))
+                            }
+                        />
                     </div>
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
@@ -440,14 +360,6 @@ export default function index() {
                     </div>
                 </CardContent>
             </div>
-            <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
-                <DialogContent className="sm:max-w-[625px] bg-background-login">
-                    <DialogHeader>
-                        <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
-                    </DialogHeader>
-                    <WebSearchForm isApi={true} />
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
@@ -461,7 +373,6 @@ interface UseChatConfigProps {
     tabDisplayNameRef: React.RefObject<HTMLDivElement>;
     knowledgeBaseRef: React.RefObject<HTMLDivElement>;
     modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
-    webSearchRef: React.RefObject<HTMLDivElement>;
     systemPromptRef: React.RefObject<HTMLDivElement>;
     appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
     appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
@@ -473,7 +384,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
     const [formData, setFormData] = useState<ChatConfigForm>({
         // menuShow: true,
-        systemPrompt: t('chatConfig.systemPrompt2'),
+        systemPrompt: '',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
@@ -485,15 +396,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         models: [{ key: generateUUID(4), id: null, name: '', displayName: '', visual: false }],
         maxTokens: 15000,
         voiceInput: { enabled: false, model: '' },
-        webSearch: {
-            enabled: true,
-            tool: 'bing',
-            params: {
-                api_key: '',
-                base_url: 'https://api.bing.microsoft.com/v7.0/search'
-            },
-            prompt: t('chatConfig.webSearchPrompt'),
-        },
         knowledgeBase: {
             enabled: true,
             prompt: t('chatConfig.internationalization')
@@ -505,6 +407,9 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         },
         // 默认展示名称：接口为空时展示默认文案
         tabDisplayName: t('dailyFullName'),
+        tools: [],
+        orgKbs: [],
+        recommendedApps: [],
     });
 
     // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
@@ -522,7 +427,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         getDailyConfigApi().then((res) => {
             const cfg = (res && (res as any).data) || res;
             if (cfg) {
-                const defaultSystemPrompt = t('chatConfig.systemPrompt2');
                 setFormData((prev) => {
                     const mergeObj = (a: any, b: any) =>
                         b != null && typeof b === 'object' ? { ...a, ...b } : a;
@@ -546,11 +450,10 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                         maxTokens:
                             typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
                         // 系统提示词
-                        systemPrompt: cfg.systemPrompt || defaultSystemPrompt,
+                        systemPrompt: resolveConfigString(cfg.systemPrompt, prev.systemPrompt),
                         // 图标与其他嵌套配置合并
                         sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
                         assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
-                        webSearch: mergeObj(prev.webSearch, cfg.webSearch),
                         knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
                         fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
                         tabDisplayName: (() => {
@@ -559,7 +462,11 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                             if (typeof raw !== 'string') return prev.tabDisplayName;
                             const trimmed = raw.trim();
                             return trimmed ? trimmed : prev.tabDisplayName;
-                        })()
+                        })(),
+                        // v2.5 Agent-mode fields (parse_config auto-migrates legacy webSearch → tools).
+                        tools: Array.isArray(cfg.tools) ? cfg.tools : prev.tools,
+                        orgKbs: Array.isArray(cfg.orgKbs) ? cfg.orgKbs : prev.orgKbs,
+                        recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
                     };
                 });
             }
@@ -575,7 +482,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         kownledgeBase: '',
         model: '',
         modelNames: [],
-        webSearch: undefined,
         systemPrompt: '',
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
@@ -610,7 +516,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             kownledgeBase: '',
             model: '',
             modelNames: [],
-            webSearch: undefined,
             applicationCenterWelcomeMessage: '',
             applicationCenterDescription: '',
             systemPrompt: '',
@@ -735,50 +640,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             }
         });
 
-        // Validate web search
-        if (formData.webSearch.enabled) {
-            const webSearchErrors: any = {};
-            let hasWebSearchError = false;
-
-            switch (formData.webSearch.tool) {
-                case 'bing':
-                    if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    if (!formData.webSearch.params.base_url?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, base_url: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    break;
-                case 'bocha':
-                case 'jina':
-                case 'tavily':
-                    if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    break;
-                case 'serp':
-                    if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    if (!formData.webSearch.params.engine?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, engine: t('chatConfig.errors.required') };
-                        hasWebSearchError = true;
-                    }
-                    break;
-            }
-
-            if (hasWebSearchError && !firstErrorRef && refs.webSearchRef.current) {
-                firstErrorRef = refs.webSearchRef;
-            }
-            if (Object.keys(webSearchErrors).length) {
-                newErrors.webSearch = webSearchErrors;
-            }
-        }
-
         newErrors.modelNames = modelNameErrors;
         setErrors(newErrors);
 
@@ -824,10 +685,13 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             models: formData.models,
             maxTokens: formData.maxTokens || 15000,
             systemPrompt: formData.systemPrompt,
-            webSearch: formData.webSearch,
             knowledgeBase: formData.knowledgeBase,
             fileUpload: formData.fileUpload,
             tabDisplayName: formData.tabDisplayName ?? '',
+            // v2.5 Agent-mode fields
+            tools: formData.tools,
+            orgKbs: formData.orgKbs,
+            recommendedApps: formData.recommendedApps || [],
         };
 
         console.log('Saving data:', dataToSave);

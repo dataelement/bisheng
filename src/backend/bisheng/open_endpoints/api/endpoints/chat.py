@@ -1,5 +1,6 @@
+import asyncio
 import json
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Body
@@ -9,12 +10,33 @@ a = WSGIMiddleware
 
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.v1.schemas import ChatInput, resp_200
+from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.open_endpoints.domain.schemas.message import SyncMessage
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
+
+
+@router.post('/gen_title')
+async def gen_title_v2(conversationId: str = Body(..., embed=True)):
+    """Get conversation title without authentication (v2 open endpoint)."""
+    await asyncio.sleep(5)
+    messages = await MessageSessionDao.async_get_one(conversationId)
+    return resp_200(data={'title': messages.name if messages else 'New Chat'})
+
+
+@router.get('/history')
+async def get_chat_history_v2(*,
+                              chat_id: str,
+                              flow_id: str,
+                              id: Optional[str] = None,
+                              page_size: Optional[int] = 20):
+    """Get chat history without authentication (v2 open endpoint)."""
+    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
+    return resp_200(history)
 
 
 # @router.get('/source')

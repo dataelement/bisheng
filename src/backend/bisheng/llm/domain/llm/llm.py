@@ -14,6 +14,8 @@ from typing_extensions import Self
 
 from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
+from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, ChatOpenAIReasoning, \
+    AzureChatOpenAI, ChatZhipuAI, ChatAnthropic, MoonshotChat
 from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
     AzureChatOpenAI, ChatZhipuAI, ChatAnthropic, MoonshotChat, ChatVoiceEngine
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
@@ -21,7 +23,7 @@ from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMServer, LLMModel
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
-    wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
+    wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async, normalize_reasoning_content
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -149,12 +151,12 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
 _llm_node_type: Dict = {
     # Open source inference framework
     LLMServerType.OLLAMA.value: {'client': ChatOllama, 'params_handler': _get_ollama_params},
-    LLMServerType.XINFERENCE.value: {'client': ChatOpenAI, 'params_handler': _get_xinference_params},
-    LLMServerType.LLAMACPP.value: {'client': ChatOpenAI, 'params_handler': _get_openai_params},
-    LLMServerType.VLLM.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
+    LLMServerType.XINFERENCE.value: {'client': ChatOpenAIReasoning, 'params_handler': _get_xinference_params},
+    LLMServerType.LLAMACPP.value: {'client': ChatOpenAIReasoning, 'params_handler': _get_openai_params},
+    LLMServerType.VLLM.value: {'client': ChatOpenAIReasoning, 'params_handler': _get_openai_params},
 
     # OfficalapiSERVICES
-    LLMServerType.OPENAI.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
+    LLMServerType.OPENAI.value: {'client': ChatOpenAIReasoning, 'params_handler': _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {'client': AzureChatOpenAI, 'params_handler': _get_azure_openai_params},
     LLMServerType.QWEN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
@@ -200,7 +202,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     def _init_client(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
-        self.temperature = kwargs.get('temperature', None)
+        self.temperature = kwargs.get('temperature', 1)
         self.streaming = kwargs.get('streaming', None)
 
         if not model_info:
@@ -338,7 +340,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             if self.server_info.type == LLMServerType.QWEN.value:
                 ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
-        return ret
+        return normalize_reasoning_content(ret)
 
     def moonshot_generate(
             self,
@@ -382,7 +384,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             if self.server_info.type == LLMServerType.QWEN.value:
                 ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
-        return ret
+        return normalize_reasoning_content(ret)
 
     async def moonshot_agenerate(
             self,
@@ -435,7 +437,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
             if self.server_info.type == LLMServerType.QWEN.value:
                 one.message = self.convert_qwen_result(one.message)
-            yield one
+            yield normalize_reasoning_content(one)
 
     @wrapper_bisheng_model_generator_async
     async def _astream(
@@ -448,4 +450,4 @@ class BishengLLM(BishengBase, BaseChatModel):
         async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
             if self.server_info.type == LLMServerType.QWEN.value:
                 one.message = self.convert_qwen_result(one.message)
-            yield one
+            yield normalize_reasoning_content(one)

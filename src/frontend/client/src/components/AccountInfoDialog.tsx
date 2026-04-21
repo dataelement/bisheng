@@ -46,7 +46,7 @@ export function AccountInfoDialog({
     onOpenChange,
     username = "admin",
     avatarUrl = "/path-to-avatar.png",
-    onAvatarUpdated
+    onAvatarUpdated,
 }: AccountInfoDialogProps) {
     const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(false);
@@ -492,6 +492,29 @@ export function AccountInfoDialog({
                         </section>
                     </div>
                 </div>
+                {isEditing ? (
+                    <div
+                        className="flex items-center justify-end gap-3 pt-2 px-6 pb-4 w-full border-t border-[#ececec] max-[576px]:px-4 max-[576px]:pb-0 max-[576px]:justify-between max-[576px]:gap-2"
+                    >
+                        <Button
+                            variant="outline"
+                            onClick={handleCancel}
+                            className="h-8 px-4 text-[14px] text-[#4e5969] border-[#e5e6eb] hover:bg-[#f7f8fa] max-[576px]:flex-1 max-[576px]:w-1/2 max-[576px]:px-0"
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={isSubmitDisabled()}
+                            className={`h-8 px-4 text-[14px] ${isSubmitDisabled()
+                                    ? 'bg-[#e5e6eb] text-[#c9cdd4] cursor-not-allowed hover:bg-[#e5e6eb]'
+                                    : 'bg-[#165dff] text-white hover:bg-[#4080ff]'
+                                } max-[576px]:flex-1 max-[576px]:w-1/2 max-[576px]:px-0`}
+                        >
+                            确认修改
+                        </Button>
+                    </div>
+                ) : null}
             </DialogContent>
         </Dialog>
     );

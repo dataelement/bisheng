@@ -15,7 +15,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
-        getUserGroupsApi().then((res: any) => setGroups(res.records))
+        getUserGroupsApi().then((res: any) => setGroups(res))
     }
     return { groups, loadData }
 }
@@ -173,13 +173,16 @@ export default function SystemLog() {
         </div>
         {/* Pagination */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer bg-background-login">
-            <p className="desc pl-4">{t('log.auditManagement')}</p>
+        <div className="bisheng-table-footer px-6 bg-background-login">
+            <div className="flex items-center gap-2">
+                <p className="desc">{t('log.auditManagement')}</p>
+            </div>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}
                 pageSize={pageSize}
                 total={total}
+                showTotal={true}
                 onChange={(newPage) => setPage(newPage)}
             />
         </div>

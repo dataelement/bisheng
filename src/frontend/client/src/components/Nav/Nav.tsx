@@ -10,13 +10,14 @@ import {
   useHasAccess,
   useLocalStorage,
   useLocalize,
-  useMediaQuery,
+  usePrefersMobileLayout,
   useNavScrolling,
 } from '~/hooks';
 import { cn } from '~/utils';
 import AccountSettings from './AccountSettings';
 import NavToggle from './NavToggle';
 import NewChat from './NewChat';
+import { ChatNavUserFooter } from './ChatNavUserFooter';
 
 const Nav = ({
   navVisible,
@@ -30,7 +31,7 @@ const Nav = ({
 
   const [navWidth, setNavWidth] = useState('260px');
   const [isHovering, setIsHovering] = useState(false);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
 
   const hasAccessToBookmarks = useHasAccess({
@@ -38,21 +39,14 @@ const Nav = ({
     permission: Permissions.USE,
   });
 
-  const handleMouseEnter = useCallback(() => {
-    setIsHovering(true);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setIsHovering(false);
-  }, []);
-
   useEffect(() => {
     if (isSmallScreen) {
       const savedNavVisible = localStorage.getItem('navVisible');
       if (savedNavVisible === null) {
         toggleNavVisible();
       }
-      setNavWidth('320px');
+      // 移动端：与其它页面抽屉统一固定宽度
+      setNavWidth('240px');
     } else {
       setNavWidth('240px');
     }
@@ -95,10 +89,7 @@ const Nav = ({
   );
 
   const toggleNavVisible = () => {
-    setNavVisible((prev: boolean) => {
-      localStorage.setItem('navVisible', JSON.stringify(!prev));
-      return !prev;
-    });
+    setNavVisible((prev: boolean) => !prev);
     if (newUser) {
       setNewUser(false);
     }
@@ -115,7 +106,7 @@ const Nav = ({
       <div
         data-testid="nav"
         className={
-          'nav active max-w-[240px] flex-shrink-0 overflow-x-hidden md:max-w-[240px] bg-white border-r border-[#ececec]'
+          'nav active max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[240px] bg-white border-r border-[#ececec]'
         }
         style={{
           width: navVisible ? navWidth : '0px',
@@ -123,7 +114,7 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[240px] md:w-[240px]">
+        <div className="h-full w-[240px] touch-mobile:w-full touch-desktop:w-[240px]">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
@@ -139,7 +130,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full w-full flex-col px-3 py-5"
+                  className="flex h-full min-h-0 w-full flex-col px-3 py-5"
                 >
                   {/* 新建 */}
                   <NewChat
@@ -149,11 +140,8 @@ const Nav = ({
                   />
                   <div
                     className={cn(
-                      '-mr-2 flex-1 flex-col overflow-y-auto pr-2 transition-opacity duration-500',
-                      isHovering ? '' : 'scrollbar-transparent',
+                      '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2'
                     )}
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
                     ref={containerRef}
                   >
                     {/* 会话列表 */}
@@ -166,8 +154,7 @@ const Nav = ({
                       <Spinner className={cn('m-1 mx-auto mb-4 h-4 w-4 text-text-primary')} />
                     )}
                   </div>
-                  {/* 左下角设置 */}
-                  {/* <AccountSettings /> */}
+                  {isSmallScreen ? <ChatNavUserFooter /> : null}
                 </nav>
               </div>
             </div>

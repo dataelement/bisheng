@@ -27,13 +27,13 @@ import {
 } from '~/components';
 import { useConversationsInfiniteQuery, useArchiveConvoMutation } from '~/hooks/queries/data-provider';
 import { DeleteConversationDialog } from '~/components/Conversations/ConvoOptions';
-import { useAuthContext, useLocalize, useMediaQuery } from '~/hooks';
+import { useAuthContext, useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 
 export default function ArchivedChatsTable() {
   const localize = useLocalize();
   const { isAuthenticated } = useAuthContext();
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [isOpened, setIsOpened] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');

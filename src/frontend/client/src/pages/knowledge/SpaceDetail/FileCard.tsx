@@ -1,4 +1,4 @@
-import { Circle, Download, Edit, MoreVertical, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { Circle, Download, Edit, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -15,7 +15,7 @@ import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, isKnowledgeItemPreviewable } from "../knowledgeUtils";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -31,8 +31,11 @@ interface FileCardProps {
     onPreview?: (fileId: string) => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
+    onManagePermission?: () => void;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
+    /** H5: render as list-row (not card tile). */
+    mobileListMode?: boolean;
     /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
     hideDownloadActions?: boolean;
 }
@@ -51,14 +54,25 @@ export function FileCard({
     onPreview,
     onValidateName,
     onCancelCreate,
+    onManagePermission,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
+    mobileListMode = false,
     hideDownloadActions = false,
 }: FileCardProps) {
     const localize = useLocalize();
+    /** True only for desktop + mouse: actions reveal on card hover. Otherwise keep actions visible (touch / narrow / no-hover). */
+    const revealCardActionsOnHoverOnly = useMediaQuery(
+        "(min-width: 768px) and (hover: hover) and (pointer: fine)",
+    );
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    const failureMessage = (
+        file.status === FileStatus.FAILED || file.status === FileStatus.TIMEOUT
+    ) && file.errorMessage?.trim()
+        ? file.errorMessage.trim()
+        : null;
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
@@ -170,7 +184,7 @@ export function FileCard({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin;
+    const showMoreMenu = isAdmin || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = !hideDownloadActions;
@@ -183,7 +197,7 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 shadow-none py-0",
+                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none touch-mobile:rounded-[6px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "border-primary shadow-sm"
@@ -199,116 +213,176 @@ export function FileCard({
             onMouseLeave={() => setHovered(false)}
             onClick={handleCardClick}
         >
-            <CardContent className="p-0 flex flex-col">
+            <CardContent className={cn(
+                "flex flex-col p-0",
+                mobileListMode && "touch-mobile:flex-row touch-mobile:items-center touch-mobile:gap-2 touch-mobile:p-1"
+            )}>
+                {!hideSelectionCheckbox && mobileListMode && (
+                    <div className="hidden touch-mobile:flex touch-mobile:shrink-0 touch-mobile:items-center touch-mobile:justify-center touch-mobile:pl-1 touch-mobile:pr-0.5">
+                        <Checkbox
+                            className={isSelected ? "border-primary" : "border-gray-400"}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => onSelect(!!checked)}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                )}
                 {/* 缩略图或图标区域 */}
-                <div className={`relative h-[106px] flex items-center justify-center shrink-0 ${isFolder ? 'bg-[#FAFCFF]' : 'bg-gray-50'}`}>
+                <div className={cn(
+                    "relative flex h-[106px] shrink-0 items-center justify-center",
+                    mobileListMode && "touch-mobile:h-12 touch-mobile:w-12 touch-mobile:rounded-[4px]",
+                    isFolder ? "bg-[#FAFCFF]" : "bg-gray-50"
+                )}>
                     <FileIconRenderer file={file} isFolder={isFolder} />
 
-                    {/* Hover 时显示的操作 */}
-                    {!hideSelectionCheckbox && (hovered || isSelected) && (
-                        <div className="absolute top-2 left-2 z-10">
-                            <Checkbox className={isSelected ? "border-primary" : "border-gray-400"} checked={isSelected} onCheckedChange={(checked) => onSelect(!!checked)} onClick={(e) => e.stopPropagation()} />
+                    {!hideSelectionCheckbox && (
+                        <div
+                            className={cn(
+                                "absolute left-2 top-2 z-10 transition-opacity",
+                                mobileListMode && "touch-mobile:hidden",
+                                !revealCardActionsOnHoverOnly
+                                    ? "opacity-100"
+                                    : isSelected
+                                    ? "opacity-100"
+                                    : "opacity-0 group-hover:opacity-100"
+                            )}
+                        >
+                            <Checkbox
+                                className={isSelected ? "border-primary" : "border-gray-400"}
+                                checked={isSelected}
+                                onCheckedChange={(checked) => onSelect(!!checked)}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                            />
                         </div>
                     )}
 
-                    <div
-                        className={cn(
-                            "absolute top-2 right-2 z-20 flex items-center gap-1 transition-opacity",
-                            showCardActions
-                                ? "pointer-events-auto opacity-100"
-                                : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-                        )}
-                    >
-                        {showInlineDownloadButton && (
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
-                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                title={localize("com_knowledge.download")}
-                            >
-                                <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
-                            </Button>
-                        )}
-                        {showMoreMenu && (
-                            <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="w-5 h-5 rounded-md shrink-0"
+                    {!mobileListMode && (
+                        <div
+                            className={cn(
+                                "absolute right-2 top-2 z-20 flex items-center gap-1 transition-opacity",
+                                !revealCardActionsOnHoverOnly
+                                    ? "pointer-events-auto opacity-100"
+                                    : showCardActions
+                                    ? "pointer-events-auto opacity-100"
+                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                            )}
+                        >
+                            {showInlineDownloadButton && (
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
+                                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                    title={localize("com_knowledge.download")}
+                                >
+                                    <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                </Button>
+                            )}
+                            {showMoreMenu && (
+                                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="w-5 h-5 rounded-md shrink-0"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <MoreVertical className="size-4 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+
+                                    <DropdownMenuContent
+                                        align="end"
+                                        className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        <MoreVertical className="size-4 text-[#4e5969] group-hover:text-[#1d2129]" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-
-                                <DropdownMenuContent
-                                    align="end"
-                                    className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    {showMenuDownloadItem && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                            className="flex items-center"
-                                        >
-                                            <Download className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.download")}
-                                        </DropdownMenuItem>
-                                    )}
-
-                                    {isAdmin && (
-                                        <>
-                                            {!isFolder && (
-                                                <DropdownMenuItem
-                                                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                                    className="flex items-center"
-                                                >
-                                                    <Tag className="mr-2 size-4 shrink-0" />
-                                                    {localize("com_knowledge.edit_tags")}
-                                                </DropdownMenuItem>
-                                            )}
+                                        {showMenuDownloadItem && (
                                             <DropdownMenuItem
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    startRenaming();
-                                                }}
+                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
                                                 className="flex items-center"
                                             >
-                                                <Edit className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.rename")}
+                                                <Download className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.download")}
                                             </DropdownMenuItem>
-                                            {hasRetryOption && (
+                                        )}
+
+                                        {onManagePermission && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                                className="flex items-center"
+                                            >
+                                                <Shield className="mr-2 size-4 shrink-0" />
+                                                {localize("com_permission.manage_permission")}
+                                            </DropdownMenuItem>
+                                        )}
+
+                                        {isAdmin && (
+                                            <>
+                                                {!isFolder && (
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                        className="flex items-center"
+                                                    >
+                                                        <Tag className="mr-2 size-4 shrink-0" />
+                                                        {localize("com_knowledge.edit_tags")}
+                                                    </DropdownMenuItem>
+                                                )}
                                                 <DropdownMenuItem
-                                                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        startRenaming();
+                                                    }}
                                                     className="flex items-center"
                                                 >
-                                                    <RefreshCw className="mr-2 size-4 shrink-0" />
-                                                    {localize("com_knowledge.retry")}
+                                                    <Edit className="mr-2 size-4 shrink-0" />
+                                                    {localize("com_knowledge.rename")}
                                                 </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                            >
-                                                <Trash2 className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.delete")}
-                                            </DropdownMenuItem>
-                                        </>
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
-                    </div>
+                                                {hasRetryOption && (
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                        className="flex items-center"
+                                                    >
+                                                        <RefreshCw className="mr-2 size-4 shrink-0" />
+                                                        {localize("com_knowledge.retry")}
+                                                    </DropdownMenuItem>
+                                                )}
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                                    className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
+                                                >
+                                                    <Trash2 className="mr-2 size-4 shrink-0" />
+                                                    {localize("com_knowledge.delete")}
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* 底部内容区域 */}
-                <div className="p-1">
+                <div className={cn(
+                    "p-1",
+                    mobileListMode && "touch-mobile:min-w-0 touch-mobile:flex-1 touch-mobile:pr-1"
+                )}>
                     {/* 文件名和状态 */}
                     <div className="flex items-center text-sm font-medium min-w-0">
                         {getStatusText()}
                     </div>
+                    {failureMessage && (
+                        <p
+                            className="mt-1 text-xs leading-[16px] text-[#f53f3f] line-clamp-2 break-words"
+                            title={failureMessage}
+                        >
+                            {localize("com_knowledge.failure_reason")}: {failureMessage}
+                        </p>
+                    )}
 
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
@@ -330,6 +404,101 @@ export function FileCard({
                         <span className="text-[#999] text-xs shrink-0 ">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
+
+                {mobileListMode && (
+                    <div className="touch-mobile:flex touch-mobile:shrink-0 touch-mobile:items-center touch-mobile:gap-1 touch-mobile:pr-1">
+                    {showMenuDownloadItem && (
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
+                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                            title={localize("com_knowledge.download")}
+                        >
+                            <Download className="size-3.5 text-[#4e5969]" />
+                        </Button>
+                    )}
+                    {showMoreMenu && (
+                        <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-5 w-5 shrink-0 rounded-md"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <MoreVertical className="size-4 text-[#4e5969]" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                        {showMenuDownloadItem && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                                className="flex items-center"
+                                            >
+                                        <Download className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.download")}
+                                            </DropdownMenuItem>
+                                        )}
+
+                                {onManagePermission && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                        className="flex items-center"
+                                    >
+                                        <Shield className="mr-2 size-4 shrink-0" />
+                                        {localize("com_permission.manage_permission")}
+                                    </DropdownMenuItem>
+                                )}
+
+                                {isAdmin && (
+                                    <>
+                                        {!isFolder && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                className="flex items-center"
+                                            >
+                                                <Tag className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.edit_tags")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                startRenaming();
+                                            }}
+                                            className="flex items-center"
+                                        >
+                                            <Edit className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.rename")}
+                                        </DropdownMenuItem>
+                                        {hasRetryOption && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                className="flex items-center"
+                                            >
+                                                <RefreshCw className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.retry")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                            className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
+                                        >
+                                            <Trash2 className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.delete")}
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

@@ -207,7 +207,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                     isPopoverActive || isActive
                         ? "flex"
                         : "hidden group-focus-within:flex group-hover:flex",
-                    "shrink-0"
+                    "shrink-0 touch-mobile:flex [@media(hover:none)]:flex",
                 )}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -223,7 +223,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                                         'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-[#86909c] hover:text-[#1d2129]',
                                         isActive
                                             ? 'opacity-100'
-                                            : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100',
+                                            : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100 touch-mobile:opacity-100 [@media(hover:none)]:opacity-100',
                                     )}
                                 >
                                     <Ellipsis className="icon-md" aria-hidden={true} />

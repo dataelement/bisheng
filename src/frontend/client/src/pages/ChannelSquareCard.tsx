@@ -105,8 +105,8 @@ export function ChannelSquareCard({
         </p>
 
         {/* 创建者和统计信息 */}
-        <div className="flex items-center gap-2.5 text-[14px] leading-[20px] text-[#86909C]">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#86909C] touch-desktop:flex-nowrap touch-desktop:gap-2.5 touch-desktop:text-[14px] touch-desktop:leading-[20px]">
+          <div className="flex shrink-0 items-center gap-1.5">
             {creatorAvatars && creatorAvatars.length > 0 ? (
               <div className="flex -space-x-1.5">
                 {creatorAvatars.slice(0, 3).map((src, idx) => (
@@ -124,10 +124,10 @@ export function ChannelSquareCard({
               </Avatar>
             )}
           </div>
-          <span>
-            {articleCount} {localize("com_subscription.articles")}
+          <span className="whitespace-nowrap">
+            {articleCount}{localize("com_subscription.articles")}
           </span>
-          <span>{subscriberCount}{localize("com_ui_subscription")}</span>
+          <span className="whitespace-nowrap">{subscriberCount}{localize("com_ui_subscription")}</span>
         </div>
       </CardContent>
     </Card>

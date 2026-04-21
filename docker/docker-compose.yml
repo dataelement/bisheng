@@ -20,6 +20,37 @@ services:
       retries: 4
     restart: on-failure
 
+  openfga-migrate:
+    container_name: bisheng-openfga-migrate
+    image: openfga/openfga:latest
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: mysql
+      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  openfga:
+    container_name: bisheng-openfga
+    image: openfga/openfga:latest
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: mysql
+      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
+      OPENFGA_LOG_FORMAT: json
+      OPENFGA_PLAYGROUND_ENABLED: "true"
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "3000:3000"
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    # 不在 compose 里写 HEALTHCHECK：openfga 官方镜像为 distroless，无 /bin/sh、无 wget，
+    # CMD-SHELL 会永久 unhealthy。未定义时 Compose 将 ``service_healthy`` 视为已启动即可。
+    restart: unless-stopped
+
   redis:
     container_name: bisheng-redis
     image: redis:7.0.4
@@ -75,7 +106,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-  
+      openfga:
+        condition: service_healthy
+
   backend_worker:
     container_name: bisheng-backend-worker
     image: dataelement/bisheng-backend:v2.4.0
@@ -105,7 +138,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
+      openfga:
+        condition: service_healthy
 
   frontend:
     container_name: bisheng-frontend

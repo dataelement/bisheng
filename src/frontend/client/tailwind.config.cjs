@@ -1,4 +1,5 @@
 // const { fontFamily } = require('tailwindcss/defaultTheme');
+const plugin = require('tailwindcss/plugin');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -27,11 +28,16 @@ module.exports = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: 0 },
         },
+        'pulse-scale': {
+          '0%, 100%': { transform: 'scale(0.6)' },
+          '50%': { transform: 'scale(1)' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
       },
       colors: {
         gray: {
@@ -135,6 +141,17 @@ module.exports = {
   plugins: [
     require('tailwindcss-animate'),
     require('tailwindcss-radix')(),
+    plugin(({ addVariant }) => {
+      // Match usePrefersMobileLayout inverse: primary input is mouse-like (no width).
+      addVariant(
+        'touch-desktop',
+        '@media (hover: hover) and (pointer: fine)',
+      );
+      addVariant(
+        'touch-mobile',
+        '@media not ((hover: hover) and (pointer: fine))',
+      );
+    }),
     // require('@tailwindcss/typography'),
   ],
 };

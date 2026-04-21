@@ -1,3 +1,4 @@
+import { generateUUID } from "~/utils";
 import request from "./request";
 
 // 毕昇config
@@ -55,10 +56,11 @@ export const getAssistantDetailApi = async (
     id: string,
     shareToken?: string,
     skip403Redirect?: boolean,
+    apiVersion: string = 'v1',
 ): Promise<any> => {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/v1/assistant/info/${id}`, {
+    return await request.get(`/api/${apiVersion}/assistant/info/${id}`, {
         headers,
         skip403Redirect,
     } as any)
@@ -111,8 +113,8 @@ export const trackingApi = (data: { message_id: string, operation_type: 'dislike
 /**
  * 技能 工作流详情
  */
-export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken }
-    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string }): Promise<any> {
+export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken, apiVersion = 'v1' }
+    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string, apiVersion?: string }): Promise<any> {
     const filterFlowMsg = (data) => {
         return data.filter(item =>
             ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
@@ -127,7 +129,7 @@ export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareTok
 
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
+    return await request.get(`/api/${apiVersion}/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
         headers
     }).then(res => {
         if (res.status_code !== 200) return []
@@ -235,7 +237,7 @@ export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'li
     formData.append("file", file);
     if (uploadMode) {
         formData.append("endpoint", "custom");
-        formData.append("file_id", crypto.randomUUID());
+        formData.append("file_id", generateUUID(32));
         formData.append("file_name", file.name);
     }
     const urlMap = {
@@ -411,6 +413,10 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
     return await request.get(`/api/v1/chat/online`, { params })
 }
 
+// Get recommended apps configured by admin
+export const getRecommendedAppsApi = async () => {
+    return await request.get('/api/v1/workstation/app/recommended')
+}
 /**
  * Pin/unpin an app in the used apps list.
  */

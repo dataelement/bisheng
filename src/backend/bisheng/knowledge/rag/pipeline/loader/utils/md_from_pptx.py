@@ -10,6 +10,7 @@ def parser_pptx2md(
         pptx_file: str,
         md_file: str,
         image_dir: str = None,
+        enable_slides: bool = False,
 ):
     """
     Convert a PowerPoint file to Markdown format.
@@ -25,6 +26,7 @@ def parser_pptx2md(
             output_path=Path(md_file),
             image_dir=Path(image_dir),
             disable_notes=True,
+            enable_slides=enable_slides,
         )
     )
 
@@ -32,6 +34,7 @@ def parser_pptx2md(
 def handler(
         cache_dir,
         file_path,
+        enable_slides: bool = False,
 ):
     doc_id = str(uuid4())
     md_file_name = f"{cache_dir}/{doc_id}.md"
@@ -40,6 +43,7 @@ def handler(
         pptx_file=file_path,
         md_file=md_file_name,
         image_dir=image_dir,
+        enable_slides=enable_slides,
     )
 
     if os.path.exists(md_file_name):

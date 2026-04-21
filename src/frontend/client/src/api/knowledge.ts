@@ -200,6 +200,7 @@ interface RawSpaceChild {
     update_time?: string;
     thumbnail?: string;
     error_message?: string;
+    remark?: string;
     file_source?: string;
 }
 
@@ -314,6 +315,43 @@ function deriveFileType(raw: any): FileType {
     }
 }
 
+function extractKnowledgeFileError(raw: any): string | undefined {
+    const directMessage = raw?.error_message;
+    if (typeof directMessage === "string" && directMessage.trim()) {
+        return directMessage.trim();
+    }
+
+    const remark = raw?.remark;
+    if (typeof remark !== "string" || !remark.trim()) {
+        return undefined;
+    }
+
+    const trimmedRemark = remark.trim();
+    try {
+        const parsed = JSON.parse(trimmedRemark);
+        const nestedMessage =
+            parsed?.data?.exception ??
+            parsed?.exception ??
+            parsed?.message;
+
+        if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+            return nestedMessage.trim();
+        }
+
+        if (typeof parsed?.status_message === "string" && parsed.status_message.trim()) {
+            return parsed.status_message.trim();
+        }
+
+        if (typeof parsed?.old_name === "string" || typeof parsed?.new_name === "string") {
+            return undefined;
+        }
+    } catch {
+        return trimmedRemark;
+    }
+
+    return undefined;
+}
+
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
 function mapChild(raw: any, spaceId: string): KnowledgeFile {
     // Backend keys in children response usually look like:
@@ -356,7 +394,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         createdAt: raw?.create_time ?? "",
         updatedAt: raw?.update_time ?? "",
         thumbnail: raw?.thumbnail ?? raw?.thumbnails,
-        errorMessage: raw?.error_message,
+        errorMessage: extractKnowledgeFileError(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
         fileSource: raw?.file_source,
@@ -430,6 +468,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         createdAt: raw.create_time || "",
         updatedAt: raw.update_time || "",
         thumbnail: raw.thumbnails || undefined,
+        errorMessage: extractKnowledgeFileError(raw),
         successFileNum: raw.success_file_num,
         fileNum: raw.file_num,
     };
@@ -753,6 +792,16 @@ export async function addSpaceTagApi(space_id: string, tag_name: string): Promis
     // Handle both flat { id, name } and wrapped { data: { id, name } } responses
     const tag = res?.data?.id !== undefined ? res.data : res?.data?.data;
     return tag as SpaceTag;
+}
+
+/**
+ * Delete a space tag.
+ * Backend: DELETE /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function deleteSpaceTagApi(space_id: string, tag_id: number): Promise<void> {
+    await request.deleteWithOptions(`/api/v1/knowledge/space/${space_id}/tag`, {
+        data: { tag_id },
+    });
 }
 
 /**

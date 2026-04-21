@@ -2,6 +2,7 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
 import { setTokenHeader } from '~/api/chat/headers-helpers';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import * as endpoints from '~/api/chat/api-endpoints';
 import type * as t from '~/types/chat/types';
 
@@ -133,9 +134,15 @@ customAxios.interceptors.response.use(
       console.warn('401 error, refreshing token');
       originalRequest._retry = true;
 
+      const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+      if (thirdPartyLoginUrl) {
+        window.location.href = thirdPartyLoginUrl;
+        return Promise.reject(error);
+      }
+
       if (import.meta.env.MODE === 'production') {
         localStorage.setItem('LOGIN_PATHNAME', location.pathname)
-        location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`
+        location.href = getPlatformAdminPanelUrl()
       }
       // } else {
       //   if (location.pathname.indexOf('login') === -1) {

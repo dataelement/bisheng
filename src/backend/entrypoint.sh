@@ -35,6 +35,8 @@ start_min_worker(){
 }
 
 if [ "$start_mode" = "api" ]; then
+    echo "Running database migrations..."
+    alembic upgrade head || echo "WARNING: alembic migration failed, continuing startup..."
     echo "Starting API server..."
     uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 1
 elif [ "$start_mode" = "knowledge" ]; then

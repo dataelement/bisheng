@@ -76,7 +76,7 @@ export default function PreviewResult({
     setChunks([]);
 
     // 合并配置（与原逻辑一致）
-    const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule } = rules;
+    const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule, splitMode, hierarchyLevel, appendTitle, maxChunkSize } = rules;
     const currentFile = fileList.find(file => file.id === selectId);
     let preview_url;
     if (showPreview) {
@@ -102,12 +102,16 @@ export default function PreviewResult({
         }],
         separator: normalizeSeparators(separator),
         separator_rule: separatorRule,
-        chunk_size: chunkSize,
-        chunk_overlap: chunkOverlap,
+        chunk_size: Number(chunkSize),
+        chunk_overlap: Number(chunkOverlap),
         retain_images: retainImages,
         enable_formula: enableFormula,
         force_ocr: forceOcr,
-        fileter_page_header_footer: pageHeaderFooter
+        filter_page_header_footer: pageHeaderFooter ? 1 : 0,
+        split_mode: splitMode,
+        hierarchy_level: Number(hierarchyLevel),
+        append_title: appendTitle,
+        max_chunk_size: Number(maxChunkSize)
       },
       (eventType, data) => {
         switch (eventType) {
@@ -124,7 +128,10 @@ export default function PreviewResult({
               activeLabels: {},
               chunkIndex: chunk.metadata.chunk_index,
               page: chunk.metadata.page,
-              text: chunk.text
+              text: chunk.text,
+              navPath: chunk.metadata.nav_path,
+              navDepth: chunk.metadata.nav_depth,
+              isHeading: chunk.metadata.is_heading
             })));
             setSelectIdSyncChunks(selectId);
             setFileViewUrl({ load: false, url: data.file_url });

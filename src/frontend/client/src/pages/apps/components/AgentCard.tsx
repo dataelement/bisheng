@@ -1,8 +1,8 @@
 import type { AppItem } from '~/@types/app';
-import AppAvator from '~/components/Avator';
-import { ChannelPinIcon } from '~/components/icons/channels';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components';
+import AppAvator from '~/components/Avator';
+import { ChannelPinGrayIcon, ChannelPinIcon, ChannelUnpinGrayIcon } from '~/components/icons/channels';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -55,20 +55,20 @@ export function AgentCard({
                   'border border-transparent hover:border-[#E5E6EB] hover:bg-[#f7f8fa]',
                   isPinned
                     ? 'opacity-100'
-                    : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100',
+                    : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100 max-[768px]:opacity-100 max-[768px]:pointer-events-auto',
                 )}
                 aria-label={
                   isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
                 }
               >
-                {/* {isPinned ? (
+                {isPinned ? (
                   <span className="relative inline-flex size-[18px] items-center justify-center">
                     <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
                     <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
                   </span>
                 ) : (
                   <ChannelPinGrayIcon className="size-[18px] shrink-0" />
-                )} */}
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent>
@@ -84,7 +84,7 @@ export function AgentCard({
       </div>
 
       {/* Tags (Hidden on hover) */}
-      <div className="flex gap-1 items-start mt-auto group-hover/card:hidden overflow-hidden flex-wrap h-[26px]">
+      <div className="flex gap-1 items-start mt-auto group-hover/card:hidden max-[768px]:hidden overflow-hidden flex-wrap h-[26px]">
         {agent.tags && agent.tags.length > 0 ? (
           agent.tags.slice(0, 3).map((tag, idx) => (
             <div
@@ -102,7 +102,7 @@ export function AgentCard({
       </div>
 
       {/* Action Buttons (Visible only on hover) */}
-      <div className="hidden group-hover/card:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
+      <div className="hidden group-hover/card:flex max-[768px]:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
         <Button
           onClick={(e) => {
             e.stopPropagation();

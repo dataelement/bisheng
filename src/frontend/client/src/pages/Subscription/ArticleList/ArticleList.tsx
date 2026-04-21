@@ -1,6 +1,6 @@
 import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
+import { Info, Menu, Plus } from "lucide-react";
 import {
     Article,
     Channel,
@@ -20,12 +20,18 @@ import { ArticleCard } from "./ArticleCard";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
 import { ShareOutlineIcon } from "~/components/icons/ShareOutlineIcon";
+import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
+import { cn } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface ArticleListProps {
     channel: Channel;
     onArticleSelect: (article: Article | null) => void;
     selectedArticleId?: string;
+    /** H5：打开「我的频道」侧栏（订阅页抽屉） */
+    onOpenChannelNav?: () => void;
+    onGoChannelSquare?: () => void;
+    onCreateChannel?: () => void;
 }
 
 /** Strip HTML tags from a string, extracting body content first */
@@ -63,7 +69,15 @@ export function mapToArticle(item: ArticleSearchResultItem, channelId: string): 
     };
 }
 
-export function ArticleList({ channel, selectedArticleId, onArticleSelect }: ArticleListProps) {
+export function ArticleList({
+    channel,
+    selectedArticleId,
+    onArticleSelect,
+    onOpenChannelNav,
+    onGoChannelSquare,
+    onCreateChannel,
+}: ArticleListProps) {
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
     const localize = useLocalize();
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -231,17 +245,69 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
 
     return (
         <div className="flex h-full w-full flex-1 flex-col">
-            {/* header */}
-            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4">
-                {/* 第一行：频道名称、信息、分享（固定 32px 高，避免分享按钮显隐或详情切换时闪动） */}
-                <div className="flex h-8 min-h-8 shrink-0 items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-1">
-                        <h1 className="truncate text-[16px] font-semibold leading-8 text-[#1D2129]">
+            {/* header — 结构与知识空间页保持一致 */}
+            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-0 touch-mobile:pb-3">
+                {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
+                    <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
+                        {/* H5 第一行：仅展开 / 创建，与标题区分开 */}
+                        <div
+                            className={cn(
+                                "-mx-4 flex h-8 items-center gap-2 px-2",
+                                onOpenChannelNav && onCreateChannel && "justify-between",
+                                !onOpenChannelNav && onCreateChannel && "justify-end",
+                            )}
+                        >
+                            {onOpenChannelNav ? (
+                                <button
+                                    type="button"
+                                    onClick={onOpenChannelNav}
+                                    aria-label={localize("com_nav_open_sidebar")}
+                                    className={mobileHeadIconBtnClassName}
+                                >
+                                    <Menu className="size-4" />
+                                </button>
+                            ) : null}
+                            {onCreateChannel ? (
+                                <button
+                                    type="button"
+                                    onClick={onCreateChannel}
+                                    aria-label={localize("com_subscription.create")}
+                                    className={mobileHeadIconBtnClassName}
+                                >
+                                    <Plus className="size-4" strokeWidth={2} />
+                                </button>
+                            ) : null}
+                        </div>
+                        {/* H5 第二行：订阅 + 前往频道广场（在展开按钮下方） */}
+                        <div className="flex min-w-0 items-end gap-2">
+                            <h2 className="shrink-0 text-[24px] font-semibold leading-8 text-[#335CFF]">
+                                {localize("com_subscription.subscribe")}
+                            </h2>
+                            {onGoChannelSquare ? (
+                                <button
+                                    type="button"
+                                    onClick={onGoChannelSquare}
+                                    className="inline-flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
+                                >
+                                    <ChannelBlocksArrowsIcon className="size-4 shrink-0 text-[#86909C]" />
+                                    <span className="truncate text-[12px] leading-5 font-normal text-[#212121]">
+                                        {localize("com_subscription.go_to_channel_plaza")}
+                                    </span>
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+                ) : null}
+
+                {/* 频道名 + 信息 + 分享 */}
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                        <h1 className="truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
                             {channelDetail?.name || channel.name}
                         </h1>
                         <Tooltip>
-                            <TooltipTrigger>
-                                <Info className="size-4 text-[#86909c]" />
+                            <TooltipTrigger className="cursor-pointer">
+                                <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
                             </TooltipTrigger>
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-[240px]">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
@@ -262,7 +328,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         </Tooltip>
                     </div>
 
-                    <div className="flex h-8 flex-shrink-0 items-center justify-end">
+                    <div className="flex shrink-0 items-center gap-3">
                         {channelDetail?.visibility !== "private" ? (
                             <Button
                                 onClick={() => {
@@ -278,66 +344,75 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                                         });
                                     });
                                 }}
-                                variant="outline"
-                                className="h-8 px-4 text-[14px] rounded-md font-normal"
+                                variant="ghost"
+                                className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:px-2 touch-mobile:text-[#212121] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white"
                             >
-                                <ShareOutlineIcon className="size-3.5" />
+                                <ShareOutlineIcon className="size-4 shrink-0 text-gray-800" />
                                 {localize("com_subscription.share")}
                             </Button>
                         ) : null}
                     </div>
                 </div>
 
-                {/* 第二行：子频道 Tabs 与 工具栏 (搜索/筛选) */}
-                <div className="flex items-center justify-between">
-                    {/* 左侧：子频道 Tabs */}
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {/* 子频道 Tabs + 搜索/筛选 — md+ 横向；H5 纵向 */}
+                <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:items-center touch-desktop:justify-between touch-desktop:gap-0">
+                    <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
                         <button
+                            type="button"
                             onClick={() => handleSubChannelChange("all")}
-                            className={`px-4 py-[5px] rounded-md border text-sm transition-colors whitespace-nowrap ${!selectedSubChannelName
-                                ? "bg-primary/20 text-primary border-primary"
-                                : "text-gray-800 hover:bg-gray-50 border-transparent"
-                                }`}
+                            className={cn(
+                                "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                !selectedSubChannelName
+                                    ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                    : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                            )}
                         >{localize("com_subscription.all")}</button>
                         {subChannels.map(sub => (
                             <button
+                                type="button"
                                 key={sub.id}
                                 onClick={() => handleSubChannelChange(sub.name)}
-                                className={`px-4 py-[5px] rounded-md border text-sm transition-colors whitespace-nowrap ${selectedSubChannelName === sub.name
-                                    ? "bg-primary/20 text-primary border-primary"
-                                    : "text-gray-800 hover:bg-gray-50 border-transparent"
-                                    }`}
+                                className={cn(
+                                    "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    selectedSubChannelName === sub.name
+                                        ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                        : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                )}
                             >
                                 {sub.name}
                             </button>
                         ))}
                     </div>
 
-                    {/* 右侧：交互工具栏 */}
-                    <div className="flex items-center gap-3 ml-4">
-                        {/* 平滑展开的搜索容器 */}
+                    <div className="flex w-full min-w-0 flex-col gap-2 touch-desktop:ml-4 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:items-center touch-desktop:gap-3">
                         <SearchInput
                             key={channel.id}
                             value={searchKey}
                             onChange={setSearchQuery}
                             placeholder={localize("com_subscription.search_articles_of_interest")}
+                            className="w-full min-w-0 touch-desktop:w-auto"
                         />
 
-                        {/* 信息源筛选 */}
-                        <MultiSourceSelect
-                            className="w-auto min-w-[140px] h-8"
-                            options={sourceOptions}
-                            value={selectedSources}
-                            onChange={handleSourcesChange}
-                        />
+                        {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排（避免整行贴右） */}
+                        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 touch-desktop:contents">
+                            <MultiSourceSelect
+                                className="h-8 min-w-[140px] max-w-full shrink-0 touch-desktop:w-auto touch-desktop:min-w-[140px]"
+                                options={sourceOptions}
+                                value={selectedSources}
+                                onChange={handleSourcesChange}
+                            />
 
-                        <button
-                            onClick={handleToggleUnread}
-                            className={`px-4 py-[5px] rounded-md border text-sm transition-colors whitespace-nowrap ${onlyUnread
-                                ? "bg-primary/20 text-primary border-primary"
-                                : "text-gray-800 hover:bg-gray-50"
-                                }`}
-                        >{localize("com_subscription.show_unread_only")}</button>
+                            <button
+                                type="button"
+                                onClick={handleToggleUnread}
+                                className={cn(
+                                    "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    onlyUnread
+                                        ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                        : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                )}
+                            >{localize("com_subscription.show_unread_only")}</button>
+                        </div>
                     </div>
                 </div>
             </div>

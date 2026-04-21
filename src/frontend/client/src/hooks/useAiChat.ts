@@ -12,10 +12,7 @@ import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import { useLocalize } from "~/hooks";
 import type { ChatMessage } from "~/api/chatApi";
-import {
-    buildMessageTree,
-    getMessages as fetchMessages
-} from "~/api/chatApi";
+import { getAgentMessages } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
@@ -40,6 +37,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const [chatModel] = useRecoilState(store.chatModel);
     const [selectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
     const [searchType] = useRecoilState(store.searchType);
+    // v2.5 Agent-mode: tools toggled on in the chat input bar. Non-empty
+    // means the backend dispatcher routes to the LangGraph Agent flow (which
+    // emits the new ChatResponse SSE format). Empty array keeps us on the
+    // legacy flow so existing tests / old clients aren't disrupted.
+    const [selectedAgentTools] = useRecoilState(store.selectedAgentTools);
 
     const queryClient = useQueryClient();
 
@@ -67,11 +69,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // In this case don't reset, messages are still valid.
         if (initialConversationId === internalConvoIdRef.current) return;
 
-        // Genuine sidebar navigation — reset and load new conversation
+        // Genuine sidebar navigation — reset and load new conversation.
+        // Set isLoading=true up-front (not false) so the welcome page doesn't
+        // briefly flash before the load effect fires on the next tick.
         abortSSE();
         setSseSubmission(null);
         setIsStreaming(false);
-        setIsLoading(false);
+        setIsLoading(initialConversationId !== "new");
         setMessages([]);
         setTitle("");
         setConversationId(initialConversationId);
@@ -90,7 +94,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             return;
         }
         setIsLoading(true);
-        fetchMessages(conversationId, shareToken)
+        // v2.5: use the native Agent-mode history endpoint.
+        // Returns ChatMessage[] with category + structured fields (reasoning,
+        // tool_calls, steps, thinking_segments) already expanded; legacy
+        // regenerate siblings are pre-collapsed server-side.
+        getAgentMessages(conversationId)
             .then((msgs) => {
                 setMessages(msgs);
                 setIsLoading(false);
@@ -102,11 +110,12 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
     }, [conversationId]);
 
-    // --- Message tree (for rendering) ---
-    const messagesTree = useMemo(() => {
-        if (messages.length === 0) return null;
-        return buildMessageTree(messages);
-    }, [messages]);
+    // v2.5 Module B: agent flow renders a flat list keyed by category;
+    // messagesTree + buildMessageTree were only needed by the legacy
+    // SiblingSwitch UI which is no longer shown (ChatView passes flatMode).
+    // The (still-used) legacy Messages/* component chain imports
+    // buildMessageTree directly from chatApi, so only this local indirection
+    // is removed.
 
     // --- Send a message ---
     const sendMessage = useCallback(
@@ -172,7 +181,16 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 isContinued: false,
                 isTemporary: false,
                 files: files ?? [],
-                tools: [],
+                // v2.5: present `tools` array → backend agent flow.
+                // Absent (null/undefined) → legacy flow. We always send the
+                // field when the user has toggled any tool on.
+                tools: selectedAgentTools.flatMap((g) =>
+                    (g.children || []).map((c) => ({
+                        id: c.id,
+                        tool_key: c.tool_key,
+                        type: "tool",
+                    })),
+                ),
                 linsight: isLingsi,
             };
 
@@ -235,6 +253,29 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 messageId: messageId || lastMsg.messageId,
                             };
                         }
+                        return msgs;
+                    });
+                },
+                // v2.5 Agent native update — merges structured fields so the
+                // AgentMessageBubble can render thinking / tool-calls / answer
+                // as separate sections instead of regex-parsing a `:::thinking:::`
+                // envelope.
+                onAgentUpdate: (patch) => {
+                    setMessages((prev) => {
+                        const msgs = [...prev];
+                        const lastMsg = msgs[msgs.length - 1];
+                        if (!lastMsg || lastMsg.isCreatedByUser) return prev;
+                        msgs[msgs.length - 1] = {
+                            ...lastMsg,
+                            // Tag with agent category so the bubble switches to
+                            // native rendering. First SSE event upgrades the row;
+                            // subsequent ones just refresh fields.
+                            category: patch.category ?? lastMsg.category ?? "agent_answer",
+                            ...(patch.messageId ? { messageId: patch.messageId } : {}),
+                            ...(patch.text != null ? { text: patch.text } : {}),
+                            ...(patch.events ? { events: patch.events } : {}),
+                            ...(patch.finalised ? { unfinished: false } : {}),
+                        };
                         return msgs;
                     });
                 },
@@ -396,6 +437,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 isRegenerate: true,
                 isTemporary: false,
                 files: parentMsg.files ?? [],
+                tools: selectedAgentTools.flatMap((g) =>
+                    (g.children || []).map((c) => ({
+                        id: c.id,
+                        tool_key: c.tool_key,
+                        type: "tool",
+                    })),
+                ),
                 linsight: isLingsi,
             };
 
@@ -424,6 +472,25 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 messageId: messageId || msgs[idx].messageId,
                             };
                         }
+                        return msgs;
+                    });
+                },
+                onAgentUpdate: (patch) => {
+                    setMessages((prev) => {
+                        const msgs = [...prev];
+                        const idx = msgs.findIndex(
+                            (m) => m.messageId === newResponseId,
+                        );
+                        if (idx < 0) return prev;
+                        msgs[idx] = {
+                            ...msgs[idx],
+                            category:
+                                patch.category ?? msgs[idx].category ?? "agent_answer",
+                            ...(patch.messageId ? { messageId: patch.messageId } : {}),
+                            ...(patch.text != null ? { text: patch.text } : {}),
+                            ...(patch.events ? { events: patch.events } : {}),
+                            ...(patch.finalised ? { unfinished: false } : {}),
+                        };
                         return msgs;
                     });
                 },
@@ -474,7 +541,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     return {
         // State
         messages,
-        messagesTree,
+        // Legacy alias — kept null to maintain the old destructuring shape
+        // without shipping tree-building on the hot path.
+        messagesTree: null as unknown,
         conversationId,
         title,
         isLoading,

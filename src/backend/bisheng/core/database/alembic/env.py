@@ -1,5 +1,7 @@
 from logging.config import fileConfig
 
+from sqlalchemy import text
+
 from alembic import context
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -26,6 +28,43 @@ target_metadata = SQLModelSerializable.metadata
 # ... etc.
 
 
+def ensure_alembic_version_table(connection) -> None:
+    """Ensure long local revision ids fit into Alembic's version table."""
+    dialect_name = connection.dialect.name
+    if dialect_name != "mysql":
+        return
+
+    table_exists = connection.execute(
+        text(
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'alembic_version'"
+        )
+    ).scalar()
+    if not table_exists:
+        connection.execute(
+            text(
+                "CREATE TABLE alembic_version ("
+                "version_num VARCHAR(255) NOT NULL, "
+                "PRIMARY KEY (version_num)"
+                ")"
+            )
+        )
+        return
+
+    column_len = connection.execute(
+        text(
+            "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() "
+            "AND TABLE_NAME = 'alembic_version' "
+            "AND COLUMN_NAME = 'version_num'"
+        )
+    ).scalar()
+    if column_len is not None and int(column_len) < 255:
+        connection.execute(
+            text("ALTER TABLE alembic_version MODIFY version_num VARCHAR(255) NOT NULL")
+        )
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -38,6 +77,7 @@ def run_migrations_online() -> None:
     database_conn_manager = sync_get_database_connection()
 
     with database_conn_manager.engine.connect() as connection:
+        ensure_alembic_version_table(connection)
         context.configure(
             connection=connection, target_metadata=target_metadata
         )

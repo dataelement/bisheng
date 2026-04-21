@@ -12,8 +12,10 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useLocalize } from "~/hooks";
-import { getFullWidthLength } from "~/utils";
+import { PermissionDialog } from "~/components/permission";
+import { canOpenPermissionDialog } from "~/api/permission";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -42,6 +44,7 @@ interface KnowledgeSpaceContentProps {
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
+    onGoKnowledgeSquare?: () => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -71,8 +74,10 @@ export function KnowledgeSpaceContent({
     onToggleAiAssistant,
     isAiAssistantOpen,
     onCreateSpace,
+    onGoKnowledgeSquare,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
@@ -153,9 +158,65 @@ export function KnowledgeSpaceContent({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+    const [permTarget, setPermTarget] = useState<{
+        id: string;
+        name: string;
+        type: "folder" | "knowledge_file";
+    } | null>(null);
+    const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
+    const permissionEntryProbeKey = displayFiles
+        .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
+        .map((file) => `${file.id}:${file.type}`)
+        .join("|");
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (isAdmin) {
+            setPermissionEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setPermissionEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+                const allowed = await canOpenPermissionDialog(resourceType, file.id, {
+                    signal: controller.signal,
+                }).catch(() => false);
+                return allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setPermissionEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [
+        isAdmin,
+        permissionEntryProbeKey,
+    ]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -237,6 +298,19 @@ export function KnowledgeSpaceContent({
             newSelected.delete(fileId);
         }
         setSelectedFiles(newSelected);
+    };
+
+    const handleManagePermission = (fileId: string) => {
+        const target = displayFiles.find((file) => file.id === fileId);
+        if (!target) {
+            return;
+        }
+
+        setPermTarget({
+            id: target.id,
+            name: target.name,
+            type: target.type === FileType.FOLDER ? "folder" : "knowledge_file",
+        });
     };
 
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
@@ -487,6 +561,7 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
+                onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
             />
@@ -513,12 +588,23 @@ export function KnowledgeSpaceContent({
                                 )}
                             </p>
                         </div>
-                    ) : viewMode === "card" ? (
+                    ) : (isH5 || viewMode === "card") ? (
                         <div className="flex-1 overflow-y-auto scrollbar-on-hover">
                             <div
                                 ref={cardGridRef}
-                                className="grid w-full min-w-0 gap-4 py-4"
-                                style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
+                                className={cn(
+                                    "w-full min-w-0 py-4",
+                                    isH5
+                                        ? viewMode === "list"
+                                            ? "grid grid-cols-1 gap-2"
+                                            : "grid grid-cols-2 gap-3"
+                                        : "grid gap-4"
+                                )}
+                                style={
+                                    isH5
+                                        ? undefined
+                                        : { gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }
+                                }
                             >
                                 {displayFiles.map((file) => (
                                     <FileCard
@@ -533,11 +619,13 @@ export function KnowledgeSpaceContent({
                                         onEditTags={() => handleOpenEditTags(file.id)}
                                         onRetry={() => handleSingleRetry(file.id)}
                                         onNavigateFolder={() => onNavigateFolder(file.id)}
-                                        onPreview={handlePreviewFile}
-                                        onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
-                                        onCancelCreate={onCancelCreateFolder}
-                                    />
-                                ))}
+                                    onPreview={handlePreviewFile}
+                                    onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
+                                    onCancelCreate={onCancelCreateFolder}
+                                    onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                    mobileListMode={isH5 && viewMode === "list"}
+                                />
+                            ))}
                             </div>
                         </div>
                     ) : (
@@ -557,6 +645,8 @@ export function KnowledgeSpaceContent({
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
+                                    permissionEntryIds={permissionEntryIds}
+                                    onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -605,6 +695,20 @@ export function KnowledgeSpaceContent({
                         : []
                 }
             />
+
+            {permTarget && (
+                <PermissionDialog
+                    open={!!permTarget}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setPermTarget(null);
+                        }
+                    }}
+                    resourceType={permTarget.type}
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
+                />
+            )}
         </div>
     );
 }

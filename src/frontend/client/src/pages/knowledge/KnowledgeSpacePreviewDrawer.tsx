@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
@@ -15,9 +15,11 @@ import {
     getJoinedSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
-    subscribeSpaceApi
+    subscribeSpaceApi,
+    unsubscribeSpaceApi
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -34,6 +36,7 @@ export function KnowledgeSpacePreviewDrawer({
     onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
     const { showToast } = useToastContext();
     const MAX_JOINED_SPACES = 50;
 
@@ -257,10 +260,9 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const getButtonConfig = () => {
-        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中/已驳回”保持原文案
-        if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
-        if (status === "rejected") return { label: localize("rejected"), variant: "secondary" as const, disabled: true };
+        if (status === "joined") return { label: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "pending") return { label: localize("com_knowledge.withdraw_application"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
@@ -271,21 +273,35 @@ export function KnowledgeSpacePreviewDrawer({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full min-h-0 overflow-hidden"
+                className={cn(
+                    "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-[1000px] sm:max-w-[1000px]",
+                    "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
+                )}
                 hideClose
             >
-                <button
-                    type="button"
-                    aria-label={localize("com_knowledge.collapse_drawer")}
-                    onClick={() => onOpenChange(false)}
-                    className="absolute left-1 top-1/2 -translate-y-1/2 h-16 w-6 bg-white text-[#C9CDD4] hover:text-[#B6BBC5] flex items-center justify-center z-20"
-                >
-                    <ChevronRight className="size-6 stroke-[2.75]" />
-                </button>
+                {!isH5 ? (
+                    <button
+                        type="button"
+                        aria-label={localize("com_knowledge.collapse_drawer")}
+                        onClick={() => onOpenChange(false)}
+                        className="absolute left-1 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-white text-[#C9CDD4] hover:text-[#B6BBC5]"
+                    >
+                        <ChevronRight className="size-6 stroke-[2.75]" />
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        aria-label={localize("com_knowledge.close")}
+                        onClick={() => onOpenChange(false)}
+                        className="absolute right-4 top-4 z-20 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                    >
+                        <X className="size-4" />
+                    </button>
+                )}
                 {space && (
                     <>
-                        <SheetHeader className="px-6 pt-6 pb-4 gap-0 border-b border-gray-100 text-left">
-                            <SheetTitle className="font-semibold text-[#1d2129] leading-tight mb-1">
+                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
+                            <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold touch-mobile:pr-10">
                                 {space.name}
                             </SheetTitle>
                             {space.description && (
@@ -317,7 +333,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                        : status === "pending" || status === "rejected"
+                                        : status === "pending"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                             : ""
                                         }`}
@@ -330,7 +346,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover px-6 py-4"
+                            className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
@@ -368,7 +384,7 @@ export function KnowledgeSpacePreviewDrawer({
                                         <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">
                                             {localize("com_knowledge.no_files")}</div>
                                     ) : (
-                                        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                                        <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
                                             {filesPreview.map((f) => (
                                                 <FileCard
                                                     key={f.id}
@@ -376,7 +392,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     userRole={space?.role ?? SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
-                                                            onDownload={() => { }}
+                                                    onDownload={() => { }}
                                                     onRename={() => { }}
                                                     onDelete={() => { }}
                                                     onEditTags={() => { }}
@@ -387,8 +403,8 @@ export function KnowledgeSpacePreviewDrawer({
                                                     }}
                                                     onPreview={handlePreviewFile}
                                                     disableClickNavigate
-                                                            hideSelectionCheckbox
-                                                            hideDownloadActions
+                                                    hideSelectionCheckbox
+                                                    hideDownloadActions
                                                 />
                                             ))}
                                         </div>

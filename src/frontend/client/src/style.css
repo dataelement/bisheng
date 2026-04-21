@@ -1510,6 +1510,23 @@ button {
   background-color: hsla(0, 0%, 100%, 0.1);
 }
 
+/* Show scrollbar only while hovering the container */
+.scroll-no-hover {
+  scrollbar-width: none; /* Firefox */
+}
+.scroll-no-hover::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+.scroll-no-hover:hover {
+  scrollbar-width: thin; /* Firefox */
+}
+.scroll-no-hover:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+.dark .scroll-no-hover:hover::-webkit-scrollbar-thumb {
+  background-color: hsla(0, 0%, 100%, 0.1);
+}
+
 body,
 html {
   height: 100%;

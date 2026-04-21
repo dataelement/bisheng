@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import * as http from 'node:http';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
@@ -13,6 +14,61 @@ const app_env = {
   BASE_URL: '/workspace',
   BISHENG_HOST: '/admin'
 }
+
+const minioTarget = 'http://192.168.106.116:9000';
+const minioPathRE = /^\/(?:workspace\/)?bisheng(?:\/|$)/;
+
+function minioFileProxyPlugin(): Plugin {
+  return {
+    name: 'bisheng:minio-file-proxy',
+    apply: 'serve',
+    configureServer(server) {
+      const minioProxyMiddleware = (req, res, next) => {
+        const requestUrl = req.url || '';
+
+        if (!minioPathRE.test(requestUrl)) {
+          next();
+          return;
+        }
+
+        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/bisheng(?:\/|$))/, '');
+        const targetUrl = new URL(rewrittenUrl, minioTarget);
+        const proxyReq = http.request(
+          {
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port,
+            method: req.method,
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            headers: {
+              ...req.headers,
+              host: targetUrl.host,
+            },
+          },
+          (proxyRes) => {
+            res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+            proxyRes.pipe(res);
+          },
+        );
+
+        proxyReq.on('error', (error) => {
+          if (!res.headersSent) {
+            res.writeHead(502, { 'Content-Type': 'text/plain' });
+          }
+          res.end(`MinIO proxy error: ${error.message}`);
+        });
+
+        req.pipe(proxyReq);
+      };
+
+      server.middlewares.stack.unshift({
+        route: '',
+        handle: minioProxyMiddleware,
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
   base: app_env.BASE_URL || '/',
@@ -30,7 +86,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: 'http://127.0.0.1:7860',
+        target: 'http://192.168.106.116:9000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -38,7 +94,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://127.0.0.1:7860',
+        target: 'http://localhost:7860',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -52,7 +108,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.116:9000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -65,6 +121,7 @@ export default defineConfig(({ command }) => ({
   envDir: '../',
   envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
   plugins: [
+    minioFileProxyPlugin(),
     react(),
     nodePolyfills(),
     VitePWA({

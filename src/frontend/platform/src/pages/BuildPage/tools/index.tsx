@@ -1,5 +1,8 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -41,6 +44,12 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     useToolType(setType)
     const [loading, setLoading] = useState(false)
+
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
+    const toolIds = allData.map((el: any) => String(el.id));
+    const { levels: permLevels } = usePermissionLevels('tool', toolIds);
 
     const loadData = async (_type = "custom") => {
         await getToolsApi(_type).then((res) => {
@@ -118,10 +127,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             <span>{t("tools.mcpTools")}</span>
                         </div>
                     </div>
-                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-betwee px-2">
-                        <p className="text-sm text-muted-foreground break-all">
-                            {t("tools.manageCustomTools")}
-                        </p>
+                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm text-muted-foreground break-keep">
+                                {t("tools.manageCustomTools")}
+                            </p>
+                            <span className="text-sm text-[#86909c] whitespace-nowrap">{t('pagination.totalRecords', { ns: 'bs', total: options.length })}</span>
+                        </div>
                     </div>
                 </div>
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
@@ -173,6 +185,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                             type === 'mcp' ? mcpDialogRef.current.open(el) :
                                                 editRef.current.edit(el)
                                         }}
+                                        onPermission={canManageResource(permLevels, el.id)
+                                            ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
+                                            : null}
+                                        permissionBadge={<PermissionBadge level={permLevels[String(el.id)]} />}
                                     ></ToolItem>
                                 ))
                             ) : (
@@ -201,6 +217,17 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
             />
 
             <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
+
+            {/* Permission management dialog */}
+            {permTarget && (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="tool"
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
+                />
+            )}
         </div>
     );
 }

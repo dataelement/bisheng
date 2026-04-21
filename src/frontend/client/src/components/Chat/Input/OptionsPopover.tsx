@@ -54,12 +54,12 @@ export default function OptionsPopover({
   return (
     <Portal>
       <Content sideOffset={8} align="start" ref={popoverRef} asChild>
-        <div className="z-[70] flex w-screen flex-col items-center md:w-full md:px-4">
+        <div className="z-[70] flex w-screen flex-col items-center touch-desktop:w-full touch-desktop:px-4">
           <div
             className={cn(
               cardStyle,
               'dark:bg-gray-700',
-              'border-d-0 flex w-full flex-col overflow-hidden rounded-none border-s-0 border-t bg-white px-0 pb-[10px] dark:border-white/10 md:rounded-md md:border lg:w-[736px]',
+              'border-d-0 flex w-full flex-col overflow-hidden rounded-none border-s-0 border-t bg-white px-0 pb-[10px] dark:border-white/10 touch-desktop:rounded-md touch-desktop:border lg:w-[736px]',
             )}
           >
             <div className="flex w-full items-center bg-gray-50 px-2 py-2 dark:bg-gray-700">

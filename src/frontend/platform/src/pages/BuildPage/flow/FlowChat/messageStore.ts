@@ -1,12 +1,12 @@
 import { message } from '@/components/bs-ui/toast/use-toast';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { getChatHistory } from '@/controllers/API';
-import { ChatMessageType } from '@/types/chat';
 import { WorkflowMessage } from '@/types/flow';
 import { formatDate } from '@/util/utils';
 import i18next from 'i18next';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
+import { normalizeCitationItems } from '@/components/bs-comp/chatComponent/citationUtils';
 
 /**
  * 会话消息管理
@@ -23,7 +23,7 @@ type State = {
     historyEnd: boolean,
     messages: WorkflowMessage[]
     /** 历史回话独立存储 */
-    hisMessages: ChatMessageType[]
+    hisMessages: any[]
     /**
      * 控制引导问题的显示状态
      */
@@ -32,7 +32,7 @@ type State = {
 }
 
 type Actions = {
-    loadHistoryMsg: (flowid: string, chatId: string, data: { appendHistory: boolean, lastMsg: string }) => Promise<void>;
+    loadHistoryMsg: (flowid: string, chatId: string, data: { appendHistory: boolean, lastMsg: string }) => Promise<any>;
     loadMoreHistoryMsg: (flowid: string, appendHistory: boolean) => Promise<void>;
     destory: () => void;
     createSendMsg: (msg: string) => void;
@@ -50,7 +50,7 @@ type Actions = {
 }
 
 
-const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
+const handleHistoryMsg = (data: any[]): WorkflowMessage[] => {
     const correctedJsonString = (str: string) => str
         // .replace(/\\([\s\S])|(`)/g, '\\\\$1$2') // 转义反斜线和反引号
         .replace(/\n/g, '\\n')                  // 转义换行符
@@ -89,6 +89,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
                 message,
                 thought: intermediate_steps,
                 reasoning_log: message.reasoning_content || '',
+                citations: normalizeCitationItems(other),
                 noAccess: true
             }
         })
@@ -127,7 +128,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 node_id: message?.node_id || '',
                 create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
                 extra,
-                reasoning_log
+                reasoning_log,
+                citations: normalizeCitationItems(data)
             })
             return { messages: newChat }
         })
@@ -150,6 +152,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             reasoning_log: data.type === 'end' ? currentMsg.reasoning_log : currentMsg.reasoning_log + (reasoning_content || ''),
             create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
+            citations: normalizeCitationItems(data) || currentMsg.citations || null,
             end: data.type === 'end'
         }
 
@@ -206,7 +209,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     async loadHistoryMsg(flowid, chatId, { lastMsg }) {
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
-        const hisMessages = msgs.map(el => ({ ...el, his: true })).reverse()
+        const hisMessages: WorkflowMessage[] = msgs.map(el => ({ ...el, his: true })).reverse()
         currentChatId = chatId
         if (msgs.length && lastMsg) {
             hisMessages.push({
@@ -231,7 +234,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const prevMsgs = get().messages
         // 最后一条消息id不存在，忽略 loadmore
         if (!prevMsgs[0]?.id) return
-        const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
+        const res = await getChatHistory(flowid, chatId, 10, Number(prevMsgs[0]?.id || 0))
         // 过滤非同一会话消息
         if (res[0]?.chat_id !== currentChatId) {
             return console.warn('loadMoreHistoryMsg chatId not match, ignore')
@@ -269,6 +272,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             ...data,
             message: currentMessage.message + data.message,
             end: ['end', 'over'].includes(data.type),
+            citations: normalizeCitationItems(data) || currentMessage.citations || null,
             create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
         }
 
@@ -387,7 +391,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
 
 
 
-const bsMsgItem = {
+const bsMsgItem: any = {
     flow_id: '',
     chat_id: '',
     files: [],

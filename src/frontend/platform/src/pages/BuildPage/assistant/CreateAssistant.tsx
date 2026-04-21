@@ -1,5 +1,6 @@
 import { AssistantIcon } from "@/components/bs-icons";
 import Avator from "@/components/bs-ui/input/avator";
+import { ShareToChildrenSwitch } from "@/components/bs-ui/shareToChildrenSwitch";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,8 +16,14 @@ export default function CreateAssistant() {
 
     const { t } = useTranslation()
 
-    // State for form fields
-    const [formData, setFormData] = useState({
+    // State for form fields. F017: shareToChildren is undefined by default
+    // (meaning "inherit Root.share_default_to_children" at the backend).
+    const [formData, setFormData] = useState<{
+        url: string;
+        name: string;
+        roleAndTasks: string;
+        shareToChildren?: boolean;
+    }>({
         url: '',
         name: '',
         roleAndTasks: `${t('build.example')}：
@@ -24,7 +31,8 @@ ${t('build.exampleOne')}
 ${t('build.exampleTwo')}
 1. XX
 2. XX
-3. …`
+3. …`,
+        shareToChildren: undefined,
     });
 
     const [loading, setLoading] = useState(false);
@@ -81,7 +89,14 @@ ${t('build.exampleTwo')}
         if (isValid) {
             console.log('Form data:', formData);
             setLoading(true)
-            const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks, formData.url))
+            const res = await captureAndAlertRequestErrorHoc(
+                createAssistantsApi(
+                    formData.name, formData.roleAndTasks, formData.url,
+                    // F017: forward the Root-only share_to_children flag;
+                    // backend ignores it for Child creators.
+                    formData.shareToChildren,
+                ),
+            )
             if (res) {
                 //@ts-ignore
                 window.assistantCreate = true // Mark as creating new assistant
@@ -125,6 +140,13 @@ ${t('build.exampleTwo')}
                 />
                 {errors.roleAndTasks && <p className="bisheng-tip mt-1">{errors.roleAndTasks}</p>}
             </div>
+            {/* F017: Root-only toggle; hidden for Child creators. */}
+            <ShareToChildrenSwitch
+                checked={Boolean(formData.shareToChildren)}
+                onCheckedChange={(checked) =>
+                    setFormData(prev => ({ ...prev, shareToChildren: checked }))
+                }
+            />
         </div>
         <DialogFooter>
             <DialogClose>

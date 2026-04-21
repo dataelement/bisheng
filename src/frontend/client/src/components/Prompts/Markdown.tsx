@@ -5,7 +5,7 @@ export const CodeVariableGfm = ({ children }: { children: React.ReactNode }) => 
   return (
     <code
       onDoubleClick={handleDoubleClick}
-      className="rounded-md bg-surface-primary-alt p-1 text-xs text-text-secondary md:text-sm"
+      className="rounded-md bg-surface-primary-alt p-1 text-xs text-text-secondary touch-desktop:text-sm"
     >
       {children}
     </code>

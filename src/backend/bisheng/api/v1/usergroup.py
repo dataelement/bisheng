@@ -8,7 +8,7 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import UserGroupEmptyError
-from bisheng.database.models.group import Group, GroupCreate
+from bisheng.database.models.group import Group, GroupCreate, GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -19,23 +19,14 @@ router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(UserPay
 @router.get('/list')
 async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    Get all groups
+    Get all groups（PRD：超管全量；其他用户见公开组 + 自建/加入的私密组）
     """
     if login_user.is_admin():
-        groups = []
+        groups_res = RoleGroupService().get_group_list([])
     else:
-        # Query if you are an administrator of another user group under
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        groups = []
-        for one in user_groups:
-            if one.is_group_admin:
-                groups.append(one.group_id)
-        # Not an administrator of any user group does not have permission to view
-        if not groups:
-            raise UnAuthorizedError()
-
-    groups_res = RoleGroupService().get_group_list(groups)
-    return resp_200({'records': groups_res})
+        groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 5000, '')
+        groups_res = RoleGroupService().enrich_group_reads(groups)
+    return resp_200({'records': groups_res, 'total': len(groups_res)})
 
 
 @router.post('/create')
@@ -98,7 +89,7 @@ async def get_group_user(group_id: int,
     """
     Get grouped users
     """
-    return RoleGroupService().get_group_user_list(group_id, page_size, page_num)
+    return resp_200(RoleGroupService().get_group_user_list(group_id, page_size, page_num))
 
 
 @router.post('/set_group_admin')
@@ -112,6 +103,17 @@ async def set_group_admin(
     """
 
     return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
+
+@router.post('/set_group_members')
+async def set_group_members(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+    """
+    Batch set group members (non-admin), overriding the historical members
+    """
+    return resp_200(RoleGroupService().set_group_members(request, login_user, user_ids, group_id))
 
 
 @router.post('/set_update_user', status_code=200)

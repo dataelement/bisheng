@@ -1,5 +1,7 @@
 import { cname } from "@/components/bs-ui/utils";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { AppNumType, AppType } from "@/types/app";
+import { Copy, Shield } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SkillIcon } from "../../bs-icons";
@@ -35,6 +37,12 @@ interface IProps<T> {
   onCheckedChange?: (b: boolean, data: T) => Promise<any>
   onDelete?: (data: T) => void,
   onSetting?: (data: T) => void,
+  onPermission?: (data: T) => void,
+  permissionBadge?: React.ReactNode,
+  showSwitch?: boolean,
+  /** 与「编辑应用」解耦：由角色「创建应用」(create_app) 等控制，见构建页 apps */
+  showCopy?: boolean,
+  onCopy?: (data: T) => void,
 }
 
 export const gradients = [
@@ -86,12 +94,17 @@ export default function CardComponent<T>({
   onDelete,
   onAddTemp,
   onCheckedChange,
-  onSetting
+  onSetting,
+  onPermission,
+  permissionBadge = null,
+  showSwitch = true,
+  showCopy = false,
+  onCopy,
 }: IProps<T>) {
 
   const [_checked, setChecked] = useState(checked)
 
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const handleCheckedChange = async (bln) => {
     const res = await onCheckedChange(bln, data)
@@ -159,17 +172,17 @@ export default function CardComponent<T>({
         {logo}
         <div className="flex gap-1 items-center">
           {headSelecter}
-          <Switch
+          {showSwitch && <Switch
             checked={_checked}
             className={i18next.language === 'ja' ? 'w-20' : 'w-12'}
             // @ts-ignore
             texts={[t('skills.online'), t('skills.offline')]}
             onCheckedChange={(b) => edit && handleCheckedChange(b)}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
-          ></Switch>
+          ></Switch>}
         </div>
       </div>
-      <CardTitle className="truncate-doubleline leading-5 break-all">{title}</CardTitle>
+      <CardTitle className="truncate-doubleline leading-5 break-all flex items-center gap-1">{title}{permissionBadge}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription className="break-all">{description}</CardDescription>
@@ -182,13 +195,24 @@ export default function CardComponent<T>({
           <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
           <span className="text-sm font-medium overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>
-        {edit
-          && <div className="hidden group-hover:flex">
+        {(edit || (showCopy && onCopy)) && (
+          <div className="hidden group-hover:flex gap-1 items-center">
             {/* {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>} */}
-            {isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
-            {!checked && <div className="hover:bg-[#24272d] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
+            {edit && onPermission && <div className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1" onClick={(e) => { e.stopPropagation(); onPermission(data) }}><Shield className="w-4 h-4" /></div>}
+            {edit && isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            {showCopy && onCopy && (
+              <Tip content={i18n.t('copy', { ns: 'flow' })} side="top">
+                <div
+                  className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1"
+                  onClick={(e) => { e.stopPropagation(); onCopy(data); }}
+                >
+                  <Copy className="w-4 h-4" />
+                </div>
+              </Tip>
+            )}
+            {edit && !checked && onDelete && <div className="hover:bg-[#24272d] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>
-        }
+        )}
       </div>
       {footer}
     </CardFooter>

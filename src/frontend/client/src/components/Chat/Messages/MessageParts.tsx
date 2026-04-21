@@ -78,8 +78,8 @@ export default function Message(props: TMessageProps) {
         onWheel={handleScroll}
         onTouchMove={handleScroll}
       >
-        <div className="m-auto justify-center p-4 py-2 md:gap-6 ">
-          <div className="group mx-auto flex flex-1 gap-3 md:max-w-3xl md:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5">
+        <div className="m-auto justify-center p-4 py-2 touch-desktop:gap-6 ">
+          <div className="group mx-auto flex flex-1 gap-3 touch-desktop:max-w-3xl touch-desktop:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5">
             <div className="relative flex flex-shrink-0 flex-col items-end">
               <div>
                 <div className="pt-0.5">
@@ -96,7 +96,7 @@ export default function Message(props: TMessageProps) {
               )}
             >
               <div className={cn('select-none font-semibold', fontSize)}>{name}</div>
-              <div className="flex-col gap-1 md:gap-3">
+              <div className="flex-col gap-1 touch-desktop:gap-3">
                 <div className="flex max-w-full flex-grow flex-col gap-0">
                   <ContentParts
                     isLast={isLast}

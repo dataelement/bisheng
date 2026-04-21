@@ -13,6 +13,7 @@ import {
     type KeyboardEvent,
 } from "react";
 import { File_Accept } from "~/common";
+import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -199,16 +200,13 @@ const AiChatInput = memo(
         // Show file upload feature
         const showUpload = fileUpload && bsConfig?.fileUpload?.enabled;
 
-        // --- Mutual exclusion logic ---
-        // Each "mode" (kb, tools, files) is active if it has data selected
-        const hasKbs = selectedOrgKbs.length > 0;
-        const hasToolsActive = searchType === "netSearch";
-        const hasFiles = !!chatFiles && chatFiles.length > 0;
-
-        // If any one is active, disable the other two pickers
-        const kbDisabled = !!disabled || hasToolsActive || hasFiles;
-        const toolsDisabled = !!disabled || hasKbs || hasFiles;
-        const filesDisabled = disabled || hasKbs || hasToolsActive;
+        // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
+        // knowledge bases and files coexist freely — there's no mutex anymore.
+        // `agentMode` stays around only so Lingsi / legacy renderers keep working.
+        const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
+        const kbDisabled = !!disabled;
+        const toolsDisabled = !!disabled;
+        const filesDisabled = !!disabled;
 
         // Drag & paste file support (only when not disabled by exclusion)
         const { isDragging, handlePaste } = useFileDropAndPaste({
@@ -257,7 +255,7 @@ const AiChatInput = memo(
         );
 
         return (
-            <div className="aichat px-4 pb-4 shrink-0 relative">
+            <div className="px-4 sm:px-0 pb-4 touch-mobile:px-0 touch-mobile:pb-3 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -274,8 +272,9 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl'}`}>
-                    {/* File upload area: file list + attachment button */}
+                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden touch-mobile:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl touch-mobile:rounded-2xl'}`}>
+                    {/* File upload area: file list only. Trigger moves to "+" menu
+                        when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
                         const accept = isLingsi ? (bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight) : "";
@@ -285,13 +284,15 @@ const AiChatInput = memo(
                             showVoice={showVoice}
                             accepts={accept}
                             disabled={filesDisabled}
+                            hideTrigger={agentMode && !isLingsi}
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
                             size={bsConfig?.uploaded_files_maximum_size || 50}
                             onChange={(files: any) => {
                                 setFileUploading(!files);
                                 setChatFiles(files);
-                                // When files are added, clear kb and tools
-                                if (files && files.length > 0) {
+                                // Legacy mutex: adding files clears kb + tools.
+                                // Agent mode keeps them independent so the model can use everything.
+                                if (files && files.length > 0 && !agentMode) {
                                     onSelectedOrgKbsChange?.([]);
                                     onSearchTypeChange?.("");
                                 }
@@ -405,6 +406,27 @@ const AiChatInput = memo(
 
                         {/* Toolbar: model select + knowledge base + tools */}
                         <div className="absolute bottom-0 left-3 flex gap-2 items-center">
+                            {/* "+" menu — v2.5: combines file upload + knowledge space +
+                                org knowledge base. Renders in place of ChatKnowledge when
+                                agent mode is active (which is the v2.5 default). */}
+                            {!isLingsi && (agentMode || bsConfig?.knowledgeBase?.enabled) && onSelectedOrgKbsChange && (
+                                <ChatKnowledge
+                                    config={bsConfig}
+                                    disabled={!!disabled}
+                                    value={selectedOrgKbs}
+                                    onChange={(val) => {
+                                        onSelectedOrgKbsChange(val);
+                                        // Legacy mutex only; agent mode keeps concurrent selections.
+                                        if (val.length > 0 && !agentMode) {
+                                            setChatFiles(null);
+                                            onSearchTypeChange?.("");
+                                        }
+                                    }}
+                                    showFileUpload={showUpload && agentMode}
+                                    fileUploadDisabled={filesDisabled}
+                                    onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
+                                />
+                            )}
                             {/* Model select */}
                             {modelSelect && modelOptions && !isLingsi && (
                                 <AiModelSelect
@@ -414,37 +436,21 @@ const AiChatInput = memo(
                                     onChange={onModelChange!}
                                 />
                             )}
-
-                            {/* Knowledge base — disabled when tools or files active */}
-                            {knowledgeBase &&
-                                !isLingsi &&
-                                bsConfig?.knowledgeBase?.enabled &&
-                                onSelectedOrgKbsChange && (
-                                    <ChatKnowledge
-                                        config={bsConfig}
-                                        disabled={kbDisabled}
-                                        value={selectedOrgKbs}
-                                        onChange={(val) => {
-                                            onSelectedOrgKbsChange(val);
-                                            // Clear files when kb is selected
-                                            if (val.length > 0) {
-                                                setChatFiles(null);
-                                                onSearchTypeChange?.("");
-                                            }
-                                        }}
-                                    />
-                                )
-                            }
-
-                            {/* Tools (web search etc.) — disabled when kb or files active */}
-                            {tools && onSearchTypeChange && (
+                            {/* Tools picker */}
+                            {tools && agentMode && (
+                                <AgentToolSelector
+                                    availableTools={bsConfig.tools}
+                                    disabled={toolsDisabled}
+                                />
+                            )}
+                            {tools && !agentMode && onSearchTypeChange && (
                                 <ChatToolDown
                                     linsi={isLingsi}
                                     config={bsConfig}
                                     searchType={searchType}
                                     setSearchType={(type) => {
                                         onSearchTypeChange(type);
-                                        // Clear files and kb when tools activated
+                                        // Legacy mutex: clear files + kb when tool activated
                                         if (type === "netSearch") {
                                             setChatFiles(null);
                                             onSelectedOrgKbsChange?.([]);

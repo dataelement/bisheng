@@ -10,7 +10,8 @@ import {
     Download,
     Tag,
     RotateCcw,
-    Trash2
+    Trash2,
+    Shield
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
@@ -29,8 +30,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { ShareOutlineIcon, AiChatIcon } from "~/components/icons";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useToastContext } from "~/Providers";
-import { useLocalize } from "~/hooks";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
+import { PermissionDialog } from "~/components/permission";
+import { canOpenPermissionDialog } from "~/api/permission";
 
 /** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
 const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
@@ -61,6 +65,7 @@ interface KnowledgeSpaceHeaderProps {
     onBatchTag: () => void;
     onBatchRetry: () => void;
     onBatchDelete: () => void;
+    onGoKnowledgeSquare?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
 }
@@ -89,10 +94,12 @@ export function KnowledgeSpaceHeader({
     onBatchTag,
     onBatchRetry,
     onBatchDelete,
+    onGoKnowledgeSquare,
     onToggleAiAssistant,
     isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
     const toolbarMeasureRef = useRef<HTMLDivElement>(null);
     const [toolbarCompact, setToolbarCompact] = useState(false);
 
@@ -112,6 +119,21 @@ export function KnowledgeSpaceHeader({
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [canManagePermission, setCanManagePermission] = useState(isAdmin);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+
+        canOpenPermissionDialog("knowledge_space", space.id, { signal: controller.signal })
+            .then((allowed) => { if (!cancelled) setCanManagePermission(allowed || isAdmin); })
+            .catch(() => { if (!cancelled) setCanManagePermission(isAdmin); });
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [space.id, isAdmin]);
 
     const handleShare = () => {
         try {
@@ -131,7 +153,8 @@ export function KnowledgeSpaceHeader({
         }
     };
 
-    const showToolbarActions = isAdmin || selectedCount > 1;
+    const selectedThreshold = isH5 ? 0 : 1;
+    const showToolbarActions = isAdmin || selectedCount > selectedThreshold;
 
     const viewFilterSortCluster = (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
@@ -264,7 +287,7 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {selectedCount > 1 && (
+            {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" variant="outline" className="h-8 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
@@ -333,14 +356,34 @@ export function KnowledgeSpaceHeader({
         );
 
     return (
-        <div className="space-y-4 pt-5 pb-4">
-            {/* 面包屑 / Title */}
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                {/* 左侧：标题与信息 / 面包屑 */}
-                <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
+        <>
+        <div className="space-y-4 pt-5 pb-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
+            {currentPath.length === 0 ? (
+                <div className="hidden touch-mobile:flex items-end gap-3">
+                    <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
+                        {localize("com_knowledge.knowledge_space")}
+                    </h1>
+                    {onGoKnowledgeSquare ? (
+                        <button
+                            type="button"
+                            onClick={onGoKnowledgeSquare}
+                            className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
+                        >
+                            <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
+                            <span className="text-[12px] leading-5 font-normal text-[#212121]">
+                                前往知识广场
+                            </span>
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+
+            {/* 面包屑 / 当前空间标题 */}
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
-                            <h1 className="text-base text-[#1d2129]">{space.name}</h1>
+                            <h1 className="text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">{space.name}</h1>
                             <Tooltip>
                                 <TooltipTrigger className="cursor-pointer">
                                     <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
@@ -416,10 +459,10 @@ export function KnowledgeSpaceHeader({
                 </div>
 
                 {/* 右侧：AI助手和分享 */}
-                <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
+                <div className="flex shrink-0 items-center gap-3">
                     <Button
                         variant="ghost"
-                        className="ai-btn-border-draw h-8 px-1.5 gap-1 font-normal rounded-[6px] hover:bg-transparent"
+                        className="ai-btn-border-draw h-8 gap-1 rounded-[6px] px-3 font-normal hover:bg-transparent"
                         disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
@@ -428,10 +471,20 @@ export function KnowledgeSpaceHeader({
                         <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
                     </Button>
 
+                    {canManagePermission && (
+                        <Button
+                            variant="ghost"
+                            className="h-8 gap-2 rounded-[6px] border border-[#EBECF0] bg-white px-4 font-normal text-[#212121] transition-colors hover:bg-[#F7F8FA]"
+                            onClick={() => setPermDialogOpen(true)}
+                        >
+                            <Shield className="size-4 text-gray-800" />
+                            {localize("com_permission.manage_permission")}</Button>
+                    )}
+
                     {showShare && (
                         <Button
                             variant="ghost"
-                            className="h-8 px-1.5 gap-1 font-normal transition-colors"
+                            className="h-8 gap-2 rounded-[6px] border border-[#EBECF0] bg-white px-4 font-normal text-[#212121] transition-colors hover:bg-[#F7F8FA]"
                             onClick={handleShare}
                         >
                             <ShareOutlineIcon className="size-4 text-gray-800" />
@@ -473,5 +526,14 @@ export function KnowledgeSpaceHeader({
                 )}
             </div>
         </div>
+
+        <PermissionDialog
+            open={permDialogOpen}
+            onOpenChange={setPermDialogOpen}
+            resourceType="knowledge_space"
+            resourceId={space.id}
+            resourceName={space.name}
+        />
+        </>
     );
 }

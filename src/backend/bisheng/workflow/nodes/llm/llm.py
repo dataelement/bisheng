@@ -7,6 +7,7 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.callback.llm_usage_callback import LLMUsageCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
@@ -37,7 +38,7 @@ class LLMNode(BaseNode):
 
         # InisialisasillmObjects
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
-                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    temperature=self.node_params.get('temperature', 1),
                                                     app_id=self.workflow_id,
                                                     app_name=self.workflow_name,
                                                     app_type=ApplicationTypeEnum.WORKFLOW,
@@ -115,7 +116,16 @@ class LLMNode(BaseNode):
                                               node_name=self.name,
                                               output=self._output_user,
                                               output_key=output_key)
-        config = RunnableConfig(callbacks=[llm_callback])
+        # F017 AC-09: attribute LLM token usage to the invoking user's leaf
+        # tenant (INV-T13). The ContextVar is already populated by F012's
+        # middleware / Celery task_prerun, so LLMTokenTracker picks it up
+        # on on_llm_end.
+        usage_callback = LLMUsageCallbackHandler(
+            user_id=self.user_id,
+            model_id=self.node_params.get('model_id'),
+            session_id=self.workflow_id,
+        )
+        config = RunnableConfig(callbacks=[llm_callback, usage_callback])
         inputs = []
         if system:
             inputs.append(SystemMessage(content=system))

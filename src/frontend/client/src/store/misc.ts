@@ -14,4 +14,7 @@ const queriesEnabled = atom<boolean>({
   default: true,
 });
 
-export default { hideBannerHint, messageAttachmentsMap, queriesEnabled };
+/** 主站会话历史抽屉（与 Root 原 navVisible 共用 localStorage key `navVisible`） */
+const chatHistoryDrawerOpen = atomWithLocalStorage<boolean>('navVisible', true);
+
+export default { hideBannerHint, messageAttachmentsMap, queriesEnabled, chatHistoryDrawerOpen };

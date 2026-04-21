@@ -1,19 +1,34 @@
 import React, { useState, useRef, useCallback } from "react";
+import { ChevronLeft } from "lucide-react";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
 import { useResizablePanel } from "./hooks/useResizablePanel";
+import { cn } from "~/utils";
 
 interface ChannelLayoutProps {
     channel: Channel;
     onFullScreen?: (article: Article, aiAssistant?: boolean) => void;
+    /** H5：打开左侧「我的频道」抽屉（由订阅页挂载） */
+    onOpenChannelNav?: () => void;
+    onGoChannelSquare?: () => void;
+    onCreateChannel?: () => void;
 }
 
 const MIN_LEFT_WIDTH = 480;
 const MIN_RIGHT_WIDTH = 480;
 
-export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
+export function ChannelLayout({
+    channel,
+    onFullScreen,
+    onOpenChannelNav,
+    onGoChannelSquare,
+    onCreateChannel,
+}: ChannelLayoutProps) {
+    const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
@@ -61,26 +76,36 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
     }, []);
 
     return (
-        <div ref={containerRef} className="flex h-full w-full overflow-hidden bg-white">
+        <div ref={containerRef} className="relative flex h-full w-full overflow-hidden bg-white">
             {/* Transparent overlay during drag — prevents children from stealing mouse events */}
-            {isResizing && (
+            {isResizing && !isH5 && (
                 <div className="fixed inset-0 z-50 cursor-col-resize" />
             )}
-            {/* Left list area */}
+            {/* Left list area — H5 始终全宽列表；PC 选中文时与右侧分栏 */}
             <div
-                style={{ width: selectedArticle ? `${leftWidth}px` : '100%' }}
-                className="h-full flex-shrink-0"
+                style={
+                    !isH5 && selectedArticle
+                        ? { width: `${leftWidth}px` }
+                        : undefined
+                }
+                className={cn(
+                    "h-full shrink-0",
+                    isH5 ? "w-full min-w-0 flex-1" : selectedArticle ? "" : "w-full",
+                )}
             >
                 <ArticleList
                     channel={channel}
                     onArticleSelect={handleArticleSelect}
                     selectedArticleId={selectedArticle?.id}
+                    onOpenChannelNav={onOpenChannelNav}
+                    onGoChannelSquare={onGoChannelSquare}
+                    onCreateChannel={onCreateChannel}
                 />
             </div>
 
-            {/* Splitter - only shown when an article is selected */}
-            {selectedArticle && (
-                <div className="relative w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
+            {/* Splitter — 仅 PC 选中文时 */}
+            {!isH5 && selectedArticle && (
+                <div className="relative w-px min-w-[1px] max-w-[1px] shrink-0">
                     <div
                         onMouseDown={startResizing}
                         className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
@@ -90,10 +115,9 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
                 </div>
             )}
 
-            {/* Right detail area */}
-            {selectedArticle && (
-                <div className="relative flex-1 h-full min-w-[480px] bg-white">
-                    {/* Collapse toggle — positioned on the left edge, vertically centered */}
+            {/* Right detail — 仅 PC */}
+            {!isH5 && selectedArticle && (
+                <div className="relative h-full min-w-[480px] flex-1 bg-white">
                     <NavToggle
                         navVisible={true}
                         onToggle={() => setSelectedArticle(null)}
@@ -108,6 +132,38 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
                         onFullScreen={() => onFullScreen?.(selectedArticle, false)}
                         onAiAssistant={() => onFullScreen?.(selectedArticle, true)}
                     />
+                </div>
+            )}
+
+            {/* H5：文章详情全屏叠在列表上 */}
+            {isH5 && selectedArticle && (
+                <div
+                    className="absolute inset-0 z-[35] flex flex-col bg-white"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={localize("com_subscription.subscribe")}
+                >
+                    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-[#e5e6eb] px-2">
+                        <button
+                            type="button"
+                            onClick={() => setSelectedArticle(null)}
+                            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                            aria-label={localize("com_ui_go_back")}
+                        >
+                            <ChevronLeft className="size-5" />
+                        </button>
+                        <span className="min-w-0 flex-1 truncate text-left text-[14px] font-medium text-[#1D2129]">
+                            {selectedArticle.title}
+                        </span>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                        <ArticleDetail
+                            article={selectedArticle}
+                            loading={detailLoading}
+                            onFullScreen={() => onFullScreen?.(selectedArticle, false)}
+                            onAiAssistant={() => onFullScreen?.(selectedArticle, true)}
+                        />
+                    </div>
                 </div>
             )}
         </div>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { MarkdownView } from './PreviewParagraph';
 
+declare const __APP_ENV__: any;
+
 const TxtFileViewer = ({ html = false, markdown = false, filePath }) => {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
@@ -32,7 +34,7 @@ const TxtFileViewer = ({ html = false, markdown = false, filePath }) => {
 
     if (loading) {
         return (
-            <div className="p-4 text-sm text-gray-500">
+            <div className="flex h-full min-h-0 items-center justify-center p-4 text-sm text-gray-500">
                 Loading text file...
             </div>
         );
@@ -40,22 +42,22 @@ const TxtFileViewer = ({ html = false, markdown = false, filePath }) => {
 
     if (error) {
         return (
-            <div className="p-4 text-sm text-red-500">
+            <div className="flex h-full min-h-0 items-center justify-center p-4 text-sm text-red-500">
                 Error loading file: {error}
             </div>
         );
     }
 
-    if (markdown) return <MarkdownView noHead data={{ text: content }} />
+    if (markdown) return <div className="h-full min-h-0 overflow-y-auto"><MarkdownView noHead data={{ text: content }} /></div>
 
     if (html) return <iframe
-        className="w-full h-full border"
+        className="h-full w-full border"
         srcDoc={content}  // 使用srcdoc直接嵌入HTML内容
         sandbox="allow-scripts"
     />
 
     return (
-        <div className="p-4 text-sm whitespace-pre-wrap bg-gray-50 rounded border border-gray-200 h-full overflow-y-auto">
+        <div className="h-full min-h-0 overflow-y-auto p-4 text-sm whitespace-pre-wrap bg-gray-50 rounded border border-gray-200">
             {content || <span className="text-gray-400">(Empty file)</span>}
         </div>
     );

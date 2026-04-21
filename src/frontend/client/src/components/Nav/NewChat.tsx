@@ -1,17 +1,21 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Search, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { matchPath, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
+import BookOpenIcon from '~/components/ui/icon/BookOpen';
+import GlobeIcon from '~/components/ui/icon/Globe';
+import HomeIcon from '~/components/ui/icon/Home';
+import LinkIcon from '~/components/ui/icon/Link';
 import { useGetBsConfig, useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import type { TConversation, TMessage } from '~/types/chat';
 import { Constants, QueryKeys } from '~/types/chat';
-import { useLocalize, useNewConvo } from '~/hooks';
+import { useAuthContext, useLocalize, useNewConvo } from '~/hooks';
 import store from '~/store';
-import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
+import { cn, getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
+import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { Button } from '../ui';
-import AppsIcon from '../ui/icon/Apps';
 
 const NewChatButtonIcon = ({ conversation }: { conversation: TConversation | null }) => {
   const searchQuery = useRecoilValue(store.searchQuery);
@@ -78,9 +82,16 @@ export default function NewChat({
   /** Note: this component needs an explicit index passed if using more than one */
   const { newConversation: newConvo } = useNewConvo(index);
   const { data: bsConfig } = useGetBsConfig()
+  const { pathname } = useLocation();
+  const { user } = useAuthContext();
 
   const navigate = useNavigate();
   const localize = useLocalize();
+  const plugins: string[] | null = Array.isArray((user as { plugins?: string[] })?.plugins)
+    ? (user as { plugins: string[] }).plugins
+    : null;
+  const showSubscriptionTab = plugins ? plugins.includes('subscription') : true;
+  const showKnowledgeSpaceTab = plugins ? plugins.includes('knowledge_space') : true;
 
   const { conversation } = store.useCreateConversationAtom(index);
 
@@ -105,6 +116,68 @@ export default function NewChat({
       <div className="" style={{ transform: 'none' }}>
         <div className="mb-4 flex items-center justify-between">
           <p className="font-medium text-[#212121] text-[16px] ml-2">{localize('com_nav_home')}</p>
+        </div>
+        <div className="mb-2 hidden w-full touch-mobile:flex flex-nowrap items-stretch justify-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {[
+            {
+              section: 'home',
+              to: lastSectionPaths.home || '/c/new',
+              icon: HomeIcon,
+              label: localize('com_nav_home'),
+              isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+            },
+            {
+              section: 'apps',
+              to: appsSectionLinkTarget(),
+              icon: GlobeIcon,
+              label: localize('com_nav_app_center'),
+              isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+            },
+            {
+              section: 'channel',
+              to: lastSectionPaths.channel || '/channel',
+              icon: LinkIcon,
+              label: localize('com_ui_channel'),
+              isActive: pathname.startsWith('/channel'),
+            },
+            {
+              section: 'knowledge',
+              to: lastSectionPaths.knowledge || '/knowledge',
+              icon: BookOpenIcon,
+              label: localize('com_knowledge.knowledge_space'),
+              isActive: pathname.startsWith('/knowledge'),
+            },
+          ]
+            .filter((l) => {
+              if (l.section === 'channel') return showSubscriptionTab;
+              if (l.section === 'knowledge') return showKnowledgeSpaceTab;
+              return true;
+            })
+            .map((link) => (
+              <NavLink
+                key={link.section}
+                to={link.to}
+                aria-label={link.label}
+                className={({ isActive: navActive }) =>
+                  cn(
+                    'flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors',
+                    navActive || link.isActive
+                      ? 'bg-[#E6EDFC] text-[#335CFF]'
+                      : 'text-[#818181] hover:bg-[#f2f3f5]',
+                  )
+                }
+              >
+                {({ isActive: navActive }) => {
+                  const on = navActive || link.isActive;
+                  const Icon = link.icon;
+                  return (
+                    <Icon
+                      className={cn('size-5 shrink-0', on ? 'text-[#335CFF]' : 'text-[#818181]')}
+                    />
+                  );
+                }}
+              </NavLink>
+            ))}
         </div>
         <div className='flex gap-1 w-full'>
           {/* 新建btn */}

@@ -13,6 +13,7 @@ import {
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
+    Shield,
     Tag, Trash2
 } from "lucide-react";
 import {
@@ -454,12 +455,14 @@ interface FileTableProps {
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
+    permissionEntryIds?: Set<string>;
+    onManagePermission?: (id: string) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -512,6 +515,11 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
+                                onManagePermission={
+                                    onManagePermission && permissionEntryIds?.has(file.id)
+                                        ? () => onManagePermission(file.id)
+                                        : undefined
+                                }
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
@@ -551,6 +559,7 @@ function FileRow({
     onPreview,
     onValidateName,
     onCancelCreate,
+    onManagePermission,
     columnWidths,
     showLeftShadow,
     showRightShadow,
@@ -568,6 +577,7 @@ function FileRow({
     onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
+    onManagePermission?: () => void;
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
     showRightShadow: boolean;
@@ -580,6 +590,11 @@ function FileRow({
     const rowBg = isSelected
         ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
         : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
+    const failureMessage = (
+        file.status === FileStatus.FAILED || file.status === FileStatus.TIMEOUT
+    ) && file.errorMessage?.trim()
+        ? file.errorMessage.trim()
+        : null;
 
     const {
         isRenaming,
@@ -604,7 +619,7 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin;
+    const showMoreMenu = isAdmin || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = rowHovered || moreMenuOpen;
@@ -663,6 +678,17 @@ function FileRow({
                             >
                                 <RefreshCw className="mr-2 size-4" />
                                 {localize("com_knowledge.retry")}
+                            </DropdownMenuItem>
+                        )}
+                        {onManagePermission && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onManagePermission();
+                                }}
+                            >
+                                <Shield className="mr-2 size-4" />
+                                {localize("com_permission.manage_permission")}
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
@@ -759,10 +785,18 @@ function FileRow({
                                 onPreview?.();
                             }}
                         >
-                            {file.name}
+                            <span className="block truncate">{file.name}</span>
                         </span>
                     )}
                 </div>
+                {failureMessage && !isRenaming && (
+                    <p
+                        className="mt-1 truncate text-xs leading-5 text-[#f53f3f]"
+                        title={failureMessage}
+                    >
+                        {localize("com_knowledge.failure_reason")}: {failureMessage}
+                    </p>
+                )}
                 {/* 固定列右侧阴影 */}
                 <StickyColumnShadow show={showLeftShadow} />
             </TableCell>

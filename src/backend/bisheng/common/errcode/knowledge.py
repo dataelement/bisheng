@@ -146,7 +146,26 @@ class KnowledgeMetadataValueTypeConvertError(BaseErrorCode):
     Msg: str = 'Meta data fields {field_name} Value type conversion error: {error_msg}'
 
 
+# 标签已存在
+class KnowledgeTagExistError(BaseErrorCode):
+    Code: int = 10985
+    Msg: str = '标签已存在'
+
+
+# 标签不存在
+class KnowledgeTagNotExistError(BaseErrorCode):
+    Code: int = 10986
+    Msg: str = '标签不存在'
+
+
+# 单个文件标签数量超出限制
+class KnowledgeFileTagLimitError(BaseErrorCode):
+    Code: int = 10987
+    Msg: str = '每个文件最多只能关联 5 个标签'
+
+
 # source keyword Processing in the background, try again later
 class BackendProcessingError(BaseErrorCode):
     Code = 10990
     Msg = "Processing in the background, try again later"
+

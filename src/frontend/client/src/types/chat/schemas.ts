@@ -511,6 +511,7 @@ export type TMessage = z.input<typeof tMessageSchema> & {
   plugins?: TResPlugin[];
   content?: TMessageContentParts[];
   files?: Partial<TFile>[];
+  citations?: any[] | null;
   depth?: number;
   siblingIndex?: number;
   attachments?: TAttachment[];

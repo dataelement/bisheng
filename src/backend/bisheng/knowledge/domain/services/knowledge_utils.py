@@ -129,12 +129,12 @@ class KnowledgeUtils(BaseService):
         """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
         if file_name:
             file_ext = file_name.split(".")[-1]
-        if file_ext == "doc":
+        if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_id}.docx"
-        elif file_ext in ["ppt", "pptx"]:
+        elif file_ext in ["xls", "xlsx", "et"]:
+            return f"preview/{file_id}.xlsx"
+        elif file_ext in ["ppt", "pptx", "dps"]:
             return f"preview/{file_id}.pdf"
-        elif file_ext == "docx":
-            return f"preview/{file_id}.docx"
         # No preview required for other file types
         return None
 
@@ -143,9 +143,11 @@ class KnowledgeUtils(BaseService):
         """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
         file_name = os.path.basename(file_path)
         file_name_no_ext, file_ext = file_name.rsplit(".", 1)
-        if file_ext == "doc":
+        if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_name_no_ext}.docx"
-        elif file_ext in ["ppt", "pptx"]:
+        elif file_ext in ["xls", "xlsx", "et"]:
+            return f"preview/{file_name_no_ext}.xlsx"
+        elif file_ext in ["ppt", "pptx", "dps"]:
             return f"preview/{file_name_no_ext}.pdf"
         # No preview required for other file types
         return None

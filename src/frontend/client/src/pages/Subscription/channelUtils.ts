@@ -114,13 +114,31 @@ export function buildFilterRules(data: CreateChannelFormData): ManagerChannelFil
  * Build CreateManagerChannelPayload from form data.
  */
 export function buildCreateChannelPayload(data: CreateChannelFormData): CreateManagerChannelPayload {
+    // v2.5 Module D — travels with the channel and is persisted atomically.
+    // Always include so the server can clear existing rows when the user
+    // emptied the config. An undefined field would mean "leave untouched".
+    // Also drop sub-entries whose sub-channel was removed from the form so
+    // we don't persist orphaned config the UI no longer surfaces.
+    let knowledgeSync = data.knowledgeSync;
+    if (knowledgeSync) {
+        const validNames = new Set(
+            data.createSubChannel
+                ? data.subChannels.map((s) => s.name.trim()).filter(Boolean)
+                : [],
+        );
+        knowledgeSync = {
+            ...knowledgeSync,
+            subs: knowledgeSync.subs.filter((s) => validNames.has(s.sub_channel_name)),
+        };
+    }
     return {
         name: data.channelName.trim(),
         description: data.channelDesc.trim() || undefined,
         source_list: data.sources.map((s) => s.id),
         visibility: data.visibility,
         filter_rules: buildFilterRules(data),
-        is_released: data.publishToSquare === "yes"
+        is_released: data.publishToSquare === "yes",
+        knowledge_sync: knowledgeSync,
     };
 }
 

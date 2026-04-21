@@ -139,9 +139,9 @@ export default function VariableForm({
   };
 
   return (
-    <div className="mx-auto p-1 md:container">
+    <div className="mx-auto p-1 touch-desktop:container">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="mb-6 max-h-screen max-w-[90vw] overflow-auto rounded-md bg-gray-100 p-4 text-text-secondary dark:bg-gray-700/50 sm:max-w-full md:max-h-80">
+        <div className="mb-6 max-h-screen max-w-[90vw] overflow-auto rounded-md bg-gray-100 p-4 text-text-secondary dark:bg-gray-700/50 sm:max-w-full touch-desktop:max-h-80">
           <ReactMarkdown
             /** @ts-ignore */
             remarkPlugins={[supersub, remarkGfm, [remarkMath, { singleDollarTextMath: true }]]}

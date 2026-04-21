@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { defalutPrompt } from "./WorkbenchModel";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, footer = null }) => {
 
     const defaultValue = useMemo(() => {
         let _defaultValue = []
@@ -44,6 +44,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
                 options={options}
                 close={close}
                 onChange={(val) => onChange(val[1])}
+                footer={footer}
             />
         </div>
     );

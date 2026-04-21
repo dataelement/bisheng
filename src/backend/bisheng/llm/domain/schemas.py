@@ -14,6 +14,12 @@ class LLMModelInfo(LLMModelBase):
 class LLMServerInfo(LLMServerBase):
     id: Optional[int] = None
     models: List[LLMModelInfo] = Field(default_factory=list, description='Model List')
+    # Set by the Service layer when a Root-owned server is surfaced to a
+    # Child caller — drives the frontend readonly Badge + disabled edit.
+    is_root_shared_readonly: bool = Field(
+        default=False,
+        description='True when the caller sees this server via Root→Child share',
+    )
 
     # Sensitive Data Desensitization
     @model_validator(mode='after')
@@ -67,6 +73,13 @@ class LLMServerCreateReq(BaseModel):
     limit_flag: Optional[bool] = Field(default=False, description='Whether to turn on the daily call limit')
     limit: Optional[int] = Field(default=0, description='Daily call limit')
     config: Optional[dict] = Field(default=None, description='Service Provider Configuration')
+    # Root-only switch. Default True so Root creates are group-shared
+    # unless the super admin explicitly opts out; ignored when the
+    # caller is writing under a non-Root tenant.
+    share_to_children: bool = Field(
+        default=True,
+        description='Fan out this server to all Children via FGA shared_with tuples',
+    )
     models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list,
                                                       description='List of models under Service Provider')
 

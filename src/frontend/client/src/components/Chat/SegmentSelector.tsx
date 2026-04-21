@@ -5,21 +5,22 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
 
     return (
         <div className="w-full">
-            {/* 选项卡容器 */}
-            <div className="p-1 rounded-full border flex">
+            <div className="p-1 rounded-full border border-[#e5e6eb] bg-white/80 flex shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                 <button
-                    className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${!lingsi
-                        ? 'bg-blue-50 shadow-sm'
-                        : '0'
+                    type="button"
+                    className={`flex-1 py-2 touch-mobile:py-2 px-3 touch-mobile:px-3 touch-desktop:px-8 rounded-full text-sm touch-mobile:text-[13px] break-keep transition-all font-medium ${!lingsi
+                        ? 'bg-[#E6EDFC] text-[#165DFF] shadow-sm'
+                        : 'text-[#1d2129] bg-transparent'
                         }`}
                     onClick={() => onChange(false)}
                 >
                     {bsConfig?.tabDisplayName ? bsConfig.tabDisplayName : localize('com_segment_daily_mode')}
                 </button>
                 <button
-                    className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${lingsi
-                        ? 'bg-blue-50 shadow-sm'
-                        : ''
+                    type="button"
+                    className={`flex-1 py-2 touch-mobile:py-2 px-3 touch-mobile:px-3 touch-desktop:px-8 rounded-full text-sm touch-mobile:text-[13px] break-keep transition-all font-medium ${lingsi
+                        ? 'bg-[#E6EDFC] text-[#165DFF] shadow-sm'
+                        : 'text-[#1d2129] bg-transparent'
                         }`}
                     onClick={() => onChange(true)}
                 >
@@ -31,7 +32,7 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
                     </div>
                 </button>
             </div>
-        </div >
+        </div>
     );
 };
 

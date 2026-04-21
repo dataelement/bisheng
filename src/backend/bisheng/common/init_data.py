@@ -12,7 +12,6 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
-from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
@@ -29,41 +28,40 @@ async def init_default_data():
         try:
             db_manager = await get_database_connection()
             await db_manager.create_db_and_tables()
+            # Bypass tenant filter during init — no tenant context available at startup
+            from bisheng.core.context.tenant import _bypass_tenant_filter
+            _bypass_token = _bypass_tenant_filter.set(True)
             async with get_async_db_session() as session:
                 db_role = await session.exec(select(Role).limit(1))
                 db_role = db_role.all()
                 if not db_role:
                     # Initialize system configuration, Admin has all permissions
                     db_role = Role(id=AdminRole, role_name='System Admin', remark='System highest privileges',
-                                   group_id=DefaultGroup)
+                                   group_id=None, role_type='global')
                     session.add(db_role)
-                    db_role_normal = Role(id=DefaultRole, role_name='Regular users', remark='Regular users',
-                                          group_id=DefaultGroup)
+                    db_role_normal = Role(id=DefaultRole, role_name='普通用户', remark='普通用户',
+                                          group_id=None, role_type='global')
                     session.add(db_role_normal)
-                    # Grant to Normal User View access to the Build, Knowledge, Model menu bar
+                    # Grant DefaultRole WEB_MENU permissions (F005: updated for v2.5)
                     session.add_all([
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.WORKSTATION.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.BUILD.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.MODEL.value),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.BACKEND.value),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.FRONTEND.value),
+                                   third_id=WebMenuResource.CREATE_KNOWLEDGE.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.MODEL.value),
                     ])
                     await session.commit()
-                # Add Default User Group
-                group = await session.exec(select(Group).limit(1))
-                group = group.all()
-                if not group:
-                    group = Group(id=DefaultGroup, group_name='Default user group', create_user=1, update_user=1)
-                    session.add(group)
-                    await session.commit()
-                    await session.refresh(group)
+                # Initialize default tenant (F001)
+                await _init_default_tenant(session)
+                # Initialize default root department (F002)
+                await _init_default_root_department(session)
 
                 user = await session.exec(select(User).limit(1))
                 user = user.all()
@@ -79,6 +77,8 @@ async def init_default_data():
                     await session.commit()
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
+
+                await _backfill_guest_department_membership(session)
 
                 # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
@@ -124,11 +124,16 @@ async def init_default_data():
                         update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
 
+            _bypass_tenant_filter.reset(_bypass_token)
+
             # Initialize Databaseconfig
             await settings.init_config()
 
             # init dashboard data
             await init_dashboard_datasets()
+
+            # F006: One-time RBAC → ReBAC permission migration
+            await _migrate_rbac_to_rebac_if_needed()
         except Exception as exc:
             # if the exception involves tables already existing
             # we can ignore it
@@ -149,6 +154,213 @@ def read_from_conf(file_path: str) -> str:
         content = f.read()
 
     return content
+
+
+async def _init_default_tenant(session):
+    """Idempotently create the default tenant (id=1) and backfill user_tenant.
+
+    Called during init_default_data() to ensure the default tenant exists.
+    Uses bypass_tenant_filter() since tenant filter events might be active.
+
+    Backfill runs whenever there are users with no ``user_tenant`` row, even if
+    the default tenant row already exists (e.g. first user registered after DB
+    was migrated with tenant but without associations).
+    """
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+    from bisheng.database.models.tenant import Tenant, UserTenant
+
+    with bypass_tenant_filter():
+        existing = (await session.exec(
+            select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID)
+        )).first()
+        if not existing:
+            tenant = Tenant(
+                id=DEFAULT_TENANT_ID,
+                tenant_code='default',
+                tenant_name='Default Tenant',
+                status='active',
+            )
+            session.add(tenant)
+            await session.commit()
+
+        # Backfill user_tenant for users without any tenant association (always)
+        users_without_tenant = (await session.exec(
+            select(User.user_id).where(
+                User.user_id.notin_(
+                    select(UserTenant.user_id)
+                )
+            )
+        )).all()
+
+        for uid in users_without_tenant:
+            session.add(UserTenant(
+                user_id=uid,
+                tenant_id=DEFAULT_TENANT_ID,
+                is_default=1,
+            ))
+
+        if users_without_tenant:
+            await session.commit()
+
+    logger.info(
+        f'Default tenant ready (id={DEFAULT_TENANT_ID}); '
+        f'user_tenant backfill rows={len(users_without_tenant)}',
+    )
+
+
+async def _init_default_root_department(session):
+    """Idempotently create the default root department for the default tenant.
+
+    Called during init_default_data() after _init_default_tenant().
+    Uses bypass_tenant_filter() since tenant filter events might be active.
+
+    Part of F002-department-tree.
+    """
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+    from bisheng.database.models.department import Department
+    from bisheng.database.models.tenant import Tenant
+
+    guest_dept_id = 'BS@guest'
+    guest_name = '临时访客'
+    guest_sort_order = 2147483647
+
+    with bypass_tenant_filter():
+        # Check if default tenant exists and has no root_dept_id yet
+        tenant = (await session.exec(
+            select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID)
+        )).first()
+        if tenant is None:
+            return
+
+        root_dept = None
+        if tenant.root_dept_id is not None:
+            root_dept = (await session.exec(
+                select(Department).where(Department.id == tenant.root_dept_id)
+            )).first()
+
+        if root_dept is None:
+            root_dept = Department(
+                dept_id='BS@root',
+                name='Default Organization',
+                parent_id=None,
+                tenant_id=DEFAULT_TENANT_ID,
+                path='',
+                source='local',
+                status='active',
+            )
+            session.add(root_dept)
+            await session.flush()
+            await session.refresh(root_dept)
+            root_dept.path = f'/{root_dept.id}/'
+            tenant.root_dept_id = root_dept.id
+            session.add(root_dept)
+            await session.commit()
+
+        guest = (await session.exec(
+            select(Department).where(Department.dept_id == guest_dept_id)
+        )).first()
+        if guest is None:
+            guest = Department(
+                dept_id=guest_dept_id,
+                name=guest_name,
+                parent_id=root_dept.id,
+                tenant_id=DEFAULT_TENANT_ID,
+                path=f'{root_dept.path}',
+                source='local',
+                status='active',
+                sort_order=guest_sort_order,
+            )
+            session.add(guest)
+            await session.flush()
+            await session.refresh(guest)
+            guest.path = f'{root_dept.path}{guest.id}/'
+            session.add(guest)
+            await session.commit()
+        else:
+            changed = False
+            if guest.parent_id != root_dept.id:
+                guest.parent_id = root_dept.id
+                changed = True
+            if guest.sort_order != guest_sort_order:
+                guest.sort_order = guest_sort_order
+                changed = True
+            expected_path_prefix = root_dept.path or ''
+            if not (guest.path or '').startswith(expected_path_prefix):
+                guest.path = f'{expected_path_prefix}{guest.id}/'
+                changed = True
+            if changed:
+                session.add(guest)
+                await session.commit()
+
+    logger.info(f'Default root department ready (id={root_dept.id}), guest dept ready (dept_id={guest_dept_id})')
+
+
+async def _backfill_guest_department_membership(session):
+    """Ensure users have at least one department; fallback to 临时访客."""
+    from bisheng.database.models.department import Department, UserDepartment
+
+    guest = (await session.exec(
+        select(Department).where(
+            Department.dept_id == 'BS@guest',
+            Department.status == 'active',
+        )
+    )).first()
+    if not guest:
+        return
+
+    user_rows = (await session.exec(select(User.user_id))).all()
+    if not user_rows:
+        return
+
+    for uid in user_rows:
+        has_any = (await session.exec(
+            select(UserDepartment.id).where(UserDepartment.user_id == uid)
+        )).first()
+        if has_any is not None:
+            continue
+        session.add(UserDepartment(
+            user_id=uid,
+            department_id=guest.id,
+            is_primary=1,
+            source='local',
+        ))
+    await session.commit()
+
+
+async def _migrate_rbac_to_rebac_if_needed():
+    """One-time RBAC → ReBAC permission migration (F006). Idempotent.
+
+    Checks Redis key 'migration:f006:completed' to skip if already done.
+    Uses SETNX lock (TTL=3600s) to prevent concurrent execution.
+    """
+    try:
+        from bisheng.core.openfga.manager import get_fga_client
+        fga = get_fga_client()
+        if fga is None:
+            return  # OpenFGA not enabled, skip
+
+        redis_client = await get_redis_client()
+        if await redis_client.aget('migration:f006:completed'):
+            return  # Already completed
+
+        lock_key = 'migration:f006:lock'
+        if not await redis_client.asetNx(lock_key, '1', expiration=3600):
+            return  # Another process is executing
+
+        try:
+            from bisheng.permission.migration.migrate_rbac_to_rebac import RBACToReBACMigrator
+            from datetime import datetime
+            migrator = RBACToReBACMigrator(dry_run=False)
+            stats = await migrator.run()
+            await redis_client.aset('migration:f006:completed', json.dumps({
+                'timestamp': datetime.now().isoformat(),
+                'stats': stats.to_dict(),
+            }))
+            logger.info(f'F006 migration completed: {stats.total} tuples written')
+        finally:
+            await redis_client.adelete(lock_key)
+    except Exception as e:
+        logger.error(f'F006 migration failed (will retry on next startup): {e}')
 
 
 def upload_preset_minio_file():

@@ -1,16 +1,16 @@
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
+import { NotificationSeverity } from "~/common"
+import AppAvator from '~/components/Avator'
+import { Button } from "~/components/ui/Button"
+import { useLocalize } from "~/hooks"
 import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
-import AppAvator from '~/components/Avator'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
-import { useToastContext } from "~/Providers";
-import { Button } from "~/components/ui/Button";
-import { useLocalize } from "~/hooks";
-import { NotificationSeverity } from "~/common";
 
 const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 
@@ -186,16 +186,16 @@ export default function ExplorePlaza() {
                 className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
                 style={{ backgroundImage: `url(${APP_TAB_BANNER})` }}
             >
-                <div className="absolute left-4 top-4 z-10">
+                <div className="absolute left-5 top-5 z-10">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-7 w-7 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335CFF]"
+                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335CFF]"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>
                 </div>
-                <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-5 pt-7 text-center">
+                <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
                     <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-[#335CFF]">
                         {localize('com_app_center_welcome')}
                     </h1>
@@ -206,14 +206,14 @@ export default function ExplorePlaza() {
             </div>
 
             {/* 过滤栏 */}
-            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-6 xl:px-0 py-6">
+            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-5 py-5">
                 <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
                 <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
             </div>
 
             {/* 智能体网格 */}
-            <main className="w-full max-w-[1000px] px-6 xl:px-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[12px]">
+            <main className="w-full max-w-[1000px] px-5">
+                <div className="grid w-full gap-[12px] grid-cols-2 [@media(min-width:768px)]:grid-cols-4">
                     {agents.map((agent, idx) => (
                         <ExploreCard key={`${agent.id}-${idx}`} agent={agent} onClick={handleCardClick} onShare={handleShare} />
                     ))}

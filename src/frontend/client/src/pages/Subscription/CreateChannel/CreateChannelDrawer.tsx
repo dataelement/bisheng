@@ -27,6 +27,9 @@ import {
 import { AddSourceDropdown } from "./AddSourceDropdown";
 import { CrawlPreviewDialog } from "./CrawlPreviewDialog";
 import { CreateChannelSuccessContent } from "./CreateChannelSuccess";
+import KnowledgeSyncSection, {
+    type KnowledgeSyncDraft,
+} from "./KnowledgeSyncSection";
 import { SubChannelBlock, type SubChannelData } from "./SubChannelBlock";
 import {
     FilterConditionEditor,
@@ -64,6 +67,9 @@ export interface CreateChannelFormData {
     topFilterRelation: "and" | "or";
     createSubChannel: boolean;
     subChannels: SubChannelData[];
+    /** v2.5 Module D — flows through to the `knowledge_sync` field on the
+     * Channel create/update payload. */
+    knowledgeSync: KnowledgeSyncDraft;
 }
 
 interface CreateChannelDrawerProps {
@@ -93,6 +99,12 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
+    // v2.5 Module D — owned here so the draft survives across renders of the
+    // section and travels with the channel create/update payload on submit.
+    const [syncDraft, setSyncDraft] = useState<KnowledgeSyncDraft>({
+        main: { enabled: false, spaces: [] },
+        subs: [],
+    });
 
     const isCreateFormPristine = () => {
         // 仅用于“创建频道”场景：未做任何修改时，关闭不需要二次确认
@@ -113,6 +125,16 @@ export function CreateChannelDrawer({
     const [isBodyScrolling, setIsBodyScrolling] = useState(false);
     const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Reset the sync draft only on close. Kept in a standalone effect keyed
+    // on `open` alone so it does not re-fire when unstable form hook refs
+    // change — the main init effect below has a heavier dep list that can
+    // flip every render under some localize/query-client setups.
+    useEffect(() => {
+        if (!open) {
+            setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+        }
+    }, [open]);
+
     useEffect(() => {
         if (!open) {
             initedChannelIdRef.current = null;
@@ -125,6 +147,22 @@ export function CreateChannelDrawer({
 
             // 使用统一表单初始化逻辑（名称 / 简介 / 权限 / 是否发布 / filter_rules）
             form.initFromChannel(editingChannel);
+
+            // v2.5 Module D — hydrate sync draft from channel detail if present.
+            const existingSync = (editingChannel as any).knowledge_sync;
+            if (existingSync && (existingSync.main || existingSync.subs)) {
+                setSyncDraft({
+                    main: {
+                        enabled: !!existingSync.main?.enabled,
+                        spaces: Array.isArray(existingSync.main?.spaces)
+                            ? existingSync.main.spaces
+                            : [],
+                    },
+                    subs: Array.isArray(existingSync.subs) ? existingSync.subs : [],
+                });
+            } else {
+                setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+            }
 
             // 信息源回显：
             const sourceInfos = (editingChannel as any).source_infos as
@@ -200,7 +238,7 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    className="w-full max-w-[900px] sm:max-w-[1000px] overflow-y-auto scroll-on-scroll bg-white pl-20 pr-20 flex flex-col"
+                    className="flex w-full max-w-[900px] flex-col overflow-y-auto scrollbar-on-hover bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                     onScroll={handleBodyScroll}
                     data-scrolling={isBodyScrolling ? "true" : "false"}
                 >
@@ -212,8 +250,8 @@ export function CreateChannelDrawer({
                         <XIcon className="size-4" />
                         <span className="sr-only">Close</span>
                     </button>
-                    <SheetHeader className="sticky top-0 z-10 ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB] bg-white">
-                        <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
+                    <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
+                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                             {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                         </SheetTitle>
                     </SheetHeader>
@@ -239,7 +277,7 @@ export function CreateChannelDrawer({
                     ) : (
                         <div
                             className={cn(
-                                "overflow-visible px-6 py-5 space-y-5"
+                                "space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0"
                             )}
                         >
                             {/* 添加信息源 */}
@@ -605,16 +643,38 @@ export function CreateChannelDrawer({
                                     </div>
                                 )}
                             </div>
+
+                            {/* v2.5 Module D — 频道同步至知识空间配置 */}
+                            <KnowledgeSyncSection
+                                value={syncDraft}
+                                onChange={setSyncDraft}
+                                mainChannelName={form.channelName.trim()}
+                                subChannelNames={
+                                    form.createSubChannel
+                                        ? form.subChannels
+                                            .map((s) => s.name?.trim())
+                                            .filter((n): n is string => !!n)
+                                        : []
+                                }
+                                // In create mode the current user is always the creator.
+                                // In edit mode, honour the backend's role assignment.
+                                isCreator={
+                                    !isEditMode ||
+                                    String(editingChannel?.role) === "creator"
+                                }
+                            />
                         </div>
                     )}
 
+
+
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
-                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 px-6 pt-10 pb-5 border-t border-[#E5E6EB] bg-white">
+                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-6 pb-5 pt-10 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] !font-normal text-[#4E5969]"
+                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -631,7 +691,8 @@ export function CreateChannelDrawer({
                                         filterGroups: form.filterGroups,
                                         topFilterRelation: form.topFilterRelation,
                                         createSubChannel: form.createSubChannel,
-                                        subChannels: form.subChannels
+                                        subChannels: form.subChannels,
+                                        knowledgeSync: syncDraft,
                                     };
 
                                     // 创建和编辑统一走同一套校验逻辑：
@@ -671,7 +732,7 @@ export function CreateChannelDrawer({
                                         form.setSubmitting(false);
                                     }
                                 }}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] !font-normal disabled:opacity-50"
+                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 touch-mobile:flex-1"
                             >
                                 {isEditMode
                                     ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

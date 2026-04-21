@@ -1,5 +1,8 @@
 "use client"
 
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge"
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { SearchInput } from "@/components/bs-ui/input"
@@ -46,6 +49,11 @@ export function DashboardSidebar({
 
     const [searchQuery, setSearchQuery] = useState("")
     const { user } = useContext(userContext);
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
+    const dashboardIds = dashboards.map((d) => String(d.id));
+    const { levels: permLevels } = usePermissionLevels('dashboard', dashboardIds);
 
     const canCreate = useMemo(() => {
         return user.web_menu?.includes('create_dashboard') || user.role === 'admin'
@@ -227,12 +235,26 @@ export function DashboardSidebar({
                                     onDefault={onDefault}
                                     onShare={onShare}
                                     onDelete={handleDelete}
+                                    onPermission={canManageResource(permLevels, dashboard.id)
+                                        ? (d) => { setPermTarget({ id: String(d.id), name: d.title }); setPermDialogOpen(true); }
+                                        : undefined}
+                                    permissionBadge={<PermissionBadge level={permLevels[String(dashboard.id)]} />}
                                 />
                             ))
                         )}
                     </div>
                 </div>
             )}
+        {/* Permission management dialog */}
+        {permTarget && (
+            <PermissionDialog
+                open={permDialogOpen}
+                onOpenChange={setPermDialogOpen}
+                resourceType="dashboard"
+                resourceId={permTarget.id}
+                resourceName={permTarget.name}
+            />
+        )}
         </div>
     )
 }

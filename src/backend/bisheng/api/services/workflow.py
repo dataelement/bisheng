@@ -18,12 +18,11 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType, Flow
 from bisheng.database.models.flow import UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
@@ -63,16 +62,9 @@ class WorkFlowService(BaseService):
                 flow_versions[one.flow_id] = []
             flow_versions[one.flow_id].append(jsonable_encoder(one))
 
-        resource_groups = GroupResourceDao.get_resources_group(None, resource_ids)
-        resource_group_dict = {}
-        for one in resource_groups:
-            if one.third_id not in resource_group_dict:
-                resource_group_dict[one.third_id] = []
-            resource_group_dict[one.third_id].append(one.group_id)
-
         resource_tag_dict = TagDao.get_tags_by_resource(None, resource_ids)
 
-        # Add additional information
+        # Add additional information (F008: removed group_ids, AC-08)
         for one in data:
             if one['flow_type'] == FlowType.WORKFLOW.value:
                 access_type = AccessType.WORKFLOW_WRITE
@@ -82,18 +74,15 @@ class WorkFlowService(BaseService):
             one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
             one['write'] = True if managed else user.access_check(one['user_id'], one['id'], access_type)
             one['version_list'] = flow_versions.get(one['id'], [])
-            one['group_ids'] = resource_group_dict.get(one['id'], [])
             one['tags'] = resource_tag_dict.get(one['id'], [])
             one['logo'] = cls.get_logo_share_link(one['logo'])
         return data
 
     @classmethod
-    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
-                      page: int = 1, page_size: int = 10, managed: bool = False,
-                      skip_pagination: bool = False) -> (list[dict], int):
-        """
-        Get all the skills
-        """
+    async def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int],
+                            flow_type: Optional[int], page: int = 1, page_size: int = 10,
+                            managed: bool = False, skip_pagination: bool = False, search_description: bool = False) -> (list[dict], int):
+        """Get all the skills (async, ReBAC + 部门管理员隐式可见 兼容)."""
         if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
             return [], 0
 
@@ -113,15 +102,12 @@ class WorkFlowService(BaseService):
 
         # Get a list of skills visible to the user
         if user.is_admin():
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, None, query_page,
-                                               query_page_size)
+            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
+                                                     query_page, query_page_size, search_description=search_description)
         else:
-            access_list = [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
-            if managed:
-                access_list = [AccessType.WORKFLOW_WRITE, AccessType.ASSISTANT_WRITE]
-            flow_id_extra = user.get_user_access_resource_ids(access_list)
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, None,
-                                               query_page, query_page_size)
+            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=managed)
+            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, user.user_id,
+                                                     flow_id_extra, None, query_page, query_page_size, search_description=search_description)
         data = cls.filter_supported_apps(data)
         if flow_type is None and not skip_pagination:
             total = len(data)
@@ -264,7 +250,7 @@ class WorkFlowService(BaseService):
                 workflow_event.output_schema = WorkflowOutputSchema(
                     message=chat_response.message.get('msg'),
                     reasoning_content=chat_response.message.get('reasoning_content'),
-                    output_key=chat_response.message.get('output_key'),
+                    output_key=chat_response.message.get('output_key')
                 )
                 cls.handle_source(chat_response, workflow_event)
             case WorkflowEventType.Error.value:
@@ -380,8 +366,7 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         else:
-            flow_id_extra = user.get_user_access_resource_ids(
-                [AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
+            flow_id_extra = user.get_merged_rebac_app_resource_ids(for_write=False)
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, user_id=user.user_id,
                                            id_extra=flow_id_extra, page=0, limit=0)
         data = cls.filter_supported_apps(data)
@@ -433,25 +418,9 @@ class WorkFlowService(BaseService):
 
         # Get a list of skills visible to the user
         if user.is_admin():
-            data, _ = FlowDao.get_all_apps(
-                keyword,
-                FlowStatus.ONLINE.value,
-                None,
-                None,
-                None,
-                None,
-                flow_ids_not_in,
-                0,
-                0,
-            )
+            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
         else:
-            user_role = UserRoleDao.get_user_roles(user.user_id)
-            role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids,
-                                                              [AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
-            flow_id_extra = []
-            if role_access:
-                flow_id_extra = [access.third_id for access in role_access]
+            flow_id_extra = user.get_merged_rebac_app_resource_ids(for_write=False)
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)

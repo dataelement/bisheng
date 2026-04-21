@@ -74,8 +74,12 @@
     "dev:docker": "vite --host 0.0.0.0",
     "start": "vite",
     "build": "vite build",
+    "build:vconsole": "VITE_ENABLE_VCONSOLE=true vite build",
     "serve": "vite preview",
-    "format": "npx prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
+    "format": "npx prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "eslintConfig": {
     "extends": [
@@ -111,10 +115,17 @@
     "prettier-plugin-tailwindcss": "^0.6.5",
     "rollup-plugin-visualizer": "^5.12.0",
     "typescript": "^5.4.5",
+    "vconsole": "^3.15.1",
     "vite": "^5.3.1",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^1.0.6",
-    "vite-plugin-svgr": "^4.2.0"
+    "vite-plugin-svgr": "^4.2.0",
+    "vitest": "^3.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "jsdom": "^25.0.0"
   },
   "engines": {
     "node": ">= 18"

@@ -15,18 +15,21 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { truncateString } from "@/util/utils";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
+import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi, batchDownloadFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
+import FileTagList from "./tags/FileTagList";
+import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
 
 interface StatusIndicatorProps {
     status: number;
@@ -104,6 +107,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
+    const { toast } = useToast()
 
     const { isEditable, setEditable } = useKnowledgeStore();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
@@ -235,6 +239,42 @@ export default function Files({ onPreview }) {
         })
     }
 
+    // Batch Download
+    const [isDownloading, setIsDownloading] = useState(false);
+    const canBatchEditTags = isEditable && selectedFileObjs.length > 0 && selectedFileObjs.every(file => file.status === 2);
+    const handleBatchDownload = async () => {
+        setIsDownloading(true);
+        try {
+            const fileIds = selectedFileObjs.map(f => Number(f.id));
+            if (!fileIds.length) {
+                toast({ variant: 'error', description: t('selectFile', { ns: 'knowledge' }) });
+                setIsDownloading(false);
+                return;
+            }
+            const url = await batchDownloadFileApi({ knowledge_id: Number(id), file_ids: fileIds });
+            if (url) {
+                if (fileIds.length === 1) {
+                    downloadFile(url, selectedFileObjs[0].file_name);
+                } else {
+                    const now = new Date();
+                    const dateStr =
+                        String(now.getFullYear()) +
+                        String(now.getMonth() + 1).padStart(2, '0') +
+                        String(now.getDate()).padStart(2, '0');
+                    const timeStr = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+                    const libName = localStorage.getItem('libname') || '知识库';
+                    downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
+                }
+            } else {
+                toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+            }
+        } catch (e) {
+            toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     // Batch retry
     const handleBatchRetry = () => {
         // Filter failed files, preserving complete parameters
@@ -250,7 +290,8 @@ export default function Files({ onPreview }) {
     // Strategy parsing
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
-            if (el.file_name.includes('xlsx', 'xls', 'csv') && el.parse_type !== "local" && el.parse_type !== "uns") {
+            const suffix = el.file_name.split('.').pop()?.toLowerCase() || '';
+            if (['xlsx', 'xls', 'csv', 'et'].includes(suffix) && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
@@ -276,7 +317,7 @@ export default function Files({ onPreview }) {
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
         if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
-        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
+        return ['XLSX', 'XLS', 'CSV', 'ET'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
     }
 
     // Check if there are selected parsing failed files
@@ -346,6 +387,33 @@ export default function Files({ onPreview }) {
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
+                        <Button
+                            variant="outline"
+                            onClick={handleBatchDownload}
+                            disabled={isDownloading}
+                            className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                        >
+                            {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
+                            <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
+                        </Button>
+                        <Tip content={!isEditable ? t('noOperationPermission') : !canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
+                            <KnowledgeTagSelect
+                                knowledgeId={id}
+                                fileIds={selectedFileObjs.map(f => Number(f.id))}
+                                onUpdate={reload}
+                                isEditable={canBatchEditTags}
+                            >
+                                <Button
+                                    variant="outline"
+                                    disabled={!canBatchEditTags}
+                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <TagIcon size={16} />
+                                    <span className="hidden sm:inline">{t('tags')}</span>
+                                </Button>
+                            </KnowledgeTagSelect>
+                        </Tip>
                         <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                             <Button
                                 variant="outline"
@@ -407,6 +475,7 @@ export default function Files({ onPreview }) {
                                 />
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
+                            <TableHead className="min-w-[150px]">{t('tags')}</TableHead>
                             <TableHead>{t('segmentationStrategy')}</TableHead>
                             <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
@@ -556,6 +625,15 @@ export default function Files({ onPreview }) {
                                         </div>
                                     </Tip>
                                 </TableCell>
+                                <TableCell className="min-w-[150px]">
+                                    <FileTagList
+                                        knowledgeId={id}
+                                        fileId={el.id}
+                                        tags={el.tags || []}
+                                        isEditable={isEditable && el.status === 2}
+                                        onUpdate={reload}
+                                    />
+                                </TableCell>
                                 <TableCell>
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
@@ -625,6 +703,7 @@ export default function Files({ onPreview }) {
                         page={page}
                         pageSize={pageSize}
                         total={total}
+                        showTotal={true}
                         onChange={(newPage) => setPage(newPage)}
                     />
                 </div>

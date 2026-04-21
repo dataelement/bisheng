@@ -31,7 +31,6 @@ class GraphState(BaseModel):
     def get_history_list(self, count: int) -> List[BaseMessage]:
         return self.history_memory.buffer_as_messages[-count:]
 
-
     def save_context(self, content: str, msg_sender: str) -> None:
         """  Save chat
         workflow In special cases, the process will have multiple rounds of interaction, so it is not one-to-one, reworking the message structure"""
@@ -48,11 +47,10 @@ class GraphState(BaseModel):
 
     def get_variable(self, node_id: str, key: str, count: Optional[int] = None) -> Any:
         """ Get data from global variables """
-        if node_id not in self.variables_pool:
-            return None
-
         if key == 'chat_history':
             return self.get_history_memory(count=count)
+        if node_id not in self.variables_pool:
+            return None
         return self.variables_pool[node_id].get(key)
 
     def get_variable_by_str(self, contact_key: str, history_count: Optional[int] = None) -> Any:

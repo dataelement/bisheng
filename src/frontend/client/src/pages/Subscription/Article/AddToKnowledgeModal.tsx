@@ -9,6 +9,7 @@ import { useToastContext } from "~/Providers";
 import { generateUUID, getFullWidthLength } from "~/utils";
 import {
     getManagedSpacesApi,
+    getMineSpacesApi,
     getSpaceChildrenApi,
     createFolderApi,
     addArticleToKnowledgeApi,
@@ -33,11 +34,26 @@ export interface KnowledgeNode {
     childrenLoading?: boolean;
 }
 
+export interface AddToKnowledgeSelection {
+    knowledgeSpaceId: string;
+    knowledgeSpaceName: string;
+    folderId: string | null;
+    folderPath: string | null;
+}
+
 interface AddToKnowledgeModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    /** Article ID to add to the selected knowledge space/folder */
+    /** Article ID to add to the selected knowledge space/folder (article mode). */
     articleId?: string | number;
+    /**
+     * v2.5 Module D: when set to "channel_sync", the modal becomes a generic
+     * space/folder picker — confirm returns selection info via onSyncSelect
+     * instead of calling addArticleToKnowledgeApi.
+     */
+    mode?: "article" | "channel_sync";
+    /** Receives the chosen knowledge space / folder; only fires in channel_sync mode. */
+    onSyncSelect?: (selection: AddToKnowledgeSelection) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -258,7 +274,13 @@ function TreeNode({
 
 // ─── Main Modal ──────────────────────────────────────────────────────────
 
-export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnowledgeModalProps) {
+export function AddToKnowledgeModal({
+    open,
+    onOpenChange,
+    articleId,
+    mode = "article",
+    onSyncSelect,
+}: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
@@ -281,7 +303,15 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        getManagedSpacesApi()
+        // v2.5 Module D: channel_sync mode must only show spaces the current
+        // user created (TC-015/TC-037), ordered the same way as the "我创建的"
+        // sidebar (TC-017: order_by=update_time). Article mode keeps the
+        // original managed-scope behaviour so existing callers are untouched.
+        const loader =
+            mode === "channel_sync"
+                ? getMineSpacesApi({ order_by: "update_time" })
+                : getManagedSpacesApi();
+        loader
             .then((spaces) => {
                 const nodes: KnowledgeNode[] = spaces.map(s => ({
                     id: s.id,
@@ -463,6 +493,34 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     /** Confirm — add article to selected space/folder */
     const handleConfirm = async (forceReplace = false) => {
+        // v2.5 Module D — channel-sync mode: report selection back to caller,
+        // no article upload.
+        if (mode === "channel_sync") {
+            if (!selectedId) return;
+            const node = findNode(tree, selectedId);
+            if (!node) return;
+            const spaceNode = findNode(tree, node.spaceId) || node;
+            // Compose folder path from ancestors (excluding the space root).
+            const buildPath = (): string | null => {
+                if (node.type === "space") return null;
+                const chain: string[] = [];
+                let cur: KnowledgeNode | null = node;
+                while (cur && cur.id !== node.spaceId) {
+                    chain.unshift(cur.name);
+                    cur = cur.parentId ? (findNode(tree, cur.parentId) ?? null) : null;
+                }
+                return chain.length ? chain.join("/") : null;
+            };
+            onSyncSelect?.({
+                knowledgeSpaceId: node.spaceId,
+                knowledgeSpaceName: spaceNode.name || "",
+                folderId: node.type === "space" ? null : selectedId,
+                folderPath: buildPath(),
+            });
+            onOpenChange(false);
+            return;
+        }
+
         if (!articleId) return;
 
         // If forcing replace from the duplicate dialog, use pending params
@@ -534,38 +592,42 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     return (
         <>
             <Dialog open={open} onOpenChange={handleOpenChange}>
-                <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
+                <DialogContent
+                    close={false}
+                    className="w-[576px] max-w-[92vw] p-0 gap-0 overflow-hidden rounded-xl touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                >
                     {/* Header */}
-                    <DialogHeader className="px-6 pt-3 pb-3">
-                        <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>
+                    <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] touch-mobile:px-4">
+                        <DialogTitle className="text-[20px] font-medium leading-7 text-[#212121]">
+                            {localize("com_subscription.add_to_knowledge_space")}
+                        </DialogTitle>
                     </DialogHeader>
 
                     {/* Search */}
-                    <div className="px-6 pt-3">
+                    <div className="px-6 pt-4 touch-mobile:px-4">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-gray-400 pointer-events-none" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
                             <Input
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                                className="w-full h-8 pl-8 pr-8 text-sm rounded-md border border-gray-100 focus:outline-none"
+                                className="w-full h-8 pl-8 pr-8 text-[14px] rounded-[6px] border border-[#ECECEC] focus:outline-none"
                             />
                             {search && (
                                 <button
                                     className="absolute right-2.5 top-1/2 -translate-y-1/2"
                                     onClick={() => setSearch("")}
                                 >
-                                    <X className="size-3.5 text-gray-400" />
+                                    <X className="size-3.5 text-[#818181]" />
                                 </button>
                             )}
                         </div>
                     </div>
 
                     {/* Tree / Empty state */}
-                    <div className="px-6 pt-4">
+                    <div className="px-6 pt-4 touch-mobile:px-4">
                         <div
-                            className="p-3 w-[552px] max-w-full overflow-y-auto overflow-x-hidden border rounded-md scrollbar-on-hover"
-                            style={{ height: 340 }}
+                            className="h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover touch-mobile:h-[calc(100dvh-260px)]"
                         >
                             {spacesLoading ? (
                                 <div className="flex items-center justify-center h-full text-[#86909c]">
@@ -613,18 +675,18 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                     </div>
 
                     {/* Footer */}
-                    <DialogFooter className="px-5 py-3.5 mt-3 flex flex-row justify-end gap-1">
+                    <DialogFooter className="mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 touch-mobile:mt-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenChange(false)}
-                            className="h-8 px-4 text-sm rounded-md font-normal"
+                            className="h-8 px-4 text-sm rounded-md font-normal touch-mobile:flex-1"
                         >{localize("com_subscription.cancel")}</Button>
                         <Button
                             size="sm"
                             onClick={() => void handleConfirm()}
                             disabled={!selectedId || isConfirming}
-                            className="h-8 px-4 text-sm rounded-md font-normal"
+                            className="h-8 px-4 text-sm rounded-md font-normal touch-mobile:flex-1"
                         >
                             {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
                         </Button>

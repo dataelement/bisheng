@@ -5,7 +5,7 @@ from typing import Sequence, Any, Dict
 from langchain_core.documents import BaseDocumentTransformer, Document
 
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.rag.extract_info import extract_abstract
 
 
 def extract_code_blocks(markdown_code_block: str):
@@ -63,8 +63,12 @@ class AbstractTransformer(BaseDocumentTransformer):
                 break
             text += document.page_content
         if text:
-            abstract = extract_title(llm, text, max_length=self.max_chunk_content,
-                                     abstract_prompt=abstract_config.abstract_prompt)
+            abstract = extract_abstract(
+                llm,
+                text,
+                max_length=self.max_chunk_content,
+                abstract_prompt=abstract_config.abstract_prompt,
+            )
             clean_abstract = parse_document_title(abstract)
             if self.knowledge_file:
                 self.knowledge_file.abstract = clean_abstract

@@ -22,6 +22,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
+from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
@@ -141,7 +142,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                         latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
                         if not isinstance(latest_message, AIMessageChunk):
                             continue
-                        reasoning_content = latest_message.additional_kwargs.get("reasoning_content", "")
+                        reasoning_content = extract_reasoning_content(latest_message)
                         content = latest_message.content
 
                         chunk_data = {

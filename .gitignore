@@ -13,6 +13,9 @@ autogen_coding/
 # Mac
 .DS_Store
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # VSCode
 .vscode
 .vscode/settings.json
@@ -262,7 +265,9 @@ docker/data/*
 docker/mysql/data/*
 docker/office/bisheng/*.gz
 
-CLAUDE.md
+bisheng-sync.sh
 !src/backend/bisheng/telemetry_search/**/*.pyc
+.omx/
 
-docs
+# Local installers / stray root files (do not commit)
+*.msi

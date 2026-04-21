@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
  * Supports three modes:
@@ -51,6 +51,7 @@ export function AiAssistantPanel({
     fileChat,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
 
     // Determine chat mode: fileChat > channel > workstation
     const isFileChatMode = !!fileChat;
@@ -115,9 +116,11 @@ export function AiAssistantPanel({
     return (
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
-            <div className={`flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
-                <h3 className="text-sm leading-6 font-medium text-gray-900">{localize("com_subscription.ai_assistant")}</h3>
-                <div className="flex items-center gap-3 pr-3">
+            <div className={`relative flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
+                <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 touch-desktop:pointer-events-auto touch-desktop:static touch-desktop:w-auto touch-desktop:translate-x-0 touch-desktop:text-left">
+                    {localize("com_subscription.ai_assistant")}
+                </h3>
+                <div className="ml-auto flex items-center gap-3 pr-3">
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -134,13 +137,15 @@ export function AiAssistantPanel({
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                    <Button
-                        variant="ghost"
-                        className="text-gray-400 p-0.5 group relative w-5 h-5"
-                        onClick={onClose}
-                    >
-                        <ChevronsRightIcon className="size-4" />
-                    </Button>
+                    {!isH5 && (
+                        <Button
+                            variant="ghost"
+                            className="text-gray-400 p-0.5 group relative w-5 h-5"
+                            onClick={onClose}
+                        >
+                            <ChevronsRightIcon className="size-4" />
+                        </Button>
+                    )}
                 </div>
             </div>
 

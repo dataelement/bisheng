@@ -8,7 +8,7 @@ from elasticsearch import AsyncElasticsearch, Elasticsearch, exceptions as es_ex
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, BaseTelemetryEvent, UserContext, \
-    UserGroupInfo, UserRoleInfo
+    UserGroupInfo, UserRoleInfo, UserDepartmentInfo
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
 from bisheng.user.domain.models.user import User
@@ -41,6 +41,13 @@ INDEX_MAPPING = {
                             "role_id": {"type": "integer"},
                             "role_name": {"type": "keyword"},
                             "group_id": {"type": "integer"},
+                        }
+                    },
+                    "user_department_infos": {
+                        "type": "object",
+                        "properties": {
+                            "department_id": {"type": "integer"},
+                            "department_name": {"type": "keyword"}
                         }
                     }
                 }
@@ -116,34 +123,43 @@ class BaseTelemetryService(object):
             user_repository = UserRepositoryImpl(session)
             user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
 
-        if not user:
-            user = User(
-                user_id=user_id,
-                user_name=str(user_id)
+            if not user:
+                return UserContext(
+                    user_id=user_id,
+                    user_name=str(user_id),
+                    user_group_infos=[],
+                    user_role_infos=[],
+                    user_department_infos=[]
+                )
+
+            if user.groups is None:
+                user.groups = []
+            if user.roles is None:
+                user.roles = []
+
+            user_context = UserContext(
+                user_id=user.user_id,
+                user_name=user.user_name,
+                user_group_infos=[
+                    UserGroupInfo(
+                        user_group_id=group.id,
+                        user_group_name=group.group_name
+                    ) for group in user.groups
+                ],
+                user_role_infos=[
+                    UserRoleInfo(
+                        role_id=role.id,
+                        role_name=role.role_name,
+                        group_id=role.group_id,
+                    ) for role in user.roles
+                ],
+                user_department_infos=[
+                    UserDepartmentInfo(
+                        department_id=dept.id,
+                        department_name=dept.name
+                    ) for dept in getattr(user, 'departments', []) or []
+                ]
             )
-
-        if user.groups is None:
-            user.groups = []
-        if user.roles is None:
-            user.roles = []
-
-        user_context = UserContext(
-            user_id=user.user_id,
-            user_name=user.user_name,
-            user_group_infos=[
-                UserGroupInfo(
-                    user_group_id=group.id,
-                    user_group_name=group.group_name
-                ) for group in user.groups
-            ],
-            user_role_infos=[
-                UserRoleInfo(
-                    role_id=role.id,
-                    role_name=role.role_name,
-                    group_id=role.group_id,
-                ) for role in user.roles
-            ]
-        )
         return user_context
 
     @staticmethod
@@ -152,34 +168,43 @@ class BaseTelemetryService(object):
             user_repository = UserRepositoryImpl(session)
             user = user_repository.get_user_with_groups_and_roles_by_user_id_sync(user_id)
 
-        if not user:
-            user = User(
-                user_id=user_id,
-                user_name=str(user_id)
+            if not user:
+                return UserContext(
+                    user_id=user_id,
+                    user_name=str(user_id),
+                    user_group_infos=[],
+                    user_role_infos=[],
+                    user_department_infos=[]
+                )
+
+            if user.groups is None:
+                user.groups = []
+            if user.roles is None:
+                user.roles = []
+
+            user_context = UserContext(
+                user_id=user.user_id,
+                user_name=user.user_name,
+                user_group_infos=[
+                    UserGroupInfo(
+                        user_group_id=group.id,
+                        user_group_name=group.group_name
+                    ) for group in user.groups
+                ],
+                user_role_infos=[
+                    UserRoleInfo(
+                        role_id=role.id,
+                        role_name=role.role_name,
+                        group_id=role.group_id,
+                    ) for role in user.roles
+                ],
+                user_department_infos=[
+                    UserDepartmentInfo(
+                        department_id=dept.id,
+                        department_name=dept.name
+                    ) for dept in getattr(user, 'departments', []) or []
+                ]
             )
-
-        if user.groups is None:
-            user.groups = []
-        if user.roles is None:
-            user.roles = []
-
-        user_context = UserContext(
-            user_id=user.user_id,
-            user_name=user.user_name,
-            user_group_infos=[
-                UserGroupInfo(
-                    user_group_id=group.id,
-                    user_group_name=group.group_name
-                ) for group in user.groups
-            ],
-            user_role_infos=[
-                UserRoleInfo(
-                    role_id=role.id,
-                    role_name=role.role_name,
-                    group_id=role.group_id,
-                ) for role in user.roles
-            ]
-        )
         return user_context
 
     @property

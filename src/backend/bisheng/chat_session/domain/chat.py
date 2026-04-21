@@ -19,15 +19,17 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessageDao, ChatMessage
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.chat_session.domain.services.chat_message_service import _resolve_leaf_tenant_id
 from bisheng.chat_session.utils import get_session_app_type
 from bisheng.user.domain.models.user import UserDao
 
 
 class ChatSessionService:
     """Chat session lifecycle services."""
+
 
     @staticmethod
     async def get_chat_history(chat_id: str, flow_id: str, message_id: Optional[str] = None,
@@ -45,7 +47,11 @@ class ChatSessionService:
                                                                   message_id=message_id, page_size=page_size)
         if history:
             user_info = await UserDao.aget_user(user_id=session_info.user_id)
-            history = ChatMessageHistoryResponse.from_chat_message_objs(history, user_info, session_info)
+            history = ChatMessageHistoryResponse.from_chat_message_objs(
+                history,
+                user_info,
+                session_info
+            )
         return history
 
     @staticmethod
@@ -233,10 +239,18 @@ class ChatSessionService:
         """Get existing session or create a new one with audit log and telemetry.
 
         Used when adding messages to ensure a session exists.
+
+        F017 §5.4: new MessageSession rows carry ``tenant_id = user's leaf
+        tenant`` (NOT the resource tenant) per INV-T13. Refuse to persist
+        a session if neither the ContextVar nor login_user carries a
+        tenant — that is AC-11's guard against NULL-tenant derived data.
         """
         session_info = MessageSessionDao.get_one(chat_id=chat_id)
         if session_info:
             return session_info
+
+        # F017 AC-11: resolve leaf tenant; raise 19504 if unavailable.
+        leaf_tenant_id = _resolve_leaf_tenant_id(login_user)
 
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if flow_info:
@@ -247,6 +261,7 @@ class ChatSessionService:
                 flow_name=flow_info.name,
                 user_id=login_user.user_id,
                 sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                tenant_id=leaf_tenant_id,
             ))
             if flow_info.flow_type == FlowType.WORKFLOW.value:
                 AuditLogService.create_chat_workflow(login_user, request_ip, flow_id, flow_info)
@@ -260,6 +275,7 @@ class ChatSessionService:
                     flow_name=assistant_info.name,
                     user_id=login_user.user_id,
                     sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                    tenant_id=leaf_tenant_id,
                 ))
                 AuditLogService.create_chat_assistant(login_user, request_ip, flow_id)
 

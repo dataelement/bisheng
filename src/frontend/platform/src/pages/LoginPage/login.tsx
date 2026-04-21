@@ -1,5 +1,6 @@
 import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 import { GithubIcon } from '@/components/bs-icons/github';
+import { LoadingIcon } from '@/components/bs-icons/loading';
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import json from "../../../package.json";
@@ -13,7 +14,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
 import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
-import { ldapLoginApi } from '@/controllers/API/pro';
+import { ldapLoginApi, getSSOurlApi } from '@/controllers/API/pro';
 
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -23,12 +24,52 @@ export const LoginPage = () => {
     const { appConfig } = useContext(locationContext)
     const isLoading = false
 
-    const mailRef = useRef(null)
+    const personIdRef = useRef(null)
+    const userNameRef = useRef(null)
     const pwdRef = useRef(null)
     const agenPwdRef = useRef(null)
 
     // login or register
     const [showLogin, setShowLogin] = useState(true)
+
+    // Check third-party redirect login before rendering the login form
+    const [oauthLoading, setOauthLoading] = useState(true)
+    const [oauthData, setOauthData] = useState<any>(null)
+
+    useEffect(() => {
+        getSSOurlApi()
+            .then((urls: any) => {
+                setOauthData(urls)
+                if (urls?.ldap) {
+                    setHasLdap(true)
+                }
+                if (urls?.ldapCheckboxLabel) {
+                    setLdapCheckboxLabel(urls.ldapCheckboxLabel)
+                    setIsLdapLogin(true)
+                }
+                // Persist redirect URLs for interceptor access (401 / logout)
+                if (urls?.redirect_login_url) {
+                    localStorage.setItem('THIRD_PARTY_LOGIN_URL', urls.redirect_login_url)
+                } else {
+                    localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
+                }
+                if (urls?.redirect_logout_url) {
+                    localStorage.setItem('THIRD_PARTY_LOGOUT_URL', urls.redirect_logout_url)
+                } else {
+                    localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+                }
+                // Redirect immediately if third-party login URL is configured
+                if (urls?.redirect_login_url) {
+                    window.location.href = urls.redirect_login_url
+                    return
+                }
+                setOauthLoading(false)
+            })
+            .catch(() => {
+                // Third-party service unavailable — fall through to normal login
+                setOauthLoading(false)
+            })
+    }, [])
 
     useLoginError()
 
@@ -44,13 +85,19 @@ export const LoginPage = () => {
         getCaptchaApi().then(setCaptchaData)
     };
 
-    const [isLDAP, setIsLDAP] = useState(false)
+    const [hasLdap, setHasLdap] = useState(false)
+    const [ldapCheckboxLabel, setLdapCheckboxLabel] = useState('')
+    const [isLdapLogin, setIsLdapLogin] = useState(true)
+    const enableDualLogin = hasLdap && !!ldapCheckboxLabel
+    const shouldUseLdap = hasLdap && (!enableDualLogin || isLdapLogin)
+    const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap)
+
     const handleLogin = async () => {
         const error = []
-        const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
-        if (!mail) error.push(t('login.pleaseEnterAccount'))
+        const [personId, pwd] = [personIdRef.current.value, pwdRef.current.value]
+        if (!personId) error.push(t('login.pleaseEnterPersonId'))
         if (!pwd) error.push(t('login.pleaseEnterPassword'))
-        if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
+        if (!shouldUseLdap && captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return message({
             title: `${t('prompt')}`,
             variant: 'warning',
@@ -61,17 +108,26 @@ export const LoginPage = () => {
         //     list: error,
         // });
 
-        const encryptPwd = isLDAP ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
+        const encryptPwd = shouldUseLdap ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
         captureAndAlertRequestErrorHoc(
-            (isLDAP
-                ? ldapLoginApi(mail, encryptPwd)
-                : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
+            (shouldUseLdap
+                ? ldapLoginApi(personId, encryptPwd)
+                : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
+                // Multi-tenant: check if tenant selection is required
+                if (res.requires_tenant_selection) {
+                    sessionStorage.setItem('pending_tenants', JSON.stringify(res.tenants))
+                    if (window.self !== window.top) localStorage.setItem('ws_token', res.access_token)
+                    localStorage.setItem('isLogin', '1')
+                    location.href = `${__APP_ENV__.BASE_URL}/tenant-select`
+                    return
+                }
+
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
                 const pathname = localStorage.getItem('LOGIN_PATHNAME')
                 if (pathname) {
-                    // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login. 
+                    // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login.
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
                 } else {
@@ -81,7 +137,7 @@ export const LoginPage = () => {
                 }
             }), (error) => {
                 if (error?.code === 10601) { // 密码过期
-                    localStorage.setItem('account', mail)
+                    localStorage.setItem('account', personId)
                     navigate('/reset', { state: { noback: true } })
                     return true // Skip the default error toast; resetPwd page shows its own
                 }
@@ -92,12 +148,20 @@ export const LoginPage = () => {
 
     const handleRegister = async () => {
         const error = []
-        const [mail, pwd, apwd] = [mailRef.current.value, pwdRef.current.value, agenPwdRef.current.value]
-        if (!mail) {
-            error.push(t('login.pleaseEnterAccount'))
+        const [personId, userName, pwd, apwd] = [
+            personIdRef.current.value,
+            userNameRef.current?.value,
+            pwdRef.current.value,
+            agenPwdRef.current.value
+        ]
+        if (!personId) {
+            error.push(t('login.pleaseEnterPersonId'))
         }
-        if (mail.length < 3) {
-            error.push(t('login.accountTooShort'))
+        if (!userName) {
+            error.push(t('login.pleaseEnterUserName'))
+        }
+        if (personId.length < 2) {
+            error.push(t('login.personIdTooShort'))
         }
         if (!/.{8,}/.test(pwd)) {
             error.push(t('login.passwordTooShort'))
@@ -119,7 +183,7 @@ export const LoginPage = () => {
             })
         }
         const encryptPwd = await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(registerApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
+        captureAndAlertRequestErrorHoc(registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
             // setSuccessData({ title: t('login.registrationSuccess') })
             message({
                 title: `${t('prompt')}`,
@@ -131,6 +195,13 @@ export const LoginPage = () => {
         }))
 
         fetchCaptchaData()
+    }
+
+    // Show loading spinner while checking for third-party redirect
+    if (oauthLoading) {
+        return <div className='w-full h-full bg-background-dark flex justify-center items-center'>
+            <LoadingIcon className="w-48 text-primary" />
+        </div>
     }
 
     return <div className='w-full h-full bg-background-dark'>
@@ -152,14 +223,24 @@ export const LoginPage = () => {
                             <Input
                                 id="email"
                                 className='h-[48px] dark:bg-login-input'
-                                ref={mailRef}
+                                ref={personIdRef}
                                 placeholder={t('login.account')}
-                                type="email"
+                                type="text"
                                 autoCapitalize="none"
-                                autoComplete="email"
+                                autoComplete="username"
                                 autoCorrect="off"
                             />
                         </div>
+                        {
+                            !showLogin && <div className="grid">
+                                <Input
+                                    id="userName"
+                                    className='h-[48px] dark:bg-login-input'
+                                    ref={userNameRef}
+                                    placeholder={t('login.userName')}
+                                />
+                            </div>
+                        }
                         <div className="grid">
                             <Input
                                 id="pwd"
@@ -167,19 +248,22 @@ export const LoginPage = () => {
                                 ref={pwdRef}
                                 placeholder={t('login.password')}
                                 type="password"
-                                onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()} />
+                                onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()}
+                            />
                         </div>
                         {
                             !showLogin && <div className="grid">
-                                <Input id="pwd"
+                                <Input
+                                    id="pwd"
                                     className='h-[48px] dark:bg-login-input'
                                     ref={agenPwdRef}
                                     placeholder={t('login.confirmPassword')}
-                                    type="password" />
+                                    type="password"
+                                />
                             </div>
                         }
                         {
-                            captchaData.user_capthca && (<div className="flex items-center gap-4">
+                            showCaptcha && (<div className="flex items-center gap-4">
                                 <Input
                                     type="text"
                                     ref={captchaRef}
@@ -198,8 +282,18 @@ export const LoginPage = () => {
                         }
                         {
                             showLogin ? <>
+                                {enableDualLogin && (
+                                    <label className="flex items-center gap-2 text-sm text-tx-color">
+                                        <input
+                                            type="checkbox"
+                                            checked={isLdapLogin}
+                                            onChange={(event) => setIsLdapLogin(event.target.checked)}
+                                        />
+                                        <span>{ldapCheckboxLabel}</span>
+                                    </label>
+                                )}
                                 <div className="text-center">
-                                    {!isLDAP && appConfig.register && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
+                                    {!shouldUseLdap && appConfig.register && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
                                 </div>
                                 <Button
                                     className='h-[48px] mt-[32px] dark:bg-button'
@@ -214,7 +308,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.isPro && <LoginBridge onHasLdap={setIsLDAP} />}
+                        {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

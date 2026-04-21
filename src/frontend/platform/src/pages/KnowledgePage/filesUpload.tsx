@@ -3,9 +3,10 @@ import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
+import { checkPermission } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
@@ -40,6 +41,8 @@ export default function FilesUpload() {
   const location = useLocation();
   const { id: knowledgeId } = useParams(); // Get knowledge base ID from route
   const { message } = useToast();
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [hasEditPermission, setHasEditPermission] = useState(false);
 
   // Normal mode exclusive states (no adjustment mode related logic)
   const [currentStep, setCurrentStep] = useState(1); // Initial step: 1 (upload file)
@@ -63,6 +66,25 @@ export default function FilesUpload() {
   const handleStep2StateChange = (state: Step2PersistState) => {
     setStep2PersistState(state);
   };
+
+  useEffect(() => {
+    const guardByPermission = async () => {
+      if (!knowledgeId) {
+        setPermissionChecked(true);
+        setHasEditPermission(false);
+        return;
+      }
+      const result = await captureAndAlertRequestErrorHoc(checkPermission('knowledge_space', String(knowledgeId), 'can_edit'));
+      const allowed = !!result?.allowed;
+      setHasEditPermission(allowed);
+      setPermissionChecked(true);
+      if (!allowed) {
+        message({ variant: 'warning', description: t('noOperationPermission') });
+        navigate(`/filelib/${knowledgeId}`);
+      }
+    };
+    guardByPermission();
+  }, [knowledgeId]);
 
   // Step 1: File upload completed, jump to step 2
   const handleStep1Next = async (files) => {
@@ -157,8 +179,8 @@ export default function FilesUpload() {
       knowledge_id: Number(_config.rules.knowledgeId || knowledgeId),
       separator: normalizeSeparators(_config.rules.separator),
       separator_rule: _config.rules.separatorRule,
-      chunk_size: _config.rules.chunkSize,
-      chunk_overlap: _config.rules.chunkOverlap,
+      chunk_size: Number(_config.rules.chunkSize),
+      chunk_overlap: Number(_config.rules.chunkOverlap),
       file_list: _config.rules.fileList.map(item => ({
         file_path: item.filePath,
         excel_rule: _config.applyEachCell ? item.excelRule : _config.cellGeneralConfig
@@ -166,7 +188,11 @@ export default function FilesUpload() {
       retain_images: _config.rules.retainImages,
       enable_formula: _config.rules.enableFormula,
       force_ocr: _config.rules.forceOcr,
-      fileter_page_header_footer: _config.rules.pageHeaderFooter
+      filter_page_header_footer: _config.rules.pageHeaderFooter ? 1 : 0,
+      split_mode: _config.rules.splitMode,
+      hierarchy_level: Number(_config.rules.hierarchyLevel),
+      append_title: _config.rules.appendTitle,
+      max_chunk_size: Number(_config.rules.maxChunkSize)
     };
 
     captureAndAlertRequestErrorHoc(subUploadLibFile(apiConfig).then(res => {
@@ -296,6 +322,11 @@ export default function FilesUpload() {
   }
   return (
     <div className="relative h-full flex flex-col">
+      {!permissionChecked && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
+          <LoadingIcon />
+        </div>
+      )}
       {/* Top return bar */}
       <div className="pt-4 px-4">
         <div className="flex items-center mb-4">
@@ -324,6 +355,7 @@ export default function FilesUpload() {
           <div className="h-full">
             {/* Step 1: File upload (normal mode exclusive) */}
             {currentStep === 1 && (
+              hasEditPermission &&
               <FileUploadStep1
                 onNext={handleStep1Next}
                 onSave={handleSaveByDefaultConfig}

@@ -1,0 +1,53 @@
+{
+  "dialog": {
+    "title": "権限管理",
+    "tabList": "現在の権限",
+    "tabGrant": "権限を追加",
+    "tabShare": "リンク共有"
+  },
+  "level": {
+    "owner": "オーナー",
+    "manager": "マネージャー",
+    "editor": "エディター",
+    "viewer": "ビューアー"
+  },
+  "subject": {
+    "user": "ユーザー",
+    "department": "部門",
+    "userGroup": "ユーザーグループ"
+  },
+  "action": {
+    "grant": "権限付与",
+    "revoke": "取消",
+    "confirmRevoke": "この権限を取り消しますか？",
+    "submit": "送信",
+    "modify": "権限を変更"
+  },
+  "search": {
+    "user": "ユーザーを検索...",
+    "department": "部門を検索...",
+    "userGroup": "グループを検索..."
+  },
+  "includeChildren": "サブ部門を含む",
+  "list": {
+    "emptyForSubject": "この分類に該当する権限はありません"
+  },
+  "empty": {
+    "permissions": "権限レコードなし",
+    "departments": "部門データなし",
+    "userGroups": "ユーザーグループなし",
+    "searchResults": "結果が見つかりません"
+  },
+  "comingSoon": "近日公開",
+  "managePermission": "権限管理",
+  "error": {
+    "permissionDenied": "権限が不足しています",
+    "grantFailed": "権限付与に失敗しました",
+    "revokeFailed": "権限取消に失敗しました"
+  },
+  "success": {
+    "grant": "権限を付与しました",
+    "revoke": "権限を取り消しました",
+    "modify": "権限レベルを変更しました"
+  }
+}

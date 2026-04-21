@@ -1,9 +1,10 @@
+import asyncio
 import json
 import math
 import os
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, Request
@@ -30,6 +31,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
+    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeFileTagLimitError
 )
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
@@ -42,6 +44,7 @@ from bisheng.database.models.group_resource import (
 )
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -117,6 +120,45 @@ class KnowledgeService(KnowledgeUtils):
         return await self.metadata_service.list_metadata_fields(default_user, knowledge_id)
 
     @classmethod
+    async def _get_writable_knowledge(cls, login_user: UserPayload, knowledge_id: int) -> Knowledge:
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError(msg="knowledge not found")
+        if not await login_user.async_access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError()
+        return knowledge
+
+    @classmethod
+    async def _get_readable_knowledge(cls, login_user: UserPayload, knowledge_id: int) -> Knowledge:
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError(msg="knowledge not found")
+        if not await login_user.async_access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE
+        ):
+            raise UnAuthorizedError()
+        return knowledge
+
+    @staticmethod
+    def _deduplicate_tag_ids(tag_ids: List[int]) -> List[int]:
+        return list(dict.fromkeys(tag_ids))
+
+    @classmethod
+    async def _validate_knowledge_tag_ids(cls, knowledge_id: int, tag_ids: List[int]) -> None:
+        if not tag_ids:
+            return
+
+        tags = await TagDao.aget_tags_by_ids(tag_ids)
+        if len(tags) != len(tag_ids):
+            raise KnowledgeTagNotExistError()
+
+        for tag in tags:
+            if tag.business_type != TagBusinessTypeEnum.KNOWLEDGE or tag.business_id != str(knowledge_id):
+                raise KnowledgeTagNotExistError()
+
+    @classmethod
     def get_all_knowledge_by_time_range(cls, start_data: datetime, end_data: datetime, page: int = 1,
                                         page_size: int = 10):
         """Get all the knowledge bases created in a certain timeframe"""
@@ -138,16 +180,15 @@ class KnowledgeService(KnowledgeUtils):
             page: int = 1,
             limit: int = 10,
     ) -> Tuple[List[KnowledgeRead], int]:
-        if not login_user.is_admin():
-            knowledge_id_extra = []
-            user_role = await UserRoleDao.aget_user_roles(login_user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
-                role_access = await RoleAccessDao.aget_role_access(role_ids, AccessType.KNOWLEDGE)
-                if role_access:
-                    knowledge_id_extra = [
-                        int(access.third_id) for access in role_access
-                    ]
+        # F008: 列表可见性 = OpenFGA `can_read`（与 PRD「使用知识库」/关系模型 can_read 一致）。
+        # 与「当前用户创建」的知识库 ID 取并集：避免 list_objects 滞后、缓存或计算差异导致创建者看不到自己的库。
+        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_space')
+        if accessible_ids is not None:
+            creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
+                login_user.user_id, knowledge_type,
+            )
+            merged = set(int(k) for k in accessible_ids) | set(creator_ids)
+            knowledge_id_extra = list(merged)
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
@@ -166,8 +207,34 @@ class KnowledgeService(KnowledgeUtils):
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
-        result = cls.convert_knowledge_read(login_user, res)
+        result = await cls.aconvert_knowledge_read(login_user, res)
         return result, total
+
+    @classmethod
+    async def aconvert_knowledge_read(
+            cls, login_user: UserPayload, knowledge_list: List[Knowledge]
+    ) -> List[KnowledgeRead]:
+        """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
+        if not knowledge_list:
+            return []
+        db_user_ids = {one.user_id for one in knowledge_list}
+        db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
+        db_user_dict = {one.user_id: one.user_name for one in db_user_info}
+
+        async def _row(one: Knowledge) -> KnowledgeRead:
+            if login_user.user_id == one.user_id:
+                copiable = True
+            else:
+                copiable = await login_user.async_access_check(
+                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                )
+            return KnowledgeRead(
+                **one.model_dump(),
+                user_name=db_user_dict.get(one.user_id, str(one.user_id)),
+                copiable=copiable,
+            )
+
+        return list(await asyncio.gather(*[_row(one) for one in knowledge_list]))
 
     @classmethod
     def convert_knowledge_read(
@@ -179,13 +246,17 @@ class KnowledgeService(KnowledgeUtils):
         res = []
 
         for one in knowledge_list:
+            if login_user.user_id == one.user_id:
+                copiable = True
+            else:
+                copiable = login_user.access_check(
+                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                )
             res.append(
                 KnowledgeRead(
                     **one.model_dump(),
                     user_name=db_user_dict.get(one.user_id, str(one.user_id)),
-                    copiable=login_user.access_check(
-                        one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
-                    ),
+                    copiable=copiable,
                 )
             )
         return res
@@ -226,7 +297,11 @@ class KnowledgeService(KnowledgeUtils):
         # CorrectionembeddingModels
         if not db_knowledge.model:
             raise KnowledgeNoEmbeddingError.http_exception()
-        embed_info = LLMDao.get_model_by_id(int(db_knowledge.model))
+        try:
+            embedding_model_id = int(str(db_knowledge.model).strip())
+        except (TypeError, ValueError):
+            raise KnowledgeNoEmbeddingError.http_exception()
+        embed_info = LLMDao.get_model_by_id(embedding_model_id)
         if not embed_info:
             raise KnowledgeNoEmbeddingError.http_exception()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
@@ -286,20 +361,9 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge_hook(
             cls, request: Request, login_user: UserPayload, knowledge: Knowledge
     ):
-        # Query the user group the user belongs to under
-        user_group = UserGroupDao.get_user_group(login_user.user_id)
-        if user_group:
-            # Batch Insert Knowledge Base Resources into Associated Tables
-            batch_resource = []
-            for one in user_group:
-                batch_resource.append(
-                    GroupResource(
-                        group_id=one.group_id,
-                        third_id=knowledge.id,
-                        type=ResourceTypeEnum.KNOWLEDGE.value,
-                    )
-                )
-            GroupResourceDao.insert_group_batch(batch_resource)
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_space', str(knowledge.id))
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -398,10 +462,9 @@ class KnowledgeService(KnowledgeUtils):
 
         cls.audit_telemetry_service.audit_delete_knowledge(login_user, request, knowledge)
 
-        # Purge resources under user groups
-        GroupResourceDao.delete_group_resource_by_third_id(
-            str(knowledge.id), ResourceTypeEnum.KNOWLEDGE
-        )
+        # F008: Clean up all FGA tuples for this resource (AC-03)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.delete_resource_tuples_sync('knowledge_space', str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
@@ -499,10 +562,14 @@ class KnowledgeService(KnowledgeUtils):
 
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
+            split_mode=req_data.split_mode,
             separator=req_data.separator,
             separator_rule=req_data.separator_rule,
             chunk_size=req_data.chunk_size,
             chunk_overlap=req_data.chunk_overlap,
+            hierarchy_level=req_data.hierarchy_level,
+            append_title=req_data.append_title,
+            max_chunk_size=req_data.max_chunk_size,
             force_ocr=req_data.force_ocr,
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
@@ -543,8 +610,7 @@ class KnowledgeService(KnowledgeUtils):
         minio_client = await get_minio_storage()
 
         file_share_url = minio_client.clear_minio_share_host(file_path)
-        if file_ext in ['doc', 'ppt', 'pptx']:
-            file_share_url = ''
+        if file_ext in ['doc', 'docx', 'wps', 'xls', 'xlsx', 'et', 'ppt', 'pptx', 'dps']:
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = await minio_client.get_share_link(
@@ -903,6 +969,10 @@ class KnowledgeService(KnowledgeUtils):
         # get file title from es
         finally_res = []
         file_title_map = cls.get_knowledge_files_title(db_knowledge, res)
+        file_tags_map = TagDao.get_tags_by_resource(
+            ResourceTypeEnum.KNOWLEDGE_FILE,
+            [str(one.id) for one in res],
+        ) if res else {}
         timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
@@ -912,6 +982,7 @@ class KnowledgeService(KnowledgeUtils):
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
+            finally_res[index].tags = file_tags_map.get(str(one.id), [])
         if timeout_files:
             KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.TIMEOUT,
                                                 KnowledgeFileFailedError(
@@ -1348,3 +1419,229 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
         return db_knowledge
+
+    @classmethod
+    async def batch_download_files(
+            cls,
+            login_user: UserPayload,
+            knowledge_id: int,
+            file_ids: List[int],
+    ) -> str:
+        """Batch download knowledge-base files.
+
+        Business rules (from M2 spec):
+        - 1 file  → return a MinIO presigned URL directly pointing to the original object.
+        - ≥2 files → pack into a ZIP archive named ``{knowledge_name}{YYYYMMDD_HHMM}.zip``,
+          upload to the MinIO *tmp* bucket, and return a presigned URL valid for 7 days.
+
+        Permission: the caller must have at least ``AccessType.KNOWLEDGE`` (read) access.
+        """
+        import os
+        import tempfile
+        import zipfile
+        from pathlib import Path
+
+        # ── 1. Permission check ──────────────────────────────────────────────────
+        knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError(msg="knowledge not found")
+        if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
+            raise UnAuthorizedError()
+
+        if not file_ids:
+            raise NotFoundError(msg="file_ids must not be empty")
+
+        # ── 2. Query file records ────────────────────────────────────────────────
+        db_files: List[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
+        # Keep only files that actually belong to this knowledge base
+        db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
+        if not db_files:
+            raise NotFoundError(msg="no valid files found")
+
+        minio_client = get_minio_storage_sync()
+
+        # ── 3. Single-file shortcut: return presigned URL directly ───────────────
+        if len(db_files) == 1:
+            file = db_files[0]
+            object_name = file.object_name
+            if not object_name:
+                raise NotFoundError(msg="file has no stored object")
+            return minio_client.get_share_link_sync(object_name)
+
+        # ── 4. Multi-file: pack into ZIP, upload to tmp bucket, return URL ───────
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        zip_name = f"{knowledge.name}{timestamp}.zip"
+        zip_uuid = generate_uuid()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = os.path.join(tmp_dir, zip_name)
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file in db_files:
+                    object_name = file.object_name
+                    if not object_name:
+                        continue
+                    local_path = os.path.join(tmp_dir, file.file_name)
+                    try:
+                        resp = minio_client.download_object_sync(object_name=object_name)
+                        with open(local_path, "wb") as fh:
+                            for chunk in resp.stream(65536):
+                                fh.write(chunk)
+                        zf.write(local_path, arcname=file.file_name)
+                    except Exception as exc:
+                        logger.warning(f"batch_download: skip file {file.id} due to error: {exc}")
+                    finally:
+                        try:
+                            resp.close()
+                            resp.release_conn()
+                        except Exception:
+                            pass
+
+            # ── 5. Upload ZIP to MinIO tmp bucket ────────────────────────────────
+            minio_object_name = f"download/{zip_uuid}/{zip_name}"
+            await minio_client.put_object_tmp(minio_object_name, Path(zip_path), content_type="application/zip")
+            share_url = await minio_client.get_share_link(
+                minio_object_name,
+                bucket=minio_client.tmp_bucket,
+                clear_host=True,
+                expire_days=7,
+            )
+
+        return share_url
+
+    # ──────────────────────────── Tags ───────────────────────────────────
+    @classmethod
+    async def get_knowledge_tags(
+            cls,
+            login_user: UserPayload,
+            knowledge_id: int,
+            keyword: Optional[str] = None,
+            page: int = 1,
+            limit: int = 10,
+    ) -> Tuple[List[Tag], int]:
+        await cls._get_readable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        keyword = keyword.strip() if keyword else None
+        tags = await TagDao.asearch_tags(
+            keyword=keyword,
+            page=page,
+            limit=limit,
+            business_type=TagBusinessTypeEnum.KNOWLEDGE,
+            business_id=str(knowledge_id),
+        )
+        total = await TagDao.acount_tags(
+            keyword=keyword,
+            business_type=TagBusinessTypeEnum.KNOWLEDGE,
+            business_id=str(knowledge_id),
+        )
+        return tags, total
+
+    @classmethod
+    async def add_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_name: str) -> Tag:
+        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+
+        existing_tags = await TagDao.get_tags_by_business(business_type=TagBusinessTypeEnum.KNOWLEDGE,
+                                                          business_id=str(knowledge_id), name=tag_name)
+        if any(t.name == tag_name for t in existing_tags):
+            raise KnowledgeTagExistError()
+
+        new_tag = Tag(
+            name=tag_name,
+            user_id=login_user.user_id,
+            business_type=TagBusinessTypeEnum.KNOWLEDGE,
+            business_id=str(knowledge_id),
+        )
+        return await TagDao.ainsert_tag(new_tag)
+
+    @classmethod
+    async def update_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_id: int, tag_name: str) -> Tag:
+        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+
+        tag = await TagDao.get_tag(tag_id)
+        if not tag or tag.business_id != str(knowledge_id) or tag.business_type != TagBusinessTypeEnum.KNOWLEDGE:
+            raise KnowledgeTagNotExistError()
+
+        return await TagDao.aupdate_tag(tag_id, name=tag_name)
+
+    @classmethod
+    async def delete_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_id: int):
+        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        return await TagDao.delete_business_tag(tag_id, business_id=str(knowledge_id),
+                                                business_type=TagBusinessTypeEnum.KNOWLEDGE)
+
+    @classmethod
+    async def update_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_id: int, tag_ids: List[int]):
+        """ 设置单文件的标签 (全量替换) """
+        tag_ids = cls._deduplicate_tag_ids(tag_ids)
+        if len(tag_ids) > 5:
+            raise KnowledgeFileTagLimitError()
+
+        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if not file_record or file_record.knowledge_id != knowledge_id:
+            raise NotFoundError(msg="文档不存在")
+
+        await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids)
+
+        resource_id = str(file_id)
+        resource_type = ResourceTypeEnum.KNOWLEDGE_FILE
+        await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, login_user.user_id)
+
+    @classmethod
+    async def batch_add_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_ids: List[int], tag_ids: List[int]):
+        """ 批量添加标签到文档 """
+        tag_ids = cls._deduplicate_tag_ids(tag_ids)
+        if len(tag_ids) > 5:
+            raise KnowledgeFileTagLimitError()
+
+        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+
+        if not file_ids or not tag_ids:
+            return
+
+        await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids)
+
+        files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        valid_file_ids = [f.id for f in files if f.knowledge_id == knowledge_id]
+        if not valid_file_ids:
+            return
+
+        resource_type = ResourceTypeEnum.KNOWLEDGE_FILE
+        existing_tag_map = await TagDao.aget_resource_tag_ids_batch(
+            [str(file_id) for file_id in valid_file_ids],
+            resource_type,
+        )
+        for file_id in valid_file_ids:
+            current_tag_ids = set(existing_tag_map.get(str(file_id), []))
+            if len(current_tag_ids.union(tag_ids)) > 5:
+                raise KnowledgeFileTagLimitError()
+            await TagDao.add_tags(tag_ids, str(file_id), resource_type, login_user.user_id)
+
+    @classmethod
+    async def apply_tag_pre_filter(cls, tag_ids: List[int], knowledge_id: int) -> Optional[List[str]]:
+        """
+        根据标签 ID 获取 document_id (知识库文件的 file_id 的字符串列表)，用于传入向量检索的 filter_expr。
+        返回 None 表示无需过滤（未指定标签）。
+        返回 [] 表示指定了标签但没有找到任何文件（检索应返回空）。
+        """
+        if not tag_ids:
+            return None
+
+        links = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.KNOWLEDGE_FILE)
+
+        # We need the resource IDs from links, but we must verify they belong to knowledge_id
+        # To avoid extra DB queries, if we assume tags are already scoped to knowledge_id,
+        # we can just return the resource_ids. But to be safe, let's filter valid file ids.
+        if not links:
+            return []
+
+        resource_ids = list({link.resource_id for link in links})
+
+        # Verify the resources actually belong to this knowledge base
+        file_ids = [int(rid) for rid in resource_ids if rid.isdigit()]
+        if not file_ids:
+            return []
+
+        files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        valid_file_ids = [str(f.id) for f in files if f.knowledge_id == knowledge_id]
+
+        return valid_file_ids

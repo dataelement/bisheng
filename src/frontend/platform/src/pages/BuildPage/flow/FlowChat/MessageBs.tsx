@@ -12,6 +12,8 @@ import ChatFile from "./ChatFileFile";
 import MessageMarkDown from "./MessageMarkDown";
 import { useMessageStore } from "./messageStore";
 import { useTranslation } from "react-i18next";
+import CitationReferencesDrawer from "@/components/bs-comp/chatComponent/CitationReferencesDrawer";
+import { normalizeCitationItems, parseLegacyWebCitationContent } from "@/components/bs-comp/chatComponent/citationUtils";
 
 
 const ReasoningLog = ({ loading, msg = '' }) => {
@@ -47,13 +49,30 @@ const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, version, onMarkClick }:
-    { debug?: boolean, ogo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
+type MessageBsProps = {
+    debug?: boolean;
+    mark?: boolean;
+    logo?: any;
+    data: WorkflowMessage;
+    onUnlike?: any;
+    onSource?: any;
+    version?: string;
+    onMarkClick?: any;
+};
+
+export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, version, onMarkClick }: MessageBsProps) {
     const { t } = useTranslation('flow')
 
     const message = useMemo(() => {
         return typeof data.message === 'string' ? data.message : data.message.msg
     }, [data.message])
+
+    const { content: displayMessage, webContent } = useMemo(
+        () => parseLegacyWebCitationContent(message),
+        [message],
+    )
+    const citations = useMemo(() => normalizeCitationItems(data), [data]);
+    const allowRemoteCitationResolve = true;
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
@@ -64,7 +83,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
     return <div className="bisheng-message flex w-full">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && data.reasoning_log} msg={data.reasoning_log} />
-            {!(data.reasoning_log && !message && !data.files.length) && <>
+            {!(data.reasoning_log && !displayMessage && !data.files?.length) && <>
                 <div className="flex justify-between items-center mb-1">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
                     <div className={`text-right group-hover:opacity-100 opacity-0`}>
@@ -74,12 +93,19 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
                         {logo}
-                        {message || data.files.length ?
+                        {displayMessage || data.files?.length ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)] overflow-x-auto">
-                                {message && <MessageMarkDown message={message} />}
-                                {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
+                                {displayMessage && <MessageMarkDown message={displayMessage} citations={citations} webContent={webContent} allowRemoteCitationResolve={allowRemoteCitationResolve} />}
+                                {displayMessage && <CitationReferencesDrawer
+                                    content={String(displayMessage || '')}
+                                    webContent={webContent}
+                                    citations={citations}
+                                    allowRemoteCitationResolve={allowRemoteCitationResolve}
+                                    buttonClassName="mt-2"
+                                />}
+                                {!!data.files?.length && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                 {/* @user */}
-                                {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
+                                {data.receiver && <p className="text-blue-500 text-sm">@ {(data.receiver as any).user_name}</p>}
                                 {/* 光标 */}
                                 {/* {data.message.toString() && !data.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>} */}
                             </div>
@@ -101,18 +127,19 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         onSource={() => onSource?.({
                             chatId,
                             messageId: data.id || data.message_id,
-                            message,
+                            message: displayMessage,
                         })}
                     />
                     {!debug && <MessageButtons
                         mark={mark}
                         version={version}
+                        debug={debug}
                         id={data.id || data.message_id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                        text={data.message.msg || data.message}
+                        text={displayMessage}
                     ></MessageButtons>}
                 </div>
             }

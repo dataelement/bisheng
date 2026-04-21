@@ -170,13 +170,11 @@ export function ConversationHistory({
                             return (
                                 <div
                                     key={session.chat_id}
-                                    className={`group flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-colors ${
-                                        isEditing ? "cursor-default" : "cursor-pointer"
-                                    } ${
-                                        session.chat_id === activeChatId
+                                    className={`group flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-colors ${isEditing ? "cursor-default" : "cursor-pointer"
+                                        } ${session.chat_id === activeChatId
                                             ? "bg-[#e8f3ff] text-[#165dff]"
                                             : "text-[#4e5969] hover:bg-[#f7f8fa]"
-                                    }`}
+                                        }`}
                                     onClick={() => {
                                         if (isEditing) return;
                                         onSelect(session.chat_id);
@@ -226,7 +224,7 @@ export function ConversationHistory({
                                                     className={cn(
                                                         "flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity",
                                                         (menuOpen || session.chat_id === activeChatId) &&
-                                                            "opacity-100"
+                                                        "opacity-100"
                                                     )}
                                                     onClick={(e) => e.stopPropagation()}
                                                     aria-label="More actions"

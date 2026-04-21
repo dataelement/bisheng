@@ -19,28 +19,42 @@ chat_manager = ChatManager()
 async def get_online_chat(*,
                           keyword: Optional[str] = None,
                           tag_id: Optional[int] = None,
+                          flow_type: Optional[int] = None,
                           page: Optional[int] = 1,
                           limit: Optional[int] = 10,
+                          sort_by: Optional[str] = None,
+                          search_description: Optional[bool] = False,
                           user: UserPayload = Depends(UserPayload.get_login_user)):
-    """Access to online workflows and assistants."""
+    """Access to online workflows and assistants.
+
+    sort_by:
+        - None (default): apps with user conversations first (DESC by last-used), then by update_time DESC.
+        - "update_time": pure update_time DESC — used by the admin recommended-apps picker.
+    search_description:
+        - False (default): keyword matches name only.
+        - True: keyword matches name OR description.
+    """
     data, total = await asyncio.to_thread(
         WorkFlowService.get_all_flows,
-        user, keyword, FlowStatus.ONLINE.value, tag_id, None, page, limit,
-        skip_pagination=True)
+        user, keyword, FlowStatus.ONLINE.value, tag_id, flow_type, page, limit,
+        skip_pagination=True, search_description=bool(search_description))
 
-    # Get user's last conversation time per app
-    used_apps = await MessageSessionDao.get_user_used_apps(use_create_time=True)
-    used_map = {app[0]: app[1] for app in used_apps}
+    if sort_by == 'update_time':
+        data.sort(key=lambda app: -app['update_time'].timestamp() if app.get('update_time') else 0)
+    else:
+        # Get user's last conversation time per app
+        used_apps = await MessageSessionDao.get_user_used_apps(use_create_time=True)
+        used_map = {app[0]: app[1] for app in used_apps}
 
-    # Sort: apps with conversations first (by last used time DESC),
-    #       then apps without (by update_time DESC)
-    def sort_key(app):
-        last_chat = used_map.get(app['id'])
-        if last_chat:
-            return (0, -last_chat.timestamp())
-        return (1, -app['update_time'].timestamp() if app.get('update_time') else 0)
+        # Sort: apps with conversations first (by last used time DESC),
+        #       then apps without (by update_time DESC)
+        def sort_key(app):
+            last_chat = used_map.get(app['id'])
+            if last_chat:
+                return (0, -last_chat.timestamp())
+            return (1, -app['update_time'].timestamp() if app.get('update_time') else 0)
 
-    data.sort(key=sort_key)
+        data.sort(key=sort_key)
 
     # Manual pagination
     total = len(data)

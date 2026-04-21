@@ -9,6 +9,12 @@ from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTempla
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    CITATION_PROMPT_RULES,
+    annotate_rag_documents_with_citations,
+    cache_citation_registry_items_sync,
+    collect_rag_citation_registry_items,
+)
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
@@ -33,7 +39,7 @@ class RagNode(RagUtils):
         self._qa_prompt = None
 
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
-                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    temperature=self.node_params.get('temperature', 1),
                                                     app_id=self.workflow_id,
                                                     app_name=self.workflow_name,
                                                     app_type=ApplicationTypeEnum.WORKFLOW,
@@ -82,8 +88,12 @@ class RagNode(RagUtils):
             source_documents = [Document(page_content=str(e), metadata={})]
 
         qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
+        source_documents_with_citations = annotate_rag_documents_with_citations(source_documents)
+        cache_citation_registry_items_sync(
+            collect_rag_citation_registry_items(source_documents_with_citations)
+        )
         inputs = {
-            "context": source_documents,
+            "context": source_documents_with_citations,
         }
         if "question" in self._qa_prompt.input_variables:
             inputs["question"] = question
@@ -107,7 +117,7 @@ class RagNode(RagUtils):
                                   msg=result,
                                   unique_id=unique_id,
                                   output_key=output_key,
-                                  source_documents=source_documents))
+                                  source_documents=source_documents_with_citations))
             else:
                 # If there is a streaming output, the streaming end event is triggered, Because of the need tosource_documentSo do a streaming end event here
                 self.callback_manager.on_stream_over(StreamMsgOverData(
@@ -116,12 +126,12 @@ class RagNode(RagUtils):
                     msg=result,
                     reasoning_content=llm_callback.reasoning_content,
                     unique_id=unique_id,
-                    source_documents=source_documents,
+                    source_documents=source_documents_with_citations,
                     output_key=output_key,
                 ))
 
         self._log_reasoning_content[output_key] = llm_callback.reasoning_content
-        self._log_source_documents[output_key] = source_documents
+        self._log_source_documents[output_key] = source_documents_with_citations
         return result
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
@@ -191,6 +201,7 @@ class RagNode(RagUtils):
 
         messages_general = [
             SystemMessagePromptTemplate.from_template(system_prompt),
+            SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES),
             HumanMessagePromptTemplate.from_template(user_prompt),
         ]
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)

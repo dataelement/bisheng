@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional, List, Union
 
+from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgData, StreamMsgOverData
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -90,12 +91,12 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             StreamMsgData(node_id=self.node_id,
                           name=self.node_name,
                           msg=token,
-                          reasoning_content=getattr(chunk.message, 'additional_kwargs', {}).get('reasoning_content'),
+                          reasoning_content=extract_reasoning_content(chunk),
                           unique_id=self.unique_id,
                           output_key=self.output_key))
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        self.reasoning_content = getattr(response.generations[0][0].message, 'additional_kwargs', {}).get('reasoning_content')
+        self.reasoning_content = extract_reasoning_content(response)
         if self.cancel_llm_end:
             return
         if not self.output:

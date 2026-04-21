@@ -26,7 +26,7 @@ const ExcelPreview = ({ filePath }) => {
 
     const ext = parts.pop()?.toLowerCase() || "";
 
-    const validExtensions = ['csv', 'xlsx', 'xls', 'txt'];
+    const validExtensions = ['csv', 'xlsx', 'xls', 'et', 'txt'];
     if (validExtensions.includes(ext)) {
       return ext;
     }
@@ -36,8 +36,8 @@ const ExcelPreview = ({ filePath }) => {
   // ---------------------- File Type Detection ----------------------
   const fileExt = getFileExtension(filePath);
   const isCSV = fileExt === "csv";
-  const isExcel = ["xlsx", "xls"].includes(fileExt);
-  const isXLSX = fileExt === "xlsx"; // 用于图片提取
+  const isExcel = ["xlsx", "xls", "et"].includes(fileExt);
+  const isXLSX = fileExt === "xlsx" || fileExt === "et"; // 用于图片提取
 
   // ---------------------- Screen Size Detection (Adapt to Small/Large Screens) ----------------------
   const [screenSize, setScreenSize] = useState("medium"); // small/medium/large

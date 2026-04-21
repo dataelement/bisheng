@@ -19,7 +19,7 @@ import {
     sidebarListMoreMenuLabelClassName,
 } from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
-import { getFullWidthLength } from "~/utils";
+import { cn, getFullWidthLength } from "~/utils";
 import { ChannelPinIcon } from "~/components/icons/channels";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
@@ -114,34 +114,44 @@ export default function ChannelItem({
                 )}
             </div>
 
-            {/* 右侧区域 */}
-            <div className="flex items-center justify-end flex-shrink-0 w-8 h-5 relative">
-                {/* 1. 徽标：非菜单打开 且 非Hover 时可见 */}
+            {/* 右侧区域：PC 仍为徽标/更多叠放 + hover 切换；H5 徽标在左、更多在右常驻 */}
+            <div
+                className={cn(
+                    "relative flex flex-shrink-0 items-center justify-end",
+                    "touch-mobile:min-w-0 touch-mobile:gap-1.5 touch-mobile:pl-1",
+                    "touch-desktop:h-5 touch-desktop:w-8",
+                )}
+            >
                 {channel.unreadCount > 0 && (
-                    <span className={`
-                        absolute right-0 flex items-center justify-center
-                        text-[10px] px-1.5 py-[1px] rounded-md font-medium bg-[#335CFF33]/20 text-primary
-                        ${menuOpen ? "opacity-0" : "group-hover:opacity-0"}
-                    `}
+                    <span
+                        className={cn(
+                            "flex items-center justify-center rounded-md bg-[#335CFF33]/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
+                            "touch-mobile:relative touch-mobile:shrink-0 touch-mobile:opacity-100",
+                            "touch-desktop:absolute touch-desktop:right-0",
+                            menuOpen
+                                ? "opacity-0"
+                                : "touch-mobile:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:opacity-100 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-0",
+                        )}
                         style={{
-                            transitionProperty: 'background-color',
-                            transitionDuration: '350ms',
-                            // transitionDelay: '100ms',
-                            transitionTimingFunction: 'ease-in-out'
+                            transitionProperty: "opacity, background-color",
+                            transitionDuration: "350ms",
+                            transitionTimingFunction: "ease-in-out",
                         }}
                     >
                         {channel.unreadCount}
                     </span>
                 )}
 
-                {/* 2. 操作按钮：菜单打开 或 Hover 时可见 */}
                 <DropdownMenu onOpenChange={setMenuOpen}>
                     <DropdownMenuTrigger asChild>
                         <button
-                            className={`
-                                absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 outline-none
-                                ${menuOpen ? "opacity-100 z-10" : "opacity-0 group-hover:opacity-100 z-10"}
-                            `}
+                            type="button"
+                            className={cn(
+                                "z-10 flex size-7 shrink-0 items-center justify-center rounded-md outline-none hover:bg-black/5",
+                                menuOpen && "opacity-100",
+                                !menuOpen &&
+                                    "touch-mobile:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:opacity-100 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+                            )}
                             onClick={(e) => e.stopPropagation()}
                         >
                             <MoreHorizontal className="size-4 text-[#4e5969]" />

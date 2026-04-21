@@ -20,18 +20,19 @@ export async function logoutApi() {
   return await axios.post(`/api/v1/user/logout`);
 }
 // 登录
-export async function loginApi(name, pwd, captcha_key?, captcha?) {
+export async function loginApi(personId, pwd, captcha_key?, captcha?) {
   return await axios.post(`/api/v1/user/login`, {
-    user_name: name,
+    user_name: personId,
     password: pwd,
     captcha_key,
     captcha,
   });
 }
 // 注册
-export async function registerApi(name, pwd, captcha_key?, captcha?) {
+export async function registerApi(userName, personId, pwd, captcha_key?, captcha?) {
   return await axios.post(`/api/v1/user/regist`, {
-    user_name: name,
+    user_name: userName,
+    external_id: personId,
     password: pwd,
     captcha_key,
     captcha,
@@ -79,8 +80,12 @@ export async function disableUserApi(userid, status) {
 }
 // 角色列表
 export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
-    .then(res => res.data);
+  const res = await axios.get(`/api/v1/role/list?role_name=${searchkey}&page=1&limit=200`)
+  const payload = res?.data
+  if (Array.isArray(payload)) return payload as any
+  if (Array.isArray(payload?.data)) return payload.data as any
+  if (Array.isArray(payload?.data?.data)) return payload.data.data as any
+  return []
 }
 // 用户组下角色列表
 export async function getRolesByGroupApi(searchkey = "", groupIds: any[]): Promise<{ data: ROLE[] }> {
@@ -148,6 +153,51 @@ export async function createRole(groupId, name) {
     remark: "手动创建用户",
   });
 }
+
+// v2.5 角色管理（去用户组绑定）
+export async function getRolesPageApi(params: {
+  keyword?: string
+  page?: number
+  limit?: number
+}): Promise<{ data: ROLE[]; total: number }> {
+  const res = await axios.get(`/api/v1/roles`, { params })
+  return res
+}
+
+export async function createRoleV2Api(data: {
+  role_name: string
+  department_id?: number | null
+  quota_config?: Record<string, number>
+  remark?: string
+  menu_ids?: string[]
+}) {
+  return await axios.post(`/api/v1/roles`, data)
+}
+
+export async function updateRoleV2Api(
+  roleId: number,
+  data: {
+    role_name?: string
+    department_id?: number | null
+    quota_config?: Record<string, number>
+    remark?: string
+    menu_ids?: string[]
+  }
+) {
+  return await axios.put(`/api/v1/roles/${roleId}`, data)
+}
+
+export async function deleteRoleV2Api(roleId: number) {
+  return await axios.delete(`/api/v1/roles/${roleId}`)
+}
+
+export async function getRoleMenuV2Api(roleId: number): Promise<string[]> {
+  return await axios.get(`/api/v1/roles/${roleId}/menu`)
+}
+
+export async function updateRoleMenuV2Api(roleId: number, menu_ids: string[]) {
+  return await axios.post(`/api/v1/roles/${roleId}/menu`, { menu_ids })
+}
 /**
  * 更新角色权限
  */
@@ -185,11 +235,11 @@ export async function getRolePermissionsApi(
 /**
  * 更新角色基本信息
  */
-export async function updateRoleNameApi(roleId, name,knowledgeSpaceFileLimit) {
+export async function updateRoleNameApi(roleId, name, knowledgeSpaceFileLimit) {
   return axios.patch(`/api/v1/role/${roleId}`, {
     role_name: name,
     remark: "手动创建用户",
-    knowledge_space_file_limit:knowledgeSpaceFileLimit
+    knowledge_space_file_limit: knowledgeSpaceFileLimit
   });
 }
 
@@ -200,11 +250,13 @@ export async function delRoleApi(roleId) {
   return axios.delete(`/api/v1/role/${roleId}`);
 }
 
-// 用户组列表
-export function getUserGroupsApi(config) {
-  return axios.get(`/api/v1/group/list`, {
-    signal: config?.signal, // 绑定 AbortSignal
+/** 用户组列表（后端 data 为 { records: GroupRead[] }，此处统一为数组） */
+export async function getUserGroupsApi(config?: { signal?: AbortSignal }) {
+  const data = await axios.get(`/api/v1/group/list`, {
+    signal: config?.signal,
   });
+  const rows = (data as { records?: unknown })?.records ?? data;
+  return Array.isArray(rows) ? rows : [];
 }
 
 
@@ -215,22 +267,23 @@ export function delUserGroupApi(group_id) {
 }
 
 // 保存用户组
-export function saveUserGroup(form, selected) {
-  console.log('form :>> ', form);
+export function saveUserGroup(form, selected, visibility: string = 'public') {
   const { groupName: group_name } = form
   return axios.post(`/api/v1/group/create`, {
     group_name,
     group_admins: selected.map(item => item.value),
+    visibility: visibility === 'private' ? 'private' : 'public',
   });
 }
 
 // 修改用户组
-export function updateUserGroup(id, form, selected) {
+export function updateUserGroup(id, form, selected, visibility?: string) {
   const { groupName: group_name } = form
-  const a = axios.put(`/api/v1/group/create`, {
-    id,
-    group_name
-  });
+  const putBody: Record<string, unknown> = { id, group_name }
+  if (visibility === 'private' || visibility === 'public') {
+    putBody.visibility = visibility
+  }
+  const a = axios.put(`/api/v1/group/create`, putBody);
   const b = axios.post(`/api/v1/group/set_group_admin`, {
     group_id: id,
     user_ids: selected.map(item => item.value)
@@ -280,6 +333,18 @@ export async function getAdminsApi(): Promise<any> {
   return axios.get(`/api/v1/user/admin`);
 }
 
+// Get users in a group (non-admin members)
+export async function getGroupUsersApi(groupId: number): Promise<any> {
+  return axios.get(`/api/v1/group/get_group_user`, { params: { group_id: groupId } });
+}
+
+// Batch set group members (non-admin)
+export async function setGroupMembersApi(groupId: number, userIds: number[]) {
+  return axios.post(`/api/v1/group/set_group_members`, {
+    group_id: groupId,
+    user_ids: userIds
+  });
+}
 
 /**
  * 重置密码（管理员专用）
@@ -294,9 +359,9 @@ export async function resetPasswordApi(userId, password): Promise<any> {
 /**
  * 密码过期重置个人密码
  */
-export async function changePasswordApi(userName, password, new_password): Promise<any> {
+export async function changePasswordApi(personId, password, new_password): Promise<any> {
   return axios.post(`/api/v1/user/change_password_public`, {
-    username: userName,
+    person_id: personId,
     password,
     new_password
   });

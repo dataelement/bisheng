@@ -25,7 +25,7 @@ import {
   AnimatedSearchInput,
 } from './';
 import { TrashIcon, Spinner } from '~/components/svg';
-import { useLocalize, useMediaQuery } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 import { LocalizeFunction } from '~/common';
 
@@ -219,7 +219,7 @@ export default function DataTable<TData, TValue>({
   filterValue,
 }: DataTableProps<TData, TValue>) {
   const localize = useLocalize();
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 

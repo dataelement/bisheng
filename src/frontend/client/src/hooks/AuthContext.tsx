@@ -22,6 +22,7 @@ import {
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import useTimeout from './useTimeout';
 import store from '~/store';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 
 const AuthContext = createContext<TAuthContext | undefined>(undefined);
 
@@ -92,15 +93,25 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
+      const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
+      if (thirdPartyLogoutUrl) {
+        window.location.href = thirdPartyLogoutUrl;
+        return;
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,
         // user: undefined,
-        redirect: `${location.origin}${__APP_ENV__.BISHENG_HOST}` // data.redirect ?? bsConfig?.host,
+        redirect: getPlatformAdminPanelUrl(),
       });
     },
     onError: (error) => {
       doSetError((error as Error).message);
+      const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
+      if (thirdPartyLogoutUrl) {
+        window.location.href = thirdPartyLogoutUrl;
+        return;
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,
@@ -150,6 +161,7 @@ const AuthContextProvider = ({
   useEffect(() => {
     if (userQuery.data) {
       setUser(userQuery.data);
+      setIsAuthenticated(true);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
       // navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });

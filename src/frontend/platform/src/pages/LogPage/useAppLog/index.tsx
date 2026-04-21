@@ -204,6 +204,7 @@ export default function AppUseLog() {
                     t('log.csvHeaders.appName'),
                     t('log.csvHeaders.sessionCreationTime'),
                     t('log.csvHeaders.userName'),
+                    t('log.csvHeaders.userGroup'),
                     t('log.csvHeaders.messageRole'),
                     t('log.csvHeaders.messageSendTime'),
                     t('log.csvHeaders.messageContent'),
@@ -237,6 +238,8 @@ export default function AppUseLog() {
                         item.flow_type === 15 ? t('log.workbench_daily') : item.flow_name,
                         item.create_time.replace('T', ' '),
                         item.user_name,
+                        // Join user group names with comma separator
+                        (item.user_groups?.map((g: { name: string }) => g.name).join(',') ?? ''),
                         msg.category === 'question' ? t('log.userRole') : t('log.aiRole'),
                         msg.create_time.replace('T', ' '),
                         handleMessage(message, msg.category, item.flow_id + '_' + item.chat_id),
@@ -397,6 +400,7 @@ export default function AppUseLog() {
                     pageText={t('log.pagination.page')}
                     pageSize={pageSize}
                     total={total}
+                    showTotal={true}
                     onChange={(newPage) => setPage(newPage)}
                 />
             </div>

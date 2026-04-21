@@ -19,11 +19,17 @@ class UserRoleInfo(BaseModel):
     group_id: int
 
 
+class UserDepartmentInfo(BaseModel):
+    department_id: int
+    department_name: str
+
+
 class UserContext(BaseModel):
     user_id: int = Field(..., description="Unique identifier for the user")
     user_name: str = Field(..., description="Name of the user")
     user_group_infos: List[UserGroupInfo] = Field(default_factory=list)
     user_role_infos: List[UserRoleInfo] = Field(default_factory=list)
+    user_department_infos: List[UserDepartmentInfo] = Field(default_factory=list)
 
 
 T_EventData = TypeVar("T_EventData", bound=BaseEventData)

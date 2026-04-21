@@ -41,7 +41,10 @@ class WorkstationMessage(BaseModel):
         return str(value)
 
     @classmethod
-    async def from_chat_message(cls, message: ChatMessage):
+    async def from_chat_message(
+        cls,
+        message: ChatMessage
+    ):
         files = json.loads(message.files) if message.files else []
         extra = json.loads(message.extra) if message.extra else {}
         user_model = await UserDao.aget_user(message.user_id)
@@ -61,7 +64,7 @@ class WorkstationMessage(BaseModel):
             text=message.message,
             files=files,
             flow_name=message_session_model.name if message_session_model else None,
-            source=message.source,
+            source=message.source
         )
 
 

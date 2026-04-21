@@ -1,4 +1,5 @@
 import os
+import re
 from typing import List
 
 from langchain_core.documents import Document
@@ -10,9 +11,20 @@ from bisheng.knowledge.rag.pipeline.loader.utils.md_post_processing import post_
 
 
 class BishengPptLoader(BaseBishengLoader):
-    def __init__(self, retain_images: bool = True, *args, **kwargs):
+    def __init__(self, retain_images: bool = True, page_chunk_mode: bool = False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
+        self.page_chunk_mode = page_chunk_mode
+
+    def _build_slide_documents(self, content: str) -> List[Document]:
+        slide_texts = [one.strip() for one in re.split(r"\n---\n", content) if one.strip()]
+        return [
+            Document(
+                page_content=slide_text,
+                metadata={**self.file_metadata.copy(), "page": index + 1},
+            )
+            for index, slide_text in enumerate(slide_texts)
+        ]
 
     def load(self) -> List[Document]:
         input_file = self.file_path
@@ -24,7 +36,8 @@ class BishengPptLoader(BaseBishengLoader):
 
         md_file_path, local_image_dir, doc_id = pptx_handler(
             cache_dir=self.tmp_dir,
-            file_path=self.file_path,
+            file_path=input_file,
+            enable_slides=self.page_chunk_mode,
         )
         if self.retain_images:
             self.local_image_dir = local_image_dir
@@ -34,10 +47,13 @@ class BishengPptLoader(BaseBishengLoader):
         post_processing(md_file_path, self.retain_images)
 
         pdf_file_path = convert_ppt_to_pdf(input_file)
-        if os.path.exists(local_image_dir):
+        if pdf_file_path and os.path.exists(pdf_file_path):
             self.preview_file_path = pdf_file_path
 
         with open(md_file_path, "r", encoding="utf-8") as f:
             content = f.read()
+
+        if self.page_chunk_mode:
+            return self._build_slide_documents(content)
 
         return [Document(page_content=content, metadata=self.file_metadata.copy())]

@@ -12,6 +12,7 @@ from loguru import logger
 
 from bisheng.common.errcode.knowledge import KnowledgeFileEmptyError
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
+from bisheng.knowledge.rag.pipeline.loader.utils.pdf_header_footer import filter_repeated_header_footer_blocks
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 
 
@@ -106,6 +107,7 @@ def html_table_to_md(html_str):
 
 class MineruLoader(BaseBishengLoader):
     def __init__(self, url: str, timeout: int = 600, headers: Dict = None, request_kwargs: Dict = None,
+                 filter_page_header_footer: bool = False,
                  *args, **kwargs: Any) -> None:
         super(MineruLoader, self).__init__(*args, **kwargs)
 
@@ -113,6 +115,7 @@ class MineruLoader(BaseBishengLoader):
         self.timeout = timeout
         self.headers = headers if headers is not None else {}
         self.request_kwargs = request_kwargs if request_kwargs is not None else {}
+        self.filter_page_header_footer = filter_page_header_footer
 
         self.extra = kwargs
         self.partitions = []
@@ -227,16 +230,14 @@ class MineruLoader(BaseBishengLoader):
 
         return [Document(page_content=content, metadata=metadata)]
 
+    def _filter_blocks(self, blocks: List[Dict]) -> List[Dict]:
+        if not self.filter_page_header_footer:
+            return blocks
+        return filter_repeated_header_footer_blocks(blocks)
+
     def merge_conten_list(self, content_list) -> Tuple[str, Dict]:
         self.bbox_list = []
-        content = ""
-
-        bboxes = []
-        indexes = []
-        pages = []
-        types = []
-
-        start_index = 0
+        blocks = []
         for index, one in enumerate(content_list):
             text_type = one.get("type")
             if text_type == "image":
@@ -252,20 +253,35 @@ class MineruLoader(BaseBishengLoader):
             else:
                 text = one.get("text") + "\n"
 
-            content += text
+            blocks.append({
+                "text": text,
+                "type": text_type,
+                "page": one.get("page_idx", 0),
+                "bbox": one.get("bbox"),
+            })
 
+        blocks = self._filter_blocks(blocks)
+
+        content = ""
+        bboxes = []
+        indexes = []
+        pages = []
+        types = []
+        start_index = 0
+        for index, block in enumerate(blocks):
+            content += block["text"]
             self.bbox_list.append(TextBbox(
-                text=text,
-                type=text_type,
-                page=one.get("page_idx", 0),
+                text=block["text"],
+                type=block["type"],
+                page=block["page"],
                 part_id=str(index),
-                bbox=one.get("bbox"),
+                bbox=block["bbox"],
             ))
-            pages.append(one.get("page_idx", 0))
-            bboxes.append(one.get("bbox"))
-            indexes.append([start_index, start_index + len(text)])
-            types.append(text_type)
-            start_index += len(text)
+            pages.append(block["page"])
+            bboxes.append(block["bbox"])
+            indexes.append([start_index, start_index + len(block["text"])])
+            types.append(block["type"])
+            start_index += len(block["text"])
         return content, {
             "bboxes": bboxes,
             "pages": pages,
@@ -275,14 +291,7 @@ class MineruLoader(BaseBishengLoader):
 
     def merge_pdf_info(self, pdf_info) -> Tuple[str, Dict]:
         self.bbox_list = []
-        content = ""
-
-        bboxes = []
-        indexes = []
-        pages = []
-        types = []
-
-        start_index = 0
+        blocks = []
 
         for page_num, page in enumerate(pdf_info):
             page_idx = page.get("page_idx", page_num)
@@ -334,20 +343,35 @@ class MineruLoader(BaseBishengLoader):
                 if not text:
                     continue
 
-                content += text
+                blocks.append({
+                    "text": text,
+                    "type": text_type,
+                    "page": page_idx,
+                    "bbox": bbox,
+                })
 
-                self.bbox_list.append(TextBbox(
-                    text=text,
-                    type=text_type,
-                    page=page_idx,
-                    part_id=str(len(self.bbox_list)),
-                    bbox=bbox,
-                ))
-                pages.append(page_idx)
-                bboxes.append(bbox)
-                indexes.append([start_index, start_index + len(text)])
-                types.append(text_type)
-                start_index += len(text)
+        blocks = self._filter_blocks(blocks)
+
+        content = ""
+        bboxes = []
+        indexes = []
+        pages = []
+        types = []
+        start_index = 0
+        for index, block in enumerate(blocks):
+            content += block["text"]
+            self.bbox_list.append(TextBbox(
+                text=block["text"],
+                type=block["type"],
+                page=block["page"],
+                part_id=str(index),
+                bbox=block["bbox"],
+            ))
+            pages.append(block["page"])
+            bboxes.append(block["bbox"])
+            indexes.append([start_index, start_index + len(block["text"])])
+            types.append(block["type"])
+            start_index += len(block["text"])
 
         return content, {
             "bboxes": bboxes,

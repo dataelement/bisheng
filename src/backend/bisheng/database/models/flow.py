@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, String, and_, func, or_, text
+from sqlalchemy import Boolean, Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -55,6 +55,13 @@ class FlowBase(SQLModelSerializable):
     logo: Optional[str] = Field(default=None, index=False)
     status: Optional[int] = Field(index=False, default=1)
     flow_type: Optional[int] = Field(index=False, default=FlowType.WORKFLOW.value)
+    is_shared: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean, nullable=False, server_default=text('0'),
+            comment='F017: Root resource shared to all children (mirrors FGA shared_with tuples)',
+        ),
+    )
     guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -85,6 +92,10 @@ class Flow(FlowBase, table=True):
 
 class FlowCreate(FlowBase):
     flow_id: Optional[str] = None
+    # F017: whether the new workflow should be shared with all active Child
+    # Tenants. ``None`` → fall back to ``Root.share_default_to_children``.
+    # Ignored when creator's leaf tenant is not Root.
+    share_to_children: Optional[bool] = None
 
 
 class FlowRead(FlowBase):
@@ -330,7 +341,7 @@ class FlowDao(FlowBase):
     @classmethod
     def filter_flows_by_ids(cls, flow_ids: List[str], keyword: str = None,
                             page: int = 0, limit: int = 0, flow_type: int = FlowType.WORKFLOW.value) \
-            -> (List[Flow], int):
+        -> (List[Flow], int):
         """
         Filter flow records by ids and return brief information without graph data.
         """
@@ -379,7 +390,8 @@ class FlowDao(FlowBase):
                      id_extra: list = None,
                      id_list_not_in: list = None,
                      page: int = 0,
-                     limit: int = 0) -> (List[Dict], int):
+                     limit: int = 0,
+                     search_description: bool = False) -> (List[Dict], int):
         """Get all flow-based apps and assistants."""
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
@@ -393,8 +405,15 @@ class FlowDao(FlowBase):
                            sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
         count_statement = select(func.count(sub_query.c.id))
         if name:
-            statement = statement.where(sub_query.c.name.like(f'%{name}%'))
-            count_statement = count_statement.where(sub_query.c.name.like(f'%{name}%'))
+            if search_description:
+                keyword_filter = or_(
+                    sub_query.c.name.like(f'%{name}%'),
+                    sub_query.c.description.like(f'%{name}%'),
+                )
+            else:
+                keyword_filter = sub_query.c.name.like(f'%{name}%')
+            statement = statement.where(keyword_filter)
+            count_statement = count_statement.where(keyword_filter)
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
             count_statement = count_statement.where(sub_query.c.status == status)
@@ -447,7 +466,9 @@ class FlowDao(FlowBase):
                             id_extra: list = None,
                             id_list_not_in: list = None,
                             page: int = 0,
-                            limit: int = 0) -> (List[Dict], int):
+                            limit: int = 0,
+                            search_description=False,
+                            ) -> (List[Dict], int):
         """
         Get all flow-based apps and assistants.
         Args:
@@ -478,6 +499,13 @@ class FlowDao(FlowBase):
         if name:
             statement = statement.where(sub_query.c.name.like(f'%{name}%'))
             count_statement = count_statement.where(sub_query.c.name.like(f'%{name}%'))
+
+        if search_description and name:
+            statement = statement.where(
+                or_(sub_query.c.name.like(f'%{name}%'), sub_query.c.description.like(f'%{name}%')))
+            count_statement = count_statement.where(
+                or_(sub_query.c.name.like(f'%{name}%'), sub_query.c.description.like(f'%{name}%')))
+
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
             count_statement = count_statement.where(sub_query.c.status == status)

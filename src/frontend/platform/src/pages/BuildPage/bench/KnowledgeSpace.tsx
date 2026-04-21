@@ -10,6 +10,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Preview from "./Preview";
+import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -129,8 +130,8 @@ export default function KnowledgeSpace() {
 const useKnowledgeConfig = () => {
     const { t } = useTranslation();
     const [formData, setFormData] = useState<KnowledgeConfigForm>({
-        systemPrompt: t('chatConfig.systemPrompt2'),
-        userPrompt: t('chatConfig.retrievedAndQuestion'),
+        systemPrompt: '',
+        userPrompt: '',
         maxChunkSize: 15000,
     });
 
@@ -147,17 +148,10 @@ const useKnowledgeConfig = () => {
             const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
             const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
-            const defaultUser = t('chatConfig.retrievedAndQuestion');
-            const normalizeNonEmptyString = (value: unknown): string | undefined => {
-                if (typeof value !== 'string') return undefined;
-                const trimmed = value.trim();
-                // Treat empty string / whitespace-only as "API empty" and do not override defaults.
-                return trimmed ? value : undefined;
-            };
             setFormData((prev) => ({
                 ...prev,
-                systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? t('chatConfig.systemPrompt2'),
-                userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? defaultUser,
+                systemPrompt: resolveConfigString(systemPromptFromRes, prev.systemPrompt),
+                userPrompt: resolveConfigString(userPromptFromRes, prev.userPrompt),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
             }));
         });
