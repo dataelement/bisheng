@@ -3,6 +3,8 @@ import {
     FileStatus,
     KnowledgeFile,
     KnowledgeSpace,
+    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
+    SpaceRole,
     SortDirection,
     SortType,
     fileStatusToNumber,
@@ -59,9 +61,10 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
             setLoading(true);
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+                const isMember = activeSpace.role === SpaceRole.MEMBER;
                 const fileStatusNums = statusFilter.length > 0
                     ? statusFilter.map(fileStatusToNumber)
-                    : undefined;
+                    : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
                 const res = isSearching
                     ? await searchSpaceChildrenApi({
                         space_id: activeSpace.id,
