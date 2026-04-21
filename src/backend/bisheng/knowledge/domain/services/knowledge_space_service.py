@@ -1294,6 +1294,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         space_id: int,
         parent_id: Optional[int] = None,
+        file_ids: Optional[List[int]] = None,
         order_field: str = 'file_type',
         order_sort: str = 'asc',
         file_status: List[int] = None,
@@ -1312,9 +1313,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             await self._require_permission_id('knowledge_space', space_id, 'view_space')
         total, items = await asyncio.gather(
-            SpaceFileDao.async_count_children(space_id, parent_id, file_status),
-            SpaceFileDao.async_list_children(space_id, parent_id, order_field, order_sort, file_status, page,
-                                             page_size),
+            SpaceFileDao.async_count_children(space_id, parent_id, file_ids=file_ids, file_status=file_status),
+            SpaceFileDao.async_list_children(space_id, parent_id, file_ids=file_ids, order_field=order_field,
+                                             order_sort=order_sort, file_status=file_status, page=page,
+                                             page_size=page_size),
         )
         data = await self._handle_file_folder_extra_info(items)
         return {"total": total, "page": page, "page_size": page_size, "data": data}

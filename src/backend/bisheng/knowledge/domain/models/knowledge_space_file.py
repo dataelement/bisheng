@@ -70,6 +70,7 @@ class SpaceFileDao(KnowledgeFileDao):
             cls,
             knowledge_id: int,
             parent_id: Optional[int],
+            file_ids: Optional[List[int]] = None,
             order_field: str = "file_type",
             order_sort: str = "desc",
             file_status: List[int] = None,
@@ -91,6 +92,8 @@ class SpaceFileDao(KnowledgeFileDao):
                 exact_path = f"/{parent_id}"
             path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
+        if file_ids:
+            filters.append(KnowledgeFile.id.in_(file_ids))
 
         if file_status:
             from sqlalchemy.orm import aliased
@@ -163,6 +166,7 @@ class SpaceFileDao(KnowledgeFileDao):
             cls,
             knowledge_id: int,
             parent_id: Optional[int],
+            file_ids: Optional[List[int]] = None,
             file_status: List[int] = None,
     ) -> int:
         """
@@ -179,6 +183,8 @@ class SpaceFileDao(KnowledgeFileDao):
                 exact_path = f"/{parent_id}"
             path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
+        if file_ids:
+            filters.append(KnowledgeFile.id.in_(file_ids))
 
         if file_status:
             from sqlalchemy.orm import aliased
