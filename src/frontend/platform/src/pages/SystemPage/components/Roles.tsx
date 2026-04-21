@@ -65,7 +65,6 @@ const DEFAULT_ENABLED_MENU_IDS = [
   ADMIN_PARENT_ID,
   "knowledge_space",
   "knowledge",
-  "create_knowledge",
   "build",
 ] as const
 
