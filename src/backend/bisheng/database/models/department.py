@@ -307,9 +307,14 @@ class DepartmentDao:
 
     @classmethod
     async def acreate(cls, dept: Department) -> Department:
+        # flush() assigns the autoincrement id but doesn't persist; without
+        # an explicit commit the session's implicit rollback on close would
+        # erase the insert. Callers (e.g. OrgSyncService._create_dept) then
+        # do a follow-up UPDATE that fails with "0 rows matched" because
+        # the row it was trying to update was never actually written.
         async with get_async_db_session() as session:
             session.add(dept)
-            await session.flush()
+            await session.commit()
             await session.refresh(dept)
             return dept
 
