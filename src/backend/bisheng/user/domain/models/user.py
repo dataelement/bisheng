@@ -35,7 +35,7 @@ class UserBase(SQLModelSerializable):
     external_id: Optional[str] = Field(
         default=None,
         sa_column=Column(
-            String(128), nullable=True,
+            String(255), nullable=True,
             comment='External employee ID for sync',
         ),
     )
