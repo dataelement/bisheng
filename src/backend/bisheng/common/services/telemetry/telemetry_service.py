@@ -11,7 +11,6 @@ from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, 
     UserGroupInfo, UserRoleInfo, UserDepartmentInfo
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
-from bisheng.user.domain.models.user import User
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 
 logger = logging.getLogger(__name__)
