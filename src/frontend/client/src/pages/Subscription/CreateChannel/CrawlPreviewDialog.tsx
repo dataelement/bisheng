@@ -32,7 +32,19 @@ interface CrawlPreviewDialogProps {
     onCancel?: () => void;
 }
 
-type CrawlStatus = "loading" | "success" | "error" | "singlePageWarning";
+type CrawlStatus = "loading" | "success" | "error";
+
+/** Maps API / legacy codes (19003–19005, 13003–13005) to i18n keys for crawl preview errors. */
+function crawlErrorMessageKey(code: number | null): string {
+  if (code === 19004 || code === 13004) {
+    return "com_subscription.crawl_error_19004";
+  }
+  if (code === 19005 || code === 13005) {
+    return "com_subscription.crawl_error_19005";
+  }
+  // 19003, 13003, unknown, network
+  return "com_subscription.crawl_error_19003";
+}
 
 export function CrawlPreviewDialog({
     open,
@@ -63,24 +75,19 @@ export function CrawlPreviewDialog({
                 const res = await crawlTempSourceApi({ url });
                 const root: any = res as any;
 
-                const code = root?.status_code ?? root?.code;
-                if (code && code !== 200) {
+                const codeRaw = root?.status_code ?? root?.code;
+                if (codeRaw && codeRaw !== 200) {
                     if (requestIdRef.current !== currentId) return;
-                    // 13005：检测为单篇文章或非列表页
-                    if (code === 13005) {
-                        setStatus("singlePageWarning");
-                        setErrorCode(code);
-                        return;
-                    }
-                    // 13004：权限问题，无法爬取
-                    if (code === 13004) {
-                        setStatus("error");
-                        setErrorCode(code);
-                        return;
-                    }
-                    // 13003 及其它：解析失败
+                    const code = Number(codeRaw);
                     setStatus("error");
-                    setErrorCode(code);
+                    // 19005/13005：单篇或非列表页；19004/13004：权限；19003/13003：解析失败；其它非 200 同 19003
+                    if (
+                        [19005, 13005, 19004, 13004, 19003, 13003].includes(code)
+                    ) {
+                        setErrorCode(code);
+                    } else {
+                        setErrorCode(19003);
+                    }
                     return;
                 }
 
@@ -95,7 +102,8 @@ export function CrawlPreviewDialog({
 
                 if (likelySinglePage) {
                     if (requestIdRef.current !== currentId) return;
-                    setStatus("singlePageWarning");
+                    setStatus("error");
+                    setErrorCode(19005);
                     return;
                 }
 
@@ -126,6 +134,7 @@ export function CrawlPreviewDialog({
             } catch {
                 if (requestIdRef.current !== currentId) return;
                 setStatus("error");
+                setErrorCode(19003);
             }
         })();
     }, [open, url]);
@@ -295,16 +304,12 @@ export function CrawlPreviewDialog({
                         </div>
                     )}
 
-                    {(status === "error" || status === "singlePageWarning") && (
+                    {status === "error" && (
                         <div className="flex-1 rounded border border-[#E5E6EB] min-h-[270px] px-6 py-8 flex flex-col justify-between">
                             <div className="flex-1 flex flex-col items-center justify-center text-center">
                                 <ChannelBookIcon className="w-[100px] h-[100px] mb-5" />
                                 <p className="text-[14px] text-[#4E5969] leading-6">
-                                    {status === "singlePageWarning"
-                                        ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
-                                        : errorCode === 13004
-                                            ? localize("com_subscription.crawl_failed_due_to_permissions")
-                                            : localize("com_subscription.parse_failed_retry_or_submit")}
+                                    {localize(crawlErrorMessageKey(errorCode))}
                                 </p>
                             </div>
                         </div>
@@ -312,9 +317,9 @@ export function CrawlPreviewDialog({
                 </div>
 
                 {/* 底部操作：爬取中也展示两按钮，添加到信源置灰 */}
-                {(status === "loading" || status === "success" || status === "error" || status === "singlePageWarning") && (
+                {(status === "loading" || status === "success" || status === "error") && (
                     <div className="mt-auto flex shrink-0 items-center justify-between gap-3 pt-4">
-                        {(status === "success" || status === "error" || status === "singlePageWarning") ? (
+                        {(status === "success" || status === "error") ? (
                             <button
                                 type="button"
                                 className="text-[14px] text-[#999999] transition-colors hover:text-[#165DFF]"
