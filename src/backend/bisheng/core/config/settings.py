@@ -221,6 +221,12 @@ class CeleryConf(BaseModel):
                 'schedule': crontab.from_string('0 9 * * *'),  # every 09:00
             }
 
+        if 'sync_information_article_hourly' not in self.beat_schedule:
+            self.beat_schedule['sync_information_article_hourly'] = {
+                'task': 'bisheng.worker.information.article.sync_information_article',
+                'schedule': crontab.from_string('*/30 * * * *'),  # exec Every half hour
+            }
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info['schedule'], str):

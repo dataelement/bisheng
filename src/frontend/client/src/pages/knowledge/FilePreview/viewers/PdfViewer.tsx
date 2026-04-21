@@ -44,6 +44,10 @@ export function PdfViewer({
             return acc;
         }, {});
     }, [getPageNumber, highlightBboxes]);
+    /** Latest intersection ratio per page — observer only reports changed targets per callback */
+    const pageVisibilityRef = useRef<Map<number, number>>(new Map());
+    const isProgrammaticScrollRef = useRef(false);
+    const unlockScrollTimerRef = useRef<number | null>(null);
 
     // Render a single PDF page to canvas
     const renderPage = useCallback(
@@ -94,7 +98,14 @@ export function PdfViewer({
     // Scroll to target page
     useEffect(() => {
         if (targetPage && pageRefs.current.has(targetPage)) {
+            isProgrammaticScrollRef.current = true;
+            if (unlockScrollTimerRef.current !== null) {
+                window.clearTimeout(unlockScrollTimerRef.current);
+            }
             pageRefs.current.get(targetPage)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            unlockScrollTimerRef.current = window.setTimeout(() => {
+                isProgrammaticScrollRef.current = false;
+            }, 700);
         }
     }, [targetPage]);
 
@@ -115,18 +126,33 @@ export function PdfViewer({
         });
     }, [getPageNumber, pageSizes, targetBBox]);
 
+    useEffect(() => {
+        return () => {
+            if (unlockScrollTimerRef.current !== null) {
+                window.clearTimeout(unlockScrollTimerRef.current);
+            }
+        };
+    }, []);
+
     // IntersectionObserver to track current visible page
     useEffect(() => {
         if (!pdfDoc || !scrollContainerRef.current) return;
 
+        pageVisibilityRef.current.clear();
+
         const observer = new IntersectionObserver(
             (entries) => {
+                if (isProgrammaticScrollRef.current) return;
+                for (const entry of entries) {
+                    const pageNum = Number(entry.target.getAttribute("data-page"));
+                    if (!Number.isFinite(pageNum)) continue;
+                    pageVisibilityRef.current.set(pageNum, entry.intersectionRatio);
+                }
                 let mostVisiblePage = 1;
                 let maxRatio = 0;
-                entries.forEach((entry) => {
-                    const pageNum = Number(entry.target.getAttribute("data-page"));
-                    if (entry.intersectionRatio > maxRatio) {
-                        maxRatio = entry.intersectionRatio;
+                pageVisibilityRef.current.forEach((ratio, pageNum) => {
+                    if (ratio > maxRatio) {
+                        maxRatio = ratio;
                         mostVisiblePage = pageNum;
                     }
                 });

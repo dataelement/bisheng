@@ -7,6 +7,7 @@
     "check-imports": "node scripts/check-case-sensitive-imports.mjs",
     "start": "cross-env NODE_ENV=development vite",
     "build": "cross-env NODE_ENV=production vite build",
+    "build:vconsole": "cross-env NODE_ENV=production VITE_ENABLE_VCONSOLE=true vite build",
     "build:file": "cross-env NODE_ENV=production vite build --debug > vite-output.log 2>&1",
     "build:ci": "cross-env NODE_ENV=development vite build --mode ci",
     "preview-prod": "cross-env NODE_ENV=development vite preview",
@@ -149,9 +150,11 @@
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.2.5",
     "typescript": "^5.3.3",
+    "vconsole": "^3.15.1",
     "vite": "^6.3.6",
     "vite-plugin-compression2": "^2.2.1",
     "vite-plugin-node-polyfills": "^0.23.0",
     "vite-plugin-pwa": "^0.21.2"
-  }
+  },
+  "packageManager": "yarn@4.5.0+sha512.837566d24eec14ec0f5f1411adb544e892b3454255e61fdef8fd05f3429480102806bac7446bc9daff3896b01ae4b62d00096c7e989f1596f2af10b927532f39"
 }

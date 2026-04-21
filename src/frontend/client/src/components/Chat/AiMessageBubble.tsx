@@ -407,6 +407,13 @@ function AssistantBubble({
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
+    const isWaitingFirstToken =
+        isStreaming &&
+        isLatest &&
+        !message.error &&
+        !regularContent &&
+        !thinkingContent &&
+        webContent.length === 0;
 
     // Show a "等待模型响应…" pill while the request is in flight but no
     // tokens / events have landed yet. Disappears as soon as anything
@@ -476,6 +483,12 @@ function AssistantBubble({
                                 : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
                         )}
                     >
+
+                        {isWaitingFirstToken ? (
+                            <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                                <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
+                            </div>
+                        ) : (
                         <Markdown
                             content={regularContent}
                             webContent={webContent}
@@ -483,6 +496,7 @@ function AssistantBubble({
                             showCursor={showCursor}
                             isLatestMessage={!!isLatest}
                         />
+                        )}
                     </div>
                 )}
 

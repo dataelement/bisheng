@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
+from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
 from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
@@ -198,10 +199,6 @@ class ChannelService:
                 if new_channel_info_sources:
                     from bisheng.worker.information.article import sync_information_article
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
-                    for one in new_channel_info_sources:
-                        # Sync articles for the new information source one hour later
-                        exec_time = datetime.now() + timedelta(hours=1)
-                        sync_information_article.apply_async(args=(one.id,), eta=exec_time)
 
         # Update latest_article_update_time for the new channel
         if channel_model.source_list:
@@ -1607,10 +1604,8 @@ class ChannelService:
             Number of channels updated
         """
         from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
-        from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_sync_db_session
         from bisheng.core.search.elasticsearch.manager import get_es_connection_sync
-        from sqlmodel import update
 
         if not channels:
             return 0
@@ -1618,69 +1613,63 @@ class ChannelService:
         article_service = ArticleEsService()
         updated_count = 0
 
-        with get_sync_db_session() as session:
-            update_channels = []
-            for channel in channels:
-                try:
-                    # Get latest article create_time
-                    main_rule_groups = ChannelService._extract_filter_rule_groups(channel, channel_type="main")
-                    query = article_service._build_count_query(
-                        source_ids=channel.source_list or [],
-                        filter_rules=main_rule_groups or None,
-                    )
-                    if query is None:
-                        # No valid query (empty source_list or no filter rules), clear the time
-                        channel.latest_article_update_time = None
-                        update_channels.append(channel)
-                        updated_count += 1
-                        continue
-
-                    client = get_es_connection_sync()
-                    body = {
-                        "size": 1,
-                        "query": query,
-                        "sort": [{"publish_time": {"order": "desc"}}],
-                        "_source": ["publish_time"],
-                    }
-                    response = client.search(index=ARTICLE_INDEX_NAME, body=body)
-                    hits = response["hits"]["hits"]
-                    if not hits:
-                        # No articles found, clear the time
-                        channel.latest_article_update_time = None
-                        update_channels.append(channel)
-                        updated_count += 1
-                        continue
-
-                    latest_publish_time = hits[0]["_source"].get("publish_time")
-                    if not latest_publish_time:
-                        channel.latest_article_update_time = None
-                        update_channels.append(channel)
-                        updated_count += 1
-                        continue
-
-                    latest_article_time = ChannelService._normalize_datetime(
-                        datetime.fromisoformat(latest_publish_time)
-                    )
-                    channel.latest_article_update_time = latest_article_time
+        update_channels = []
+        for channel in channels:
+            try:
+                # Get latest article create_time
+                main_rule_groups = ChannelService._extract_filter_rule_groups(channel, channel_type="main")
+                query = article_service._build_count_query(
+                    source_ids=channel.source_list or [],
+                    filter_rules=main_rule_groups or None,
+                )
+                if query is None:
+                    # No valid query (empty source_list or no filter rules), clear the time
+                    channel.latest_article_update_time = None
                     update_channels.append(channel)
                     updated_count += 1
-
-                except Exception as exc:
-                    logger.exception(
-                        f"Failed to update latest_article_update_time for channel {channel.id}: {exc}"
-                    )
                     continue
 
-            if update_channels:
+                client = get_es_connection_sync()
+                body = {
+                    "size": 1,
+                    "query": query,
+                    "sort": [{"publish_time": {"order": "desc"}}],
+                    "_source": ["publish_time"],
+                }
+                response = client.search(index=ARTICLE_INDEX_NAME, body=body)
+                hits = response["hits"]["hits"]
+                if not hits:
+                    # No articles found, clear the time
+                    channel.latest_article_update_time = None
+                    update_channels.append(channel)
+                    updated_count += 1
+                    continue
+
+                latest_publish_time = hits[0]["_source"].get("publish_time")
+                if not latest_publish_time:
+                    channel.latest_article_update_time = None
+                    update_channels.append(channel)
+                    updated_count += 1
+                    continue
+
+                latest_article_time = ChannelService._normalize_datetime(
+                    datetime.fromisoformat(latest_publish_time)
+                )
+                channel.latest_article_update_time = latest_article_time
+                update_channels.append(channel)
+                updated_count += 1
+
+            except Exception as exc:
+                logger.exception(
+                    f"Failed to update latest_article_update_time for channel {channel.id}: {exc}"
+                )
+                continue
+
+        if update_channels:
+            with get_sync_db_session() as session:
+                channel_repository = ChannelRepositoryImpl(session=session)
                 # Batch update channels in the database using UPDATE statements
-                for channel in update_channels:
-                    stmt = (
-                        update(Channel)
-                        .where(Channel.id == channel.id)
-                        .values(latest_article_update_time=channel.latest_article_update_time)
-                    )
-                    session.execute(stmt)
-                session.commit()
+                channel_repository.update_channel_latest_article_update_time(update_channels)
         return updated_count
 
     # ──────────────────────────────────────────

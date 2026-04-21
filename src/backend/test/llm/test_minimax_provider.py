@@ -3,9 +3,9 @@
 These tests verify the MiniMax provider changes without requiring the full
 bisheng backend to be installed, by testing the specific files that were changed.
 """
+import ast
 import json
 import os
-import ast
 import unittest
 
 
@@ -15,7 +15,7 @@ class TestMiniMaxLLMModuleChanges(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.llm_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
         )
         cls.llm_py_path = os.path.normpath(cls.llm_py_path)
         with open(cls.llm_py_path) as f:
@@ -333,7 +333,8 @@ class TestOpenAIParamsFunction(unittest.TestCase):
 
     def test_preserves_model_name(self):
         """Model name should be preserved."""
-        for name in ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-Text-01']:
+        for name in ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed',
+                     'MiniMax-Text-01']:
             result = self._openai_params_fn(
                 {'model': name},
                 {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},

@@ -16,6 +16,8 @@ from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigD
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, ChatOpenAIReasoning, \
     AzureChatOpenAI, ChatZhipuAI, ChatAnthropic, MoonshotChat
+from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
+    AzureChatOpenAI, ChatZhipuAI, ChatAnthropic, MoonshotChat, ChatVoiceEngine
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMServer, LLMModel
@@ -165,7 +167,7 @@ _llm_node_type: Dict = {
     LLMServerType.SPARK.value: {'client': ChatOpenAICompatible, 'params_handler': _get_spark_params},
     LLMServerType.TENCENT.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.MOONSHOT.value: {'client': MoonshotChat, 'params_handler': _get_openai_params},
-    LLMServerType.VOLCENGINE.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
+    LLMServerType.VOLCENGINE.value: {'client': ChatVoiceEngine, 'params_handler': _get_openai_params},
     LLMServerType.SILICON.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.MIND_IE.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
 }
@@ -177,7 +179,7 @@ class BishengLLM(BishengBase, BaseChatModel):
     """
 
     streaming: Optional[bool] = Field(default=None, description="Whether to use streaming output", alias="stream")
-    temperature: Optional[float] = Field(default=1, description="Model Generated Temperature")
+    temperature: Optional[float] = Field(default=None, description="Model Generated Temperature")
 
     llm: Optional[BaseChatModel] = Field(default=None)
 

@@ -17,3 +17,5 @@ declare const __APP_ENV__: {
   PLATFORM_ORIGIN?: string;
   [key: string]: any;
 };
+
+declare const __VCONSOLE_ENABLED__: boolean;

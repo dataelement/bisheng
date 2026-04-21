@@ -1,3 +1,4 @@
+import { generateUUID } from "~/utils";
 import request from "./request";
 
 // 毕昇config
@@ -236,7 +237,7 @@ export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'li
     formData.append("file", file);
     if (uploadMode) {
         formData.append("endpoint", "custom");
-        formData.append("file_id", crypto.randomUUID());
+        formData.append("file_id", generateUUID(32));
         formData.append("file_name", file.name);
     }
     const urlMap = {

@@ -12,6 +12,22 @@ import "./style/classes.css";
 // @ts-ignore
 import "./style/markdown.css";
 import { QueryClient, QueryClientProvider } from "react-query";
+
+if (__VCONSOLE_ENABLED__) {
+  import('vconsole').then(({ default: VConsole }) => {
+    const vc = new VConsole();
+    vc.hideSwitch();
+    let visible = false;
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        visible ? vc.hide() : vc.show();
+        visible = !visible;
+      }
+    });
+  });
+}
+
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
