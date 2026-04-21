@@ -473,6 +473,15 @@ class LoginUser(BaseModel):
         return login_user
 
     @classmethod
+    async def get_model_admin_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
+        """Allow model-management access to super admins or users with model menu."""
+        login_user = await cls.get_login_user(auth_jwt)
+        if login_user.is_admin():
+            return login_user
+        await cls.assert_effective_web_menu_contains(login_user.user_id, 'model')
+        return login_user
+
+    @classmethod
     async def get_login_user_from_ws(cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str = None) -> Self:
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
         return await cls.init_login_user(
