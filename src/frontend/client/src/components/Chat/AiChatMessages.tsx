@@ -5,12 +5,14 @@
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
 import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 
 interface AiChatMessagesProps {
@@ -131,6 +133,8 @@ export default function AiChatMessages({
     onRegenerate,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
+    const isNarrowViewport = usePrefersMobileLayout();
+    const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -139,6 +143,35 @@ export default function AiChatMessages({
 
     // Build message tree from flat array (skipped in flat mode)
     const tree = useMemo(() => (flatMode ? [] : buildMessageTree(messages)), [messages, flatMode]);
+
+    const headerTitleText = useMemo(() => {
+        const raw = tree[0]?.flow_name || title;
+        if (raw != null && String(raw).trim() !== "") return String(raw).trim();
+        return localize("com_ui_new_chat");
+    }, [tree, title, localize]);
+
+    useEffect(() => {
+        if (hideHeaderTitle) {
+            setChatMobileHeader(null);
+            return;
+        }
+        setChatMobileHeader({
+            title: headerTitleText,
+            conversationId,
+            flowId: "",
+            flowType: 15,
+            readOnly: !!shareToken,
+            hideShare,
+        });
+        return () => setChatMobileHeader(null);
+    }, [
+        hideHeaderTitle,
+        headerTitleText,
+        conversationId,
+        shareToken,
+        hideShare,
+        setChatMobileHeader,
+    ]);
 
     // Check if user is near bottom
     const checkNearBottom = () => {
@@ -246,7 +279,14 @@ export default function AiChatMessages({
             )}
             <div
                 ref={scrollRef}
-                className={`h-full overflow-y-auto scrollbar-on-hover ${hideHeaderTitle ? "pt-2" : "pt-14"}`}
+                className={cn(
+                    "h-full overflow-y-auto scrollbar-on-hover",
+                    hideHeaderTitle
+                        ? "pt-2"
+                        : isNarrowViewport
+                          ? "pt-11"
+                          : "pt-14",
+                )}
                 onScroll={handleScroll}
             >
                 <div

@@ -58,7 +58,7 @@ export const ChatToolDown = ({
           )}
         >
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal touch-mobile:sr-only">
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
             {localize("com_tools_title")}
           </span>
         </div>
@@ -131,7 +131,7 @@ export const LinsiTools = ({ tools, setTools }) => {
       <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 touch-mobile:px-1.5">
         <div className={cn("flex gap-2", active && "text-blue-600")}>
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal touch-mobile:sr-only">
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
             {localize("com_tools_title")}
           </span>
         </div>

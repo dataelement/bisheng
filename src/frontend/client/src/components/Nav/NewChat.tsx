@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, Plus } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { matchPath, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
@@ -114,10 +114,35 @@ export default function NewChat({
   return (
     <div className="sticky left-0 right-0 top-0 z-50 bg-white">
       <div className="" style={{ transform: 'none' }}>
-        <div className="mb-4 flex items-center justify-between">
-          <p className="font-medium text-[#212121] text-[16px] ml-2">{localize('com_nav_home')}</p>
-        </div>
-        <div className="mb-2 hidden w-full touch-mobile:flex flex-nowrap items-stretch justify-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {isSmallScreen ? (
+          <div className="-mx-3 shrink-0 border-b border-[#e5e6eb] px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              {bsConfig?.sidebarIcon?.image ? (
+                <img
+                  className="h-8 w-8 rounded-md object-contain"
+                  src={bsConfig.sidebarIcon.image}
+                  alt={localize('com_nav_home')}
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-md bg-[#F2F3F5]" aria-hidden />
+              )}
+              <button
+                type="button"
+                onClick={toggleNav}
+                aria-label={localize('com_nav_close_sidebar')}
+                className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+              >
+                <X className="size-4" strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-4 flex items-center justify-between">
+            <p className="ml-2 text-[16px] font-medium text-[#212121]">{localize('com_nav_home')}</p>
+          </div>
+        )}
+        {/* 与频道 / 知识空间 H5 抽屉四入口同款：SubscriptionMobileDrawerNavTabs / KnowledgeMobileDrawerNavTabs */}
+        <div className="-mx-3 mb-2 hidden w-full shrink-0 touch-mobile:flex touch-mobile:items-center touch-mobile:justify-center touch-mobile:gap-2 touch-mobile:border-b touch-mobile:border-[#e5e6eb] touch-mobile:px-2 touch-mobile:py-2">
           {[
             {
               section: 'home',
@@ -158,12 +183,11 @@ export default function NewChat({
                 key={link.section}
                 to={link.to}
                 aria-label={link.label}
+                title={link.label}
                 className={({ isActive: navActive }) =>
                   cn(
-                    'flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors',
-                    navActive || link.isActive
-                      ? 'bg-[#E6EDFC] text-[#335CFF]'
-                      : 'text-[#818181] hover:bg-[#f2f3f5]',
+                    'flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[#f2f3f5]',
+                    navActive || link.isActive ? 'bg-[#e6edfc]' : undefined,
                   )
                 }
               >
