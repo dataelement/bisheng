@@ -222,9 +222,11 @@ export function ConversationHistory({
                                                 <button
                                                     type="button"
                                                     className={cn(
-                                                        "flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity",
+                                                        "flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 transition-opacity",
+                                                        // Desktop mouse: show on row hover or when menu open / active session; touch: always visible
+                                                        "opacity-0 group-hover:opacity-100 coarse-pointer:opacity-100",
                                                         (menuOpen || session.chat_id === activeChatId) &&
-                                                        "opacity-100"
+                                                            "opacity-100",
                                                     )}
                                                     onClick={(e) => e.stopPropagation()}
                                                     aria-label="More actions"
