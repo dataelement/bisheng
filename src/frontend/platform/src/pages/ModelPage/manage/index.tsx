@@ -15,11 +15,13 @@ import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
 import { useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
+import { canManageModelSettings } from "./permissions"
 import SystemModelConfig from "./SystemModelConfig"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
     const [expand, setExpand] = useState(false)
+    const canManage = canManageModelSettings(user)
 
     return <div className="text-sm bs-table-row">
         <div className={`grid grid-cols-2 transition-colors hover:bg-muted/50 items-center mt-1 mx-2 h-[52px] rounded-sm`}>
@@ -33,7 +35,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
             </div>
             <div className="bs-table-td h-full p-2 flex justify-end items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
                 <Button variant="link" onClick={() => onModel(data.id)}
-                    disabled={user.role !== 'admin'}
+                    disabled={!canManage}
                     className={`link px-0 pl-6`}>
                     {t('model.modelConfiguration')}
                 </Button>
@@ -62,7 +64,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                     {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
                                 </TableCell>
                                 <TableCell>
-                                    <Switch disabled={user.role !== 'admin'} checked={m.online} onCheckedChange={(bool) => onCheck(index, bool, m.id)} />
+                                    <Switch disabled={!canManage} checked={m.online} onCheckedChange={(bool) => onCheck(index, bool, m.id)} />
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -91,6 +93,7 @@ export default function Management() {
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
+    const canManage = canManageModelSettings(user)
 
     const [searchParams, setSearchParams] = useSearchParams()
     useEffect(() => {
@@ -160,11 +163,11 @@ export default function Management() {
         )}
         <div className="h-full overflow-y-auto">
             <div className="flex justify-end gap-4">
-                {user.role === 'admin' && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
                     <SettingIcon className="text-red-500" />
                     {t('model.systemModelSettings')}
                 </Button>}
-                {user.role === 'admin' && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
                 <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
             </div>
             <div className="h-[85%]">

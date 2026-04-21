@@ -16,12 +16,12 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao
 from ..schemas import FinetuneCreateReq
 
-router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(UserPayload.get_login_user)])
+router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(UserPayload.get_model_admin_user)])
 
 
 # create finetune job
 @router.post('/job')
-async def create_job(*, finetune: FinetuneCreateReq, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def create_job(*, finetune: FinetuneCreateReq, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     finetune = Finetune(**finetune.model_dump(exclude={'method'}),
                         method=finetune.method.value,
@@ -33,7 +33,7 @@ async def create_job(*, finetune: FinetuneCreateReq, login_user: UserPayload = D
 
 # Delete training task
 @router.delete('/job')
-async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     await FinetuneService.delete_job(job_id, login_user)
     return resp_200(None)
@@ -41,7 +41,7 @@ async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPaylo
 
 # Abort training mission
 @router.post('/job/cancel')
-async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     ret = await FinetuneService.cancel_job(job_id, login_user)
     return resp_200(ret)
@@ -49,14 +49,14 @@ async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPaylo
 
 # Publish Training Tasks
 @router.post('/job/publish')
-async def publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     ret = await FinetuneService.publish_job(job_id, login_user)
     return resp_200(ret)
 
 
 @router.post('/job/publish/cancel')
-async def cancel_publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def cancel_publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     ret = await FinetuneService.cancel_publish_job(job_id, login_user)
     return resp_200(ret)
@@ -73,7 +73,7 @@ async def get_job(*,
                   model_name: Optional[str] = Query(default='', description='Model Name,Fuzzy search'),
                   page: Optional[int] = Query(default=1, description='Page'),
                   limit: Optional[int] = Query(default=10, description='Listings Per Page'),
-                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                  login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     status_list = []
     if status.strip():
         status_list = [int(one) for one in status.strip().split(',')]
@@ -82,15 +82,13 @@ async def get_job(*,
                             model_name=model_name,
                             page=page,
                             limit=limit)
-    if not login_user.is_admin():
-        req_data.user_id = login_user.user_id
     data, total = await FinetuneService.get_all_job(req_data)
     return resp_200(data=PageData(data=data, total=total))
 
 
 # Get the latest details of the task, this interface will synchronize the querySFT-backendThe side updates the task status to the latest
 @router.get('/job/info')
-async def get_job_info(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_job_info(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     ret = await FinetuneService.get_job_info(job_id)
     return resp_200(ret)
@@ -98,7 +96,7 @@ async def get_job_info(*, job_id: str, login_user: UserPayload = Depends(UserPay
 
 @router.patch('/job/model')
 async def update_job(*, req_data: FinetuneChangeModelName,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                     login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     ret = await FinetuneService.change_job_model_name(req_data)
     return resp_200(ret)
@@ -107,7 +105,7 @@ async def update_job(*, req_data: FinetuneChangeModelName,
 @router.post('/job/file')
 async def upload_file(*,
                       files: list[UploadFile] = File(description='Training File List'),
-                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     try:
         ret = await FinetuneFileService.upload_file(files, False, login_user)
         return resp_200(ret)
@@ -127,7 +125,7 @@ async def upload_preset_file(*,
                              name: Optional[str] = Body(description='Dataset Name'),
                              qa_list: Optional[list[int]] = Body(default=None,
                                                                  description='QAThe knowledge base upon'),
-                             login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                             login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     ret = None
     if files:
         filepath, file_name = await async_file_download(files)
@@ -158,33 +156,33 @@ async def get_preset_file(*,
                           page_size: Optional[int] = None,
                           page_num: Optional[int] = None,
                           keyword: Optional[str] = None,
-                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                          login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     ret = await FinetuneFileService.get_preset_file(keyword, page_size, page_num)
     return resp_200(ret)
 
 
 @router.delete('/job/file/preset')
-async def delete_preset_file(*, file_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def delete_preset_file(*, file_id: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     await FinetuneFileService.delete_preset_file(file_id, login_user)
     return resp_200()
 
 
 @router.get('/job/file/download')
-async def get_download_url(*, file_url: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_download_url(*, file_url: str, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     minio_client = get_minio_storage_sync()
     download_url = await minio_client.get_share_link(file_url, clear_host=False)
     return resp_200(data={'url': download_url})
 
 
 @router.get('/server/filters')
-async def get_server_filters(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_server_filters(*, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     ret = await FinetuneService.get_server_filters()
     return resp_200(data=ret)
 
 
 @router.get('/model/list')
-async def get_model_list(login_user: UserPayload = Depends(UserPayload.get_login_user),
+async def get_model_list(login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
                          server_id: int = Query(..., description='ftService UniqueID')):
     """ DapatkanftList of all models under the service """
     ret = await FinetuneService.get_model_list(server_id)
@@ -192,7 +190,7 @@ async def get_model_list(login_user: UserPayload = Depends(UserPayload.get_login
 
 
 @router.get('/gpu')
-async def get_gpu_info(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_gpu_info(*, login_user: UserPayload = Depends(UserPayload.get_model_admin_user)):
     # get login user
     ret = await FinetuneService.get_gpu_info()
     return resp_200(data=ret)
