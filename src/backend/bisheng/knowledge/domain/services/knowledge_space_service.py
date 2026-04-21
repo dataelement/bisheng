@@ -1557,6 +1557,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_path: List[str],
         parent_id: Optional[int] = None,
         file_source: FileSource = None,
+        skip_approval: bool = False,
     ) -> List[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -1569,6 +1570,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
             raise SpaceFolderNotFoundError()
+
+        if not skip_approval:
+            from bisheng.approval.domain.services.approval_service import ApprovalService
+
+            if await ApprovalService.should_require_department_space_approval(knowledge_id):
+                approval_request = await ApprovalService.create_department_space_upload_request(
+                    request=self.request,
+                    login_user=self.login_user,
+                    space_id=knowledge_id,
+                    parent_folder_id=parent_id,
+                    file_paths=file_path,
+                )
+                return ApprovalService.build_pending_file_responses(
+                    approval_request=approval_request,
+                )
 
         level = 0
         file_level_path = ""

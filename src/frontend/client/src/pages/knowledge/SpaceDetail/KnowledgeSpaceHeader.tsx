@@ -384,6 +384,11 @@ export function KnowledgeSpaceHeader({
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
                             <h1 className="text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">{space.name}</h1>
+                            {space.spaceKind === "department" && (
+                                <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
+                                    {localize("com_knowledge.department_badge")}
+                                </span>
+                            )}
                             <Tooltip>
                                 <TooltipTrigger className="cursor-pointer">
                                     <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />

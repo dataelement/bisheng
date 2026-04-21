@@ -4,6 +4,7 @@ from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.channel.domain.services.channel_subscribe_approval_handler import ChannelSubscribeApprovalHandler
+from bisheng.approval.domain.services.message_handler import DepartmentKnowledgeSpaceUploadApprovalHandler
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.repositories.implementations.space_channel_member_repository_impl import \
     SpaceChannelMemberRepositoryImpl
@@ -71,10 +72,15 @@ async def get_message_service(
     knowledge_space_subscribe_handler = KnowledgeSpaceSubscribeHandler(
         notify_sender=notify_sender
     )
+    department_knowledge_space_upload_handler = DepartmentKnowledgeSpaceUploadApprovalHandler()
     message_service = MessageService(
         message_repository=message_repository,
         message_read_repository=message_read_repository,
-        approval_handlers=[channel_subscribe_handler, knowledge_space_subscribe_handler],
+        approval_handlers=[
+            channel_subscribe_handler,
+            knowledge_space_subscribe_handler,
+            department_knowledge_space_upload_handler,
+        ],
     )
 
     return message_service

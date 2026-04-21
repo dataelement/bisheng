@@ -1424,6 +1424,8 @@
     "joined": "参加済み",
     "joined_by_me": "私が参加",
     "joined_count_label": "参加人数:",
+    "department_spaces": "部門ナレッジスペース",
+    "department_badge": "部門",
     "knowledge_space": "ナレッジスペース",
     "level_suffix": "レベル",
     "load_doc_failed": "ドキュメントの読み込みに失敗しました",

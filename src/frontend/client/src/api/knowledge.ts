@@ -106,6 +106,11 @@ export interface KnowledgeSpace {
 
     /** Optional subscription status (e.g. "subscribed") from detail APIs */
     subscriptionStatus?: string;
+
+    /** "department" when bound to a department, "normal" otherwise */
+    spaceKind?: "normal" | "department";
+    departmentId?: number;
+    departmentName?: string;
 }
 
 /** Space tag entity used by tagging UI */
@@ -271,6 +276,9 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).subscription_status ??
             (raw as any).subscriptionStatus ??
             undefined,
+        spaceKind: (raw as any).space_kind || "normal",
+        departmentId: (raw as any).department_id ?? undefined,
+        departmentName: (raw as any).department_name ?? undefined,
     };
 }
 
@@ -515,6 +523,20 @@ export async function getManagedSpacesApi(params?: {
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/managed`, {
         params: {
             order_by: params?.order_by ?? 'name',
+        },
+    });
+    return (res?.data || []).map(mapSpace);
+}
+
+/**
+ * Get department knowledge spaces the current user belongs to
+ */
+export async function getDepartmentSpacesApi(params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/department`, {
+        params: {
+            order_by: params?.order_by,
         },
     });
     return (res?.data || []).map(mapSpace);

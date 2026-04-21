@@ -1428,6 +1428,8 @@
     "joined": "已加入",
     "joined_by_me": "我加入的",
     "joined_count_label": "加入人数：",
+    "department_spaces": "部门知识空间",
+    "department_badge": "部门",
     "knowledge_space": "知识空间",
     "level_suffix": "级",
     "load_doc_failed": "无法加载文档",

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
@@ -145,8 +145,10 @@ export function KnowledgeSpaceSidebar({
     };
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [joinedCollapsed, setJoinedCollapsed] = useState(false);
+    const [departmentCollapsed, setDepartmentCollapsed] = useState(false);
     const [createdSortBy, setCreatedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
     const [joinedSortBy, setJoinedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
+    const [departmentSortBy, setDepartmentSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
@@ -167,6 +169,17 @@ export function KnowledgeSpaceSidebar({
         placeholderData: (prev) => prev,
     });
 
+    // Fetch department space list
+    const { data: departmentSpaces = [], isLoading: isDepartmentLoading } = useQuery({
+        queryKey: ["knowledgeSpaces", "department", departmentSortBy],
+        queryFn: () => getDepartmentSpacesApi({ order_by: departmentSortBy }),
+        placeholderData: (prev) => prev,
+    });
+
+    // Filter department spaces out of joined list to avoid duplication
+    const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
+    const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
+
     // CRUD operations with optimistic updates (mirrors useChannelActions)
     const {
         handleUpdateSpace,
@@ -177,30 +190,37 @@ export function KnowledgeSpaceSidebar({
         activeSpaceId,
         createdSortBy,
         joinedSortBy,
+        departmentSortBy,
         createdSpaces,
-        joinedSpaces,
+        joinedSpaces: filteredJoinedSpaces,
+        departmentSpaces,
         onSpaceSelect,
     });
 
     // Auto-select first space when no space is active (mirrors ChannelSidebar)
     useEffect(() => {
         if (!activeSpaceId) {
-            // Wait for both to finish initial loading to guarantee priorities
-            if (isCreatedLoading || isJoinedLoading) return;
+            if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
 
-            if (createdSpaces.length > 0) {
+            if (departmentSpaces.length > 0) {
+                onSpaceSelect(departmentSpaces[0]);
+            } else if (createdSpaces.length > 0) {
                 onSpaceSelect(createdSpaces[0]);
-            } else if (joinedSpaces.length > 0) {
-                onSpaceSelect(joinedSpaces[0]);
+            } else if (filteredJoinedSpaces.length > 0) {
+                onSpaceSelect(filteredJoinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, createdSpaces, joinedSpaces, isCreatedLoading, isJoinedLoading, onSpaceSelect]);
+    }, [activeSpaceId, departmentSpaces, createdSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
 
-    const toggleSort = (type: "created" | "joined") => {
+    const toggleSort = (type: "created" | "joined" | "department") => {
         if (type === "created") {
             const next = SORT_CYCLE[(SORT_CYCLE.indexOf(createdSortBy) + 1) % SORT_CYCLE.length];
             queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "mine", createdSortBy] });
             setCreatedSortBy(next);
+        } else if (type === "department") {
+            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(departmentSortBy) + 1) % SORT_CYCLE.length];
+            queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "department", departmentSortBy] });
+            setDepartmentSortBy(next);
         } else {
             const next = SORT_CYCLE[(SORT_CYCLE.indexOf(joinedSortBy) + 1) % SORT_CYCLE.length];
             queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "joined", joinedSortBy] });
@@ -318,8 +338,40 @@ export function KnowledgeSpaceSidebar({
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
+                        {/* Department spaces — always on top per PRD */}
+                        {departmentSpaces.length > 0 && (
+                            <div className="pt-0">
+                                <SectionHeader
+                                    title={localize("com_knowledge.department_spaces")}
+                                    collapsed={departmentCollapsed}
+                                    onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
+                                    sortText={getSortLabel(departmentSortBy, localize)}
+                                    onSort={() => toggleSort("department")}
+                                />
+                                {!departmentCollapsed && (
+                                    <div className="space-y-1">
+                                        {departmentSpaces.map(s => (
+                                            <KnowledgeSpaceItem
+                                                key={s.id}
+                                                space={s}
+                                                type="department"
+                                                isActive={s.id === activeSpaceId}
+                                                onSelect={onSpaceSelect}
+                                                onUpdate={handleUpdateSpace}
+                                                onDelete={handleDeleteSpace}
+                                                onLeave={handleLeaveSpace}
+                                                onPin={(id, pinned) => handlePinSpace(id, pinned, "department")}
+                                                onSettings={onSpaceSettings}
+                                                onManageMembers={onManageMembers}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* My created */}
-                        <div className="pt-0">
+                        <div className={departmentSpaces.length > 0 ? "py-4" : "pt-0"}>
                             <SectionHeader
                                 title={localize("com_knowledge.created_by_me")}
                                 collapsed={createdCollapsed}
@@ -360,7 +412,7 @@ export function KnowledgeSpaceSidebar({
                             />
                             {!joinedCollapsed && (
                                 <div className="space-y-1">
-                                    {joinedSpaces.map(s => (
+                                    {filteredJoinedSpaces.map(s => (
                                         <KnowledgeSpaceItem
                                             key={s.id}
                                             space={s}
@@ -375,7 +427,7 @@ export function KnowledgeSpaceSidebar({
                                             onManageMembers={onManageMembers}
                                         />
                                     ))}
-                                    {!joinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
+                                    {!filteredJoinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
                                 </div>
                             )}
                         </div>

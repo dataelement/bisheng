@@ -1508,6 +1508,8 @@
     "joined": "Joined",
     "joined_by_me": "Joined by me",
     "joined_count_label": "Joined count:",
+    "department_spaces": "Department Spaces",
+    "department_badge": "Dept",
     "knowledge_space": "Knowledge Space",
     "level_suffix": "levels",
     "load_doc_failed": "Failed to load document",
