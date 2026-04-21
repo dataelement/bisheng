@@ -43,7 +43,7 @@ export interface CreateKnowledgeSpaceFormData {
 interface CreateKnowledgeSpaceDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onConfirm?: (data: CreateKnowledgeSpaceFormData) => void;
+    onConfirm?: (data: CreateKnowledgeSpaceFormData) => void | Promise<boolean | void>;
     onViewSpace?: () => void;
     onManageMembers?: () => void;
     mode?: "create" | "edit";
@@ -107,7 +107,7 @@ export function CreateKnowledgeSpaceDrawer({
         }
     }, [open, mode, editingSpace]);
 
-    const handleConfirm = () => {
+    const handleConfirm = async () => {
         if (!name.trim()) {
             showToast({
                 message: localize("com_subscription.knowledge_space_name_empty") || localize("com_knowledge.space_name_empty"),
@@ -121,7 +121,10 @@ export function CreateKnowledgeSpaceDrawer({
             joinPolicy,
             publishToSquare: needPublishOption ? publishToSquare : "no"
         };
-        onConfirm?.(payload);
+        const result = await onConfirm?.(payload);
+        if (result === false) {
+            return;
+        }
         // Only show success page in create mode
         if (mode === "create") {
             setShowSuccess(true);
@@ -409,4 +412,3 @@ export function CreateKnowledgeSpaceDrawer({
         </Sheet>
     );
 }
-

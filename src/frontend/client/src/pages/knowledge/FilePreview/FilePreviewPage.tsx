@@ -73,7 +73,10 @@ export default function FilePreviewPage() {
                     return;
                 }
 
-                setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${chosenUrl}`);
+                const resolvedUrl = /^https?:\/\//.test(chosenUrl)
+                    ? chosenUrl
+                    : `${window.location.origin}${__APP_ENV__.BASE_URL}${chosenUrl}`;
+                setFileUrl(resolvedUrl);
                 setFileType(ext);
             })
             .catch((err) => console.error("Failed to load preview URL:", err))

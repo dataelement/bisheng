@@ -1294,21 +1294,23 @@ class KnowledgeService(KnowledgeUtils):
         if not file:
             raise NotFoundError(msg="file not found")
         minio_client = get_minio_storage_sync()
+        original_object_name = cls.resolve_source_object_name(file.id, file.file_name, file.object_name)
+        preview_object_name = cls.resolve_preview_object_name(
+            file.id, file.file_name, file.preview_file_object_name
+        )
         if file.preview_file_object_name:
-            original_url = cls.get_file_share_url_with_empty(file.object_name)
-            preview_url = cls.get_file_share_url_with_empty(file.preview_file_object_name)
+            original_url = cls.get_file_share_url_with_empty(original_object_name)
+            preview_url = cls.get_file_share_url_with_empty(preview_object_name)
         # 130File parsing prior to version
         elif file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
-            original_url = minio_client.get_share_link_sync(cls.get_knowledge_file_object_name(file.id, file.file_name))
+            original_url = cls.get_file_share_url_with_empty(original_object_name)
             preview_url = ""
             if minio_client.object_exists_sync(object_name=str(file.id)):
                 preview_url = minio_client.get_share_link_sync(str(file.id))
         else:
-            original_url = cls.get_file_share_url_with_empty(file.object_name)
+            original_url = cls.get_file_share_url_with_empty(original_object_name)
             preview_url = ""
-            # 130After the version of the file parsing logic, only the source file and preview file are no longer transferredpdfSettings Updated. what double check raws pls
-            if file.file_name.endswith(('.doc', '.ppt', '.pptx')):
-                preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(file.id, file.file_name)
+            if preview_object_name:
                 preview_url = cls.get_file_share_url_with_empty(preview_object_name)
         return original_url, preview_url
 

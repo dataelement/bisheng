@@ -675,8 +675,16 @@ export async function createSpaceApi(data: {
     auth_type: string;
     is_released?: boolean;
 }): Promise<KnowledgeSpace> {
-    const res = await request.post(`/api/v1/knowledge/space`, data) as ApiResponse<RawKnowledgeSpace>;
-    return mapSpace({ ...res.data, user_role: SpaceRole.CREATOR });
+    const res: any = await request.post(`/api/v1/knowledge/space`, data);
+    const statusCode = res?.status_code ?? res?.code ?? 200;
+    if (statusCode !== 200) {
+        throw new Error(res?.status_message || res?.message || "createSpaceApi failed");
+    }
+    const raw = res?.data;
+    if (!raw || raw?.id === undefined || raw?.id === null) {
+        throw new Error("createSpaceApi: missing data");
+    }
+    return mapSpace({ ...raw, user_role: SpaceRole.CREATOR });
 }
 
 /**
