@@ -142,13 +142,13 @@ module.exports = {
     require('tailwindcss-animate'),
     require('tailwindcss-radix')(),
     plugin(({ addVariant }) => {
-      // Match usePrefersMobileLayout inverse: primary input is mouse-like (no width).
+      // Viewport breakpoints (align with Tailwind `lg` at 1024px).
+      addVariant('touch-desktop', '@media (min-width: 1024px)');
+      addVariant('touch-mobile', '@media (max-width: 1023px)');
+      // Primary input: mouse + hover vs touch / coarse pointer (for hover-only controls).
+      addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');
       addVariant(
-        'touch-desktop',
-        '@media (hover: hover) and (pointer: fine)',
-      );
-      addVariant(
-        'touch-mobile',
+        'coarse-pointer',
         '@media not ((hover: hover) and (pointer: fine))',
       );
     }),

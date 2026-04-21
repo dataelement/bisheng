@@ -114,7 +114,7 @@ export default function ChannelItem({
                 )}
             </div>
 
-            {/* 右侧区域：PC 仍为徽标/更多叠放 + hover 切换；H5 徽标在左、更多在右常驻 */}
+            {/* 右侧区域：窄屏为徽标在左/更多在右；宽屏为徽标与更多叠放。仅粗指针设备上更多按钮常驻，窄屏 PC 仍 hover 显示 */}
             <div
                 className={cn(
                     "relative flex flex-shrink-0 items-center justify-end",
@@ -126,11 +126,11 @@ export default function ChannelItem({
                     <span
                         className={cn(
                             "flex items-center justify-center rounded-md bg-[#335CFF33]/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
-                            "touch-mobile:relative touch-mobile:shrink-0 touch-mobile:opacity-100",
+                            "touch-mobile:relative touch-mobile:shrink-0 coarse-pointer:opacity-100",
                             "touch-desktop:absolute touch-desktop:right-0",
                             menuOpen
                                 ? "opacity-0"
-                                : "touch-mobile:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:opacity-100 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-0",
+                                : "coarse-pointer:opacity-100 fine-pointer:group-hover:opacity-0",
                         )}
                         style={{
                             transitionProperty: "opacity, background-color",
@@ -150,7 +150,7 @@ export default function ChannelItem({
                                 "z-10 flex size-7 shrink-0 items-center justify-center rounded-md outline-none hover:bg-black/5",
                                 menuOpen && "opacity-100",
                                 !menuOpen &&
-                                    "touch-mobile:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:opacity-100 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+                                    "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100",
                             )}
                             onClick={(e) => e.stopPropagation()}
                         >

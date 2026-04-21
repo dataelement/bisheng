@@ -142,12 +142,9 @@ export function ArticleCard({
                         <div
                             className={cn(
                                 "flex items-center gap-3 transition-opacity",
-                                // Narrow viewport, touch, or no-hover primary input: keep actions visible (not width-only).
-                                "touch-mobile:static touch-mobile:opacity-100 touch-mobile:pointer-events-auto",
-                                "[@media(hover:none)]:static [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto",
-                                "[@media(pointer:coarse)]:static [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:pointer-events-auto",
-                                // Desktop with mouse: float on row, show when hovering the card.
-                                "touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:absolute touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:right-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:pointer-events-auto touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+                                // Touch / coarse pointer: actions always visible; fine pointer (incl. narrow desktop): hover on card.
+                                "coarse-pointer:static coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto",
+                                "fine-pointer:pointer-events-none fine-pointer:absolute fine-pointer:right-0 fine-pointer:opacity-0 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100",
                             )}
                         >
                             {hasKnowledge && (

@@ -55,7 +55,7 @@ export function AgentCard({
                   'border border-transparent hover:border-[#E5E6EB] hover:bg-[#f7f8fa]',
                   isPinned
                     ? 'opacity-100'
-                    : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100 max-[768px]:opacity-100 max-[768px]:pointer-events-auto',
+                    : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100 coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto',
                 )}
                 aria-label={
                   isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
@@ -84,7 +84,7 @@ export function AgentCard({
       </div>
 
       {/* Tags (Hidden on hover) */}
-      <div className="flex gap-1 items-start mt-auto group-hover/card:hidden max-[768px]:hidden overflow-hidden flex-wrap h-[26px]">
+      <div className="flex gap-1 items-start mt-auto group-hover/card:hidden coarse-pointer:hidden overflow-hidden flex-wrap h-[26px]">
         {agent.tags && agent.tags.length > 0 ? (
           agent.tags.slice(0, 3).map((tag, idx) => (
             <div
@@ -102,7 +102,7 @@ export function AgentCard({
       </div>
 
       {/* Action Buttons (Visible only on hover) */}
-      <div className="hidden group-hover/card:flex max-[768px]:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
+      <div className="hidden group-hover/card:flex coarse-pointer:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
         <Button
           onClick={(e) => {
             e.stopPropagation();

@@ -1,11 +1,10 @@
 import useMediaQuery from './useMediaQuery';
 
 /**
- * Whether to use touch-first / H5 shell (overlay nav, drawers, stacked regions).
- * True when the primary interaction is not "desktop-like" (mouse + hover-capable fine pointer).
- * Does not use viewport width — resizing the window does not switch shell mode on PC.
+ * Narrow viewport / H5-style shell (overlay nav, drawers, stacked regions).
+ * Matches Tailwind `lg` breakpoint: max-width 1023px.
+ * Use coarse-pointer / touch-only CSS (or a dedicated hook) for hover-vs-tap affordances — not this hook.
  */
 export default function usePrefersMobileLayout(): boolean {
-  const isDesktopLikePointer = useMediaQuery('(hover: hover) and (pointer: fine)');
-  return !isDesktopLikePointer;
+  return useMediaQuery('(max-width: 1023px)');
 }

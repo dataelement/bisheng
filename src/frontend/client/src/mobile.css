@@ -86,7 +86,10 @@
   .sibling-switch {
     display: none;
   }
+}
 
+/* Hover-only chat controls: always visible on touch / coarse pointer, not on narrow desktop windows. */
+@media not ((hover: hover) and (pointer: fine)) {
   .hover-button {
     display: block;
     visibility: visible;
