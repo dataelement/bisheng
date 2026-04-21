@@ -118,6 +118,17 @@ class KnowledgeUtils(BaseService):
         return f"original/{file_id}.{file_ext}"
 
     @classmethod
+    def resolve_source_object_name(
+            cls, file_id: int | str, file_name: str, object_name: Optional[str] = None
+    ) -> Optional[str]:
+        """Prefer the persisted object path and fall back to the canonical storage path."""
+        if object_name:
+            return object_name
+        if not file_name:
+            return object_name
+        return cls.get_knowledge_file_object_name(file_id, file_name)
+
+    @classmethod
     def get_knowledge_bbox_file_object_name(cls, file_id: int | str) -> str:
         """Get the corresponding knowledge base filebboxFiles inminioStorage Path for"""
         return f"partitions/{file_id}.json"
@@ -137,6 +148,17 @@ class KnowledgeUtils(BaseService):
             return f"preview/{file_id}.docx"
         # No preview required for other file types
         return None
+
+    @classmethod
+    def resolve_preview_object_name(
+            cls, file_id: int | str, file_name: str = None, preview_file_object_name: Optional[str] = None
+    ) -> Optional[str]:
+        """Prefer the persisted preview path and fall back to the canonical preview path."""
+        if preview_file_object_name:
+            return preview_file_object_name
+        if not file_name:
+            return preview_file_object_name
+        return cls.get_knowledge_preview_file_object_name(file_id=file_id, file_name=file_name)
 
     @classmethod
     def get_tmp_preview_file_object_name(cls, file_path: str) -> Optional[str]:

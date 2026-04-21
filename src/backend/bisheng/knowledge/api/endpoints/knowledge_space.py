@@ -161,6 +161,7 @@ async def remove_member(
 async def list_space_children(
         space_id: int,
         parent_id: Optional[int] = None,
+        file_ids: List[int] = Query(default=None, description="精确文件ID列表"),
         order_field: str = 'file_type',
         order_sort: str = 'asc',
         file_status: List[int] = Query(default=None, description="文件状态列表"),
@@ -168,7 +169,7 @@ async def list_space_children(
         page_size: int = 20,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.list_space_children(space_id, parent_id, order_field, order_sort,
+    result = await svc.list_space_children(space_id, parent_id, file_ids, order_field, order_sort,
                                            file_status=file_status, page=page, page_size=page_size)
     return resp_200(result)
 
