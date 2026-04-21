@@ -19,7 +19,8 @@ class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
         statement = (
             select(User).where(User.user_id == user_id).options(
                 selectinload(User.groups),  # type: ignore
-                selectinload(User.roles)  # type: ignore
+                selectinload(User.roles),  # type: ignore
+                selectinload(User.departments)  # type: ignore
             )
         )
 
