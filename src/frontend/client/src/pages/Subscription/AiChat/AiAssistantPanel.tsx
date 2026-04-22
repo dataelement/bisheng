@@ -37,6 +37,10 @@ interface AiAssistantPanelProps {
     articleDocId?: string;
     /** Knowledge space file chat — when provided, switches to file chat mode */
     fileChat?: { spaceId: string; fileId: string };
+    /**
+     * H5 文章详情叠层：外层已有返回与标题，内层只保留清空等工具，避免双标题栏。
+     */
+    compactMobileChrome?: boolean;
 }
 
 /**
@@ -49,6 +53,7 @@ export function AiAssistantPanel({
     noBorder,
     articleDocId,
     fileChat,
+    compactMobileChrome = false,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -113,41 +118,53 @@ export function AiAssistantPanel({
         if (ok) clearConversation();
     };
 
+    const showCompactMobileHeader = compactMobileChrome && isH5;
+
+    const clearChatControl = (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="text-gray-400 p-0.5 group relative w-5 h-5"
+                        onClick={handleClearConversation}
+                    >
+                        <ChannelClearIcon className="size-4" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>{localize("com_subscription.clear_chat")}</p>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+
     return (
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
-            <div className={`relative flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
-                <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 touch-desktop:pointer-events-auto touch-desktop:static touch-desktop:w-auto touch-desktop:translate-x-0 touch-desktop:text-left">
-                    {localize("com_subscription.ai_assistant")}
-                </h3>
-                <div className="ml-auto flex items-center gap-3 pr-3">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    className="text-gray-400 p-0.5 group relative w-5 h-5"
-                                    onClick={handleClearConversation}
-                                >
-                                    <ChannelClearIcon className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{localize("com_subscription.clear_chat")}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                    {!isH5 && (
-                        <Button
-                            variant="ghost"
-                            className="text-gray-400 p-0.5 group relative w-5 h-5"
-                            onClick={onClose}
-                        >
-                            <ChevronsRightIcon className="size-4" />
-                        </Button>
-                    )}
+            {showCompactMobileHeader ? (
+                <div className={`flex shrink-0 items-center justify-end px-3 py-2 ${noBorder ? '' : 'border-b border-gray-100'}`}>
+                    {clearChatControl}
                 </div>
-            </div>
+            ) : (
+                <div className={`relative flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
+                    <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 touch-desktop:pointer-events-auto touch-desktop:static touch-desktop:w-auto touch-desktop:translate-x-0 touch-desktop:text-left">
+                        {localize("com_subscription.ai_assistant")}
+                    </h3>
+                    <div className="ml-auto flex items-center gap-3 pr-3">
+                        {clearChatControl}
+                        {!isH5 && (
+                            <Button
+                                variant="ghost"
+                                className="text-gray-400 p-0.5 group relative w-5 h-5"
+                                onClick={onClose}
+                            >
+                                <ChevronsRightIcon className="size-4" />
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Messages Area */}
             <AiChatMessages

@@ -101,15 +101,15 @@ export function AgentCard({
         )}
       </div>
 
-      {/* Action Buttons (Visible only on hover) */}
-      <div className="hidden group-hover/card:flex coarse-pointer:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
+      {/* Action Buttons (Visible only on hover / 触控始终可见)；≤576px 缩小以免双列卡片横向溢出 */}
+      <div className="hidden group-hover/card:flex coarse-pointer:flex max-[576px]:gap-0.5 gap-1 items-stretch justify-center w-full min-w-0 mt-auto h-[28px] max-[576px]:h-[24px]">
         <Button
           onClick={(e) => {
             e.stopPropagation();
             onShare(agent);
           }}
           variant="outline"
-          className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px] font-normal"
+          className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal max-[576px]:px-1 max-[576px]:text-[11px] max-[576px]:leading-[14px]"
         >
           {localize('com_app_share_app')}
         </Button>
@@ -118,7 +118,7 @@ export function AgentCard({
             e.stopPropagation();
             onStartChat(agent);
           }}
-          className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px] font-normal"
+          className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal max-[576px]:px-1 max-[576px]:text-[11px] max-[576px]:leading-[14px]"
         >
           {localize('com_app_start_chat')}
         </Button>

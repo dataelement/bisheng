@@ -25,7 +25,7 @@ import {
     AlertDialogTitle,
 } from "~/components/ui/AlertDialog";
 import { AddSourceDropdown } from "./AddSourceDropdown";
-import { CrawlPreviewDialog } from "./CrawlPreviewDialog";
+import { CrawlPreviewPanel } from "./CrawlPreviewDialog";
 import { CreateChannelSuccessContent } from "./CreateChannelSuccess";
 import KnowledgeSyncSection, {
     type KnowledgeSyncDraft,
@@ -99,6 +99,8 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
+    /** H5：「选择知识空间」下钻层挂载在此容器内，避免与抽屉叠加第二层全屏 Dialog */
+    const knowledgePickerHostRef = useRef<HTMLDivElement>(null);
     // v2.5 Module D — owned here so the draft survives across renders of the
     // section and travels with the channel create/update payload on submit.
     const [syncDraft, setSyncDraft] = useState<KnowledgeSyncDraft>({
@@ -238,10 +240,17 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    className="flex w-full max-w-[900px] flex-col overflow-y-auto scrollbar-on-hover bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
-                    onScroll={handleBodyScroll}
-                    data-scrolling={isBodyScrolling ? "true" : "false"}
+                    className="flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                 >
+                    <div
+                        ref={knowledgePickerHostRef}
+                        className={cn(
+                            "relative flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-on-hover",
+                            form.crawlDialogOpen && "overflow-hidden"
+                        )}
+                        onScroll={handleBodyScroll}
+                        data-scrolling={isBodyScrolling ? "true" : "false"}
+                    >
                     <button
                         type="button"
                         onClick={() => handleClose(false)}
@@ -460,10 +469,12 @@ export function CreateChannelDrawer({
                             {/* 是否发布到广场（仅在非私有时展示） */}
                             {form.visibility !== "private" && (
                                 <div className="space-y-3">
-                                    <Label className="text-[14px] text-[#1D2129]">
-                                        <span className="text-[#F53F3F] mr-1">*</span>
-                                        {localize("com_subscription.is_publish_plaza")}
-                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>{localize("com_subscription.publish_to_square_description")}</span>
+                                    <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                        <span>
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            {localize("com_subscription.is_publish_plaza")}
+                                        </span>
+                                        <span className={FORM_HINT_TEXT_CLASS}>{localize("com_subscription.publish_to_square_description")}</span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={form.publishToSquare}
@@ -495,12 +506,12 @@ export function CreateChannelDrawer({
                             {/* 频道内容筛选 */}
                             <div className="space-y-3">
                                 <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <Label className="text-[14px] flex text-[#1D2129]">
-                                            {localize("com_subscription.channel_content_filter")}
-                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
+                                    <div className="min-w-0 pr-2">
+                                        <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                            <span>{localize("com_subscription.channel_content_filter")}</span>
+                                            <span className={FORM_HINT_TEXT_CLASS}>
                                                 {localize("com_subscription.only_filter_criteria")}
-                                            </p>
+                                            </span>
                                         </Label>
                                     </div>
                                     <Switch
@@ -513,7 +524,7 @@ export function CreateChannelDrawer({
                                     />
                                 </div>
                                 {form.contentFilter && (
-                                    <div className="border border-t-[#E5E6EB] overflow-hidden">
+                                    <div className="overflow-hidden rounded-[6px] border border-t-[#E5E6EB]">
                                         <div className="flex items-center justify-between gap-2 px-3 py-2 bg-[#F7F8FA]">
                                             <button
                                                 type="button"
@@ -554,12 +565,12 @@ export function CreateChannelDrawer({
                             {/* 创建子频道 */}
                             <div className="space-y-3">
                                 <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <Label className="text-[14px] flex text-[#1D2129]">
-                                            {localize("com_subscription.create_sub_channel")}
-                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
+                                    <div className="min-w-0 pr-2">
+                                        <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                            <span>{localize("com_subscription.create_sub_channel")}</span>
+                                            <span className={FORM_HINT_TEXT_CLASS}>
                                                 {localize("com_subscription.subscribe_same_filters")}
-                                            </p>
+                                            </span>
                                         </Label>
                                     </div>
                                     <Switch
@@ -572,7 +583,7 @@ export function CreateChannelDrawer({
                                     />
                                 </div>
                                 {form.createSubChannel && (
-                                    <div className="overflow-hidden border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
+                                    <div className="overflow-hidden rounded-[6px] border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
                                         {form.subChannels.map((sub) => (
                                             <SubChannelBlock
                                                 key={sub.id}
@@ -662,6 +673,7 @@ export function CreateChannelDrawer({
                                     !isEditMode ||
                                     String(editingChannel?.role) === "creator"
                                 }
+                                knowledgePickerHostRef={knowledgePickerHostRef}
                             />
                         </div>
                     )}
@@ -742,25 +754,26 @@ export function CreateChannelDrawer({
                             </Button>
                         </div>
                     )}
+                        {form.crawlDialogOpen && (
+                            <div className="absolute inset-0 z-[70] flex min-h-0 flex-col bg-white">
+                                <CrawlPreviewPanel
+                                    url={form.crawlUrl}
+                                    onBack={() => {
+                                        form.setShowAddSourcePanel(true);
+                                        form.setSourceSearchResetToken((t) => t + 1);
+                                        form.setCrawlDialogOpen(false);
+                                    }}
+                                    onAddSource={(source) => {
+                                        form.setSources((prev) => [...prev, source]);
+                                        form.setCrawlDialogOpen(false);
+                                        form.setShowAddSourcePanel(true);
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </SheetContent>
             </Sheet>
-
-            <CrawlPreviewDialog
-                open={form.crawlDialogOpen}
-                onOpenChange={form.setCrawlDialogOpen}
-                url={form.crawlUrl}
-                onCancel={() => {
-                    // 失败/取消后回到「添加信息源」面板，并清空输入框
-                    form.setShowAddSourcePanel(true);
-                    form.setSourceSearchResetToken((t) => t + 1);
-                }}
-                onAddSource={(source) => {
-                    form.setSources((prev) => [...prev, source]);
-                    form.setCrawlDialogOpen(false);
-                    // 添加成功后回到「添加信息源」面板，并展示选中状态
-                    form.setShowAddSourcePanel(true);
-                }}
-            />
         </>
     );
 }

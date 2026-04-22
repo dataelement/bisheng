@@ -99,7 +99,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   return (
     <StandaloneChatContext.Provider value={contextValue}>
-      <div className="flex bg-[#fbfbfb]" style={{ height: '100dvh' }}>
+      <div className="flex bg-[#F9F9F9]" style={{ height: '100dvh' }}>
         <div className="relative z-0 flex h-full w-full overflow-hidden">
 
           {/* Desktop sidebar */}
@@ -161,7 +161,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
           {/* Chat panel */}
           <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden p-2">
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-[8px] bg-white">
+            <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-[#EBECF0] bg-white shadow-xl">
               {activeChatId ? (
                 <AppChat
                   chatId={activeChatId}

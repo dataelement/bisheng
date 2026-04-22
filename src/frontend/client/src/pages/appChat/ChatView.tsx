@@ -72,7 +72,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
                     <ChatEmptyState onNewChat={createNewChat} />
                 </div>
             ) : (
-                <div className="relative mx-auto h-full min-h-0 w-full max-w-[860px] max-[768px]:max-w-[720px] max-[576px]:max-w-[528px] flex-1">
+                <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
                     <ChatMessages
                         useName={user?.username}
                         title={data.name}

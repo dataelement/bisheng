@@ -1,20 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, X } from 'lucide-react';
-import { matchPath, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
-import BookOpenIcon from '~/components/ui/icon/BookOpen';
-import GlobeIcon from '~/components/ui/icon/Globe';
-import HomeIcon from '~/components/ui/icon/Home';
-import LinkIcon from '~/components/ui/icon/Link';
 import { useGetBsConfig, useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import type { TConversation, TMessage } from '~/types/chat';
 import { Constants, QueryKeys } from '~/types/chat';
-import { useAuthContext, useLocalize, useNewConvo } from '~/hooks';
+import { useLocalize, useNewConvo } from '~/hooks';
 import store from '~/store';
-import { cn, getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
-import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
+import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
+import { HubModuleNavTabs } from '~/components/Nav/HubModuleNavTabs';
 import { Button } from '../ui';
 
 const NewChatButtonIcon = ({ conversation }: { conversation: TConversation | null }) => {
@@ -82,16 +78,8 @@ export default function NewChat({
   /** Note: this component needs an explicit index passed if using more than one */
   const { newConversation: newConvo } = useNewConvo(index);
   const { data: bsConfig } = useGetBsConfig()
-  const { pathname } = useLocation();
-  const { user } = useAuthContext();
-
   const navigate = useNavigate();
   const localize = useLocalize();
-  const plugins: string[] | null = Array.isArray((user as { plugins?: string[] })?.plugins)
-    ? (user as { plugins: string[] }).plugins
-    : null;
-  const showSubscriptionTab = plugins ? plugins.includes('subscription') : true;
-  const showKnowledgeSpaceTab = plugins ? plugins.includes('knowledge_space') : true;
 
   const { conversation } = store.useCreateConversationAtom(index);
 
@@ -115,7 +103,7 @@ export default function NewChat({
     <div className="sticky left-0 right-0 top-0 z-50 bg-white">
       <div className="" style={{ transform: 'none' }}>
         {isSmallScreen ? (
-          <div className="-mx-3 shrink-0 border-b border-[#e5e6eb] px-3 py-2.5">
+          <div className="shrink-0 border-b border-[#e5e6eb] py-2.5">
             <div className="flex items-center justify-between">
               {bsConfig?.sidebarIcon?.image ? (
                 <img
@@ -141,67 +129,9 @@ export default function NewChat({
             <p className="ml-2 text-[16px] font-medium text-[#212121]">{localize('com_nav_home')}</p>
           </div>
         )}
-        {/* 与频道 / 知识空间 H5 抽屉四入口同款：SubscriptionMobileDrawerNavTabs / KnowledgeMobileDrawerNavTabs */}
-        <div className="-mx-3 mb-2 hidden w-full shrink-0 touch-mobile:flex touch-mobile:items-center touch-mobile:justify-center touch-mobile:gap-2 touch-mobile:border-b touch-mobile:border-[#e5e6eb] touch-mobile:px-2 touch-mobile:py-2">
-          {[
-            {
-              section: 'home',
-              to: lastSectionPaths.home || '/c/new',
-              icon: HomeIcon,
-              label: localize('com_nav_home'),
-              isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-            },
-            {
-              section: 'apps',
-              to: appsSectionLinkTarget(),
-              icon: GlobeIcon,
-              label: localize('com_nav_app_center'),
-              isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-            },
-            {
-              section: 'channel',
-              to: lastSectionPaths.channel || '/channel',
-              icon: LinkIcon,
-              label: localize('com_ui_channel'),
-              isActive: pathname.startsWith('/channel'),
-            },
-            {
-              section: 'knowledge',
-              to: lastSectionPaths.knowledge || '/knowledge',
-              icon: BookOpenIcon,
-              label: localize('com_knowledge.knowledge_space'),
-              isActive: pathname.startsWith('/knowledge'),
-            },
-          ]
-            .filter((l) => {
-              if (l.section === 'channel') return showSubscriptionTab;
-              if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-              return true;
-            })
-            .map((link) => (
-              <NavLink
-                key={link.section}
-                to={link.to}
-                aria-label={link.label}
-                title={link.label}
-                className={({ isActive: navActive }) =>
-                  cn(
-                    'flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[#f2f3f5]',
-                    navActive || link.isActive ? 'bg-[#e6edfc]' : undefined,
-                  )
-                }
-              >
-                {({ isActive: navActive }) => {
-                  const on = navActive || link.isActive;
-                  const Icon = link.icon;
-                  return (
-                    <Icon
-                      className={cn('size-5 shrink-0', on ? 'text-[#335CFF]' : 'text-[#818181]')}
-                    />
-                  );
-                }}
-              </NavLink>
-            ))}
+        {/* 与 SideNavModuleTabs 一致：四等分格内居中，避免 justify-center + 负边距导致首页选中块视觉偏左 */}
+        <div className="mb-2 hidden w-full min-w-0 shrink-0 touch-mobile:block">
+          <HubModuleNavTabs equalWidth className="w-full min-w-0" />
         </div>
         <div className='flex gap-1 w-full'>
           {/* 新建btn */}

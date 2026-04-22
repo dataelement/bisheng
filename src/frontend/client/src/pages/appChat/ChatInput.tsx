@@ -47,11 +47,12 @@ export default function ChatInput({ readOnly, v }) {
     }, [inputDisabled]);
 
     return (
-        <div className="absolute z-10 px-4 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
-            {/* drag upload overlay */}
-            {isDragging && <DragDropOverlay />}
+        <div className="absolute z-10 bottom-0 w-full bg-[#fff] dark:bg-[#1B1B1B]">
+            <div className="mx-auto w-full max-w-[800px] px-4 pt-1">
+                {/* drag upload overlay */}
+                {isDragging && <DragDropOverlay />}
 
-            <div className="relative px-4 rounded-3xl bg-surface-tertiary">
+                <div className="relative px-4 rounded-3xl bg-surface-tertiary">
                 {/* attr file */}
                 {showUpload && <InputFiles
                     ref={inputFilesRef}
@@ -119,8 +120,9 @@ export default function ChatInput({ readOnly, v }) {
                     placeholder={placholder}
                     className={"resize-none bg-transparent border-none p-4 pr-10 text-md min-h-24 max-h-80 scrollbar-hide"}
                 ></Textarea>
+                </div>
+                <p className="text-center text-sm pt-2 pb-4 text-gray-400">{bishengConfig?.dialog_tips}</p>
             </div>
-            <p className="text-center text-sm pt-2 pb-4 text-gray-400">{bishengConfig?.dialog_tips}</p>
         </div>
     );
 };

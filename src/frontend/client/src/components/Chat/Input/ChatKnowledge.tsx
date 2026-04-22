@@ -1,5 +1,7 @@
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   PaperclipIcon,
   Plus,
@@ -24,7 +26,7 @@ import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 
@@ -49,6 +51,13 @@ function useDebounce<T>(value: T, delay: number): T {
 
 const MAX_SUB_HEIGHT = 320;
 const BOTTOM_GAP = 8;
+/** 移动端：碰撞检测余量；底部勿过大，否则 flip/shift 会把整块菜单顶到视口上方导致裁切 */
+const MOBILE_MENU_COLLISION = {
+  top: 56,
+  bottom: 28,
+  left: 12,
+  right: 12,
+} as const;
 
 /**
  * Compute an alignOffset so the sub-content top aligns with the parent menu top,
@@ -60,7 +69,7 @@ const BOTTOM_GAP = 8;
 function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, triggerKey: string, open: boolean) {
   const [alignOffset, setAlignOffset] = useState(0);
   const [maxH, setMaxH] = useState<number>(MAX_SUB_HEIGHT);
-  const subContentRef = useRef<HTMLDivElement | null>(null);
+  const subContentRef = useRef<HTMLElement | null>(null);
 
   // Phase 1 — compute alignOffset & an initial maxH from parent menu rect
   useLayoutEffect(() => {
@@ -414,13 +423,61 @@ export const ChatKnowledge = ({
   const hasAnySelection = value.length > 0;
 
   const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
+  const isMobile = usePrefersMobileLayout();
+  const [mobilePanel, setMobilePanel] = useState<'root' | 'space' | 'org'>('root');
   const menuContentRef = useRef<HTMLDivElement>(null);
   const spaceLayout = useSubMenuLayout(menuContentRef, 'space', openSub === 'space');
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
+  const handleRootOpenChange = useCallback((open: boolean) => {
+    setRootOpen(open);
+    setOpenSub(null);
+    setMobilePanel('root');
+  }, []);
+
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  /** 第二层：高度取触发器上下可用空间的较小值，避免翻转到上方后仍按「很高」排版导致顶出屏幕 */
+  const [mobileDrillMaxH, setMobileDrillMaxH] = useState<number | undefined>(undefined);
+  const [mobileMenuSide, setMobileMenuSide] = useState<'top' | 'bottom'>('bottom');
+
+  useLayoutEffect(() => {
+    if (!isMobile || !rootOpen || mobilePanel === 'root') {
+      setMobileDrillMaxH(undefined);
+      setMobileMenuSide('bottom');
+      return;
+    }
+    const run = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const padT = MOBILE_MENU_COLLISION.top;
+      const padB = MOBILE_MENU_COLLISION.bottom;
+      const above = r.top - padT;
+      const below = window.innerHeight - r.bottom - padB;
+      // Mobile adaptive strategy:
+      // prefer opening downward when there is enough space;
+      // otherwise open upward to avoid being clipped by the chat input area.
+      const preferBottom = below >= 240 || below >= above;
+      setMobileMenuSide(preferBottom ? 'bottom' : 'top');
+      const raw = (preferBottom ? below : above) - 8;
+      const capped = Math.min(Math.max(Math.floor(raw), 80), Math.floor(window.innerHeight * 0.72));
+      setMobileDrillMaxH(capped);
+    };
+    run();
+    const ro = new ResizeObserver(run);
+    if (triggerRef.current) ro.observe(triggerRef.current);
+    window.addEventListener('resize', run);
+    window.addEventListener('scroll', run, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', run);
+      window.removeEventListener('scroll', run, true);
+    };
+  }, [isMobile, rootOpen, mobilePanel]);
+
   return (
-    <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
-      <DropdownMenuTrigger disabled={disabled}>
+    <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
+      <DropdownMenuTrigger ref={triggerRef} disabled={disabled}>
         <div className={cn(
           "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-black/5 transition-colors outline-none",
           disabled && "opacity-50 cursor-not-allowed"
@@ -429,10 +486,26 @@ export const ChatKnowledge = ({
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent ref={menuContentRef} align="start" collisionPadding={BOTTOM_GAP} className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
-
-        {/* 上传文件 */}
-        {showFileUpload && (
+      <DropdownMenuContent
+        ref={menuContentRef}
+        align="start"
+        side={isMobile ? mobileMenuSide : 'bottom'}
+        collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
+        sticky={isMobile ? 'partial' : undefined}
+        className={cn(
+          'w-[200px] flex flex-col gap-0 rounded-2xl border-slate-100 p-1.5 shadow-xl',
+          isMobile && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
+          isMobile &&
+          mobilePanel !== 'root' &&
+          'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
+        )}
+        style={
+          isMobile && mobilePanel !== 'root' && mobileDrillMaxH !== undefined
+            ? { maxHeight: mobileDrillMaxH }
+            : undefined
+        }
+      >
+        {showFileUpload && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
           <DropdownMenuItem
             disabled={fileUploadDisabled}
             onSelect={(e) => {
@@ -440,50 +513,80 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFileUploadClick?.();
             }}
-            className="flex items-center gap-3 rounded-xl outline-none cursor-pointer px-2 py-1.5 data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed"
+            className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
             <PaperclipIcon className="size-[18px] text-slate-600" />
-            <span className="text-[14px] text-slate-700 font-normal">{localize('com_ui_upload_files')}</span>
+            <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
 
-        {/* 知识空间 */}
-        <DropdownMenuSub
-          open={openSub === 'space'}
-          onOpenChange={(o) => {
-            if (o) setOpenSub('space');
-            else setOpenSub((cur) => (cur === 'space' ? null : cur));
-          }}
-        >
-          <DropdownMenuSubTrigger
-            data-sub-key="space"
-            className={cn(
-              "flex items-center justify-between rounded-xl outline-none cursor-pointer",
-              "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <BookOpen className="size-[18px] text-slate-600" />
-                {selectedKnowledgeSpaces.length > 0 && (
-                  <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
-                )}
+        {/* 移动端：同级覆盖 + 返回；桌面端：Radix Sub 左右级联 */}
+        {isMobile && mobilePanel === 'root' && (
+          <>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                setMobilePanel('space');
+              }}
+              className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="relative shrink-0">
+                  <BookOpen className="size-[18px] text-slate-600" />
+                  {selectedKnowledgeSpaces.length > 0 && (
+                    <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                  )}
+                </div>
+                <span className="truncate text-[14px] font-normal text-slate-700">
+                  {localize('com_ui_knowledge_space')}
+                </span>
               </div>
-              <span className="text-[14px] text-slate-700 font-normal">{localize('com_ui_knowledge_space')}</span>
-            </div>
-          </DropdownMenuSubTrigger>
+              <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
+            </DropdownMenuItem>
+            {config?.knowledgeBase?.enabled !== false && (
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setMobilePanel('org');
+                }}
+                className="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="relative shrink-0">
+                    <BooksIcon className="size-[18px] opacity-70" />
+                    {selectedOrgKbs.length > 0 && (
+                      <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                    )}
+                  </div>
+                  <span className="truncate text-[14px] font-normal text-slate-700">
+                    {localize('com_tools_org_knowledge')}
+                  </span>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
 
-          <DropdownMenuSubContent
-            alignOffset={spaceLayout.alignOffset}
-            collisionPadding={BOTTOM_GAP}
-            className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white flex flex-col overflow-hidden"
-            style={{
-              '--tw-enter-duration': '0.35s',
-              '--tw-enter-easing': 'ease-in-out',
-              maxHeight: spaceLayout.maxH,
-            } as React.CSSProperties}
-          >
-            <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_ui_knowledge_space')}</p>
+        {isMobile && mobilePanel === 'space' && (
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+              <button
+                type="button"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                aria-label={localize('com_ui_go_back')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMobilePanel('root');
+                }}
+              >
+                <ChevronLeft className="size-5" strokeWidth={2} />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                {localize('com_ui_knowledge_space')}
+              </span>
+            </div>
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
@@ -496,49 +599,28 @@ export const ChatKnowledge = ({
               onLoadMore={() => { }}
               emptyText={localize('com_chat_knowledge_empty_no_spaces')}
             />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+          </div>
+        )}
 
-        {/* 组织知识库 — hidden when admin disables the KB feature
-            (bsConfig.knowledgeBase.enabled === false). Knowledge space above
-            is a user-scoped feature and stays visible. */}
-        {config?.knowledgeBase?.enabled !== false && (
-        <DropdownMenuSub
-          open={openSub === 'org'}
-          onOpenChange={(o) => {
-            if (o) setOpenSub('org');
-            else setOpenSub((cur) => (cur === 'org' ? null : cur));
-          }}
-        >
-          <DropdownMenuSubTrigger
-            data-sub-key="org"
-            className={cn(
-              "flex items-center justify-between rounded-xl outline-none cursor-pointer mt-0.5",
-              "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <BooksIcon className="size-[18px] opacity-70" />
-                {selectedOrgKbs.length > 0 && (
-                  <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
-                )}
-              </div>
-              <span className="text-[14px] text-slate-700 font-normal">{localize('com_tools_org_knowledge')}</span>
+        {isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+              <button
+                type="button"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                aria-label={localize('com_ui_go_back')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMobilePanel('root');
+                }}
+              >
+                <ChevronLeft className="size-5" strokeWidth={2} />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                {localize('com_tools_org_knowledge')}
+              </span>
             </div>
-          </DropdownMenuSubTrigger>
-
-          <DropdownMenuSubContent
-            alignOffset={orgLayout.alignOffset}
-            collisionPadding={BOTTOM_GAP}
-            className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white flex flex-col overflow-hidden"
-            style={{
-              '--tw-enter-duration': '0.35s',
-              '--tw-enter-easing': 'ease-in-out',
-              maxHeight: orgLayout.maxH,
-            } as React.CSSProperties}
-          >
-            <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_tools_org_knowledge')}</p>
             <KnowledgeListPanel
               placeholder={localize('com_tools_knowledge_base_search')}
               keyword={orgKeyword}
@@ -548,13 +630,135 @@ export const ChatKnowledge = ({
               onToggle={(item) => handleToggle(item, 'org')}
               isFetching={orgFetching}
               hasMore={hasMoreOrg}
-              onLoadMore={() => setOrgPage(p => p + 1)}
+              onLoadMore={() => setOrgPage((p) => p + 1)}
               emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
             />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+          </div>
         )}
 
+        {!isMobile && (
+          <>
+            <DropdownMenuSub
+              open={openSub === 'space'}
+              onOpenChange={(o) => {
+                if (o) setOpenSub('space');
+                else setOpenSub((cur) => (cur === 'space' ? null : cur));
+              }}
+            >
+              <DropdownMenuSubTrigger
+                data-sub-key="space"
+                className={cn(
+                  'flex cursor-pointer items-center justify-between rounded-xl outline-none',
+                  '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <BookOpen className="size-[18px] text-slate-600" />
+                    {selectedKnowledgeSpaces.length > 0 && (
+                      <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                    )}
+                  </div>
+                  <span className="text-[14px] font-normal text-slate-700">
+                    {localize('com_ui_knowledge_space')}
+                  </span>
+                </div>
+              </DropdownMenuSubTrigger>
+
+              <DropdownMenuSubContent
+                alignOffset={spaceLayout.alignOffset}
+                collisionPadding={BOTTOM_GAP}
+                className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl"
+                style={
+                  {
+                    '--tw-enter-duration': '0.35s',
+                    '--tw-enter-easing': 'ease-in-out',
+                    maxHeight: spaceLayout.maxH,
+                  } as React.CSSProperties
+                }
+              >
+                <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
+                  {localize('com_ui_knowledge_space')}
+                </p>
+                <KnowledgeListPanel
+                  placeholder={localize('com_chat_knowledge_placeholder_search_space')}
+                  keyword={spaceKeyword}
+                  setKeyword={setSpaceKeyword}
+                  items={filteredSpaces}
+                  selectedItems={selectedKnowledgeSpaces}
+                  onToggle={(item) => handleToggle(item, 'space')}
+                  isFetching={spaceFetching}
+                  hasMore={false}
+                  onLoadMore={() => { }}
+                  emptyText={localize('com_chat_knowledge_empty_no_spaces')}
+                />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
+            {/* 组织知识库 — hidden when admin disables the KB feature
+                (bsConfig.knowledgeBase.enabled === false). Knowledge space above
+                is a user-scoped feature and stays visible. */}
+            {config?.knowledgeBase?.enabled !== false && (
+              <DropdownMenuSub
+                open={openSub === 'org'}
+                onOpenChange={(o) => {
+                  if (o) setOpenSub('org');
+                  else setOpenSub((cur) => (cur === 'org' ? null : cur));
+                }}
+              >
+                <DropdownMenuSubTrigger
+                  data-sub-key="org"
+                  className={cn(
+                    'mt-0.5 flex cursor-pointer items-center justify-between rounded-xl outline-none',
+                    '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <BooksIcon className="size-[18px] opacity-70" />
+                      {selectedOrgKbs.length > 0 && (
+                        <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                      )}
+                    </div>
+                    <span className="text-[14px] font-normal text-slate-700">
+                      {localize('com_tools_org_knowledge')}
+                    </span>
+                  </div>
+                </DropdownMenuSubTrigger>
+
+                <DropdownMenuSubContent
+                  alignOffset={orgLayout.alignOffset}
+                  collisionPadding={BOTTOM_GAP}
+                  className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl"
+                  style={
+                    {
+                      '--tw-enter-duration': '0.35s',
+                      '--tw-enter-easing': 'ease-in-out',
+                      maxHeight: orgLayout.maxH,
+                    } as React.CSSProperties
+                  }
+                >
+                  <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
+                    {localize('com_tools_org_knowledge')}
+                  </p>
+                  <KnowledgeListPanel
+                    placeholder={localize('com_tools_knowledge_base_search')}
+                    keyword={orgKeyword}
+                    setKeyword={setOrgKeyword}
+                    items={sortedOrgKbs}
+                    selectedItems={selectedOrgKbs}
+                    onToggle={(item) => handleToggle(item, 'org')}
+                    isFetching={orgFetching}
+                    hasMore={hasMoreOrg}
+                    onLoadMore={() => setOrgPage((p) => p + 1)}
+                    emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
+                  />
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

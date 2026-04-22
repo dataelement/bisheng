@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpandableSearchField } from '~/components/ui/ExpandableSearchField';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useMediaQuery } from '~/hooks';
 
 interface AppSearchBarProps {
   query: string;
@@ -9,11 +9,15 @@ interface AppSearchBarProps {
   debounceMs?: number;
 }
 
+/** Breakpoint aligned with app center header `max-[576px]` — mobile uses always-expanded search */
+const APP_SEARCH_MOBILE_MQ = '(max-width: 576px)';
+
 /**
- * 应用探索页搜索：与消息提醒弹窗同一套可展开搜索 + 防抖；带清空按钮。
+ * 应用中心 / 探索页搜索：桌面端可收起图标搜索；移动端始终展开全宽 + 防抖。
  */
 export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBarProps) {
   const localize = useLocalize();
+  const isMobileLayout = useMediaQuery(APP_SEARCH_MOBILE_MQ);
   const [localValue, setLocalValue] = useState(query);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -50,11 +54,15 @@ export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBar
 
   return (
     <ExpandableSearchField
+      alwaysExpanded={isMobileLayout}
+      showClearButton={isMobileLayout}
       value={localValue}
       onChange={handleChange}
       placeholder={localize('com_app_search_placeholder')}
       titleWhenCollapsed={localize('com_app_search_by_name')}
-      expandedWidthClassName="w-[220px]"
+      expandedWidthClassName={
+        isMobileLayout ? 'w-full min-w-0' : 'w-[220px]'
+      }
     />
   );
 }

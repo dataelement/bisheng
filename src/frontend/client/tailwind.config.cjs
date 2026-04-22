@@ -145,6 +145,12 @@ module.exports = {
       // Viewport breakpoints (align with Tailwind `lg` at 1024px).
       addVariant('touch-desktop', '@media (min-width: 1024px)');
       addVariant('touch-mobile', '@media (max-width: 1023px)');
+      // 订阅文章列表等：平板窄宽 — 搜索与信息源/未读筛选同一行
+      addVariant(
+        'range-576-768',
+        '@media (min-width: 576px) and (max-width: 768px)',
+      );
+      addVariant('lt-576', '@media (max-width: 575px)');
       // Primary input: mouse + hover vs touch / coarse pointer (for hover-only controls).
       addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');
       addVariant(

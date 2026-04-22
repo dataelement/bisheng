@@ -5,7 +5,10 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
+import { useMediaQuery } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
+
+const RECENT_APPS_HINT = '最近使用过的应用都在这里～';
 
 export default function AppCenter() {
     const {
@@ -20,38 +23,72 @@ export default function AppCenter() {
         shareApp,
     } = useAppCenter();
 
+    const isH5Layout = useMediaQuery('(max-width: 576px)');
+
     // Initial fetch
     useEffect(() => {
         fetchApps();
     }, [fetchApps]);
 
+    const exploreLink = (
+        <Link
+            to="/apps/explore"
+            className="backdrop-blur-[4px] flex shrink-0 items-center justify-center gap-[6px] px-[10px] py-[6px] rounded-[8px] hover:bg-gray-50 transition-colors"
+        >
+            <ChannelBlocksArrowsIcon className="size-4 text-[#335cff]" />
+            <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] whitespace-nowrap">
+                探索更多应用
+            </span>
+        </Link>
+    );
+
     return (
         <div className="bg-white min-h-screen flex flex-col items-center px-[12px] py-[20px] relative w-full">
-            {/* 顶部页眉 */}
-            <header className="flex items-center justify-between leading-8 max-w-[1000px] w-full shrink-0 relative max-[576px]:flex-col max-[576px]:items-start gap-2">
-                <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
-                    应用中心
-                </h1>
-                <div className="max-[576px]:w-full max-[576px]:pt-1">
-                    <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
-                </div>
-            </header>
+            {isH5Layout ? (
+                <>
+                    {/* H5：一行 — 应用中心 | 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
+                    <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
+                        <h1 className="font-['PingFang_SC'] font-semibold leading-[28px] text-[#335cff] text-[20px] shrink-0">
+                            应用中心
+                        </h1>
+                        <p
+                            className="font-['PingFang_SC'] text-[#666] text-[13px] leading-[20px] min-w-0 flex-1 truncate"
+                            title={RECENT_APPS_HINT}
+                        >
+                            {RECENT_APPS_HINT}
+                        </p>
+                        {exploreLink}
+                    </header>
+                    <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0">
+                        <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+                    </div>
+                </>
+            ) : (
+                <>
+                    <header className="flex items-center leading-8 max-w-[1000px] w-full shrink-0 relative">
+                        <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
+                            应用中心
+                        </h1>
+                    </header>
 
-            {/* 副标题与探索更多 */}
-            <div className="flex items-center gap-[24px] max-w-[1000px] w-full shrink-0 relative mt-4 mb-4">
-                <p className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px] max-[600px]:hidden">
-                    最近使用过的应用都在这里～
-                </p>
-                <Link
-                    to="/apps/explore"
-                    className="backdrop-blur-[4px] flex items-center justify-center gap-[6px] px-[10px] py-[6px] rounded-[8px] hover:bg-gray-50 transition-colors"
-                >
-                    <LayoutGrid size={16} className="text-[#335cff]" />
-                    <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px]">
-                        探索更多应用
-                    </span>
-                </Link>
-            </div>
+                    <div className="flex max-w-[1000px] w-full min-w-0 shrink-0 items-center gap-4 sm:gap-6 mt-4 mb-4">
+                        <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
+                            <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
+                                <p
+                                    className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px] min-w-0 shrink truncate"
+                                    title={RECENT_APPS_HINT}
+                                >
+                                    {RECENT_APPS_HINT}
+                                </p>
+                                {exploreLink}
+                            </div>
+                        </div>
+                        <div className="shrink-0 min-w-[120px] w-auto">
+                            <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+                        </div>
+                    </div>
+                </>
+            )}
 
             {/* 内容区域 */}
             <main className="flex flex-col items-start gap-[14px] max-w-[1000px] w-full shrink-0 relative">

@@ -5,7 +5,7 @@ import { UserPopMenu } from "~/layouts/UserPopMenu";
  */
 export function ChatNavUserFooter() {
     return (
-        <div className="shrink-0 border-t border-[#ececec] pt-3 pb-1 mt-2 -mx-1 px-1">
+        <div className="shrink-0 border-t border-[#ececec] pt-3 pb-1 mt-2 -mx-1 px-1 touch-mobile:mx-0 touch-mobile:px-0">
             <UserPopMenu variant="drawer" />
         </div>
     );
