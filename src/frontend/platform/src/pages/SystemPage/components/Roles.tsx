@@ -361,7 +361,6 @@ export default function Roles() {
   }
 
   const creatorLabel = (el: ROLE) => {
-    if (el.role_type === "global") return t("system.systemPresetGlobal")
     return el.creator_name?.trim() || "-"
   }
 
