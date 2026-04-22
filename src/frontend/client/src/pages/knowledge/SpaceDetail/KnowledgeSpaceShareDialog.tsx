@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SpaceRole } from "~/api/knowledge";
+import { KnowledgeSpaceMemberManagementPanel } from "~/components/KnowledgeSpaceMemberManagementPanel";
 import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
 import { PermissionListTab } from "~/components/permission/PermissionListTab";
 import {
@@ -18,6 +20,7 @@ import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 
 const SHARE_TAB = "share";
+const MEMBERS_TAB = "members";
 const PERMISSION_TAB = "permission";
 
 interface KnowledgeSpaceShareDialogProps {
@@ -25,7 +28,9 @@ interface KnowledgeSpaceShareDialogProps {
     onOpenChange: (open: boolean) => void;
     resourceId: string;
     resourceName: string;
+    currentUserRole?: SpaceRole | null;
     showShareTab: boolean;
+    showMembersTab?: boolean;
     showPermissionTab: boolean;
 }
 
@@ -34,22 +39,24 @@ export function KnowledgeSpaceShareDialog({
     onOpenChange,
     resourceId,
     resourceName,
+    currentUserRole = null,
     showShareTab,
+    showMembersTab = false,
     showPermissionTab,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
-    const defaultTab = showShareTab ? SHARE_TAB : PERMISSION_TAB;
+    const defaultTab = showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB;
     const [activeTab, setActiveTab] = useState(defaultTab);
     const [refreshKey, setRefreshKey] = useState(0);
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         if (open) {
-            setActiveTab(showShareTab ? SHARE_TAB : PERMISSION_TAB);
+            setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
             setCopied(false);
         }
-    }, [open, showShareTab]);
+    }, [open, showMembersTab, showShareTab]);
 
     const shareLink = useMemo(() => {
         if (typeof window === "undefined") return "";
@@ -84,7 +91,7 @@ export function KnowledgeSpaceShareDialog({
             ? localize("com_knowledge.share")
             : localize("com_permission.dialog_title")
     } - ${resourceName}`;
-    const hasMultipleTabs = showShareTab && showPermissionTab;
+    const hasMultipleTabs = [showShareTab, showMembersTab, showPermissionTab].filter(Boolean).length > 1;
 
     const sharePanel = (
         <div className="space-y-3 pt-2">
@@ -140,6 +147,16 @@ export function KnowledgeSpaceShareDialog({
         </>
     );
 
+    const memberPanel = (
+        <div className="flex min-h-0 flex-1 flex-col pt-2">
+            <KnowledgeSpaceMemberManagementPanel
+                spaceId={resourceId}
+                currentUserRole={currentUserRole}
+                active={open && activeTab === MEMBERS_TAB}
+            />
+        </div>
+    );
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[680px]">
@@ -150,22 +167,42 @@ export function KnowledgeSpaceShareDialog({
                 {hasMultipleTabs ? (
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
                         <TabsList className="bg-surface-primary-alt p-1">
-                            <TabsTrigger value={SHARE_TAB}>
-                                {localize("com_knowledge.share")}
-                            </TabsTrigger>
-                            <TabsTrigger value={PERMISSION_TAB}>
-                                {localize("com_permission.manage_permission")}
-                            </TabsTrigger>
+                            {showShareTab && (
+                                <TabsTrigger value={SHARE_TAB}>
+                                    {localize("com_knowledge.share")}
+                                </TabsTrigger>
+                            )}
+                            {showMembersTab && (
+                                <TabsTrigger value={MEMBERS_TAB}>
+                                    {localize("com_subscription.member_management")}
+                                </TabsTrigger>
+                            )}
+                            {showPermissionTab && (
+                                <TabsTrigger value={PERMISSION_TAB}>
+                                    {localize("com_permission.manage_permission")}
+                                </TabsTrigger>
+                            )}
                         </TabsList>
-                        <TabsContent value={SHARE_TAB} className="p-0">
-                            {sharePanel}
-                        </TabsContent>
-                        <TabsContent value={PERMISSION_TAB} className="p-0">
-                            <Tabs defaultValue="list">{permissionPanel}</Tabs>
-                        </TabsContent>
+                        {showShareTab && (
+                            <TabsContent value={SHARE_TAB} className="p-0">
+                                {sharePanel}
+                            </TabsContent>
+                        )}
+                        {showMembersTab && (
+                            <TabsContent value={MEMBERS_TAB} className="flex min-h-0 flex-1 p-0">
+                                {memberPanel}
+                            </TabsContent>
+                        )}
+                        {showPermissionTab && (
+                            <TabsContent value={PERMISSION_TAB} className="p-0">
+                                <Tabs defaultValue="list">{permissionPanel}</Tabs>
+                            </TabsContent>
+                        )}
                     </Tabs>
                 ) : showShareTab ? (
                     sharePanel
+                ) : showMembersTab ? (
+                    memberPanel
                 ) : (
                     <Tabs defaultValue="list">{permissionPanel}</Tabs>
                 )}

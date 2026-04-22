@@ -1,4 +1,4 @@
-import { Building2, MoreHorizontal, Pin, PinOff, Settings, Users, LogOut } from "lucide-react";
+import { Building2, MoreHorizontal, Pin, PinOff, Settings, Share2, LogOut } from "lucide-react";
 import { useState } from "react";
 import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -148,9 +148,9 @@ export default function KnowledgeSpaceItem({
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers?.(space)}
                             >
-                                <Users className={sidebarListMoreMenuIconClassName} />
+                                <Share2 className={sidebarListMoreMenuIconClassName} />
                                 <span className={sidebarListMoreMenuLabelClassName}>
-                                    {localize("com_knowledge.member_management")}
+                                    {localize("com_knowledge.share")}
                                 </span>
                             </DropdownMenuItem>
                         )}
