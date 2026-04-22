@@ -5,6 +5,41 @@ if (!Object.hasOwn) {
   };
 }
 
+const DEV_SW_RESET_KEY = '__bisheng_dev_sw_reset__';
+const isLocalDevHost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
+
+if (
+  import.meta.env.DEV &&
+  isLocalDevHost &&
+  typeof window !== 'undefined' &&
+  'serviceWorker' in navigator &&
+  window.sessionStorage.getItem(DEV_SW_RESET_KEY) !== 'done'
+) {
+  void (async () => {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      if (!registrations.length) {
+        window.sessionStorage.setItem(DEV_SW_RESET_KEY, 'done');
+        return;
+      }
+
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+
+      if ('caches' in window) {
+        const cacheKeys = await window.caches.keys();
+        await Promise.all(cacheKeys.map((cacheKey) => window.caches.delete(cacheKey)));
+      }
+
+      window.sessionStorage.setItem(DEV_SW_RESET_KEY, 'done');
+      window.location.reload();
+    } catch (error) {
+      console.warn('Failed to reset dev service workers', error);
+    }
+  })();
+}
+
 import 'regenerator-runtime/runtime';
 import { createRoot } from 'react-dom/client';
 import './locales/i18n';
