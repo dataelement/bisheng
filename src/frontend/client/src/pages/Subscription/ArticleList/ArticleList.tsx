@@ -99,6 +99,9 @@ export function ArticleList({
         queryFn: () => getChannelDetailApi(channel.id),
         staleTime: 60_000, // Cache for 1 minute
     });
+    const canManageChannel = channel.role === "creator" || channel.role === "admin";
+    const canOpenChannelShare =
+        canManageChannel || (channelDetail ? channelDetail.visibility !== "private" : false);
 
     // Derive source options directly from channelDetail.source_infos (refreshes after channel edit)
     const sourceOptions = useMemo(() => {
@@ -456,5 +459,3 @@ export function ArticleList({
         </div>
     );
 }
-    const canManageChannel = channel.role === "creator" || channel.role === "admin";
-    const canOpenChannelShare = canManageChannel || (channelDetail ? channelDetail.visibility !== "private" : false);
