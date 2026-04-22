@@ -34,7 +34,6 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { useModel } from "../ModelPage/manage";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
-import { DepartmentSpaceDialog } from "./components/DepartmentSpaceDialog";
 
 // Knowledge base status
 const enum KnowledgeBaseStatus {
@@ -323,7 +322,6 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 const doing = {} // Record knowledge bases being copied
 export default function KnowledgeFile() {
     const [open, setOpen] = useState(false);
-    const [departmentSpaceDialogOpen, setDepartmentSpaceDialogOpen] = useState(false);
     const { user } = useContext(userContext);
     const { message } = useToast()
     const navigate = useNavigate()
@@ -507,15 +505,6 @@ export default function KnowledgeFile() {
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    {user.role === 'admin' && (
-                        <Button
-                            variant="outline"
-                            className="px-6"
-                            onClick={() => setDepartmentSpaceDialogOpen(true)}
-                        >
-                            {t('departmentSpace.configure', { ns: 'bs' })}
-                        </Button>
-                    )}
                     {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
                 <Table noScroll>
@@ -745,12 +734,6 @@ export default function KnowledgeFile() {
                     resourceName={permTarget.name}
                 />
             )}
-
-            <DepartmentSpaceDialog
-                open={departmentSpaceDialogOpen}
-                onOpenChange={setDepartmentSpaceDialogOpen}
-                onCreated={reload}
-            />
         </div>
     );
 }
