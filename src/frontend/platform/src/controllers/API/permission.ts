@@ -28,6 +28,7 @@ export type RelationModel = {
   /** 后端未返回时按 relation 推断 */
   grant_tier?: GrantTier
   permissions: string[]
+  permissions_explicit?: boolean
   is_system: boolean
 }
 

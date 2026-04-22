@@ -64,10 +64,10 @@ const RELATION_LEVEL_I18N_KEY: Record<ModelRelation, string> = {
 }
 
 const DEFAULT_RELATION_MODELS: RelationModel[] = [
-  { id: "owner", name: "所有者", relation: "owner", grant_tier: "owner", permissions: [], is_system: true },
-  { id: "manager", name: "可管理", relation: "manager", grant_tier: "manager", permissions: [], is_system: true },
-  { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], is_system: true },
-  { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], is_system: true },
+  { id: "owner", name: "所有者", relation: "owner", grant_tier: "owner", permissions: [], permissions_explicit: false, is_system: true },
+  { id: "manager", name: "可管理", relation: "manager", grant_tier: "manager", permissions: [], permissions_explicit: false, is_system: true },
+  { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
+  { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
 ]
 
 const TEMPLATE_SECTIONS: TemplateSection[] = [
@@ -241,8 +241,9 @@ export default function RolesAndPermissions() {
 
   useEffect(() => {
     if (!currentModel) return
-    if (currentModel.permissions && currentModel.permissions.length > 0) {
-      setSelectedPermissionIds(currentModel.permissions)
+    const permissions = currentModel.permissions || []
+    if (currentModel.permissions_explicit !== false) {
+      setSelectedPermissionIds(permissions)
       return
     }
     const ids = templateSections.flatMap((section) =>

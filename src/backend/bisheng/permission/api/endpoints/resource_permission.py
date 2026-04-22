@@ -67,6 +67,12 @@ def _normalize_model_dict(m: dict) -> dict:
         out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
     if not _validate_tier_relation(out['grant_tier'], out.get('relation') or ''):
         out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
+    if 'permissions_explicit' not in out:
+        permissions = out.get('permissions') or []
+        if out.get('is_system'):
+            out['permissions_explicit'] = False
+        else:
+            out['permissions_explicit'] = bool(permissions)
     return out
 
 
@@ -74,19 +80,19 @@ def _default_relation_models() -> list[dict]:
     return [
         {
             'id': 'owner', 'name': '所有者', 'relation': 'owner',
-            'grant_tier': 'owner', 'permissions': [], 'is_system': True,
+            'grant_tier': 'owner', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
         {
             'id': 'manager', 'name': '可管理', 'relation': 'manager',
-            'grant_tier': 'manager', 'permissions': [], 'is_system': True,
+            'grant_tier': 'manager', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
         {
             'id': 'editor', 'name': '可编辑', 'relation': 'editor',
-            'grant_tier': 'usage', 'permissions': [], 'is_system': True,
+            'grant_tier': 'usage', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
         {
             'id': 'viewer', 'name': '可查看', 'relation': 'viewer',
-            'grant_tier': 'usage', 'permissions': [], 'is_system': True,
+            'grant_tier': 'usage', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
     ]
 
@@ -458,6 +464,7 @@ async def create_relation_model(
         'relation': request.relation,
         'grant_tier': _infer_grant_tier_from_relation(request.relation),
         'permissions': request.permissions or [],
+        'permissions_explicit': True,
         'is_system': False,
     })
     await _save_relation_models(models)
@@ -481,6 +488,7 @@ async def update_relation_model(
             m['name'] = request.name.strip()
         if request.permissions is not None:
             m['permissions'] = request.permissions
+            m['permissions_explicit'] = True
         updated = True
         break
     if not updated:

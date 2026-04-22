@@ -84,6 +84,7 @@ class RelationModelItem(BaseModel):
     name: str
     relation: str = Field(description='owner | manager | editor | viewer')
     permissions: List[str] = Field(default_factory=list)
+    permissions_explicit: bool = False
     is_system: bool = False
     # 授权级别：决定前台授权人需具备的资源权限档位（与 PRD 管理所有者/管理者/使用者对应）
     grant_tier: str = Field(
