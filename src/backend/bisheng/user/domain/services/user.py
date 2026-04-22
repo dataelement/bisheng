@@ -48,6 +48,26 @@ AVATAR_OBJECT_PREFIX = 'avatar/'
 
 class UserService:
     @classmethod
+    async def ainvalidate_jwt_after_account_disabled(cls, user_id: int) -> None:
+        """禁用账号后立刻让已签发的 JWT 失效（F012 ``token_version``），并清理管理端 scope 缓存。"""
+        try:
+            await UserDao.aincrement_token_version(user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                'aincrement_token_version failed after account disabled user_id=%s: %s',
+                user_id, exc,
+            )
+            return
+        try:
+            from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+            await TenantScopeService.clear_on_token_version_bump(user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                'clear_on_token_version_bump failed after account disabled user_id=%s: %s',
+                user_id, exc,
+            )
+
+    @classmethod
     def _normalize_avatar_object_name(cls, avatar: str | None, bucket: str | None = None) -> str | None:
         if not avatar:
             return avatar
@@ -175,6 +195,7 @@ class UserService:
             # Maximum number of errors reached, account banned
             db_user.delete = 1
             await UserDao.aupdate_user(db_user)
+            await cls.ainvalidate_jwt_after_account_disabled(db_user.user_id)
             raise UserPasswordMaxTryError()
         raise UserValidateError()
 

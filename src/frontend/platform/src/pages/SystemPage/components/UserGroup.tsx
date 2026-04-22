@@ -6,7 +6,7 @@ import { PlusIcon } from "@/components/bs-icons/plus";
 import { deleteUserGroupV2, listUserGroupsV2, UserGroupV2 } from "@/controllers/API/userGroups";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
     Table,
     TableBody,
@@ -16,6 +16,12 @@ import {
     TableHeader,
     TableRow
 } from "../../../components/bs-ui/table";
+import {
+    ColumnResizeHandle,
+    useResizableColumns,
+    type ResizableColumnDef,
+} from "@/components/bs-ui/table/useResizableColumns";
+import { cname } from "@/components/bs-ui/utils";
 import EditUserGroup from "./EditUserGroup";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
@@ -98,6 +104,22 @@ export default function UserGroups() {
         return ug.create_user != null ? String(ug.create_user) : "—"
     }
 
+    const groupTableCols = useMemo((): ResizableColumnDef[] => {
+        const c: ResizableColumnDef[] = [
+            { defaultWidth: 200, minWidth: 140 },
+            { defaultWidth: 220, minWidth: 120 },
+        ]
+        if (appConfig.isPro) c.push({ defaultWidth: 150, minWidth: 100 })
+        c.push(
+            { defaultWidth: 120, minWidth: 88 },
+            { defaultWidth: 160, minWidth: 130 },
+            { defaultWidth: 150, minWidth: 110 },
+        )
+        return c
+    }, [appConfig.isPro])
+    const ugRc = useResizableColumns(groupTableCols)
+    const ugLast = groupTableCols.length - 1
+
     return <div className="relative">
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">
             <div className="flex gap-6 items-center justify-end">
@@ -109,32 +131,73 @@ export default function UserGroups() {
                     <span className="text-[#fff] mx-4">{t('create')}</span>
                 </Button>
             </div>
-            <Table className="mb-10">
+            <Table
+                noScroll
+                className="mb-10 !w-auto min-w-full"
+                style={{ tableLayout: "fixed", width: ugRc.totalWidth }}
+            >
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[200px]">{t('system.groupName')}</TableHead>
-                        <TableHead>{t('system.groupCreator')}</TableHead>
-                        {appConfig.isPro && <TableHead className="w-[150px]">{t('system.flowControl')}</TableHead>}
-                        <TableHead className="w-[100px]">{t('system.groupVisibility')}</TableHead>
-                        <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
-                        <TableHead className="text-right w-[130px]" >{t('operations')}</TableHead>
+                        <TableHead {...ugRc.getThProps(0)}>
+                            {t('system.groupName')}
+                            <ColumnResizeHandle columnIndex={0} lastColumn={0 === ugLast} startResize={ugRc.startResize} />
+                        </TableHead>
+                        <TableHead {...ugRc.getThProps(1)}>
+                            {t('system.groupCreator')}
+                            <ColumnResizeHandle columnIndex={1} lastColumn={1 === ugLast} startResize={ugRc.startResize} />
+                        </TableHead>
+                        {appConfig.isPro && (
+                            <TableHead {...ugRc.getThProps(2)}>
+                                {t('system.flowControl')}
+                                <ColumnResizeHandle columnIndex={2} lastColumn={2 === ugLast} startResize={ugRc.startResize} />
+                            </TableHead>
+                        )}
+                        <TableHead {...ugRc.getThProps(appConfig.isPro ? 3 : 2)}>
+                            {t('system.groupVisibility')}
+                            <ColumnResizeHandle
+                                columnIndex={appConfig.isPro ? 3 : 2}
+                                lastColumn={(appConfig.isPro ? 3 : 2) === ugLast}
+                                startResize={ugRc.startResize}
+                            />
+                        </TableHead>
+                        <TableHead {...ugRc.getThProps(appConfig.isPro ? 4 : 3)}>
+                            {t('system.changeTime')}
+                            <ColumnResizeHandle
+                                columnIndex={appConfig.isPro ? 4 : 3}
+                                lastColumn={(appConfig.isPro ? 4 : 3) === ugLast}
+                                startResize={ugRc.startResize}
+                            />
+                        </TableHead>
+                        <TableHead
+                            style={ugRc.getThProps(appConfig.isPro ? 5 : 4).style}
+                            className={cname(ugRc.getThProps(appConfig.isPro ? 5 : 4).className, "text-right")}
+                        >
+                            {t('operations')}
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {userGroups.map((ug) => (
                         <TableRow key={ug.id}>
-                            <TableCell className="font-medium">{ug.group_name}</TableCell>
-                            <TableCell className="break-all">{displayCreator(ug)}</TableCell>
-                            {appConfig.isPro && <TableCell>{(ug as any).group_limit ? t('system.limit') : t('system.unlimited')}</TableCell>}
-                            <TableCell>
+                            <TableCell {...ugRc.getTdProps(0)} className="font-medium">{ug.group_name}</TableCell>
+                            <TableCell {...ugRc.getTdProps(1)} className="break-all">{displayCreator(ug)}</TableCell>
+                            {appConfig.isPro && (
+                                <TableCell {...ugRc.getTdProps(2)}>
+                                    {(ug as any).group_limit ? t('system.limit') : t('system.unlimited')}
+                                </TableCell>
+                            )}
+                            <TableCell {...ugRc.getTdProps(appConfig.isPro ? 3 : 2)}>
                                 <Badge variant={ug.visibility === 'private' ? 'secondary' : 'outline'}>
                                     {ug.visibility === 'private' ? t('system.visibilityPrivate') : t('system.visibilityPublic')}
                                 </Badge>
                             </TableCell>
-                            <TableCell>{(ug.update_time || "").replace("T", " ")}</TableCell>
-                            <TableCell className="text-right" style={{
-                                whiteSpace: 'nowrap',
-                            }}>
+                            <TableCell {...ugRc.getTdProps(appConfig.isPro ? 4 : 3)}>
+                                {(ug.update_time || "").replace("T", " ")}
+                            </TableCell>
+                            <TableCell
+                                {...ugRc.getTdProps(appConfig.isPro ? 5 : 4)}
+                                className="whitespace-nowrap text-right"
+                            >
                                 <Button variant="link" onClick={() => setUserGroup({ ...ug })}
                                     className="px-0 pl-6">{t('edit')}
                                 </Button>

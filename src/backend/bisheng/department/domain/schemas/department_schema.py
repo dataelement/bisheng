@@ -45,6 +45,8 @@ class DepartmentUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=50)
     sort_order: Optional[int] = None
     default_role_ids: Optional[List[int]] = None
+    #: 与名称、默认角色一并提交时全量替换部门管理员（OpenFGA）；不传则不改管理员
+    admin_user_ids: Optional[List[int]] = None
 
 
 class DepartmentMoveRequest(BaseModel):

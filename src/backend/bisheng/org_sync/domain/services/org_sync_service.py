@@ -529,6 +529,8 @@ class OrgSyncService:
             return
         user.delete = 1
         await UserDao.aupdate_user(user)
+        from bisheng.user.domain.services.user import UserService
+        await UserService.ainvalidate_jwt_after_account_disabled(op.user_id)
 
         # Clean up all department memberships + OpenFGA tuples
         for dept_id in op.dept_ids:

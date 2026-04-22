@@ -18,6 +18,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table"
+import {
+  ColumnResizeHandle,
+  useResizableColumns,
+} from "@/components/bs-ui/table/useResizableColumns"
+import { cname } from "@/components/bs-ui/utils"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   Tooltip,
@@ -153,6 +158,21 @@ export function MemberTable({
   const fmtTime = (v?: string | Date | null) =>
     v ? String(v).replace("T", " ").slice(0, 19) : "-"
 
+  const memberCols = useMemo(
+    () => [
+      { defaultWidth: 160, minWidth: 120 },
+      { defaultWidth: 120, minWidth: 96 },
+      { defaultWidth: 180, minWidth: 120 },
+      { defaultWidth: 180, minWidth: 120 },
+      { defaultWidth: 160, minWidth: 120 },
+      { defaultWidth: 88, minWidth: 72 },
+      { defaultWidth: 168, minWidth: 120 },
+    ],
+    []
+  )
+  const mrc = useResizableColumns(memberCols)
+  const memberLastCol = memberCols.length - 1
+
   return (
     <div>
       <div className="mb-4 flex items-center gap-2">
@@ -178,16 +198,67 @@ export function MemberTable({
       </div>
 
       <TooltipProvider delayDuration={200}>
-      <Table>
+      <Table
+        noScroll
+        className="!w-auto min-w-full"
+        style={{ tableLayout: "fixed", width: mrc.totalWidth }}
+      >
         <TableHeader>
           <TableRow>
-            <TableHead>{t("system.username")}</TableHead>
-            <TableHead>{t("bs:department.memberType", "所属关系")}</TableHead>
-            <TableHead>{t("bs:department.roles")}</TableHead>
-            <TableHead>{t("bs:department.userGroups")}</TableHead>
-            <TableHead>{t("bs:department.updateTime")}</TableHead>
-            <TableHead>{t("bs:department.enabled")}</TableHead>
-            <TableHead className="min-w-[140px] text-right">{t("operations")}</TableHead>
+            <TableHead {...mrc.getThProps(0)}>
+              {t("system.username")}
+              <ColumnResizeHandle
+                columnIndex={0}
+                lastColumn={0 === memberLastCol}
+                startResize={mrc.startResize}
+              />
+            </TableHead>
+            <TableHead {...mrc.getThProps(1)}>
+              {t("bs:department.memberType", "所属关系")}
+              <ColumnResizeHandle
+                columnIndex={1}
+                lastColumn={1 === memberLastCol}
+                startResize={mrc.startResize}
+              />
+            </TableHead>
+            <TableHead {...mrc.getThProps(2)}>
+              {t("bs:department.roles")}
+              <ColumnResizeHandle
+                columnIndex={2}
+                lastColumn={2 === memberLastCol}
+                startResize={mrc.startResize}
+              />
+            </TableHead>
+            <TableHead {...mrc.getThProps(3)}>
+              {t("bs:department.userGroups")}
+              <ColumnResizeHandle
+                columnIndex={3}
+                lastColumn={3 === memberLastCol}
+                startResize={mrc.startResize}
+              />
+            </TableHead>
+            <TableHead {...mrc.getThProps(4)}>
+              {t("bs:department.updateTime")}
+              <ColumnResizeHandle
+                columnIndex={4}
+                lastColumn={4 === memberLastCol}
+                startResize={mrc.startResize}
+              />
+            </TableHead>
+            <TableHead {...mrc.getThProps(5)}>
+              {t("bs:department.enabled")}
+              <ColumnResizeHandle
+                columnIndex={5}
+                lastColumn={5 === memberLastCol}
+                startResize={mrc.startResize}
+              />
+            </TableHead>
+            <TableHead
+              style={mrc.getThProps(6).style}
+              className={cname(mrc.getThProps(6).className, "text-right")}
+            >
+              {t("operations")}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -200,17 +271,17 @@ export function MemberTable({
           ) : (
             members.map((m) => (
               <TableRow key={m.user_id}>
-                <TableCell title={memberDisplayNames.get(m.user_id) ?? m.user_name}>
+                <TableCell {...mrc.getTdProps(0)} title={memberDisplayNames.get(m.user_id) ?? m.user_name}>
                   {memberDisplayNames.get(m.user_id) ?? m.user_name}
                 </TableCell>
-                <TableCell>
+                <TableCell {...mrc.getTdProps(1)}>
                   <Badge variant={m.is_primary === 1 ? "default" : "outline"}>
                     {m.is_primary === 1
                       ? t("bs:department.primary")
                       : t("bs:department.secondary")}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-[150px]">
+                <TableCell {...mrc.getTdProps(2)}>
                   {(() => {
                     const roleNames: string[] = []
                     if (m.is_department_admin) {
@@ -230,7 +301,7 @@ export function MemberTable({
                     )
                   })()}
                 </TableCell>
-                <TableCell className="max-w-[150px]">
+                <TableCell {...mrc.getTdProps(3)}>
                   {(() => {
                     const text =
                       m.user_groups.map((g) => g.group_name).join(", ") || "-"
@@ -246,10 +317,10 @@ export function MemberTable({
                     )
                   })()}
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
+                <TableCell {...mrc.getTdProps(4)} className="whitespace-nowrap text-muted-foreground">
                   {fmtTime(m.update_time ?? m.create_time)}
                 </TableCell>
-                <TableCell>
+                <TableCell {...mrc.getTdProps(5)}>
                   <Switch
                     checked={m.enabled}
                     disabled={isSyncedSource(m.source)}
@@ -258,7 +329,7 @@ export function MemberTable({
                     }
                   />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell {...mrc.getTdProps(6)} className="text-right">
                   {(() => {
                     const isSuperAdmin = m.roles.some((role) => role.id === 1)
                     const canResetPwd = user.role === "admin"
@@ -272,8 +343,8 @@ export function MemberTable({
                           <Button
                             variant="link"
                             size="sm"
-                            className="px-1"
-                            disabled={user.user_id === m.user_id}
+                            className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60"
+                            disabled={user.user_id === m.user_id || !m.enabled}
                             onClick={() => handleEditUser(m)}
                           >
                             {t("edit")}

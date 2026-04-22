@@ -122,7 +122,7 @@ export default function Departments() {
         />
         <button
           className="mt-4 w-full rounded-md border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-primary hover:text-primary"
-          onClick={() => handleCreateClick(tree[0]?.id)}
+          onClick={() => handleCreateClick()}
         >
           + {t("bs:department.create")}
         </button>

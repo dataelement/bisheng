@@ -5,6 +5,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popo
 import FilterUserGroup from "@/components/bs-ui/select/filter";
 import { getRolesApi, getUserGroupsApi } from "@/controllers/API/user";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+    ColumnResizeHandle,
+    useResizableColumns,
+} from "@/components/bs-ui/table/useResizableColumns";
+import { cname } from "@/components/bs-ui/utils";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -141,6 +146,19 @@ export default function Users(params) {
 
     const [openCreate, setOpenCreate] = useState(false)
 
+    const userTableCols = useMemo(
+        () => [
+            { defaultWidth: 200, minWidth: 140 },
+            { defaultWidth: 240, minWidth: 160 },
+            { defaultWidth: 240, minWidth: 160 },
+            { defaultWidth: 170, minWidth: 130 },
+            { defaultWidth: 164, minWidth: 120 },
+        ],
+        []
+    )
+    const urc = useResizableColumns(userTableCols)
+    const userLastCol = userTableCols.length - 1
+
     useEffect(() => {
         getUserGoups()
         getRoles()
@@ -182,12 +200,19 @@ export default function Users(params) {
                     <span className="text-[#fff] mx-4">{t('create')}</span>
                 </Button>}
             </div>
-            <Table className="mb-[50px]">
+            <Table
+                noScroll
+                className="mb-[50px] !w-auto min-w-full"
+                style={{ tableLayout: "fixed", width: urc.totalWidth }}
+            >
                 {/* <TableCaption>用户列表.</TableCaption> */}
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[200px]">{t('system.username')}</TableHead>
-                        <TableHead>
+                        <TableHead {...urc.getThProps(0)}>
+                            {t('system.username')}
+                            <ColumnResizeHandle columnIndex={0} lastColumn={0 === userLastCol} startResize={urc.startResize} />
+                        </TableHead>
+                        <TableHead {...urc.getThProps(1)}>
                             <div className="flex items-center">
                                 {t('system.userGroup')}
                                 <UsersFilter
@@ -198,8 +223,9 @@ export default function Users(params) {
                                     onFilter={(ids) => filterData({ groupId: ids })}
                                 ></UsersFilter>
                             </div>
+                            <ColumnResizeHandle columnIndex={1} lastColumn={1 === userLastCol} startResize={urc.startResize} />
                         </TableHead>
-                        <TableHead>
+                        <TableHead {...urc.getThProps(2)}>
                             <div className="flex items-center">
                                 {t('system.role')}
                                 <UsersFilter
@@ -210,25 +236,30 @@ export default function Users(params) {
                                     onFilter={(ids) => filterData({ roleId: ids })}
                                 ></UsersFilter>
                             </div>
+                            <ColumnResizeHandle columnIndex={2} lastColumn={2 === userLastCol} startResize={urc.startResize} />
                         </TableHead>
-                        <TableHead>{t('system.changeTime')}</TableHead>
-                        <TableHead className="text-right w-[164px]">{t('operations')}</TableHead>
+                        <TableHead {...urc.getThProps(3)}>
+                            {t('system.changeTime')}
+                            <ColumnResizeHandle columnIndex={3} lastColumn={3 === userLastCol} startResize={urc.startResize} />
+                        </TableHead>
+                        <TableHead
+                            style={urc.getThProps(4).style}
+                            className={cname(urc.getThProps(4).className, "text-right")}
+                        >
+                            {t('operations')}
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {users.map((el: any) => (
                         <TableRow key={el.id}>
-                            <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
-                            {/* <TableCell>{el.role}</TableCell> */}
-                            <TableCell className="break-all">{(el.groups || []).map(el => el.name).join(',')}</TableCell>
-                            <TableCell className="break-all">{(el.roles || []).map(el => el.name).join(',')}</TableCell>
-                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell 
-                                className="text-right" 
-                                style={{ 
-                                    whiteSpace: 'nowrap',
-                                }}
-                                >
+                            <TableCell {...urc.getTdProps(0)} className="truncate font-medium">
+                                {el.user_name}
+                            </TableCell>
+                            <TableCell {...urc.getTdProps(1)} className="break-all">{(el.groups || []).map(el => el.name).join(',')}</TableCell>
+                            <TableCell {...urc.getTdProps(2)} className="break-all">{(el.roles || []).map(el => el.name).join(',')}</TableCell>
+                            <TableCell {...urc.getTdProps(3)}>{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell {...urc.getTdProps(4)} className="whitespace-nowrap text-right">
                                 {operations(el)}
                             </TableCell>
                         </TableRow>

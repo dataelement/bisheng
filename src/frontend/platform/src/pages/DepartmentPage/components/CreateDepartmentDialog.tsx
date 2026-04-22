@@ -1,5 +1,3 @@
-import { SubjectSearchUser } from "@/components/bs-comp/permission/SubjectSearchUser"
-import type { SelectedSubject } from "@/components/bs-comp/permission/types"
 import { Button } from "@/components/bs-ui/button"
 import {
   Dialog,
@@ -10,12 +8,16 @@ import {
 } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
+import MultiSelect from "@/components/bs-ui/select/multi"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { createDepartmentApi } from "@/controllers/API/department"
+import { getUsersApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentTreeNode } from "@/types/api/department"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+
+type AdminOption = { value: string; label: string }
 
 interface CreateDepartmentDialogProps {
   tree: DepartmentTreeNode[]
@@ -33,8 +35,71 @@ export function CreateDepartmentDialog({
   const { t } = useTranslation()
   const [name, setName] = useState("")
   const [parentId, setParentId] = useState<number | null>(defaultParentId)
-  const [adminPicks, setAdminPicks] = useState<SelectedSubject[]>([])
+  const [adminSelectValue, setAdminSelectValue] = useState<AdminOption[]>([])
+  const [userSearchOptions, setUserSearchOptions] = useState<AdminOption[]>([])
   const [loading, setLoading] = useState(false)
+
+  const adminSelectValueRef = useRef<AdminOption[]>([])
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    adminSelectValueRef.current = adminSelectValue
+  }, [adminSelectValue])
+
+  useEffect(() => {
+    return () => {
+      searchAbortRef.current?.abort()
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [])
+
+  const mergeUserOptions = useCallback(
+    (
+      searchResults: { user_id: number; user_name: string }[],
+      currentAdmins: AdminOption[]
+    ): AdminOption[] => {
+      const byVal = new Map<string, AdminOption>()
+      for (const a of currentAdmins) byVal.set(a.value, a)
+      for (const u of searchResults) {
+        const v = String(u.user_id)
+        if (!byVal.has(v)) {
+          byVal.set(v, { value: v, label: u.user_name })
+        }
+      }
+      return Array.from(byVal.values())
+    },
+    []
+  )
+
+  const runUserSearch = useCallback(
+    async (q: string, currentAdmins: AdminOption[]) => {
+      searchAbortRef.current?.abort()
+      const ac = new AbortController()
+      searchAbortRef.current = ac
+      try {
+        const res = await getUsersApi(
+          { name: q, page: 1, pageSize: 120 },
+          { signal: ac.signal }
+        )
+        if (ac.signal.aborted) return
+        setUserSearchOptions(mergeUserOptions(res.data || [], currentAdmins))
+      } catch {
+        /* aborted or network */
+      }
+    },
+    [mergeUserOptions]
+  )
+
+  const scheduleUserSearch = useCallback(
+    (q: string) => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = setTimeout(() => {
+        void runUserSearch(q, adminSelectValueRef.current)
+      }, 300)
+    },
+    [runUserSearch]
+  )
 
   // Flatten tree for parent selector (exclude archived departments)
   const flatList: { id: number; name: string; depth: number }[] = []
@@ -61,7 +126,9 @@ export function CreateDepartmentDialog({
       createDepartmentApi({
         name,
         parent_id: parentId,
-        admin_user_ids: adminPicks.length ? adminPicks.map((s) => s.id) : undefined,
+        admin_user_ids: adminSelectValue.length
+          ? adminSelectValue.map((o) => Number(o.value))
+          : undefined,
       })
     ).then((res) => {
       setLoading(false)
@@ -70,7 +137,7 @@ export function CreateDepartmentDialog({
       toast({ title: t("bs:department.create"), variant: "success" })
       onCreated()
     })
-  }, [name, parentId, adminPicks, onCreated, t])
+  }, [name, parentId, adminSelectValue, onCreated, t])
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -109,32 +176,30 @@ export function CreateDepartmentDialog({
             />
           </div>
 
-          {/* Department admins (optional) */}
+          {/* Department admins (optional) — 与部门设置页相同的多选搜索 */}
           <div className="space-y-2">
             <Label>{t("bs:department.admins")}</Label>
-            <SubjectSearchUser
-              value={adminPicks}
-              onChange={setAdminPicks}
+            <p className="text-xs text-muted-foreground">{t("bs:department.adminsHint")}</p>
+            <MultiSelect
+              multiple
+              scroll
+              onScrollLoad={() => {}}
+              value={adminSelectValue}
+              options={userSearchOptions}
+              placeholder={t("bs:department.adminSelectPlaceholder")}
+              searchPlaceholder={t("bs:department.searchUsersPlaceholder")}
+              onSearch={(q) => scheduleUserSearch(q)}
+              onLoad={() => {
+                void runUserSearch("", adminSelectValueRef.current)
+              }}
+              onChange={(vals) => {
+                const v = (vals as AdminOption[]) || []
+                setAdminSelectValue(v)
+                adminSelectValueRef.current = v
+              }}
+              className="max-w-xl w-full"
+              contentClassName="min-w-[var(--radix-select-trigger-width)]"
             />
-            {adminPicks.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {adminPicks.map((s) => (
-                  <span
-                    key={s.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs"
-                  >
-                    {s.name}
-                    <button
-                      type="button"
-                      className="ml-0.5 text-muted-foreground hover:text-destructive"
-                      onClick={() => setAdminPicks((prev) => prev.filter((p) => p.id !== s.id))}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
         <DialogFooter>
