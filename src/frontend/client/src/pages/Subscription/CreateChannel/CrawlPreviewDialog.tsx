@@ -1,11 +1,5 @@
-import { Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "~/components/ui/Dialog";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -19,29 +13,25 @@ import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useLocalize } from "~/hooks";
+import useMediaQuery from "~/hooks/useMediaQuery";
 import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
 import type { InformationSource } from "~/api/channels";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
 
-interface CrawlPreviewDialogProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
+export interface CrawlPreviewPanelProps {
     url: string;
+    /** 返回 / 取消：回到「创建频道」表单侧（含添加信息源面板） */
+    onBack: () => void;
     onAddSource: (source: InformationSource) => void;
-    onCancel?: () => void;
 }
 
 type CrawlStatus = "loading" | "success" | "error" | "singlePageWarning";
 
-export function CrawlPreviewDialog({
-    open,
-    onOpenChange,
-    url,
-    onAddSource,
-    onCancel
-}: CrawlPreviewDialogProps) {
+/** 创建频道抽屉内下钻：爬取内容确认（不再叠加独立 Dialog） */
+export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPanelProps) {
     const localize = useLocalize();
+    const noHoverDevice = useMediaQuery("(hover: none)");
     const [status, setStatus] = useState<CrawlStatus>("loading");
     const [adding, setAdding] = useState(false);
     const [previewData, setPreviewData] = useState<{ name: string; icon?: string; articles?: { title: string; url: string }[] } | null>(null);
@@ -53,7 +43,7 @@ export function CrawlPreviewDialog({
     const requestIdRef = useRef(0);
 
     useEffect(() => {
-        if (!open || !url) return;
+        if (!url) return;
         setStatus("loading");
         setPreviewData(null);
         setErrorCode(null);
@@ -128,11 +118,10 @@ export function CrawlPreviewDialog({
                 setStatus("error");
             }
         })();
-    }, [open, url]);
+    }, [url]);
 
     // 加载订阅配置中的 feedback_tips
     useEffect(() => {
-        if (!open) return;
         (async () => {
             try {
                 const resp = await getFeedbackTips();
@@ -144,13 +133,11 @@ export function CrawlPreviewDialog({
             } catch {
             }
         })();
-    }, [open]);
+    }, []);
 
     const handleCancel = () => {
-        // 标记当前请求为失效，后续响应不再更新 UI
         requestIdRef.current++;
-        onCancel?.();
-        onOpenChange(false);
+        onBack();
     };
 
     const handleAddSource = () => {
@@ -181,10 +168,11 @@ export function CrawlPreviewDialog({
                 }
                 if (created) {
                     onAddSource(created);
+                } else {
+                    onBack();
                 }
             } finally {
                 setAdding(false);
-                onOpenChange(false);
             }
         })();
     };
@@ -196,20 +184,23 @@ export function CrawlPreviewDialog({
     };
 
     return (
-        <Dialog modal open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden z-[100]"
-                overlayClassName="z-[100]"
-                onPointerDownOutside={(e) => e.preventDefault()}
-                onInteractOutside={(e) => e.preventDefault()}
-            >
-                <DialogHeader>
-                    <DialogTitle className="text-[16px] font-medium">
+        <>
+            <div className="flex h-full min-h-0 flex-1 flex-col bg-white text-[14px]">
+                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-[#ECECEC] px-4 pb-4 pt-4 sm:px-6">
+                    <button
+                        type="button"
+                        onClick={handleCancel}
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        aria-label={localize("com_ui_go_back")}
+                    >
+                        <ChevronLeft className="size-5" />
+                    </button>
+                    <h2 className="min-w-0 flex-1 text-left text-[20px] font-medium leading-7 text-[#212121]">
                         {localize("com_subscription.confirm_crawled_content")}
-                    </DialogTitle>
-                </DialogHeader>
+                    </h2>
+                </div>
 
-                <div className="flex flex-col gap-4 flex-1 min-h-0">
+                <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 sm:px-6">
                     <div>
                         <Input
                             value={url}
@@ -220,7 +211,7 @@ export function CrawlPreviewDialog({
                     </div>
 
                     {status === "loading" && (
-                        <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
+                        <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
                             <ChannelLoadingIcon className="w-[120px] h-[120px]" />
                             <p className="text-[14px] text-[#4E5969]">
                                 {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
@@ -279,13 +270,32 @@ export function CrawlPreviewDialog({
                                                     href={a.url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="group/item flex min-w-0 items-center truncate text-[13px] text-[#165DFF] hover:text-[#335CFF]"
+                                                    className={cn(
+                                                        "flex min-w-0 items-center gap-1 text-[13px] text-[#165DFF]",
+                                                        noHoverDevice ? "" : "group/item hover:text-[#335CFF]"
+                                                    )}
                                                 >
-                                                    <span className="mr-2 h-[6px] w-[6px] flex-shrink-0 rounded-full bg-[#C9CDD4]" aria-hidden />
-                                                    <span className="min-w-0 truncate underline-offset-2 group-hover/item:underline">
+                                                    <span
+                                                        className={cn(
+                                                            "mr-2 h-[6px] w-[6px] flex-shrink-0 rounded-full",
+                                                            noHoverDevice ? "bg-[#165DFF]" : "bg-[#C9CDD4] group-hover/item:bg-[#165DFF]"
+                                                        )}
+                                                        aria-hidden
+                                                    />
+                                                    <span
+                                                        className={cn(
+                                                            "min-w-0 flex-1 truncate underline-offset-2",
+                                                            noHoverDevice ? "underline" : "group-hover/item:underline"
+                                                        )}
+                                                    >
                                                         {a.title}
                                                     </span>
-                                                    <ChannelRightSmallUpIcon className="ml-1 h-4 w-4 flex-shrink-0 text-inherit opacity-0 transition-opacity group-hover/item:opacity-100" />
+                                                    <ChannelRightSmallUpIcon
+                                                        className={cn(
+                                                            "h-4 w-4 flex-shrink-0 text-inherit transition-opacity",
+                                                            noHoverDevice ? "opacity-100" : "opacity-0 group-hover/item:opacity-100"
+                                                        )}
+                                                    />
                                                 </a>
                                             ))}
                                         </div>
@@ -296,10 +306,10 @@ export function CrawlPreviewDialog({
                     )}
 
                     {(status === "error" || status === "singlePageWarning") && (
-                        <div className="flex-1 rounded border border-[#E5E6EB] min-h-[270px] px-6 py-8 flex flex-col justify-between">
-                            <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                <ChannelBookIcon className="w-[100px] h-[100px] mb-5" />
-                                <p className="text-[14px] text-[#4E5969] leading-6">
+                        <div className="flex min-h-[270px] flex-1 flex-col justify-between rounded border border-[#E5E6EB] px-6 py-8">
+                            <div className="flex flex-1 flex-col items-center justify-center text-center">
+                                <ChannelBookIcon className="mb-5 w-[100px] h-[100px]" />
+                                <p className="text-[14px] leading-6 text-[#4E5969]">
                                     {status === "singlePageWarning"
                                         ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
                                         : errorCode === 13004
@@ -311,23 +321,29 @@ export function CrawlPreviewDialog({
                     )}
                 </div>
 
-                {/* 底部操作：爬取中也展示两按钮，添加到信源置灰 */}
                 {(status === "loading" || status === "success" || status === "error" || status === "singlePageWarning") && (
-                    <div className="mt-auto flex shrink-0 items-center justify-between gap-3 pt-4">
+                    <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-[#E5E6EB] px-4 py-4 sm:px-6">
                         {(status === "success" || status === "error" || status === "singlePageWarning") ? (
                             <button
                                 type="button"
-                                className="text-[14px] text-[#999999] transition-colors hover:text-[#165DFF]"
+                                className="inline-flex flex-wrap items-baseline gap-x-1 text-left text-[14px] leading-relaxed"
                                 onClick={() => setFeedbackDialogOpen(true)}
-                            >{localize("com_subscription.unsatisfied_with_crawl_submit_request")}</button>
+                            >
+                                <span className="text-[#4E5969]">
+                                    {localize("com_subscription.unsatisfied_with_crawl_prompt")}
+                                </span>
+                                <span className="font-normal text-[#165DFF]">
+                                    {localize("com_subscription.submit_manual_crawl_request")}
+                                </span>
+                            </button>
                         ) : (
                             <span />
                         )}
-                        <div className="flex">
+                        <div className="flex justify-end gap-2">
                             <Button
                                 variant="secondary"
                                 onClick={handleCancel}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] touch-mobile:flex-1"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -335,19 +351,17 @@ export function CrawlPreviewDialog({
                                 <Button
                                     onClick={handleAddSource}
                                     disabled={status !== "success" || adding}
-                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-[#165DFF] ml-2 hover:bg-[#4080FF] border border-[#165DFF] text-white disabled:opacity-50 gap-2"
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-[#165DFF] hover:bg-[#4080FF] border border-[#165DFF] text-white disabled:opacity-50 gap-2 touch-mobile:flex-1"
                                 >
                                     {adding && <Loader2 className="size-4 animate-spin" />}
                                     {localize("com_subscription.add_source")}
                                 </Button>
                             )}
                         </div>
-
                     </div>
                 )}
-            </DialogContent>
+            </div>
 
-            {/* 人工爬取需求提示弹窗 */}
             <AlertDialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
                 <AlertDialogContent className="sm:max-w-[480px]">
                     <AlertDialogHeader>
@@ -361,6 +375,6 @@ export function CrawlPreviewDialog({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </Dialog>
+        </>
     );
 }

@@ -146,7 +146,6 @@ function Sidebar({
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full px-2' : 'w-[38vw] px-2') : 'w-16 px-2',
         'h-screen flex flex-col justify-between py-2 shrink-0 bg-white',
-        !overlay && 'border-r border-[#ececec]',
         // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
         // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
         isChatSection && isMobile && 'hidden',
@@ -154,22 +153,34 @@ function Sidebar({
     >
       <div className={cn('flex flex-col', showExpandedHubSidebar ? 'gap-4 items-stretch' : 'gap-10 items-center')}>
         <div className={cn('relative shrink-0', showExpandedHubSidebar ? 'flex items-center justify-between p-2' : 'size-10 flex items-center justify-center')}>
-          {bsConfig?.sidebarIcon?.image ? (
+          {showExpandedHubSidebar ? (
+            <>
+              {bsConfig?.sidebarIcon?.image ? (
+                <img
+                  src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
+                  className="size-8 shrink-0 object-contain"
+                  alt={localize('com_nav_home')}
+                />
+              ) : (
+                <div className="size-8 shrink-0 rounded-md bg-[#F2F3F5]" aria-hidden />
+              )}
+              {onCloseMobileApps ? (
+                <button
+                  type="button"
+                  onClick={onCloseMobileApps}
+                  aria-label={localize('com_nav_close_sidebar')}
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                >
+                  <X className="size-4" />
+                </button>
+              ) : null}
+            </>
+          ) : bsConfig?.sidebarIcon?.image ? (
             <img
               src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
-              className={cn(showExpandedHubSidebar ? 'size-8 object-contain' : 'size-full object-contain')}
+              className="size-full object-contain"
               alt=""
             />
-          ) : null}
-          {showExpandedHubSidebar && onCloseMobileApps ? (
-            <button
-              type="button"
-              onClick={onCloseMobileApps}
-              aria-label={localize('com_nav_close_sidebar')}
-              className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
-            >
-              <X className="size-4" />
-            </button>
           ) : null}
         </div>
 
@@ -188,13 +199,17 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col gap-4 items-center">
-        {(user?.plugins?.includes('backend') || user?.plugins?.includes('admin')) && (
-          <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
-            <div title={localize('com_nav_admin_panel')} className="p-3 rounded-lg hover:bg-[#e6edfc] transition-colors">
-              <MonitorIcon className="size-5 text-[#818181]" />
-            </div>
-          </a>
-        )}
+        {!isMobile &&
+          (user?.plugins?.includes('backend') || user?.plugins?.includes('admin')) && (
+            <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
+              <div
+                title={localize('com_nav_admin_panel')}
+                className="rounded-lg p-3 transition-colors hover:bg-[#e6edfc]"
+              >
+                <MonitorIcon className="size-5 text-[#818181]" />
+              </div>
+            </a>
+          )}
         <div className="w-full h-px bg-[#ececec]" />
 
         {/* 用户菜单：应用中心抽屉模式展示整行（含右箭头） */}
@@ -212,6 +227,16 @@ export default function MainLayout() {
   const isMobile = usePrefersMobileLayout();
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
   const isAppsArea = pathname.includes('/apps');
+  /** 探索广场：横幅内已有返回，隐藏主布局左上角汉堡，避免重复一行 */
+  let pathForMatch = (pathname.split('?')[0] || '').replace(/\/+$/, '') || '/';
+  const appBase =
+    typeof __APP_ENV__ !== 'undefined' ? String(__APP_ENV__.BASE_URL || '').replace(/\/$/, '') : '';
+  if (appBase && (pathForMatch === appBase || pathForMatch.startsWith(`${appBase}/`))) {
+    pathForMatch = pathForMatch.slice(appBase.length) || '/';
+  }
+  const isAppsExploreRoute = Boolean(
+    matchPath({ path: '/apps/explore', end: true }, pathForMatch),
+  );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
@@ -302,7 +327,7 @@ export default function MainLayout() {
           aria-modal="true"
           aria-label={localize('com_nav_app_center')}
         >
-          <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#ececec] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+          <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
             <Sidebar
               mobileSidebarOpen={mobileSidebarOpen}
               onCloseMobileApps={() => setMobileSidebarOpen(false)}
@@ -319,7 +344,11 @@ export default function MainLayout() {
         </div>
       ) : null}
       <main className="flex-1 h-screen relative p-2 pl-0 min-w-0">
-        {shouldHideSidebarOnMobileAppsArea && isAppsArea && !isAppChatRoute && !mobileSidebarOpen ? (
+        {shouldHideSidebarOnMobileAppsArea &&
+        isAppsArea &&
+        !isAppChatRoute &&
+        !isAppsExploreRoute &&
+        !mobileSidebarOpen ? (
           <button
             type="button"
             aria-label={localize('com_nav_open_sidebar')}
@@ -340,6 +369,7 @@ export default function MainLayout() {
               shouldHideSidebarOnMobileAppsArea &&
                 isAppsArea &&
                 !isAppChatRoute &&
+                !isAppsExploreRoute &&
                 !mobileSidebarOpen &&
                 'pt-9',
             )}

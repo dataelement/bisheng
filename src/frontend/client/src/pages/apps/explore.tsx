@@ -205,10 +205,14 @@ export default function ExplorePlaza() {
                 </div>
             </div>
 
-            {/* 过滤栏 */}
-            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-5 py-5">
-                <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
-                <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+            {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
+            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
+                <div className="order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0">
+                    <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+                </div>
+                <div className="order-2 w-full min-w-0">
+                    <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
+                </div>
             </div>
 
             {/* 智能体网格 */}

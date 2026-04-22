@@ -67,7 +67,7 @@ export default function MobileNav({
   return (
     <div
       className={cn(
-        'bg-token-main-surface-primary sticky top-0 z-10 flex w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white touch-mobile:border-b touch-mobile:border-[#f0f1f3]',
+        'bg-token-main-surface-primary sticky top-0 z-10 flex w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white',
         showWorkbenchMergedBar ? 'min-h-11 h-11' : 'h-10',
       )}
     >

@@ -15,7 +15,7 @@
  *   • Sub-channel name updates in parent form auto-propagate to this section
  */
 import { ChevronDown, ChevronUp, PlusSquare } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { Switch } from "~/components/ui";
 import type {
     KnowledgeSyncConfig,
@@ -44,6 +44,8 @@ export interface KnowledgeSyncSectionProps {
     subChannelNames: string[];
     /** Only creators get to see this whole section. */
     isCreator: boolean;
+    /** 创建/编辑频道抽屉内的挂载点：H5 下选择知识空间在此容器内下钻，而非再叠一层 Dialog */
+    knowledgePickerHostRef?: RefObject<HTMLDivElement | null>;
 }
 
 type AddTarget =
@@ -84,6 +86,7 @@ export default function KnowledgeSyncSection({
     mainChannelName,
     subChannelNames,
     isCreator,
+    knowledgePickerHostRef,
 }: KnowledgeSyncSectionProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -248,8 +251,8 @@ export default function KnowledgeSyncSection({
 
     return (
         <div className="mt-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                     <span className="text-[14px] font-medium text-[#1D2129]">
                         {localize?.("com_subscription.sync_to_knowledge_space") ||
                             "同步至知识空间"}
@@ -262,7 +265,7 @@ export default function KnowledgeSyncSection({
                 <Switch
                     checked={mainEnabled}
                     onCheckedChange={setMainEnabled}
-                    className="data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
+                    className="shrink-0 data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
                 />
             </div>
 
@@ -295,8 +298,8 @@ export default function KnowledgeSyncSection({
 
             {mainEnabled && (
                 <div className="mt-6">
-                    <div className="flex items-center justify-between">
-                        <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                             <span
                                 className={
                                     "text-[14px] font-medium " +
@@ -308,7 +311,7 @@ export default function KnowledgeSyncSection({
                             </span>
                             <span
                                 className={
-                                    "text-[12px] " +
+                                    "text-[14px] " +
                                     (noSubChannels ? "text-[#C9CDD4]" : "text-[#86909C]")
                                 }
                             >
@@ -320,7 +323,7 @@ export default function KnowledgeSyncSection({
                             checked={!noSubChannels && subModeActive}
                             disabled={noSubChannels}
                             onCheckedChange={setSubMode}
-                            className=""
+                            className="shrink-0"
                         />
                     </div>
 
@@ -396,6 +399,7 @@ export default function KnowledgeSyncSection({
                 }}
                 mode="channel_sync"
                 onSyncSelect={handleSyncSelect}
+                channelSyncPortalHostRef={knowledgePickerHostRef}
             />
         </div>
     );

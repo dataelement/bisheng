@@ -43,7 +43,7 @@ export default function ShareAppRedirect() {
 
     // Create a new conversation and navigate — same as clicking a card
     const chatId = generateUUID(32);
-    navigate(`/app/${chatId}/${applicationId}/${flowType}`, { replace: true });
+    navigate(`/app/${chatId}/${applicationId}/${flowType}?from=share`, { replace: true });
   }, [appSlug, navigate, showToast]);
 
   // Show loading spinner during redirect

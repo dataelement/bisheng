@@ -1,17 +1,12 @@
-import { useLocalize, useAuthContext } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { matchPath, NavLink, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import {
     Channel,
     SortType,
     getChannelsApi,
 } from "~/api/channels";
-import BookOpenIcon from "~/components/ui/icon/BookOpen";
-import GlobeIcon from "~/components/ui/icon/Globe";
-import HomeIcon from "~/components/ui/icon/Home";
-import LinkIcon from "~/components/ui/icon/Link";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
@@ -19,87 +14,9 @@ import ChannelItem from "./ChannelItem";
 import { SectionHeader } from "./SectionHeader";
 import { useChannelActions } from "../hooks/useChannelActions";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
-import { appsSectionLinkTarget, lastSectionPaths } from "~/layouts/appModuleNavPaths";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 import { cn } from "~/utils";
-
-/** H5 频道抽屉顶：四模块入口 */
-function SubscriptionMobileDrawerNavTabs({
-    onAfterPick,
-}: {
-    onAfterPick?: () => void;
-}) {
-    const { pathname } = useLocation();
-    const localize = useLocalize();
-    const { user } = useAuthContext();
-    const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
-        ? ((user as { plugins: string[] }).plugins)
-        : null;
-    const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
-    const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
-
-    const links = useMemo(
-        () =>
-            [
-                {
-                    section: "home",
-                    to: lastSectionPaths.home || "/c/new",
-                    icon: HomeIcon,
-                    label: localize("com_nav_home"),
-                    isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-                },
-                {
-                    section: "apps",
-                    to: appsSectionLinkTarget(),
-                    icon: GlobeIcon,
-                    label: localize("com_nav_app_center"),
-                    isActive:
-                        matchPath("/app/:id/:fid/:type", pathname) !== null || pathname.startsWith("/apps"),
-                },
-                {
-                    section: "channel",
-                    to: lastSectionPaths.channel || "/channel",
-                    icon: LinkIcon,
-                    label: localize("com_ui_channel"),
-                    isActive: pathname.startsWith("/channel"),
-                },
-                {
-                    section: "knowledge",
-                    to: lastSectionPaths.knowledge || "/knowledge",
-                    icon: BookOpenIcon,
-                    label: localize("com_knowledge.knowledge_space"),
-                    isActive: pathname.startsWith("/knowledge"),
-                },
-            ].filter((l) => {
-                if (l.section === "channel") return showSubscriptionTab;
-                if (l.section === "knowledge") return showKnowledgeSpaceTab;
-                return true;
-            }),
-        [pathname, localize, showSubscriptionTab, showKnowledgeSpaceTab],
-    );
-
-    return (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-[#e5e6eb] px-2 py-2">
-            {links.map((link) => {
-                const Icon = link.icon;
-                return (
-                    <NavLink
-                        key={link.section}
-                        to={link.to}
-                        title={link.label}
-                        onClick={() => onAfterPick?.()}
-                        className={cn(
-                            "flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[#f2f3f5]",
-                            link.isActive && "bg-[#e6edfc]",
-                        )}
-                    >
-                        <Icon className={cn("size-5 shrink-0", link.isActive ? "text-[#335CFF]" : "text-[#818181]")} />
-                    </NavLink>
-                );
-            })}
-        </div>
-    );
-}
 
 interface ChannelSidebarProps {
     activeChannelId?: string;
@@ -220,7 +137,7 @@ export function ChannelSidebar({
     };
 
     return (
-        <div className={cn("relative shrink-0", mobileDrawerMode && "h-full min-h-0 w-full")}>
+        <div className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}>
             <div
                 className={[
                     "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden",
@@ -261,9 +178,7 @@ export function ChannelSidebar({
                                 ) : null}
                             </div>
                         </div>
-                        <SubscriptionMobileDrawerNavTabs
-                            onAfterPick={onDrawerClose}
-                        />
+                        <HubModuleNavTabs onLinkClick={() => onDrawerClose?.()} />
                         <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-3">
                             <Button
                                 variant="secondary"
@@ -315,7 +230,7 @@ export function ChannelSidebar({
                     }}
                 >
                     <div
-                        className="h-full overflow-y-auto scroll-on-scroll px-3 pb-5"
+                        className="h-full overflow-y-auto overscroll-y-contain scroll-on-scroll px-3 pb-5"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >

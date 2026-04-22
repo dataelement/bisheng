@@ -409,6 +409,9 @@ class DepartmentService:
             await session.commit()
             await session.refresh(dept)
 
+        if data.admin_user_ids is not None:
+            await cls.aset_admins(dept_id, list(data.admin_user_ids), login_user)
+
         return dept
 
     @classmethod
@@ -1340,6 +1343,10 @@ class DepartmentService:
                 db_user.delete = 1
                 session.add(db_user)
             await session.commit()
+
+        if db_user:
+            from bisheng.user.domain.services.user import UserService
+            await UserService.ainvalidate_jwt_after_account_disabled(user_id)
 
         for did in dept_ids:
             ops = DepartmentChangeHandler.on_member_removed(did, user_id)

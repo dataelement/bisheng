@@ -1,12 +1,14 @@
-import { useLocalize } from "~/hooks";
-import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import useMediaQuery from "~/hooks/useMediaQuery";
+import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { NotificationSeverity } from "~/common";
 import { Input } from "~/components";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
-import { generateUUID, getFullWidthLength } from "~/utils";
+import { cn, generateUUID, getFullWidthLength } from "~/utils";
 import {
     getManagedSpacesApi,
     getMineSpacesApi,
@@ -54,6 +56,10 @@ interface AddToKnowledgeModalProps {
     mode?: "article" | "channel_sync";
     /** Receives the chosen knowledge space / folder; only fires in channel_sync mode. */
     onSyncSelect?: (selection: AddToKnowledgeSelection) => void;
+    /**
+     * 创建/编辑频道抽屉传入：H5 下将选择器 portal 到该节点内，与「创建频道」形成下钻层级，而非再叠一层全屏 Dialog。
+     */
+    channelSyncPortalHostRef?: RefObject<HTMLDivElement | null>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -185,9 +191,9 @@ function TreeNode({
     const { showToast } = useToastContext();
 
     return (
-        <div>
+        <div className="min-w-0 max-w-full">
             <div
-                className={`group flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none
+                className={`group flex min-w-0 max-w-full items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
                     ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
@@ -212,7 +218,7 @@ function TreeNode({
                 {/* Icon */}
                 {node.type === "space"
                     ?
-                    <ChannelNotebookOneIcon className="size-[14px] object-contain opacity-90" />
+                    <ChannelNotebookOneIcon className="size-[14px] shrink-0 object-contain opacity-90" />
                     : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
                 }
 
@@ -231,7 +237,7 @@ function TreeNode({
                         onCancel={onCancelEdit}
                     />
                 ) : (
-                    <span className="flex-1 truncate">{node.name}</span>
+                    <span className="min-w-0 flex-1 truncate" title={node.name}>{node.name}</span>
                 )}
 
                 {/* Add folder button (hover) */}
@@ -249,7 +255,7 @@ function TreeNode({
 
             {/* Children */}
             {isExpanded && node.children && node.children.length > 0 && (
-                <div>
+                <div className="min-w-0 max-w-full">
                     {node.children.map(child => (
                         <TreeNode
                             key={child.id}
@@ -280,8 +286,32 @@ export function AddToKnowledgeModal({
     articleId,
     mode = "article",
     onSyncSelect,
+    channelSyncPortalHostRef,
 }: AddToKnowledgeModalProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
+    const isMax576 = useMediaQuery("(max-width: 576px)");
+    const isMax768 = useMediaQuery("(max-width: 768px)");
+    /**
+     * ≤576px：创建频道抽屉内下钻（返回 + 取消回表单）
+     * 577–768px：居中弹窗（第二稿，无返回；取消关闭）
+     * >768px：桌面宽度弹窗
+     */
+    const embedInChannelSheet =
+        mode === "channel_sync" &&
+        isMax576 &&
+        channelSyncPortalHostRef != null;
+    /** 频道同步且非下钻、仍属移动端宽：居中模态 + 统一宽高规则 */
+    const isChannelSyncCenteredMobile =
+        mode === "channel_sync" && isMax768 && !embedInChannelSheet;
+    const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+    useLayoutEffect(() => {
+        if (!open || !embedInChannelSheet) {
+            setPortalHost(null);
+            return;
+        }
+        setPortalHost(channelSyncPortalHostRef.current);
+    }, [open, embedInChannelSheet, channelSyncPortalHostRef]);
     const { showToast } = useToastContext();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
     const [search, setSearch] = useState("");
@@ -589,110 +619,216 @@ export function AddToKnowledgeModal({
 
     const isEmpty = !spacesLoading && tree.length === 0;
 
+    const titleLabel =
+        mode === "channel_sync"
+            ? localize("com_subscription.select_knowledge_space")
+            : localize("com_subscription.add_to_knowledge_space");
+
+    const goBackToChannelForm = () => handleOpenChange(false);
+
+    const useFlexTree =
+        embedInChannelSheet || isChannelSyncCenteredMobile;
+
+    const pickerBody = (
+        <>
+            {embedInChannelSheet ? (
+                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-[#ECECEC] px-4 pb-4 pt-4 sm:px-6">
+                    <button
+                        type="button"
+                        onClick={goBackToChannelForm}
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        aria-label={localize("com_ui_go_back")}
+                    >
+                        <ChevronLeft className="size-5" />
+                    </button>
+                    <h2 className="min-w-0 flex-1 text-left text-[20px] font-medium leading-7 text-[#212121]">
+                        {titleLabel}
+                    </h2>
+                </div>
+            ) : (
+                <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] touch-mobile:px-4">
+                    <DialogTitle className="text-[20px] font-medium leading-7 text-[#212121]">
+                        {titleLabel}
+                    </DialogTitle>
+                </DialogHeader>
+            )}
+
+            <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-6 pt-4 touch-mobile:px-4"}>
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
+                    <Input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
+                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-[6px] border border-[#ECECEC] focus:outline-none"
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                            onClick={() => setSearch("")}
+                        >
+                            <X className="size-3.5 text-[#818181]" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div
+                className={
+                    embedInChannelSheet
+                        ? "flex min-h-0 flex-1 flex-col px-4 pt-4 sm:px-6"
+                        : isChannelSyncCenteredMobile
+                            ? "flex min-h-0 flex-1 flex-col px-6 pt-4"
+                            : "px-6 pt-4 touch-mobile:px-4"
+                }
+            >
+                <div
+                    className={
+                        useFlexTree
+                            ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover"
+                            : cn(
+                                  "h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover",
+                                  mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
+                              )
+                    }
+                >
+                    {spacesLoading ? (
+                        <div className="flex items-center justify-center h-full min-h-[200px] text-[#86909c]">
+                            <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
+                        </div>
+                    ) : isEmpty ? (
+                        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
+                            <img
+                                className="size-[120px] mb-4 object-contain opacity-90"
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                alt="empty"
+                            />
+                            <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
+                        </div>
+                    ) : displayTree.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
+                            <img
+                                className="size-[120px] mb-4 object-contain opacity-90"
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                alt="empty"
+                            />
+                            <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
+                        </div>
+                    ) : (
+                        <div className="min-w-0 max-w-full py-1">
+                            {displayTree.map(node => (
+                                <TreeNode
+                                    key={node.id}
+                                    node={node}
+                                    nodes={displayTree}
+                                    selectedId={selectedId}
+                                    expandedIds={expandedIds}
+                                    editingId={editingId}
+                                    onSelect={handleSelect}
+                                    onToggle={toggleExpand}
+                                    onAddFolder={handleAddFolder}
+                                    onSaveEdit={handleSaveEdit}
+                                    onCancelEdit={handleCancelEdit}
+                                    searchMode={isSearchMode}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div
+                className={
+                    embedInChannelSheet
+                        ? "mt-auto flex shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] px-4 py-3 sm:px-5 sm:py-3.5"
+                        : isChannelSyncCenteredMobile
+                            ? "mt-auto flex shrink-0 flex-row justify-end gap-2 border-t border-[#ECECEC] px-6 py-3.5"
+                            : "mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 touch-mobile:mt-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3"
+                }
+            >
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goBackToChannelForm}
+                    className={cn(
+                        "h-8 px-4 text-sm rounded-md font-normal",
+                        embedInChannelSheet && "flex-1",
+                        mode === "article" && isH5 && "touch-mobile:flex-1",
+                    )}
+                >{localize("com_subscription.cancel")}</Button>
+                <Button
+                    size="sm"
+                    onClick={() => void handleConfirm()}
+                    disabled={!selectedId || isConfirming}
+                    className={cn(
+                        "h-8 px-4 text-sm rounded-md font-normal",
+                        embedInChannelSheet && "flex-1",
+                        mode === "article" && isH5 && "touch-mobile:flex-1",
+                    )}
+                >
+                    {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
+                </Button>
+            </div>
+        </>
+    );
+
+    const embeddedShell = (
+        <div className="absolute inset-0 z-[80] flex min-h-0 flex-col bg-white">
+            <div className="flex min-h-0 flex-1 items-center justify-center px-10 py-4">
+                <div className="flex h-[80vh] max-h-[600px] w-[calc(100vw-80px)] max-w-[600px] min-h-0 flex-col overflow-hidden rounded-xl border border-[#ECECEC] bg-white shadow-sm">
+                    {pickerBody}
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <>
-            <Dialog open={open} onOpenChange={handleOpenChange}>
-                <DialogContent
-                    close={false}
-                    className="w-[576px] max-w-[92vw] p-0 gap-0 overflow-hidden rounded-xl touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
-                >
-                    {/* Header */}
-                    <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] touch-mobile:px-4">
-                        <DialogTitle className="text-[20px] font-medium leading-7 text-[#212121]">
-                            {localize("com_subscription.add_to_knowledge_space")}
-                        </DialogTitle>
-                    </DialogHeader>
-
-                    {/* Search */}
-                    <div className="px-6 pt-4 touch-mobile:px-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
-                            <Input
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                                placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                                className="w-full h-8 pl-8 pr-8 text-[14px] rounded-[6px] border border-[#ECECEC] focus:outline-none"
-                            />
-                            {search && (
-                                <button
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                                    onClick={() => setSearch("")}
-                                >
-                                    <X className="size-3.5 text-[#818181]" />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Tree / Empty state */}
-                    <div className="px-6 pt-4 touch-mobile:px-4">
-                        <div
-                            className="h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover touch-mobile:h-[calc(100dvh-260px)]"
-                        >
-                            {spacesLoading ? (
-                                <div className="flex items-center justify-center h-full text-[#86909c]">
-                                    <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
-                                </div>
-                            ) : isEmpty ? (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                    <img
-                                        className="size-[120px] mb-4 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
-                                </div>
-                            ) : displayTree.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                    <img
-                                        className="size-[120px] mb-4 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
-                                </div>
-                            ) : (
-                                <div className="py-1">
-                                    {displayTree.map(node => (
-                                        <TreeNode
-                                            key={node.id}
-                                            node={node}
-                                            nodes={displayTree}
-                                            selectedId={selectedId}
-                                            expandedIds={expandedIds}
-                                            editingId={editingId}
-                                            onSelect={handleSelect}
-                                            onToggle={toggleExpand}
-                                            onAddFolder={handleAddFolder}
-                                            onSaveEdit={handleSaveEdit}
-                                            onCancelEdit={handleCancelEdit}
-                                            searchMode={isSearchMode}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <DialogFooter className="mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 touch-mobile:mt-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenChange(false)}
-                            className="h-8 px-4 text-sm rounded-md font-normal touch-mobile:flex-1"
-                        >{localize("com_subscription.cancel")}</Button>
-                        <Button
-                            size="sm"
-                            onClick={() => void handleConfirm()}
-                            disabled={!selectedId || isConfirming}
-                            className="h-8 px-4 text-sm rounded-md font-normal touch-mobile:flex-1"
-                        >
-                            {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {open &&
+                embedInChannelSheet &&
+                (portalHost
+                    ? createPortal(embeddedShell, portalHost)
+                    : (
+                        <Dialog open={open} onOpenChange={handleOpenChange}>
+                            <DialogContent
+                                close={false}
+                                className="h-[80vh] max-h-[600px] w-[calc(100vw-80px)] max-w-[600px] gap-0 overflow-hidden rounded-xl border border-[#ECECEC] p-0 shadow-sm"
+                            >
+                                {pickerBody}
+                            </DialogContent>
+                        </Dialog>
+                    ))}
+            {open && isChannelSyncCenteredMobile && (
+                <Dialog open={open} onOpenChange={handleOpenChange}>
+                    <DialogContent
+                        close={false}
+                        className="flex h-[80vh] max-h-[600px] w-[calc(100vw-80px)] max-w-[600px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
+                    >
+                        {pickerBody}
+                    </DialogContent>
+                </Dialog>
+            )}
+            {open && mode === "channel_sync" && !isMax768 && (
+                <Dialog open={open} onOpenChange={handleOpenChange}>
+                    <DialogContent
+                        close={false}
+                        className="w-[576px] max-w-[92vw] gap-0 overflow-hidden rounded-xl p-0"
+                    >
+                        {pickerBody}
+                    </DialogContent>
+                </Dialog>
+            )}
+            {open && mode === "article" && (
+                <Dialog open={open} onOpenChange={handleOpenChange}>
+                    <DialogContent
+                        close={false}
+                        className="w-[576px] max-w-[92vw] gap-0 overflow-hidden rounded-xl p-0 touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                    >
+                        {pickerBody}
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* Duplicate File Confirmation Dialog */}
             <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>

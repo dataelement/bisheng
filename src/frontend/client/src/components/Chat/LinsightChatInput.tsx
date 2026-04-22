@@ -12,7 +12,7 @@ import {
     type KeyboardEvent
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue } from "recoil";
 import { File_Accept } from "~/common";
 import { LinsiTools } from "~/components/Chat/Input/ChatFormTools";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -24,6 +24,7 @@ import { useLocalize } from "~/hooks";
 import { useLinsightSessionManager } from "~/hooks/useLinsightManager";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { cn, removeFocusRings } from "~/utils";
 import SameSopSpan, { sameSopLabelState } from "./Input/SameSopSpan";
 
@@ -117,6 +118,10 @@ const LinsightChatInput = memo(
         console.log('chatFiles :>> ', chatFiles);
         const { setLinsightSubmission } = useLinsightSessionManager('new')
         const [sameSopLabel, setSameSopLabel] = useRecoilState(sameSopLabelState)
+        // Upload size limit lives in /api/v1/env (Recoil bishengConfState),
+        // not /api/v1/workstation/config; reading it from bsConfig would
+        // silently fall back to 50MB because bsConfig lacks this field.
+        const envConfig = useRecoilValue(bishengConfState)
 
         const biu = (trimmed) => {
             if (bsConfig?.linsight_invitation_code && count === 0)
@@ -193,7 +198,7 @@ const LinsightChatInput = memo(
                             showVoice={showVoice}
                             accepts={accept}
                             uploadMode="linsight"
-                            size={bsConfig?.uploaded_files_maximum_size || 50}
+                            size={envConfig?.uploaded_files_maximum_size || 50}
                             onChange={(files: any) => {
                                 setFileUploading(!files);
                                 setChatFiles(files);

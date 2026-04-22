@@ -60,7 +60,7 @@ const FileUploadStep2 = forwardRef(({
     persistState,
     onPersistStateChange
 }: IProps, ref) => {
-    const [previewLoading, setPreviewLoading] = useState(false);
+    const [, setPreviewLoading] = useState(false);
     const [previewFailed, setPreviewFailed] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const [previewCount, setPreviewCount] = useState(0);
@@ -222,26 +222,51 @@ const FileUploadStep2 = forwardRef(({
         });
     };
     return (
-        <div className="w-full">
-            <div className={cn("flex flex-row justify-center gap-4", showPreview ? "px-4" : "")}>
-                {displayStep === 2 && (
-                    <div className={cn(
-                        "h-full flex flex-col min-w-[540px]",
-                        showPreview ? "max-w-1/2" : ""
-                    )}>
-                        <Tabs
-                            defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
-                            className="flex flex-col h-full"
+        <div className="mx-auto flex h-full w-full max-w-[1120px] min-h-0 flex-col gap-6 pt-6">
+            <Tabs
+                defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
+                className="flex min-h-0 flex-1 flex-col gap-4"
+            >
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    {displayMode === DisplayModeType.Mixed ? (
+                        <TabsList className="h-auto rounded-md bg-[#f8f8f8] p-1 shadow-none">
+                            <TabsTrigger
+                                id="knowledge_file_tab"
+                                value="file"
+                                className="rounded-[4px] border-none bg-transparent px-3 py-1 text-sm text-[#818181] shadow-none data-[state=active]:border-none data-[state=active]:bg-primary/15 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-none data-[state=inactive]:hover:bg-transparent"
+                            >
+                                {t('defaultStrategy')}
+                            </TabsTrigger>
+                            <TabsTrigger
+                                id="knowledge_table_tab"
+                                value="table"
+                                className="rounded-[4px] border-none bg-transparent px-3 py-1 text-sm text-[#818181] shadow-none data-[state=active]:border-none data-[state=active]:bg-primary/15 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-none data-[state=inactive]:hover:bg-transparent"
+                            >
+                                {t('customStrategy')}
+                            </TabsTrigger>
+                        </TabsList>
+                    ) : <div className="h-9" />}
+
+                    {displayStep === 2 && (
+                        <Button
+                            variant="outline"
+                            className="h-9 rounded-md border-[#e4e8ee] bg-white px-4 shadow-sm hover:bg-accent"
+                            onClick={handlePreview}
+                            disabled={strategies.length === 0}
                         >
-                            <div className="">
-                                {displayMode === DisplayModeType.Mixed ? (
-                                    <TabsList className="">
-                                        <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
-                                        <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
-                                    </TabsList>
-                                ) : <div className="h-1"></div>}
-                            </div>
-                            <TabsContent value="file">
+                            <SearchCheck size={16} />
+                            {showPreview ? t('repreviewSegmentation') : t('previewResults')}
+                        </Button>
+                    )}
+                </div>
+
+                <div className={cn(
+                    "grid min-h-0 flex-1 items-stretch gap-6",
+                    showPreview ? "xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]" : "grid-cols-1"
+                )}>
+                    {displayStep === 2 && (
+                        <div className="min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
+                            <TabsContent value="file" className="mt-0">
                                 <RuleFile
                                     rules={rules}
                                     setRules={setRules}
@@ -251,7 +276,7 @@ const FileUploadStep2 = forwardRef(({
                                     showPreview={showPreview}
                                 />
                             </TabsContent>
-                            <TabsContent value="table">
+                            <TabsContent value="table" className="mt-0">
                                 <RuleTable
                                     rules={rules}
                                     setRules={setRules}
@@ -262,46 +287,32 @@ const FileUploadStep2 = forwardRef(({
                                     showPreview={showPreview}
                                 />
                             </TabsContent>
-                            <div className="mt-4">
-                                <Button
-                                    className="h-8"
-                                    onClick={handlePreview}
-                                    disabled={strategies.length === 0}
-                                >
-                                    <SearchCheck size={16} />
-                                    {showPreview ? t('repreviewSegmentation') : t('previewResults')}
-                                </Button>
-                            </div>
-                        </Tabs>
-                    </div>
-                )}
+                        </div>
+                    )}
 
-                {(showPreview || (step === 3 && !isAdjustMode)) ? (
-                    <div className={cn(
-                        "relative",
-                        showPreview ? "w-1/2" : ""
-                    )}>
-                        <PreviewResult
-                            showPreview={showPreview}
-                            step={step}
-                            previewCount={previewCount}
-                            resultFiles={resultFiles}
-                            kId={kId}
-                            rules={applyRule.rules}
-                            applyEachCell={applyRule.applyEachCell}
-                            cellGeneralConfig={applyRule.cellGeneralConfig}
-                            handlePreviewResult={(isSuccess) => {
-                                setPreviewFailed(!isSuccess);
-                                setPreviewLoading(false);
-                            }}
-                        />
-                    </div>
-                ) : null}
-            </div >
+                    {(showPreview || (step === 3 && !isAdjustMode)) ? (
+                        <div className="relative min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
+                            <PreviewResult
+                                showPreview={showPreview}
+                                step={step}
+                                previewCount={previewCount}
+                                resultFiles={resultFiles}
+                                kId={kId}
+                                rules={applyRule.rules}
+                                applyEachCell={applyRule.applyEachCell}
+                                cellGeneralConfig={applyRule.cellGeneralConfig}
+                                handlePreviewResult={(isSuccess) => {
+                                    setPreviewFailed(!isSuccess);
+                                    setPreviewLoading(false);
+                                }}
+                            />
+                        </div>
+                    ) : null}
+                </div>
+            </Tabs>
 
-            <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
+            <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
                 <Button
-                    className="h-8"
                     variant="outline"
                     onClick={() => {
                         onPrev()
@@ -311,7 +322,6 @@ const FileUploadStep2 = forwardRef(({
                     {t('previousStep')}
                 </Button>
                 <Button
-                    className="h-8"
                     disabled={previewFailed || isSubmitting || strategies.length === 0}
                     onClick={internalHandleNext}
                 >

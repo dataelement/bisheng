@@ -34,7 +34,7 @@ export default function AppRoot() {
         <div>
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
-            <div className="flex bg-[#fbfbfb]" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
+            <div className="flex bg-[#F9F9F9]" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
                 <div className="relative z-0 flex h-full w-full overflow-hidden">
 
                     {/* Desktop/Tablet sidebar */}
@@ -101,8 +101,8 @@ export default function AppRoot() {
                     </div>
 
                     {/* Chat panel (routed) */}
-                    <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden p-2">
-                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-[8px] bg-white">
+                    <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
+                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
                             <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
                         </div>
                     </div>

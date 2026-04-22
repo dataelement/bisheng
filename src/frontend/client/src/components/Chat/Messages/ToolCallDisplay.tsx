@@ -96,6 +96,45 @@ function safeHostname(url: string): string {
     try { return new URL(url).hostname; } catch { return url; }
 }
 
+/**
+ * Single web-result chip. Uses the site's own `/favicon.ico` (no third-party
+ * favicon service — Google's s2 endpoint is blocked in mainland China), and
+ * falls back to the Globe icon on load failure.
+ */
+const WebResultChip: FC<{ item: any; chip: string }> = ({ item, chip }) => {
+    const url = item?.url;
+    const host = url ? safeHostname(url) : "";
+    const [faviconFailed, setFaviconFailed] = useState(false);
+    const showFavicon = !!host && !faviconFailed;
+
+    const content = (
+        <span
+            className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
+            title={chip}
+        >
+            {showFavicon ? (
+                <img
+                    src={`https://${host}/favicon.ico`}
+                    alt=""
+                    className="size-[14px] rounded-[2px]"
+                    onError={() => setFaviconFailed(true)}
+                />
+            ) : (
+                <Globe className="size-[14px] text-[#86909C]" />
+            )}
+            <span className="truncate max-w-[14rem]">{chip}</span>
+        </span>
+    );
+
+    return url ? (
+        <a href={url} target="_blank" rel="noreferrer" className="no-underline hover:opacity-80">
+            {content}
+        </a>
+    ) : (
+        content
+    );
+};
+
 /** For web results: dedupe by hostname (or title if no url), preserve search-result order. */
 function normaliseWebResults(items: any[]): any[] {
     const seen = new Set<string>();
@@ -176,17 +215,6 @@ const variantStyles = {
     },
 } as const;
 
-function formatArgs(args: unknown): string {
-    if (args == null) return "";
-    if (typeof args === "string") return args.slice(0, 120);
-    try {
-        const s = JSON.stringify(args);
-        return s.length > 120 ? `${s.slice(0, 120)}…` : s;
-    } catch {
-        return "";
-    }
-}
-
 const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
@@ -221,28 +249,27 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
         return `已使用 ${name}`;
     })();
     const style = variantStyles[variant];
-    // Generic "tool" variant intentionally hides results this release; only
-    // knowledge / web have an expandable detail panel.
+    // Panel only renders when there is actual content: errors, or finished
+    // knowledge/web variants with results. Inflight no longer surfaces raw
+    // args JSON, so the panel would otherwise be an empty gap.
     const hasDetails =
-        toolCall.inflight ||
         !!toolCall.error ||
-        (variant !== "tool" && resultCount > 0);
+        (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
-    // Inflight: always expanded. Finished: web stays open by default (spec
-    // §3.2.4), knowledge stays collapsed for compactness, tool has no panel.
-    const initialExpanded = !!toolCall.inflight || variant === "web";
+    // Web variant stays open by default after finish (spec §3.2.4); errors
+    // stay open to surface the message; everything else starts collapsed.
+    const initialExpanded =
+        !!toolCall.error || (variant === "web" && !toolCall.inflight);
     const [expanded, setExpanded] = useState<boolean>(initialExpanded);
     useEffect(() => {
-        if (toolCall.inflight) {
+        if (toolCall.error) {
             setExpanded(true);
-        } else if (variant === "web") {
+        } else if (variant === "web" && !toolCall.inflight) {
             setExpanded(true);
         } else {
             setExpanded(false);
         }
-    }, [toolCall.inflight, variant]);
-
-    const argsPreview = toolCall.inflight ? formatArgs(toolCall.args) : "";
+    }, [toolCall.inflight, toolCall.error, variant]);
 
     const leadingIcon = toolCall.inflight ? (
         <Loader2 className="mr-1.5 size-3.5 animate-spin text-text-secondary" />
@@ -301,12 +328,6 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                             <div className="leading-[22px]">{toolCall.error}</div>
                         )}
 
-                        {toolCall.inflight && argsPreview && (
-                            <div className="font-mono text-[11px] leading-[22px]">
-                                {argsPreview}
-                            </div>
-                        )}
-
                         {!toolCall.inflight && !toolCall.error && variant === "knowledge" && knowledgeChips.length > 0 && (
                             <div className="flex flex-wrap gap-2">
                                 {knowledgeChips.map((kb, i) => (
@@ -324,45 +345,13 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
 
                         {!toolCall.inflight && !toolCall.error && variant === "web" && webResults.length > 0 && (
                             <div className="flex flex-wrap gap-2">
-                                {webResults.map((item, i) => {
-                                    const chip = extractChipLabel(item, variant);
-                                    const url = item?.url;
-                                    const host = url ? safeHostname(url) : "";
-                                    const favicon = host
-                                        ? `https://www.google.com/s2/favicons?domain=${host}&sz=32`
-                                        : "";
-                                    const content = (
-                                        <span
-                                            className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
-                                            title={chip}
-                                        >
-                                            {favicon ? (
-                                                <img
-                                                    src={favicon}
-                                                    alt=""
-                                                    className="size-[14px] rounded-[2px]"
-                                                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
-                                                />
-                                            ) : (
-                                                <Globe className="size-[14px] text-[#86909C]" />
-                                            )}
-                                            <span className="truncate max-w-[14rem]">{chip}</span>
-                                        </span>
-                                    );
-                                    return url ? (
-                                        <a
-                                            key={i}
-                                            href={url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="no-underline hover:opacity-80"
-                                        >
-                                            {content}
-                                        </a>
-                                    ) : (
-                                        <span key={i}>{content}</span>
-                                    );
-                                })}
+                                {webResults.map((item, i) => (
+                                    <WebResultChip
+                                        key={i}
+                                        item={item}
+                                        chip={extractChipLabel(item, variant)}
+                                    />
+                                ))}
                             </div>
                         )}
                     </div>

@@ -1,7 +1,9 @@
 import { FileText, X } from 'lucide-react';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import FilePreview from '~/pages/knowledge/FilePreview';
+import { cn } from '~/utils';
 import {
   getCitationDocumentFileType,
   getCitationDocumentName,
@@ -49,6 +51,9 @@ export default function CitationDocumentPreviewDrawer({
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
   const isH5 = usePrefersMobileLayout();
+  /** 576 以下：文档预览撑满视口（与订阅文章 H5 全屏阅读一致） */
+  const isLt576 = useMediaQuery('(max-width: 575px)');
+  const isFullBleedMobile = isH5 && isLt576;
   if (!preview || !isRagCitation(preview.detail)) {
     return null;
   }
@@ -80,18 +85,37 @@ export default function CitationDocumentPreviewDrawer({
         onClick={onClose}
       />
       <aside
-        className={
-          isH5
-            ? "fixed inset-x-0 bottom-0 top-[44px] z-[60] flex flex-col rounded-t-2xl bg-white"
-            : "fixed inset-y-0 right-0 z-[60] flex w-[min(860px,calc(100vw-24px))] flex-col border-l border-[#E5E6EB] bg-white shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
-        }
+        className={cn(
+          'z-[60] flex flex-col bg-white',
+          isFullBleedMobile && 'fixed inset-0',
+          isH5 &&
+            !isFullBleedMobile &&
+            'fixed inset-x-0 bottom-0 top-[44px] rounded-t-2xl',
+          !isH5 &&
+            'fixed inset-y-0 right-0 w-[min(860px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        )}
         aria-label="文档预览"
       >
-        <div className={`flex shrink-0 items-center justify-between border-b border-[#F2F3F5] ${isH5 ? 'h-12 px-3' : 'h-14 px-5'}`}>
+        <div
+          className={cn(
+            'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
+            isFullBleedMobile && 'min-h-12 px-3 pt-[env(safe-area-inset-top,0px)]',
+            isH5 && !isFullBleedMobile && 'h-12 px-3',
+            !isH5 && 'h-14 px-5',
+          )}
+        >
           <div className="flex min-w-0 items-center gap-2">
-            {!isH5 && <FileText className="size-4 shrink-0 text-[#165DFF]" />}
-            {!isH5 && (
-              <h2 className={`min-w-0 truncate font-semibold text-[#1D2129] ${isH5 ? 'text-[14px] leading-5' : 'text-[16px] leading-6'}`} title={fileName}>
+            {(!isH5 || isFullBleedMobile) && (
+              <FileText className="size-4 shrink-0 text-[#165DFF]" />
+            )}
+            {(!isH5 || isFullBleedMobile) && (
+              <h2
+                className={cn(
+                  'min-w-0 truncate font-semibold text-[#1D2129]',
+                  isH5 ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
+                )}
+                title={fileName}
+              >
                 {fileName}
               </h2>
             )}
@@ -106,7 +130,13 @@ export default function CitationDocumentPreviewDrawer({
           </button>
         </div>
 
-        <div className={`min-h-0 flex-1 ${isH5 ? 'pb-[78px]' : ''}`}>
+        <div
+          className={cn(
+            'min-h-0 flex-1',
+            isFullBleedMobile && 'pb-[calc(4.875rem+env(safe-area-inset-bottom,0px))]',
+            isH5 && !isFullBleedMobile && 'pb-[78px]',
+          )}
+        >
           {fileUrl ? (
             <FilePreview
               fileName={fileName}
@@ -123,7 +153,14 @@ export default function CitationDocumentPreviewDrawer({
           )}
         </div>
         {isH5 && (
-          <div className="absolute inset-x-0 bottom-0 z-10 border-t border-[#F2F3F5] bg-white px-4 py-3">
+          <div
+            className={cn(
+              'absolute inset-x-0 bottom-0 z-10 border-t border-[#F2F3F5] bg-white px-4',
+              isFullBleedMobile
+                ? 'pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-3'
+                : 'py-3',
+            )}
+          >
             <button
               type="button"
               onClick={handleDownload}

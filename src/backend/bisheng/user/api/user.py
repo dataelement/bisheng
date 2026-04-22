@@ -364,6 +364,25 @@ def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
     return res
 
 
+async def _dept_admin_can_manage_member_account_status(
+    login_user: LoginUser, target_user_id: int,
+) -> bool:
+    """部门管理员（FGA）是否管辖目标用户所在任一部门；用于启禁用等账号状态操作。"""
+    admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+    if not admin_depts:
+        return False
+    admin_ids = {int(d.id) for d in admin_depts if d.id is not None}
+    if not admin_ids:
+        return False
+    async with get_async_db_session() as session:
+        res = await session.exec(
+            select(UserDepartment).where(UserDepartment.user_id == target_user_id)
+        )
+        rows = res.all()
+    target_ids = {int(r.department_id) for r in rows if r.department_id is not None}
+    return bool(admin_ids & target_ids)
+
+
 @router.post('/user/update', status_code=201)
 async def update(*,
                  request: Request,
@@ -378,9 +397,19 @@ async def update(*,
         user_group = UserGroupDao.get_user_group(db_user.user_id)
         user_group = [one.group_id for one in user_group]
         if not login_user.check_groups_admin(user_group):
-            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+            # 组织与成员：部门管理员对用户组无管理权，但应对其管辖部门内成员可启/禁用账号
+            allow_dept_admin = (
+                user.delete is not None
+                and not user.avatar
+                and await _dept_admin_can_manage_member_account_status(
+                    login_user, db_user.user_id,
+                )
+            )
+            if not allow_dept_admin:
+                raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
 
     # check if user already exist
+    disabled_just_now = False
     if db_user and user.delete is not None:
         # Determine if it's an admin
         with get_sync_db_session() as session:
@@ -391,6 +420,7 @@ async def update(*,
             raise HTTPException(status_code=500, detail='Cannot operate admin')
         if user.delete == db_user.delete:
             return resp_200()
+        disabled_just_now = user.delete == 1
         db_user.delete = user.delete
     if db_user.delete == 0:  # Enable User
         # Count of cleanup password errors
@@ -399,6 +429,8 @@ async def update(*,
         session.add(db_user)
         session.commit()
         session.refresh(db_user)
+    if disabled_just_now:
+        await UserService.ainvalidate_jwt_after_account_disabled(db_user.user_id)
     update_user_delete_hook(request, login_user, db_user)
     return resp_200()
 

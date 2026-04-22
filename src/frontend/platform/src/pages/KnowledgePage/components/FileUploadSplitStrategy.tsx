@@ -1,10 +1,9 @@
 import { DelIcon } from '@/components/bs-icons';
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
-import i18next, { use } from 'i18next';
-import { useMemo, useState } from 'react';
+import { GripVertical } from 'lucide-react';
+import { useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 export const ruleI18nMap = {
@@ -15,6 +14,15 @@ export const ruleI18nMap = {
   '。': 'chinesePeriodRule',
   '\\.': 'englishPeriodRule',
 }
+
+const predefinedRules = [
+  { regexKey: '\\n', mode: 'after' },
+  { regexKey: '\\n\\n', mode: 'after' },
+  { regexKey: '第.{1,3}章', mode: 'before' },
+  { regexKey: '第.{1,3}条', mode: 'before' },
+  { regexKey: '。', mode: 'after' },
+  { regexKey: '\\.', mode: 'after' }
+];
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
   const { t } = useTranslation('knowledge');
@@ -43,12 +51,11 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       setCustomRegex('');
     }
   };
-  
+
   const handleRegexClick = (regex, mode) => {
-    // 根据regex获取对应的规则key
     const newStrategy = {
       id: generateUUID(6),
-      regex:t(`predefinedRules.${ruleI18nMap[regex]}.label`),
+      regex: t(`predefinedRules.${ruleI18nMap[regex]}.label`),
       position: mode,
       rule: t(`predefinedRules.${ruleI18nMap[regex]}.desc`),
     };
@@ -59,21 +66,66 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     setStrategies(strategies.filter(item => item.id !== id));
   };
 
-const [predefinedRules] = useState([
-    { regexKey:  '\\n', mode: 'after' },
-    { regexKey:'\\n\\n', mode: 'after' },
-    { regexKey:  '第.{1,3}章', mode: 'before' },
-    { regexKey: '第.{1,3}条', mode: 'before' },
-    { regexKey: '。', mode: 'after' },
-    { regexKey: '\\.', mode: 'after' }
-
-  ]);
-
   return (
-    <div className='flex gap-6'>
-      {/* 左侧拖拽区域 */}
-      <div className='flex-1'>
-        <div className='py-2 px-0 pr-1 overflow-y-auto max-h-[11.5rem] select-none'>
+    <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)]'>
+      <div className="flex min-w-0 flex-col gap-5">
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-[#374151]">{t('recommendedRules')}</h3>
+          <div className="flex flex-wrap gap-2">
+            {predefinedRules.map((rule, index) => {
+              const regexDisplay = t(`predefinedRules.${ruleI18nMap[rule.regexKey]}.label`);
+              return (
+                <Button
+                  key={index}
+                  className="h-6 rounded-[7px] bg-[#f1f5f9] px-2.5 text-[#0f172a] shadow-sm hover:bg-[#e7edf8]"
+                  variant="secondary"
+                  onClick={() => handleRegexClick(rule.regexKey, rule.mode)}
+                >
+                  {rule.mode === 'before' ? `✂️${regexDisplay}` : `${regexDisplay}✂️`}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-[#374151]">{t('addCustomRule')}</h3>
+          <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <span className="shrink-0 text-sm text-[#0f172a]">{t('in')}</span>
+              <Input
+                value={customRegex}
+                onChange={(e) => setCustomRegex(e.target.value)}
+                placeholder={t('enterRegex')}
+                className='h-8 flex-1 border-[#ebecf0] bg-white'
+              />
+              <div className="inline-flex shrink-0 items-center rounded-md bg-[#f8f8f8] p-1">
+                {['before', 'after'].map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`rounded-[4px] px-3 py-1 text-sm transition-colors ${position === item ? 'bg-primary/15 font-medium text-primary' : 'text-[#818181]'}`}
+                    onClick={() => setPosition(item)}
+                  >
+                    {item === 'before' ? t('before') : t('after')}
+                  </button>
+                ))}
+              </div>
+              <span className="shrink-0 text-sm text-[#0f172a]">{t('split')}</span>
+            </div>
+            <Button onClick={handleAddCustomStrategy} className="h-8 shrink-0 rounded-md border-[#ebecf0] bg-white px-4 text-[#070038]" variant="outline">
+              {t('add')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className='min-w-0'>
+        <div className="mb-3 flex flex-wrap items-center gap-2 leading-none">
+          <h3 className="text-sm font-medium text-[#374151]">{t('addedRules')}</h3>
+          <p className='text-sm text-[#999]'>{t('splitPriorityInfo')}</p>
+        </div>
+        <div className='max-h-[12.5rem] select-none overflow-y-auto pr-1'>
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="strategies">
               {(provided) => (
@@ -84,26 +136,24 @@ const [predefinedRules] = useState([
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className="my-1 border rounded bg-accent text-sm h-8"
+                          className="group my-1 flex items-center gap-2 rounded-[4px] border border-[#e4e8ee] bg-[#f2f5f8] px-2 py-1 text-sm"
                         >
-                          <div className='relative group h-full py-1 px-2 whitespace-nowrap overflow-hidden max-w-96'>
-                            {strategy.position === 'before' ? (
-                              <>
-                                <span>✂️{strategy.regex}</span>
-                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>{strategy.regex}✂️</span>
-                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
-                              </>
-                            )}
-                            {/* 右侧渐变遮罩 */}
-                            <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
+                          <div
+                            {...provided.dragHandleProps}
+                            className="flex h-5 w-5 shrink-0 cursor-grab items-center justify-center text-[#94a3b8] active:cursor-grabbing"
+                          >
+                            <GripVertical className="size-4" />
+                          </div>
+                          <div className='flex min-w-0 flex-1 items-center gap-3 overflow-hidden'>
+                            <span className="shrink-0 text-sm text-[#0f172a]">
+                              {strategy.position === 'before' ? `✂️${strategy.regex}` : `${strategy.regex}✂️`}
+                            </span>
+                            <span className='min-w-0 truncate text-xs text-[#4e5969]'>{strategy.rule}</span>
+                          </div>
+                          <div className="flex items-center">
                             <DelIcon
                               onClick={() => handleDelete(strategy.id)}
-                              className='absolute right-1 top-0 hidden group-hover:block cursor-pointer'
+                              className='cursor-pointer text-[#94a3b8] opacity-0 transition-opacity group-hover:opacity-100'
                             />
                           </div>
                         </div>
@@ -111,17 +161,12 @@ const [predefinedRules] = useState([
                     </Draggable>
                   ))}
 
-                  {/* 添加占位符直到5个 */}
                   {strategies.length < 5 && (
                     Array(5 - strategies.length).fill(null).map((_, index) => (
                       <div
                         key={`placeholder-${index}`}
-                        className="my-1 border rounded bg-gray-100 text-sm opacity-50 h-8"
-                      >
-                        <div className='relative group h-full py-1 px-2'>
-                          <span className="text-gray-400"> </span>
-                        </div>
-                      </div>
+                        className="my-1 h-8 rounded-[4px] bg-[#f3f4f6] opacity-60"
+                      />
                     ))
                   )}
                   {provided.placeholder}
@@ -129,65 +174,6 @@ const [predefinedRules] = useState([
               )}
             </Droppable>
           </DragDropContext>
-        </div>
-        <p className='text-xs text-gray-500 pt-1'>{t('splitPriorityInfo')}</p>
-      </div>
-
-      <div className="flex-1 flex flex-col gap-3 px-1"> 
-        <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
-        <div className="flex flex-wrap gap-2">
-          {predefinedRules.map((rule, index) => {
-            const regexDisplay = t(`predefinedRules.${ruleI18nMap[rule.regexKey]}.label`);
-            return (
-              <Button
-                key={index}
-                className="px-2 h-6"
-                variant="secondary"
-                onClick={() => handleRegexClick(rule.regexKey, rule.mode)}
-              >
-                {rule.mode === 'before' ? `✂️${regexDisplay}` : `${regexDisplay}✂️`}
-              </Button>
-            );
-          })}
-        </div>
-        
-        <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
-        <div className="text-sm flex flex-wrap items-center gap-2">
-          <div className='flex items-center gap-1 w-full'>
-            <span>{t('in')}</span>
-            <Input
-              value={customRegex}
-              onChange={(e) => setCustomRegex(e.target.value)}
-              placeholder={t('enterRegex')}
-              className='flex-1 py-0 h-6' 
-            />
-          </div>
-        </div>
-
-        <RadioGroup 
-          value={position} 
-          onValueChange={setPosition} 
-          className="flex items-center flex-wrap text-sm gap-2" 
-        >
-          <div className="flex items-center gap-1"> 
-            <RadioGroupItem value="before" id={`radio-before-${Date.now()}`} />
-            <label htmlFor={`radio-before-${Date.now()}`} className="cursor-pointer">
-              {t('before')}
-            </label>
-          </div>
-          <div className="flex items-center gap-1">
-            <RadioGroupItem value="after" id={`radio-after-${Date.now()}`} />
-            <label htmlFor={`radio-after-${Date.now()}`} className="cursor-pointer">
-              {t('after')}
-            </label>
-          </div>
-          <span className="ml-1">{t('split')}</span> 
-        </RadioGroup>
-
-        <div className="flex justify-end mt-2"> 
-          <Button onClick={handleAddCustomStrategy} className="h-6 px-3"> 
-            {t('add')}
-          </Button>
         </div>
       </div>
     </div>

@@ -21,6 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table"
+import {
+  ColumnResizeHandle,
+  useResizableColumns,
+} from "@/components/bs-ui/table/useResizableColumns"
+import { cname } from "@/components/bs-ui/utils"
 import { userContext } from "@/contexts/userContext"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import {
@@ -117,6 +122,21 @@ export default function Roles() {
   )
 
   const defaultMenuIds = useMemo(() => [...DEFAULT_ENABLED_MENU_IDS], [])
+
+  const roleTableCols = useMemo(
+    () => [
+      { defaultWidth: 180, minWidth: 120 },
+      { defaultWidth: 280, minWidth: 200 },
+      { defaultWidth: 100, minWidth: 80 },
+      { defaultWidth: 140, minWidth: 100 },
+      { defaultWidth: 170, minWidth: 140 },
+      { defaultWidth: 170, minWidth: 140 },
+      { defaultWidth: 168, minWidth: 120 },
+    ],
+    []
+  )
+  const rc = useResizableColumns(roleTableCols)
+  const roleLastCol = roleTableCols.length - 1
 
   const buildEditSnapshot = (
     roleNameVal: string,
@@ -420,16 +440,67 @@ export default function Roles() {
             <span className="mx-4 text-[#fff]">{t("create")}</span>
           </Button>
         </div>
-        <Table className="mb-6">
+        <Table
+          noScroll
+          className="mb-6 !w-auto min-w-full"
+          style={{ tableLayout: "fixed", width: rc.totalWidth }}
+        >
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px]">{t("system.roleName")}</TableHead>
-              <TableHead>{t("system.roleScope")}</TableHead>
-              <TableHead className="w-[100px]">{t("system.userCount")}</TableHead>
-              <TableHead className="w-[140px]">{t("system.creator")}</TableHead>
-              <TableHead className="w-[170px]">{t("createTime")}</TableHead>
-              <TableHead className="w-[170px]">{t("system.changeTime")}</TableHead>
-              <TableHead className="text-right">{t("operations")}</TableHead>
+              <TableHead {...rc.getThProps(0)}>
+                {t("system.roleName")}
+                <ColumnResizeHandle
+                  columnIndex={0}
+                  lastColumn={0 === roleLastCol}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(1)}>
+                {t("system.roleScope")}
+                <ColumnResizeHandle
+                  columnIndex={1}
+                  lastColumn={1 === roleLastCol}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(2)}>
+                {t("system.userCount")}
+                <ColumnResizeHandle
+                  columnIndex={2}
+                  lastColumn={2 === roleLastCol}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(3)}>
+                {t("system.creator")}
+                <ColumnResizeHandle
+                  columnIndex={3}
+                  lastColumn={3 === roleLastCol}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(4)}>
+                {t("createTime")}
+                <ColumnResizeHandle
+                  columnIndex={4}
+                  lastColumn={4 === roleLastCol}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(5)}>
+                {t("system.changeTime")}
+                <ColumnResizeHandle
+                  columnIndex={5}
+                  lastColumn={5 === roleLastCol}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead
+                style={rc.getThProps(6).style}
+                className={cname(rc.getThProps(6).className, "text-right")}
+              >
+                {t("operations")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -442,15 +513,22 @@ export default function Roles() {
             ) : (
               roles.map((el) => (
                 <TableRow key={el.id}>
-                  <TableCell className="font-medium">{el.role_name}</TableCell>
-                  <TableCell className="min-w-[200px] max-w-md whitespace-normal break-words text-left">
+                  <TableCell {...rc.getTdProps(0)} className="font-medium">
+                    {el.role_name}
+                  </TableCell>
+                  <TableCell
+                    {...rc.getTdProps(1)}
+                    className="whitespace-normal break-words text-left"
+                  >
                     {scopeLabel(el)}
                   </TableCell>
-                  <TableCell>{el.user_count ?? "-"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{creatorLabel(el)}</TableCell>
-                  <TableCell>{fmtTime(el.create_time)}</TableCell>
-                  <TableCell>{fmtTime(el.update_time)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell {...rc.getTdProps(2)}>{el.user_count ?? "-"}</TableCell>
+                  <TableCell {...rc.getTdProps(3)} className="text-sm text-muted-foreground">
+                    {creatorLabel(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(4)}>{fmtTime(el.create_time)}</TableCell>
+                  <TableCell {...rc.getTdProps(5)}>{fmtTime(el.update_time)}</TableCell>
+                  <TableCell {...rc.getTdProps(6)} className="text-right">
                     {el.is_readonly ? (
                       <span className="text-sm text-muted-foreground">&mdash;</span>
                     ) : (
