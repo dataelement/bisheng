@@ -40,6 +40,8 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
     department_id: Optional[int] = Field(default=None, description="Bound department id for department spaces")
     department_name: Optional[str] = Field(default=None, description="Bound department name for department spaces")
+    approval_enabled: Optional[bool] = Field(default=None, description="Whether department-space uploads require approval")
+    sensitive_check_enabled: Optional[bool] = Field(default=None, description="Whether department-space uploads require content safety check")
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

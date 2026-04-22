@@ -8,6 +8,8 @@ export interface DepartmentKnowledgeSpaceSummary {
   space_kind?: "normal" | "department";
   auth_type?: string;
   is_released?: boolean;
+  approval_enabled?: boolean;
+  sensitive_check_enabled?: boolean;
 }
 
 export interface DepartmentKnowledgeSpaceApprovalSettings {
@@ -29,12 +31,15 @@ export async function batchCreateDepartmentKnowledgeSpacesApi(
   });
 }
 
-export async function getDepartmentKnowledgeSpaceApprovalSettingsApi(): Promise<DepartmentKnowledgeSpaceApprovalSettings> {
-  return await axios.get(`/api/v1/approval/department-knowledge-space/settings`);
+export async function getDepartmentKnowledgeSpaceApprovalSettingsApi(
+  spaceId: number,
+): Promise<DepartmentKnowledgeSpaceApprovalSettings> {
+  return await axios.get(`/api/v1/approval/department-knowledge-space/settings/${spaceId}`);
 }
 
 export async function updateDepartmentKnowledgeSpaceApprovalSettingsApi(
+  spaceId: number,
   data: DepartmentKnowledgeSpaceApprovalSettings,
 ): Promise<DepartmentKnowledgeSpaceApprovalSettings> {
-  return await axios.put(`/api/v1/approval/department-knowledge-space/settings`, data);
+  return await axios.put(`/api/v1/approval/department-knowledge-space/settings/${spaceId}`, data);
 }

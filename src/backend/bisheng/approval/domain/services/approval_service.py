@@ -29,7 +29,6 @@ from bisheng.common.errcode.approval import (
     ApprovalRequestPermissionDeniedError,
     ApprovalSettingsPermissionDeniedError,
 )
-from bisheng.common.models.config import ConfigDao
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
@@ -43,7 +42,6 @@ from bisheng.message.domain.repositories.implementations.inbox_message_repositor
 )
 
 
-_SETTINGS_KEY = 'department_knowledge_space_approval'
 _MESSAGE_ACTION_CODE = 'request_department_knowledge_space_upload'
 
 
@@ -83,33 +81,33 @@ class ApprovalService:
     @classmethod
     async def get_department_knowledge_space_settings(
         cls,
+        *,
+        space_id: int,
     ) -> DepartmentKnowledgeSpaceApprovalSettings:
-        row = await ConfigDao.aget_config_by_key(_SETTINGS_KEY)
-        if not row or not row.value:
-            return DepartmentKnowledgeSpaceApprovalSettings()
-        try:
-            import json
-
-            payload = json.loads(row.value)
-            return DepartmentKnowledgeSpaceApprovalSettings(**payload)
-        except Exception:
-            return DepartmentKnowledgeSpaceApprovalSettings()
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+        if not binding:
+            raise ApprovalRequestNotFoundError(msg='Department knowledge space does not exist')
+        return DepartmentKnowledgeSpaceApprovalSettings(
+            approval_enabled=binding.approval_enabled,
+            sensitive_check_enabled=binding.sensitive_check_enabled,
+        )
 
     @classmethod
     async def update_department_knowledge_space_settings(
         cls,
         *,
         login_user: UserPayload,
+        space_id: int,
         settings: DepartmentKnowledgeSpaceApprovalSettings,
     ) -> DepartmentKnowledgeSpaceApprovalSettings:
         if not login_user.is_admin():
             raise ApprovalSettingsPermissionDeniedError()
-        import json
-
-        await ConfigDao.insert_or_update_config(
-            _SETTINGS_KEY,
-            json.dumps(settings.model_dump(), ensure_ascii=False),
-        )
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+        if not binding:
+            raise ApprovalRequestNotFoundError(msg='Department knowledge space does not exist')
+        binding.approval_enabled = settings.approval_enabled
+        binding.sensitive_check_enabled = settings.sensitive_check_enabled
+        await DepartmentKnowledgeSpaceDao.aupdate(binding)
         return settings
 
     @classmethod
@@ -119,8 +117,7 @@ class ApprovalService:
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
         if not binding:
             return False
-        settings = await cls.get_department_knowledge_space_settings()
-        return settings.approval_enabled
+        return binding.approval_enabled
 
     @classmethod
     def _original_file_name_from_path(cls, file_path: str) -> str:
@@ -409,7 +406,7 @@ class ApprovalService:
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise ApprovalRequestNotFoundError(msg='Target knowledge space does not exist')
 
-        settings = await cls.get_department_knowledge_space_settings()
+        settings = await cls.get_department_knowledge_space_settings(space_id=space_id)
         file_payloads = await cls._build_file_payload(space_id=space_id, file_paths=file_paths)
         safety_status, safety_reason = await cls._run_safety_check(
             settings=settings,

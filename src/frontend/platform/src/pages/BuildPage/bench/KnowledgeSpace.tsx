@@ -34,7 +34,7 @@ export default function KnowledgeSpace() {
     const { t } = useTranslation();
     const { formData, setFormData, errors, setErrors, handleSave } = useKnowledgeConfig();
     const [managerOpen, setManagerOpen] = useState(false);
-    const [approvalOpen, setApprovalOpen] = useState(false);
+    const [approvalTarget, setApprovalTarget] = useState<DepartmentKnowledgeSpaceSummary | null>(null);
     const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([]);
     const [departmentSpacesLoading, setDepartmentSpacesLoading] = useState(false);
     const { user } = useContext(userContext);
@@ -167,25 +167,16 @@ export default function KnowledgeSpace() {
                                             {t("bench.departmentKnowledgeSpace", "部门知识空间")}
                                         </p>
                                         <p className="mt-1 text-sm text-[#86909C]">
-                                            {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建和上传审批策略。")}
+                                            {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，以及每个部门知识空间单独的上传审批策略。")}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <Button
-                                            variant="outline"
-                                            className="bg-gray-50"
-                                            onClick={() => setApprovalOpen(true)}
-                                        >
-                                            {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            className="bg-gray-50"
-                                            onClick={() => setManagerOpen(true)}
-                                        >
-                                            {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
-                                        </Button>
-                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        className="bg-gray-50"
+                                        onClick={() => setManagerOpen(true)}
+                                    >
+                                        {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
+                                    </Button>
                                 </div>
                                 <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                                     <div className="flex items-center justify-between gap-4">
@@ -229,6 +220,30 @@ export default function KnowledgeSpace() {
                                                             <p className="mt-2 text-xs text-[#86909C]">
                                                                 {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
                                                             </p>
+                                                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                <span
+                                                                    className={
+                                                                        space.approval_enabled
+                                                                            ? "rounded bg-[#E6EDFC] px-2 py-0.5 text-xs text-[#165DFF]"
+                                                                            : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
+                                                                    }
+                                                                >
+                                                                    {space.approval_enabled
+                                                                        ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
+                                                                        : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
+                                                                </span>
+                                                                <span
+                                                                    className={
+                                                                        space.sensitive_check_enabled
+                                                                            ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
+                                                                            : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
+                                                                    }
+                                                                >
+                                                                    {space.sensitive_check_enabled
+                                                                        ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
+                                                                        : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
                                                             <span className="rounded bg-[#E8F3FF] px-2 py-0.5 text-xs text-[#165DFF]">
@@ -245,6 +260,13 @@ export default function KnowledgeSpace() {
                                                                     ? t("bench.departmentKnowledgeSpacePublished", "已发布")
                                                                     : t("bench.departmentKnowledgeSpaceUnpublished", "未发布")}
                                                             </span>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="h-7 px-3 bg-gray-50"
+                                                                onClick={() => setApprovalTarget(space)}
+                                                            >
+                                                                {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
+                                                            </Button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -264,8 +286,12 @@ export default function KnowledgeSpace() {
                 onCreated={loadDepartmentSpaces}
             />
             <DepartmentKnowledgeSpaceApprovalDialog
-                open={approvalOpen}
-                onOpenChange={setApprovalOpen}
+                open={!!approvalTarget}
+                onOpenChange={(open) => {
+                    if (!open) setApprovalTarget(null);
+                }}
+                space={approvalTarget}
+                onSaved={loadDepartmentSpaces}
             />
         </div>
     );

@@ -386,7 +386,12 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
     with patch(
         'bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_all',
         new_callable=AsyncMock,
-        return_value=[SimpleNamespace(space_id=101, department_id=10)],
+        return_value=[SimpleNamespace(
+            space_id=101,
+            department_id=10,
+            approval_enabled=False,
+            sensitive_check_enabled=True,
+        )],
     ), patch(
         'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.async_get_spaces_by_ids',
         new_callable=AsyncMock,
@@ -396,9 +401,14 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
         new_callable=AsyncMock,
         return_value=[department],
     ), patch(
-        'bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids',
+        'bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
         new_callable=AsyncMock,
-        return_value={101: 10},
+        return_value=[SimpleNamespace(
+            space_id=101,
+            department_id=10,
+            approval_enabled=False,
+            sensitive_check_enabled=True,
+        )],
     ):
         result = await DepartmentKnowledgeSpaceService.get_all_department_spaces(
             request=SimpleNamespace(),
@@ -410,3 +420,5 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
     assert result[0].space_kind == 'department'
     assert result[0].department_id == 10
     assert result[0].department_name == '财务部'
+    assert result[0].approval_enabled is False
+    assert result[0].sensitive_check_enabled is True

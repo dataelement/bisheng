@@ -6,6 +6,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
   getDepartmentKnowledgeSpaceApprovalSettingsApi,
   updateDepartmentKnowledgeSpaceApprovalSettingsApi,
+  type DepartmentKnowledgeSpaceSummary,
   type DepartmentKnowledgeSpaceApprovalSettings,
 } from "@/controllers/API/departmentKnowledgeSpace";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -15,6 +16,8 @@ import { useTranslation } from "react-i18next";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  space: DepartmentKnowledgeSpaceSummary | null;
+  onSaved?: () => void;
 }
 
 const DEFAULT_SETTINGS: DepartmentKnowledgeSpaceApprovalSettings = {
@@ -22,7 +25,7 @@ const DEFAULT_SETTINGS: DepartmentKnowledgeSpaceApprovalSettings = {
   sensitive_check_enabled: false,
 };
 
-export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange }: Props) {
+export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, space, onSaved }: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [form, setForm] = useState<DepartmentKnowledgeSpaceApprovalSettings>(DEFAULT_SETTINGS);
@@ -30,9 +33,9 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange }: P
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !space?.id) return;
     setLoading(true);
-    getDepartmentKnowledgeSpaceApprovalSettingsApi()
+    getDepartmentKnowledgeSpaceApprovalSettingsApi(space.id)
       .then((res) => {
         setForm({
           approval_enabled: Boolean(res?.approval_enabled),
@@ -40,12 +43,13 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange }: P
         });
       })
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, space?.id]);
 
   const handleSave = async () => {
+    if (!space?.id) return;
     setSaving(true);
     const res = await captureAndAlertRequestErrorHoc(
-      updateDepartmentKnowledgeSpaceApprovalSettingsApi(form),
+      updateDepartmentKnowledgeSpaceApprovalSettingsApi(space.id, form),
     );
     setSaving(false);
     if (!res) return;
@@ -54,6 +58,7 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange }: P
       description: t("chatConfig.saveSuccess"),
       variant: "success",
     });
+    onSaved?.();
     onOpenChange(false);
   };
 
@@ -61,7 +66,10 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange }: P
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>{t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}</DialogTitle>
+          <DialogTitle>
+            {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
+            {space?.name ? ` · ${space.name}` : ""}
+          </DialogTitle>
           <DialogDescription>
             {t("bench.departmentKnowledgeSpaceApprovalSettingsDesc", "配置部门知识空间上传是否需要审批，以及是否开启内容安全检测。")}
           </DialogDescription>

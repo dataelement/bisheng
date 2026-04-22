@@ -15,7 +15,10 @@ from bisheng.approval.domain.schemas.approval_schema import (
     DepartmentKnowledgeSpaceApprovalSettings,
 )
 from bisheng.approval.domain.services.approval_service import ApprovalService
-from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+from bisheng.common.errcode.approval import (
+    ApprovalRequestNotFoundError,
+    ApprovalRequestPermissionDeniedError,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
 
@@ -178,3 +181,74 @@ async def test_create_department_space_upload_request_excludes_applicant_from_re
 
     assert result.reviewer_user_ids == [20]
     assert mock_get_reviewers.await_args.kwargs['exclude_user_ids'] == [10]
+
+
+@pytest.mark.asyncio
+async def test_get_department_knowledge_space_settings_reads_per_space_binding():
+    binding = SimpleNamespace(
+        approval_enabled=False,
+        sensitive_check_enabled=True,
+    )
+
+    with patch(
+        'bisheng.approval.domain.services.approval_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=binding,
+    ):
+        result = await ApprovalService.get_department_knowledge_space_settings(space_id=101)
+
+    assert result.approval_enabled is False
+    assert result.sensitive_check_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_get_department_knowledge_space_settings_raises_when_missing():
+    with patch(
+        'bisheng.approval.domain.services.approval_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with pytest.raises(ApprovalRequestNotFoundError):
+            await ApprovalService.get_department_knowledge_space_settings(space_id=101)
+
+
+@pytest.mark.asyncio
+async def test_update_department_knowledge_space_settings_updates_binding():
+    binding = SimpleNamespace(
+        approval_enabled=True,
+        sensitive_check_enabled=False,
+    )
+    settings = DepartmentKnowledgeSpaceApprovalSettings(
+        approval_enabled=False,
+        sensitive_check_enabled=True,
+    )
+
+    with patch(
+        'bisheng.approval.domain.services.approval_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=binding,
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.DepartmentKnowledgeSpaceDao.aupdate',
+        new_callable=AsyncMock,
+        return_value=binding,
+    ) as mock_update:
+        result = await ApprovalService.update_department_knowledge_space_settings(
+            login_user=_make_login_user(1, is_admin=True),
+            space_id=101,
+            settings=settings,
+        )
+
+    assert binding.approval_enabled is False
+    assert binding.sensitive_check_enabled is True
+    mock_update.assert_awaited_once_with(binding)
+    assert result == settings
+
+
+@pytest.mark.asyncio
+async def test_should_require_department_space_approval_uses_binding_setting():
+    with patch(
+        'bisheng.approval.domain.services.approval_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(approval_enabled=False),
+    ):
+        assert await ApprovalService.should_require_department_space_approval(101) is False

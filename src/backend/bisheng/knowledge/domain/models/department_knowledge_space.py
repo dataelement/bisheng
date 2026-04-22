@@ -29,6 +29,22 @@ class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
         description='Knowledge Space id',
     )
     created_by: int = Field(default=0, index=True, description='Creator user id')
+    approval_enabled: bool = Field(
+        default=True,
+        description='Whether uploads in this department knowledge space require approval',
+        sa_column=Column(
+            nullable=False,
+            server_default=text('1'),
+        ),
+    )
+    sensitive_check_enabled: bool = Field(
+        default=False,
+        description='Whether uploads in this department knowledge space require content safety check',
+        sa_column=Column(
+            nullable=False,
+            server_default=text('0'),
+        ),
+    )
     create_time: Optional[datetime] = Field(
         default=None,
         sa_column=Column(
@@ -72,13 +88,25 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
         department_id: int,
         space_id: int,
         created_by: int,
+        approval_enabled: bool = True,
+        sensitive_check_enabled: bool = False,
     ) -> DepartmentKnowledgeSpace:
         row = DepartmentKnowledgeSpace(
             tenant_id=tenant_id,
             department_id=department_id,
             space_id=space_id,
             created_by=created_by,
+            approval_enabled=approval_enabled,
+            sensitive_check_enabled=sensitive_check_enabled,
         )
+        async with get_async_db_session() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return row
+
+    @classmethod
+    async def aupdate(cls, row: DepartmentKnowledgeSpace) -> DepartmentKnowledgeSpace:
         async with get_async_db_session() as session:
             session.add(row)
             await session.commit()

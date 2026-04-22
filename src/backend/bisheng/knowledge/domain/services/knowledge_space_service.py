@@ -141,18 +141,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return spaces
         space_ids = [int(space.id) for space in spaces]
-        space_to_department = await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(space_ids)
-        if not space_to_department:
+        bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids(space_ids)
+        if not bindings:
             return spaces
-        departments = await DepartmentDao.aget_by_ids(list(space_to_department.values()))
+        binding_map = {binding.space_id: binding for binding in bindings}
+        departments = await DepartmentDao.aget_by_ids([binding.department_id for binding in bindings])
         department_name_map = {dept.id: dept.name for dept in departments}
         for space in spaces:
-            department_id = space_to_department.get(int(space.id))
-            if department_id is None:
+            binding = binding_map.get(int(space.id))
+            if binding is None:
                 continue
             space.space_kind = 'department'
-            space.department_id = department_id
-            space.department_name = department_name_map.get(department_id)
+            space.department_id = binding.department_id
+            space.department_name = department_name_map.get(binding.department_id)
+            space.approval_enabled = binding.approval_enabled
+            space.sensitive_check_enabled = binding.sensitive_check_enabled
         return spaces
 
     async def _require_write_permission(self, space_id: int) -> None:
