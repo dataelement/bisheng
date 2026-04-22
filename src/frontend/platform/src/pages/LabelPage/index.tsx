@@ -232,6 +232,7 @@ export default function Tasks() {
                     page={page}
                     pageSize={pageSize}
                     total={total}
+                    showTotal={true}
                     onChange={(newPage) => setPage(newPage)}
                 />
             </div>
