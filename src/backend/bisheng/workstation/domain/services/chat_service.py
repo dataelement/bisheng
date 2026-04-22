@@ -37,6 +37,10 @@ from bisheng.tool.domain.services.executor import ToolExecutor
 from .chat_helpers import (
     gen_title,
     read_image_as_data_url,
+    user_message,  # legacy `{created: true}` envelope — tells the client to
+                   # insert a placeholder entry in the sidebar conversation list
+                   # the moment a new chat is created (title updated later via
+                   # gen_title). Must be emitted *before* any category event.
     _sse_resp,  # v2.5 Agent-mode SSE builder
 )
 from .constants import VISUAL_MODEL_FILE_TYPES
@@ -1093,6 +1097,9 @@ async def _agent_stream_chat_completion(
             current_thinking_start = None
             return duration_ms
 
+        # Emit first so the client can add the sidebar placeholder before any
+        # streaming content arrives. onCreated hook in useAiChat keys on this.
+        yield user_message(message.id, conversation_id, 'User', data.text or '')
         yield _sse_resp('processing', 'begin', '', conversation_id)
         yield _sse_resp(
             'question', 'over',

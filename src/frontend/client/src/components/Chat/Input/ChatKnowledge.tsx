@@ -201,8 +201,10 @@ const KnowledgeListPanel = ({
         onScroll={handleScroll}
       >
         {items.map((item) => {
-          // 判断是否选中
-          const isChecked = selectedItems.some((s) => s.id === item.id);
+          // 判断是否选中 — coerce both sides to string: list items arrive from
+          // API as numeric ids, while selected items may be strings (defaults
+          // seeded via `String(k.id)` or restored from localStorage).
+          const isChecked = selectedItems.some((s) => String(s.id) === String(item.id));
           return (
             <DropdownMenuItem
               key={item.id}
@@ -380,12 +382,14 @@ export const ChatKnowledge = ({
     return [...head, ...tail];
   }, [allOrgKbs, config]);
 
-  // checked data
+  // checked data — compare with String() on both sides (API returns numeric
+  // ids, but the atom type + default-seeding use strings).
   const handleToggle = (item: any, type: KnowledgeType) => {
-    const exists = value.some((i) => i.id === item.id && i.type === type);
+    const itemKey = String(item.id);
+    const exists = value.some((i) => String(i.id) === itemKey && i.type === type);
 
     if (exists) {
-      const nextValue = value.filter((i) => !(i.id === item.id && i.type === type));
+      const nextValue = value.filter((i) => !(String(i.id) === itemKey && i.type === type));
       onChange(nextValue);
     } else {
       const currentTypeCount = value.filter(i => i.type === type).length;
@@ -401,8 +405,8 @@ export const ChatKnowledge = ({
         return;
       }
 
-      // 添加时注入 type
-      const newItem: KnowledgeItem = { id: item.id, name: item.name, type };
+      // Normalise id to string on insert to keep the atom invariant stable.
+      const newItem: KnowledgeItem = { id: itemKey, name: item.name, type };
       onChange([newItem, ...value]);
     }
   };
@@ -495,7 +499,10 @@ export const ChatKnowledge = ({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
-        {/* 组织知识库 */}
+        {/* 组织知识库 — hidden when admin disables the KB feature
+            (bsConfig.knowledgeBase.enabled === false). Knowledge space above
+            is a user-scoped feature and stays visible. */}
+        {config?.knowledgeBase?.enabled !== false && (
         <DropdownMenuSub
           open={openSub === 'org'}
           onOpenChange={(o) => {
@@ -546,6 +553,7 @@ export const ChatKnowledge = ({
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        )}
 
       </DropdownMenuContent>
     </DropdownMenu>
