@@ -5,7 +5,7 @@ import { ChannelSuccessIcon } from "~/components/icons/channels";
 interface CreateChannelSuccessContentProps {
     /** 点击「查看频道」 */
     onViewChannel: () => void;
-    /** 点击「成员管理」 */
+    /** 点击「分享」 */
     onManageMembers: () => void;
 }
 
@@ -30,10 +30,9 @@ export function CreateChannelSuccessContent({
                     <Button
                         className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-[#165DFF] px-4 text-[14px] font-normal leading-none text-white hover:bg-[#4080FF]"
                         onClick={onManageMembers}
-                    >{localize("com_subscription.member_management")}</Button>
+                    >{localize("com_subscription.share")}</Button>
                 </div>
             </div>
         </div>
     );
 }
-

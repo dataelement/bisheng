@@ -33,6 +33,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize } from "~/hooks";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
@@ -159,9 +160,25 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFile }) => {
     const localize = useLocalize();
     const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
+    const statusReason = file?.approvalReason?.trim() || file?.errorMessage?.trim() || null;
+    const wrapWithReason = (node: React.ReactNode) => {
+        if (!statusReason) return node;
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <div className="inline-flex max-w-full cursor-help">
+                        {node}
+                    </div>
+                </TooltipTrigger>
+                <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
+                    {statusReason}
+                </TooltipContent>
+            </Tooltip>
+        );
+    };
     if (approvalStatusLabel) {
         const rejected = file ? isKnowledgeApprovalRejected(file) : false;
-        return (
+        return wrapWithReason(
             <div
                 className={cn(
                     "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
@@ -183,7 +200,7 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
         [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
     };
     const item = config[status] || config[FileStatus.WAITING];
-    return (
+    return wrapWithReason(
         <div
             className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
@@ -605,13 +622,6 @@ function FileRow({
     const rowBg = isSelected
         ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
         : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
-    const failureMessage = (
-        file.status === FileStatus.FAILED || file.status === FileStatus.TIMEOUT
-    ) && file.errorMessage?.trim()
-        ? file.errorMessage.trim()
-        : null;
-    const approvalReason = file.approvalReason?.trim() || null;
-
     const {
         isRenaming,
         renameValue,
@@ -797,7 +807,7 @@ function FileRow({
                                     onNavigateFolder?.();
                                     return;
                                 }
-                                // if (!namePreviewable) return;
+                                if (!namePreviewable) return;
                                 onPreview?.();
                             }}
                         >
@@ -805,14 +815,6 @@ function FileRow({
                         </span>
                     )}
                 </div>
-                {(failureMessage || approvalReason) && !isRenaming && (
-                    <p
-                        className="mt-1 truncate text-xs leading-5 text-[#f53f3f]"
-                        title={failureMessage || approvalReason || undefined}
-                    >
-                        {localize("com_knowledge.failure_reason")}: {failureMessage || approvalReason}
-                    </p>
-                )}
                 {/* 固定列右侧阴影 */}
                 <StickyColumnShadow show={showLeftShadow} />
             </TableCell>

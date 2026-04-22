@@ -10,11 +10,10 @@ import {
     Download,
     Tag,
     RotateCcw,
-    Trash2,
-    Shield
+    Trash2
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
-import { cn, copyText } from "~/utils";
+import { cn } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
     DropdownMenu,
@@ -29,12 +28,11 @@ import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { ShareOutlineIcon, AiChatIcon } from "~/components/icons";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
-import { useToastContext } from "~/Providers";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
-import { PermissionDialog } from "~/components/permission";
 import { canOpenPermissionDialog } from "~/api/permission";
+import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 
 /** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
 const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
@@ -118,8 +116,7 @@ export function KnowledgeSpaceHeader({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = space.visibility !== VisibilityType.PRIVATE;
-    const { showToast } = useToastContext();
-    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [shareDialogOpen, setShareDialogOpen] = useState(false);
     const [canManagePermission, setCanManagePermission] = useState(isAdmin);
 
     useEffect(() => {
@@ -134,24 +131,6 @@ export function KnowledgeSpaceHeader({
             controller.abort();
         };
     }, [space.id, isAdmin]);
-
-    const handleShare = () => {
-        try {
-            const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-            const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-            const shareLink = `${normalizedBase}/knowledge/share/${space.id}`;
-            const shareText = localize("com_knowledge.welcome_join_space_link", { 0: space.name, 1: shareLink });
-            copyText(shareText)
-                .then(() => {
-                    showToast({ message: localize("com_knowledge.share_link_copied"), status: "success" });
-                })
-                .catch(() => {
-                    showToast({ message: localize("com_knowledge.copy_failed_retry"), status: "error" });
-                });
-        } catch {
-            showToast({ message: localize("com_knowledge.copy_failed_retry"), status: "error" });
-        }
-    };
 
     const selectedThreshold = isH5 ? 0 : 1;
     const showToolbarActions = isAdmin || selectedCount > selectedThreshold;
@@ -476,24 +455,15 @@ export function KnowledgeSpaceHeader({
                         <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
                     </Button>
 
-                    {canManagePermission && (
+                    {(showShare || canManagePermission) && (
                         <Button
                             variant="ghost"
                             className="h-8 gap-2 rounded-[6px] border border-[#EBECF0] bg-white px-4 font-normal text-[#212121] transition-colors hover:bg-[#F7F8FA]"
-                            onClick={() => setPermDialogOpen(true)}
-                        >
-                            <Shield className="size-4 text-gray-800" />
-                            {localize("com_permission.manage_permission")}</Button>
-                    )}
-
-                    {showShare && (
-                        <Button
-                            variant="ghost"
-                            className="h-8 gap-2 rounded-[6px] border border-[#EBECF0] bg-white px-4 font-normal text-[#212121] transition-colors hover:bg-[#F7F8FA]"
-                            onClick={handleShare}
+                            onClick={() => setShareDialogOpen(true)}
                         >
                             <ShareOutlineIcon className="size-4 text-gray-800" />
-                            {localize("com_knowledge.share")}</Button>
+                            {localize("com_knowledge.share")}
+                        </Button>
                     )}
                 </div>
             </div>
@@ -532,12 +502,13 @@ export function KnowledgeSpaceHeader({
             </div>
         </div>
 
-        <PermissionDialog
-            open={permDialogOpen}
-            onOpenChange={setPermDialogOpen}
-            resourceType="knowledge_space"
+        <KnowledgeSpaceShareDialog
+            open={shareDialogOpen}
+            onOpenChange={setShareDialogOpen}
             resourceId={space.id}
             resourceName={space.name}
+            showShareTab={showShare}
+            showPermissionTab={canManagePermission}
         />
         </>
     );

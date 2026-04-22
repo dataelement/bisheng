@@ -17,7 +17,6 @@ import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
-import { ChannelMemberDialog } from "~/components/ChannelMemberDialog";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -28,6 +27,7 @@ import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer"
 import { buildCreateChannelPayload } from "./channelUtils";
 import { Menu, Plus } from "lucide-react";
 import { cn } from "~/utils";
+import { ChannelShareDialog } from "./ChannelShareDialog";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -67,14 +67,24 @@ export default function Subscription() {
     const [channelTabActivateEpoch, setChannelTabActivateEpoch] = useState(0);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
-    const [channelMemberOpen, setChannelMemberOpen] = useState(false);
-    const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
+    const [channelShareOpen, setChannelShareOpen] = useState(false);
+    const [channelShareChannel, setChannelShareChannel] = useState<Channel | null>(null);
+    const [channelShareInitialTab, setChannelShareInitialTab] = useState<"share" | "members">("share");
     const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
+
+    const openChannelShareDialog = (
+        channel: Channel,
+        initialTab: "share" | "members" = "share",
+    ) => {
+        setChannelShareChannel(channel);
+        setChannelShareInitialTab(initialTab);
+        setChannelShareOpen(true);
+    };
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
         if (isUserLoading) return "loading";
@@ -422,8 +432,7 @@ export default function Subscription() {
                             onChannelSquare={handleChannelSquare}
                             onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                             onManageMembers={(channel) => {
-                                setChannelMemberChannel(channel);
-                                setChannelMemberOpen(true);
+                                openChannelShareDialog(channel, "members");
                             }}
                             onChannelSettings={(channel) => {
                                 setEditingChannel(null);
@@ -459,8 +468,7 @@ export default function Subscription() {
                                     onChannelSquare={handleChannelSquare}
                                     onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                                     onManageMembers={(channel) => {
-                                        setChannelMemberChannel(channel);
-                                        setChannelMemberOpen(true);
+                                        openChannelShareDialog(channel, "members");
                                     }}
                                     onChannelSettings={(channel) => {
                                         setEditingChannel(null);
@@ -494,6 +502,7 @@ export default function Subscription() {
                                 onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
                                 onGoChannelSquare={isH5 ? handleChannelSquare : undefined}
                                 onCreateChannel={isH5 ? handleCreateChannel : undefined}
+                                onOpenChannelShare={(channel) => openChannelShareDialog(channel, "share")}
                                 onFullScreen={(article, ai) => {
                                     enteredFullscreenViaAiRef.current = !!ai;
                                     setFullScreenArticle(article);
@@ -561,7 +570,7 @@ export default function Subscription() {
                     }
                 }}
                 onManageMembers={(channelId) => {
-                    setChannelMemberChannel({
+                    openChannelShareDialog({
                         id: channelId,
                         name: "",
                         creator: "",
@@ -574,8 +583,7 @@ export default function Subscription() {
                         createdAt: "",
                         updatedAt: "",
                         subChannels: []
-                    });
-                    setChannelMemberOpen(true);
+                    }, "members");
                 }}
             />
 
@@ -585,11 +593,11 @@ export default function Subscription() {
                 space={memberDialogSpace}
             />
 
-            <ChannelMemberDialog
-                open={channelMemberOpen}
-                onOpenChange={setChannelMemberOpen}
-                channelId={channelMemberChannel?.id || null}
-                currentUserRole={channelMemberChannel?.role || null}
+            <ChannelShareDialog
+                open={channelShareOpen}
+                onOpenChange={setChannelShareOpen}
+                channel={channelShareChannel}
+                initialTab={channelShareInitialTab}
             />
 
             {/* Full-screen overlay — absolute inset-0 covers the entire Subscription (including the channel sidebar), but doesn't affect MainLayout's primary navigation */}
