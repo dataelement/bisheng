@@ -6,6 +6,7 @@ import type {
 } from "./toast"
 
 const TOAST_LIMIT = 1
+const TOAST_OPEN_DURATION = 4 * 1000
 const TOAST_REMOVE_DELAY = 6 * 1000
 
 type ToasterToast = ToastProps & {
@@ -160,11 +161,17 @@ function toast({ description: descs = [], ...props }: Toast & { isAlert?: boolea
             id,
             open: true,
             onOpenChange: (open) => {
-                console.log('toast remove', id, open);
                 if (!open) dismiss()
             },
         },
     })
+
+    // Radix handles duration-based close in most cases, but this extra timeout
+    // keeps message toasts from getting stuck open when the underlying timer
+    // fails to fire in long-lived dev sessions.
+    setTimeout(() => {
+        dismiss()
+    }, TOAST_OPEN_DURATION)
 
     return {
         id: id,
@@ -188,7 +195,7 @@ function useToast() {
                 listeners.splice(index, 1)
             }
         }
-    }, [state])
+    }, [])
 
     return {
         ...state,
