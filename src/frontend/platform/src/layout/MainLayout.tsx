@@ -74,6 +74,11 @@ export default function MainLayout() {
     const isFullAdminShell = isSuperAdmin || isDeptAdmin
 
     const isMenu = (menu: string) => {
+        if (menu === 'workstation') {
+            return user.web_menu?.includes('workstation')
+                || user.web_menu?.includes('frontend')
+                || isSuperAdmin
+        }
         return user.web_menu?.includes(menu) || isSuperAdmin
     }
 
@@ -133,7 +138,7 @@ export default function MainLayout() {
                                     {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            {isMenu('frontend') && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
+                            {isMenu('workstation') && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
