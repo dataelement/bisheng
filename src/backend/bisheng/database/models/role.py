@@ -46,6 +46,10 @@ class Role(RoleBase, table=True):
         sa_column=Column(Integer, nullable=False, server_default=text('1'),
                          index=True, comment='Tenant ID'),
     )
+    create_user: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, comment='Role creator user ID'),
+    )
 
     __table_args__ = (
         UniqueConstraint('tenant_id', 'role_type', 'role_name', name='uk_tenant_roletype_rolename'),

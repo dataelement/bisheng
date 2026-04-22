@@ -3,18 +3,25 @@
 Part of F005-role-menu-quota. Implements AC-01~AC-10c.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.role.domain.schemas.role_schema import RoleCreateRequest, RoleUpdateRequest
 from bisheng.role.domain.services.role_service import RoleService
 from bisheng.user.domain.services.auth import LoginUser
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/roles')
 
 
+def _audit_log_service():
+    from bisheng.api.services.audit_log import AuditLogService
+    return AuditLogService
+
+
 @router.post('', response_model=UnifiedResponseModel)
 async def create_role(
+    request: Request,
     req: RoleCreateRequest,
     login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
@@ -23,6 +30,7 @@ async def create_role(
         role = await RoleService.create_role_with_menu(req, login_user)
     else:
         role = await RoleService.create_role(req, login_user)
+    _audit_log_service().create_role(login_user, get_request_ip(request), role)
     return resp_200(data={
         'id': role.id,
         'role_name': role.role_name,
@@ -60,6 +68,7 @@ async def get_role(
 
 @router.put('/{role_id}', response_model=UnifiedResponseModel)
 async def update_role(
+    request: Request,
     role_id: int,
     req: RoleUpdateRequest,
     login_user: LoginUser = Depends(LoginUser.get_login_user),
@@ -69,6 +78,7 @@ async def update_role(
         role = await RoleService.update_role_with_menu(role_id, req, login_user)
     else:
         role = await RoleService.update_role(role_id, req, login_user)
+    _audit_log_service().update_role(login_user, get_request_ip(request), role)
     return resp_200(data={
         'id': role.id,
         'role_name': role.role_name,
@@ -82,9 +92,11 @@ async def update_role(
 
 @router.delete('/{role_id}', response_model=UnifiedResponseModel)
 async def delete_role(
+    request: Request,
     role_id: int,
     login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """Delete a role (AC-07, AC-08)."""
-    await RoleService.delete_role(role_id, login_user)
+    role = await RoleService.delete_role(role_id, login_user)
+    _audit_log_service().delete_role(login_user, get_request_ip(request), role)
     return resp_200(data=None)

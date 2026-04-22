@@ -46,6 +46,8 @@ class TestRoleEndpoints:
     @pytest.mark.asyncio
     async def test_create_role(self, mock_admin_login):
         """AC-01: POST /api/v1/roles creates a role."""
+        from bisheng.role.api.endpoints.role import create_role
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
         from bisheng.role.domain.services.role_service import RoleService
 
         mock_role = MagicMock()
@@ -57,14 +59,21 @@ class TestRoleEndpoints:
         mock_role.remark = 'test'
         mock_role.create_time = datetime(2026, 4, 12)
         mock_role.update_time = datetime(2026, 4, 12)
+        request = MagicMock()
 
         with patch.object(RoleService, 'create_role',
-                          new_callable=AsyncMock, return_value=mock_role):
-            result = await RoleService.create_role(
-                MagicMock(role_name='New Role', quota_config={'channel': 10}),
-                mock_admin_login,
+                          new_callable=AsyncMock, return_value=mock_role), \
+             patch('bisheng.role.api.endpoints.role._audit_log_service') as mock_audit_service, \
+             patch('bisheng.role.api.endpoints.role.get_request_ip', return_value='127.0.0.1'):
+            result = await create_role(
+                request=request,
+                req=RoleCreateRequest(role_name='New Role', quota_config={'channel': 10}),
+                login_user=mock_admin_login,
             )
-        assert result.id == 15
+        assert result.data['id'] == 15
+        mock_audit_service.return_value.create_role.assert_called_once_with(
+            mock_admin_login, '127.0.0.1', mock_role,
+        )
 
     @pytest.mark.asyncio
     async def test_list_roles(self, mock_admin_login):
@@ -107,6 +116,63 @@ class TestRoleEndpoints:
             result = await RoleService.get_role(role_id=15, login_user=mock_admin_login)
         assert result.id == 15
         assert result.user_count == 3
+
+    @pytest.mark.asyncio
+    async def test_update_role_writes_audit_log(self, mock_admin_login):
+        from bisheng.role.api.endpoints.role import update_role
+        from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        mock_role = MagicMock()
+        mock_role.id = 15
+        mock_role.role_name = 'Updated Role'
+        mock_role.role_type = 'tenant'
+        mock_role.department_id = None
+        mock_role.quota_config = {'channel': 20}
+        mock_role.remark = 'updated'
+        mock_role.update_time = datetime(2026, 4, 12)
+        request = MagicMock()
+
+        with patch.object(RoleService, 'update_role',
+                          new_callable=AsyncMock, return_value=mock_role), \
+             patch('bisheng.role.api.endpoints.role._audit_log_service') as mock_audit_service, \
+             patch('bisheng.role.api.endpoints.role.get_request_ip', return_value='127.0.0.1'):
+            result = await update_role(
+                request=request,
+                role_id=15,
+                req=RoleUpdateRequest(remark='updated'),
+                login_user=mock_admin_login,
+            )
+
+        assert result.data['id'] == 15
+        mock_audit_service.return_value.update_role.assert_called_once_with(
+            mock_admin_login, '127.0.0.1', mock_role,
+        )
+
+    @pytest.mark.asyncio
+    async def test_delete_role_writes_audit_log(self, mock_admin_login):
+        from bisheng.role.api.endpoints.role import delete_role
+        from bisheng.role.domain.services.role_service import RoleService
+
+        mock_role = MagicMock()
+        mock_role.id = 15
+        mock_role.role_name = 'Delete Me'
+        request = MagicMock()
+
+        with patch.object(RoleService, 'delete_role',
+                          new_callable=AsyncMock, return_value=mock_role), \
+             patch('bisheng.role.api.endpoints.role._audit_log_service') as mock_audit_service, \
+             patch('bisheng.role.api.endpoints.role.get_request_ip', return_value='127.0.0.1'):
+            result = await delete_role(
+                request=request,
+                role_id=15,
+                login_user=mock_admin_login,
+            )
+
+        assert result.data is None
+        mock_audit_service.return_value.delete_role.assert_called_once_with(
+            mock_admin_login, '127.0.0.1', mock_role,
+        )
 
 
 class TestMenuEndpoints:

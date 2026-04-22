@@ -449,6 +449,7 @@ async def create_role(*,
         return UnAuthorizedError.return_resp()
 
     db_role = Role.model_validate(role)
+    db_role.create_user = login_user.user_id
     try:
         with get_sync_db_session() as session:
             session.add(db_role)
