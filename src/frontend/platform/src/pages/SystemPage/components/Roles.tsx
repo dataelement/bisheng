@@ -484,6 +484,7 @@ export default function Roles() {
           page={page}
           pageSize={20}
           total={total}
+          showTotal={true}
           onChange={(p) => {
             setPage(p)
             loadRoles(p, keyword)
