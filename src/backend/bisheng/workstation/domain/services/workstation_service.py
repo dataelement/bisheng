@@ -326,52 +326,86 @@ class WorkStationService(BaseService):
             )
             knowledge_vector_list.update(knowledge_space_list)
 
-            all_milvus, all_milvus_filter = [], []
-            all_es, all_es_filter = [], []
-            multi_milvus_retriever, multi_es_retriever = None, None
-            for _, vectorstore_info in knowledge_vector_list.items():
+            # Per-KB failure isolation — a single KB whose embedding model is
+            # broken (e.g. expired Volcengine key → 403) must not poison the
+            # whole batch. Run each KB's retriever independently; log + skip
+            # on failure so successful KBs still return results.
+            finally_docs: list = []
+            kb_succeed: list = []
+            kb_failed: list = []
+            max_total_docs = 100  # parity with old MultiRetriever finally_k
+
+            for kb_id, vectorstore_info in knowledge_vector_list.items():
+                if len(finally_docs) >= max_total_docs:
+                    break
                 milvus_vectorstore = vectorstore_info.get('milvus')
                 es_vectorstore = vectorstore_info.get('es')
-                all_milvus.append(milvus_vectorstore)
-                all_milvus_filter.append({'k': 100, 'param': {'ef': 110}})
-                all_es.append(es_vectorstore)
-                all_es_filter.append({'k': 100})
-            if all_milvus:
-                multi_milvus_retriever = MultiRetriever(
-                    vectors=all_milvus,
-                    search_kwargs=all_milvus_filter,
-                    finally_k=100,
-                )
-            if all_es:
-                multi_es_retriever = MultiRetriever(
-                    vectors=all_es,
-                    search_kwargs=all_es_filter,
-                    finally_k=100,
-                )
-            knowledge_retriever_tool = KnowledgeRetrieverTool(
-                vector_retriever=multi_milvus_retriever,
-                elastic_retriever=multi_es_retriever,
-                max_content=max_token,
-                rrf_remove_zero_score=True,
-                sort_by_source_and_index=True,
-            )
+                if milvus_vectorstore is None and es_vectorstore is None:
+                    logger.info(
+                        f'[queryChunksFromDB] kb={kb_id} no vectorstore, skip'
+                    )
+                    continue
 
-            finally_docs = await knowledge_retriever_tool.ainvoke({'query': question})
+                try:
+                    per_kb_milvus = (
+                        MultiRetriever(
+                            vectors=[milvus_vectorstore],
+                            search_kwargs=[{'k': 100, 'param': {'ef': 110}}],
+                            finally_k=100,
+                        )
+                        if milvus_vectorstore is not None else None
+                    )
+                    per_kb_es = (
+                        MultiRetriever(
+                            vectors=[es_vectorstore],
+                            search_kwargs=[{'k': 100}],
+                            finally_k=100,
+                        )
+                        if es_vectorstore is not None else None
+                    )
+                    per_kb_tool = KnowledgeRetrieverTool(
+                        vector_retriever=per_kb_milvus,
+                        elastic_retriever=per_kb_es,
+                        max_content=max_token,
+                        rrf_remove_zero_score=True,
+                        sort_by_source_and_index=True,
+                    )
+                    kb_docs = await per_kb_tool.ainvoke({'query': question})
+                    docs_count = len(kb_docs) if kb_docs else 0
+                    if kb_docs:
+                        finally_docs.extend(kb_docs)
+                    kb_succeed.append(kb_id)
+                    logger.info(
+                        f'[queryChunksFromDB] kb={kb_id} ok docs={docs_count}'
+                    )
+                except Exception as exc:
+                    kb_failed.append(kb_id)
+                    logger.warning(
+                        f'[queryChunksFromDB] kb={kb_id} failed: {exc}'
+                    )
+                    continue
+
+            if kb_failed:
+                logger.warning(
+                    f'[queryChunksFromDB] partial failure:'
+                    f' succeed={kb_succeed} failed={kb_failed}'
+                )
+
             if not finally_docs:
                 return [], []
 
-            prompt_context = ''
-            if not prompt_context:
-                formatted_results = []
-                for doc in finally_docs:
-                    file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
-                    content = doc.page_content.strip()
-                    formatted_results.append(
-                        f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
-                    )
-                return formatted_results, finally_docs
+            # Cap to match old MultiRetriever finally_k=100 ceiling.
+            if len(finally_docs) > max_total_docs:
+                finally_docs = finally_docs[:max_total_docs]
 
-            return [prompt_context], finally_docs
+            formatted_results = []
+            for doc in finally_docs:
+                file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
+                content = doc.page_content.strip()
+                formatted_results.append(
+                    f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
+                )
+            return formatted_results, finally_docs
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
             return [], None

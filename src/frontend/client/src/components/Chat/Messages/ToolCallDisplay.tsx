@@ -215,17 +215,6 @@ const variantStyles = {
     },
 } as const;
 
-function formatArgs(args: unknown): string {
-    if (args == null) return "";
-    if (typeof args === "string") return args.slice(0, 120);
-    try {
-        const s = JSON.stringify(args);
-        return s.length > 120 ? `${s.slice(0, 120)}…` : s;
-    } catch {
-        return "";
-    }
-}
-
 const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
@@ -260,28 +249,27 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
         return `已使用 ${name}`;
     })();
     const style = variantStyles[variant];
-    // Generic "tool" variant intentionally hides results this release; only
-    // knowledge / web have an expandable detail panel.
+    // Panel only renders when there is actual content: errors, or finished
+    // knowledge/web variants with results. Inflight no longer surfaces raw
+    // args JSON, so the panel would otherwise be an empty gap.
     const hasDetails =
-        toolCall.inflight ||
         !!toolCall.error ||
-        (variant !== "tool" && resultCount > 0);
+        (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
-    // Inflight: always expanded. Finished: web stays open by default (spec
-    // §3.2.4), knowledge stays collapsed for compactness, tool has no panel.
-    const initialExpanded = !!toolCall.inflight || variant === "web";
+    // Web variant stays open by default after finish (spec §3.2.4); errors
+    // stay open to surface the message; everything else starts collapsed.
+    const initialExpanded =
+        !!toolCall.error || (variant === "web" && !toolCall.inflight);
     const [expanded, setExpanded] = useState<boolean>(initialExpanded);
     useEffect(() => {
-        if (toolCall.inflight) {
+        if (toolCall.error) {
             setExpanded(true);
-        } else if (variant === "web") {
+        } else if (variant === "web" && !toolCall.inflight) {
             setExpanded(true);
         } else {
             setExpanded(false);
         }
-    }, [toolCall.inflight, variant]);
-
-    const argsPreview = toolCall.inflight ? formatArgs(toolCall.args) : "";
+    }, [toolCall.inflight, toolCall.error, variant]);
 
     const leadingIcon = toolCall.inflight ? (
         <Loader2 className="mr-1.5 size-3.5 animate-spin text-text-secondary" />
@@ -338,12 +326,6 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
 
                         {toolCall.error && (
                             <div className="leading-[22px]">{toolCall.error}</div>
-                        )}
-
-                        {toolCall.inflight && argsPreview && (
-                            <div className="font-mono text-[11px] leading-[22px]">
-                                {argsPreview}
-                            </div>
                         )}
 
                         {!toolCall.inflight && !toolCall.error && variant === "knowledge" && knowledgeChips.length > 0 && (

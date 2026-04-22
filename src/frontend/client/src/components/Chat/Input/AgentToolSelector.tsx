@@ -126,7 +126,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl p-2 w-64 max-h-[400px] overflow-y-auto">
+      <SelectContent className="bg-white rounded-xl p-2 w-64 max-h-[320px] overflow-y-auto">
         {availableTools.map((group) => (
           <div key={group.id} className="flex justify-between items-center mb-3 last:mb-0">
             <div className="flex gap-2 items-center min-w-0">

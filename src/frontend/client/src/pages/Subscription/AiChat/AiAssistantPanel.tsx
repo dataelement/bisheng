@@ -183,32 +183,34 @@ export function AiAssistantPanel({
             />
 
             {/* Input Area */}
-            <AiChatInput
-                size="mini"
-                features={features}
-                disabled={isSimpleMode ? false : !bsConfig?.models?.length}
-                placeholder={localize("com_subscription.input_question_placeholder")}
-                isStreaming={isStreaming}
-                onScrollToBottom={() => { }}
-                modelOptions={isSimpleMode ? undefined : bsConfig?.models}
-                modelValue={isSimpleMode ? undefined : chatModel.id}
-                onModelChange={isSimpleMode ? undefined : (val) => {
-                    const model = bsConfig?.models?.find((m) => m.id === val);
-                    setChatModel({
-                        id: Number(val),
-                        name: model?.displayName || "",
-                    });
-                }}
-                onSend={handleSend}
-                onStop={stopGenerating}
-                value={inputText}
-                onChange={setInputText}
-                bsConfig={isSimpleMode ? undefined : bsConfig}
-                selectedOrgKbs={isSimpleMode ? [] : selectedOrgKbs}
-                onSelectedOrgKbsChange={isSimpleMode ? undefined : setSelectedOrgKbs}
-                searchType={isSimpleMode ? undefined : searchType}
-                onSearchTypeChange={isSimpleMode ? undefined : setSearchType}
-            />
+            <div className="px-2">
+                <AiChatInput
+                    size="mini"
+                    features={features}
+                    disabled={isSimpleMode ? false : !bsConfig?.models?.length}
+                    placeholder={localize("com_subscription.input_question_placeholder")}
+                    isStreaming={isStreaming}
+                    onScrollToBottom={() => { }}
+                    modelOptions={isSimpleMode ? undefined : bsConfig?.models}
+                    modelValue={isSimpleMode ? undefined : chatModel.id}
+                    onModelChange={isSimpleMode ? undefined : (val) => {
+                        const model = bsConfig?.models?.find((m) => m.id === val);
+                        setChatModel({
+                            id: Number(val),
+                            name: model?.displayName || "",
+                        });
+                    }}
+                    onSend={handleSend}
+                    onStop={stopGenerating}
+                    value={inputText}
+                    onChange={setInputText}
+                    bsConfig={isSimpleMode ? undefined : bsConfig}
+                    selectedOrgKbs={isSimpleMode ? [] : selectedOrgKbs}
+                    onSelectedOrgKbsChange={isSimpleMode ? undefined : setSelectedOrgKbs}
+                    searchType={isSimpleMode ? undefined : searchType}
+                    onSearchTypeChange={isSimpleMode ? undefined : setSearchType}
+                />
+            </div>
         </div>
     );
 }

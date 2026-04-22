@@ -477,6 +477,14 @@ async def _build_knowledge_search_tool(
         return None
 
     kb_id_whitelist = [str(kb['id']) for kb in knowledge_bases_info]
+    # Space-type KBs skip auth check in queryChunksFromDB; org-type go
+    # through KnowledgeDao.ajudge_knowledge_permission. Preserve the
+    # distinction the caller captured in `source` so a single LLM-chosen
+    # subset still routes each id through the correct path.
+    space_id_set: set[int] = {
+        int(kb['id']) for kb in knowledge_bases_info
+        if kb.get('source') == 'space'
+    }
     # kb_id (str) → display name. Used by _format_chunk to embed the source KB
     # name on every chunk, so the frontend can group/dedupe by KB instead of
     # surfacing one chip per file.
@@ -669,12 +677,16 @@ async def _build_knowledge_search_tool(
             logger.warning(f'[search_kb] tag resolution failed: {exc}')
             file_filter = {}
 
+        # Split back into the two buckets so queryChunksFromDB picks the
+        # right auth-check behaviour per KB source.
+        space_bucket = [i for i in kb_ids_int if i in space_id_set]
+        org_bucket = [i for i in kb_ids_int if i not in space_id_set]
         try:
             _formatted, finally_docs = await WorkStationService.queryChunksFromDB(
                 question=query,
                 use_knowledge_param=UseKnowledgeBaseParam(
-                    knowledge_space_ids=[],
-                    organization_knowledge_ids=kb_ids_int,
+                    knowledge_space_ids=space_bucket,
+                    organization_knowledge_ids=org_bucket,
                 ),
                 max_token=max_token,
                 login_user=login_user,
@@ -736,9 +748,15 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     ukb = data.use_knowledge_base
     if not ukb:
         return []
-    ids = list(ukb.organization_knowledge_ids or []) + list(ukb.knowledge_space_ids or [])
+    org_ids = list(ukb.organization_knowledge_ids or [])
+    space_ids = list(ukb.knowledge_space_ids or [])
+    ids = org_ids + space_ids
     if not ids:
         return []
+    # Preserve the bucket each ID came from so `queryChunksFromDB` can route
+    # space-type KBs past the auth check (they're personal) while org-type
+    # still enforce permissions.
+    space_id_set = set(space_ids)
     try:
         kbs = await KnowledgeDao.aget_list_by_ids(ids)
     except Exception as exc:
@@ -790,6 +808,7 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
             'name': kb.name,
             'description': kb.description or '',
             'tags': tags_by_kb.get(kb.id, []),
+            'source': 'space' if kb.id in space_id_set else 'organization',
         }
         for kb in kbs
     ]
