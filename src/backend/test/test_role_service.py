@@ -5,6 +5,7 @@ menu permissions, permission checks.
 """
 
 import pytest
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -549,11 +550,23 @@ class TestMenuPermissions:
         from bisheng.role.domain.services.role_service import RoleService
 
         role = _make_role(15, 'Test', role_type='tenant')
+        session = MagicMock()
+        exec_result = MagicMock()
+        exec_result.first.return_value = role
+        session.exec = AsyncMock(return_value=exec_result)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session():
+            yield session
 
         with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_role_dao, \
-             patch('bisheng.role.domain.services.role_service.RoleAccessDao') as mock_ra_dao:
+             patch('bisheng.role.domain.services.role_service.select') as mock_select, \
+             patch('bisheng.role.domain.services.role_service.get_async_db_session', fake_session), \
+             patch.object(RoleService, '_replace_menu_access_in_session', new_callable=AsyncMock) as mock_replace:
             mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
-            mock_ra_dao.update_role_access_all = AsyncMock()
+            mock_select.return_value.where.return_value = MagicMock()
 
             await RoleService.update_menu(
                 role_id=15,
@@ -561,7 +574,10 @@ class TestMenuPermissions:
                 login_user=mock_admin_user,
             )
 
-        mock_ra_dao.update_role_access_all.assert_called_once()
+        mock_replace.assert_called_once()
+        assert role.update_time is not None
+        session.add.assert_called_once_with(role)
+        session.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_get_menu(self, mock_admin_user):
@@ -601,3 +617,40 @@ class TestMenuPermissions:
                     menu_ids=['workstation'],
                     login_user=mock_dept_admin,
                 )
+
+    @pytest.mark.asyncio
+    async def test_update_role_with_menu_touches_update_time_on_menu_only_edit(self, mock_admin_user):
+        from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        role = _make_role(25, 'Menu Only', role_type='tenant')
+        req = RoleUpdateRequest(menu_ids=['workstation', 'knowledge'])
+        session = MagicMock()
+        exec_result = MagicMock()
+        exec_result.first.return_value = role
+        session.exec = AsyncMock(return_value=exec_result)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session():
+            yield session
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_role_dao, \
+             patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_ensure_role_mutation_access', new_callable=AsyncMock), \
+             patch('bisheng.role.domain.services.role_service.select') as mock_select, \
+             patch('bisheng.role.domain.services.role_service.get_async_db_session', fake_session), \
+             patch.object(RoleService, '_replace_menu_access_in_session', new_callable=AsyncMock) as mock_replace:
+            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
+            mock_select.return_value.where.return_value = MagicMock()
+
+            result = await RoleService.update_role_with_menu(
+                role_id=25, req=req, login_user=mock_admin_user,
+            )
+
+        assert result is role
+        assert role.update_time is not None
+        session.add.assert_called_once_with(role)
+        mock_replace.assert_called_once()
+        session.commit.assert_awaited_once()
