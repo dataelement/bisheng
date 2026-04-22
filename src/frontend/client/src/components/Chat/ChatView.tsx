@@ -70,26 +70,51 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     } catch { /* ignore */ }
 
     // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
+    // Priority: non-empty localStorage > admin-configured default_checked.
+    // A stored `[]` is treated as "not saved" so admin defaults still apply
+    // (the "start new conversation" button writes [], and we don't want that
+    // to permanently lock defaults out). When the KB feature is disabled by
+    // admin, clear the state regardless.
     try {
-      const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
-      if (raw) {
-        setSelectedOrgKbs(JSON.parse(raw));
+      if ((bsConfig as any)?.knowledgeBase?.enabled === false) {
+        setSelectedOrgKbs([]);
       } else {
-        const defaults = ((bsConfig as any)?.orgKbs || [])
-          .filter((k: any) => k.default_checked)
-          .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
-        setSelectedOrgKbs(defaults);
+        const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
+        let saved: any[] | null = null;
+        if (raw) {
+          try {
+            const v = JSON.parse(raw);
+            if (Array.isArray(v)) saved = v;
+          } catch { /* ignore parse errors */ }
+        }
+        if (saved && saved.length > 0) {
+          setSelectedOrgKbs(saved);
+        } else {
+          const defaults = ((bsConfig as any)?.orgKbs || [])
+            .filter((k: any) => k.default_checked)
+            .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
+          setSelectedOrgKbs(defaults);
+        }
       }
     } catch { /* ignore */ }
 
-    // Agent tool groups (parent-level). AgentToolSelector still seeds from
-    // default_checked on first run; localStorage overrides that when present.
+    // Agent tool groups (parent-level). Same priority rule: non-empty local
+    // wins; empty/missing falls through so AgentToolSelector can seed from
+    // admin-configured default_checked.
     try {
       const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
+      let saved: any[] | null = null;
       if (raw) {
-        setSelectedAgentTools(JSON.parse(raw));
+        try {
+          const v = JSON.parse(raw);
+          if (Array.isArray(v)) saved = v;
+        } catch { /* ignore parse errors */ }
+      }
+      if (saved && saved.length > 0) {
+        setSelectedAgentTools(saved);
         setAgentToolsInitialized(true);
       }
+      // else: leave initialized=false so AgentToolSelector applies defaults.
     } catch { /* ignore */ }
 
     memoReadyRef.current = true;

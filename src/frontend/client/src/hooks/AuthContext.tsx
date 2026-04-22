@@ -93,6 +93,9 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
+      // Drop the session sentinel so the next authenticated hit (even same
+      // account, same tab) is treated as a fresh session and clears `bs:*`.
+      try { sessionStorage.removeItem('bs:session-user'); } catch { /* ignore */ }
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
       if (thirdPartyLogoutUrl) {
         window.location.href = thirdPartyLogoutUrl;
@@ -106,6 +109,7 @@ const AuthContextProvider = ({
       });
     },
     onError: (error) => {
+      try { sessionStorage.removeItem('bs:session-user'); } catch { /* ignore */ }
       doSetError((error as Error).message);
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
       if (thirdPartyLogoutUrl) {
@@ -162,6 +166,22 @@ const AuthContextProvider = ({
     if (userQuery.data) {
       setUser(userQuery.data);
       setIsAuthenticated(true);
+      // Session sentinel: any path that brings `user` into the app — normal
+      // login, 2FA, SSO, third-party SSO landing — ends up here once
+      // /api/user/me succeeds. sessionStorage survives same-tab reloads but
+      // dies on new tab / browser restart / explicit logout, so a mismatch
+      // means "fresh authenticated session for this user" → wipe cached
+      // chat preferences so admin-configured defaults re-apply.
+      try {
+        const uid = String(userQuery.data.id ?? '');
+        if (uid && sessionStorage.getItem('bs:session-user') !== uid) {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('bs:')) localStorage.removeItem(k);
+          }
+          sessionStorage.setItem('bs:session-user', uid);
+        }
+      } catch { /* ignore storage errors */ }
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
       // navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });

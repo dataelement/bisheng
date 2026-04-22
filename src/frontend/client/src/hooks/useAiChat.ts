@@ -14,6 +14,7 @@ import { useLocalize } from "~/hooks";
 import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
@@ -42,6 +43,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // emits the new ChatResponse SSE format). Empty array keeps us on the
     // legacy flow so existing tests / old clients aren't disrupted.
     const [selectedAgentTools] = useRecoilState(store.selectedAgentTools);
+    // Admin-level KB toggle. When disabled we strip both org-KB and knowledge-
+    // space ids from the outbound payload — defensive, in case stale state
+    // restored from localStorage still has entries even after the UI menu is
+    // hidden by ChatKnowledge.
+    const { data: bsConfig } = useGetBsConfig();
 
     const queryClient = useQueryClient();
 
@@ -159,10 +165,18 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             const updatedMessages = [...messagesRef.current, userMessage, initialResponse];
             setMessages(updatedMessages);
 
-            // Build SSE payload (same structure as useChatFunctions.ask)
-            // Filter only org-type kbs (exclude personal/space)
-            const orgKbs = selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id);
-            const spaceKbs = selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id));
+            // Build SSE payload (same structure as useChatFunctions.ask).
+            // Backend expects List[int] for both id fields; atom holds strings
+            // so we coerce via Number here.
+            // When admin disables knowledgeBase, strip both id lists regardless
+            // of local state so nothing leaks to the backend.
+            const kbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
+            const orgKbs = kbDisabled
+                ? []
+                : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id));
+            const spaceKbs = kbDisabled
+                ? []
+                : selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id));
             const payload = {
                 text: text.trim(),
                 clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
@@ -430,8 +444,12 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 model: chatModel.id + "",
                 search_enabled: searchType === "netSearch",
                 use_knowledge_base: {
-                    organization_knowledge_ids: selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id),
-                    knowledge_space_ids: selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
+                    organization_knowledge_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
+                        ? []
+                        : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id)),
+                    knowledge_space_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
+                        ? []
+                        : selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
                 },
                 isContinued: false,
                 isRegenerate: true,
