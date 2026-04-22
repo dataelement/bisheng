@@ -23,7 +23,6 @@ import {
     updateSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
-import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
 import { useToastContext } from "~/Providers";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
@@ -36,6 +35,7 @@ import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
+import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
 
 export default function Knowledge() {
     const localize = useLocalize();
@@ -46,8 +46,8 @@ export default function Knowledge() {
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
-    const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-    const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
+    const [spaceShareOpen, setSpaceShareOpen] = useState(false);
+    const [spaceShareTarget, setSpaceShareTarget] = useState<KnowledgeSpace | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -82,6 +82,11 @@ export default function Knowledge() {
     const [squareStatusOverride, setSquareStatusOverride] = useState<
         Record<string, "join" | "joined" | "pending" | "rejected">
     >({});
+
+    const openSpaceShareDialog = (space: KnowledgeSpace) => {
+        setSpaceShareTarget(space);
+        setSpaceShareOpen(true);
+    };
 
     /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
     const knowledgePluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
@@ -560,8 +565,7 @@ export default function Knowledge() {
                     onCreateSpace={handleCreateSpace}
                     onSpaceSettings={handleSpaceSettings}
                     onManageMembers={(space) => {
-                        setMemberDialogSpace(space);
-                        setMemberDialogOpen(true);
+                        openSpaceShareDialog(space);
                     }}
                     onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                     collapsed={sidebarCollapsed}
@@ -592,8 +596,7 @@ export default function Knowledge() {
                                 setSpaceListDrawerOpen(false);
                             }}
                             onManageMembers={(space) => {
-                                setMemberDialogSpace(space);
-                                setMemberDialogOpen(true);
+                                openSpaceShareDialog(space);
                                 setSpaceListDrawerOpen(false);
                             }}
                             onKnowledgeSquare={() => {
@@ -763,15 +766,25 @@ export default function Knowledge() {
                 onViewSpace={() => setShowCreateDrawer(false)}
                 onManageMembers={() => {
                     setShowCreateDrawer(false);
-                    setMemberDialogSpace(activeSpace);
-                    setMemberDialogOpen(true);
+                    if (activeSpace) openSpaceShareDialog(activeSpace);
                 }}
             />
 
-            <KnowledgeSpaceMemberDialog
-                open={memberDialogOpen}
-                onOpenChange={setMemberDialogOpen}
-                space={memberDialogSpace}
+            <KnowledgeSpaceShareDialog
+                open={spaceShareOpen}
+                onOpenChange={setSpaceShareOpen}
+                resourceId={spaceShareTarget?.id || ""}
+                resourceName={spaceShareTarget?.name || ""}
+                currentUserRole={spaceShareTarget?.role || null}
+                showShareTab={spaceShareTarget?.visibility !== VisibilityType.PRIVATE}
+                showMembersTab={
+                    spaceShareTarget?.role === SpaceRole.CREATOR ||
+                    spaceShareTarget?.role === SpaceRole.ADMIN
+                }
+                showPermissionTab={
+                    spaceShareTarget?.role === SpaceRole.CREATOR ||
+                    spaceShareTarget?.role === SpaceRole.ADMIN
+                }
             />
 
             <KnowledgeSpacePreviewDrawer

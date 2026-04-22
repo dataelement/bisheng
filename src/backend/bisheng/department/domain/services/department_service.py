@@ -740,6 +740,16 @@ class DepartmentService:
             + DepartmentChangeHandler.on_admin_removed(dept.id, [user_id])
         )
         await DepartmentChangeHandler.execute_async(ops)
+        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+            DepartmentKnowledgeSpaceService,
+        )
+        await DepartmentKnowledgeSpaceService.sync_department_admin_memberships(
+            request=None,
+            login_user=login_user,
+            department_id=dept.id,
+            added_user_ids=[],
+            removed_user_ids=[user_id],
+        )
 
     @classmethod
     async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> Set[int]:
@@ -820,6 +830,18 @@ class DepartmentService:
         if to_remove:
             ops = DepartmentChangeHandler.on_admin_removed(dept.id, to_remove)
             await DepartmentChangeHandler.execute_async(ops)
+
+        if to_add or to_remove:
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+            await DepartmentKnowledgeSpaceService.sync_department_admin_memberships(
+                request=None,
+                login_user=login_user,
+                department_id=dept.id,
+                added_user_ids=to_add,
+                removed_user_ids=to_remove,
+            )
 
         return await cls.aget_admins(dept_id, login_user)
 

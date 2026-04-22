@@ -8,14 +8,11 @@ import {
     getChannelDetailApi,
     type ArticleSearchResultItem
 } from "~/api/channels";
-import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useDebounce } from "~/hooks";
-import { useToastContext } from "~/Providers";
-import { copyText } from "~/utils";
 import { ArticleCard } from "./ArticleCard";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
@@ -32,6 +29,7 @@ interface ArticleListProps {
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
     onCreateChannel?: () => void;
+    onOpenChannelShare?: (channel: Channel) => void;
 }
 
 /** Strip HTML tags from a string, extracting body content first */
@@ -76,6 +74,7 @@ export function ArticleList({
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
+    onOpenChannelShare,
 }: ArticleListProps) {
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
     const localize = useLocalize();
@@ -91,7 +90,6 @@ export function ArticleList({
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const searchQuery = useDebounce(searchKey, 500);
-    const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
 
@@ -101,6 +99,9 @@ export function ArticleList({
         queryFn: () => getChannelDetailApi(channel.id),
         staleTime: 60_000, // Cache for 1 minute
     });
+    const canManageChannel = channel.role === "creator" || channel.role === "admin";
+    const canOpenChannelShare =
+        canManageChannel || (channelDetail ? channelDetail.visibility !== "private" : false);
 
     // Derive source options directly from channelDetail.source_infos (refreshes after channel edit)
     const sourceOptions = useMemo(() => {
@@ -329,21 +330,9 @@ export function ArticleList({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-3">
-                        {channelDetail?.visibility !== "private" ? (
+                        {canOpenChannelShare ? (
                             <Button
-                                onClick={() => {
-                                    const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
-                                    const shareText = localize("com_subscription.welcome_join_channel_share", {
-                                        name: channel.name,
-                                        shareUrl
-                                    });
-                                    copyText(shareText).then(() => {
-                                        showToast({
-                                            message: localize("com_subscription.share_link_copied"),
-                                            severity: NotificationSeverity.SUCCESS
-                                        });
-                                    });
-                                }}
+                                onClick={() => onOpenChannelShare?.(channel)}
                                 variant="ghost"
                                 className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:px-2 touch-mobile:text-[#212121] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white"
                             >

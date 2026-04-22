@@ -19,18 +19,28 @@ interface DepartmentNode {
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[]
   onChange: (v: SelectedSubject[]) => void
-  includeChildren: boolean
-  onIncludeChildrenChange: (v: boolean) => void
+  includeChildren?: boolean
+  onIncludeChildrenChange?: (v: boolean) => void
+  showIncludeChildrenToggle?: boolean
+  disabledIds?: number[]
+  disabledLabel?: string
 }
 
 export function SubjectSearchDepartment({
-  value, onChange, includeChildren, onIncludeChildrenChange,
+  value,
+  onChange,
+  includeChildren = false,
+  onIncludeChildrenChange = () => undefined,
+  showIncludeChildrenToggle = true,
+  disabledIds = [],
+  disabledLabel,
 }: SubjectSearchDepartmentProps) {
   const { t } = useTranslation('permission')
   const [tree, setTree] = useState<DepartmentNode[]>([])
   const [loading, setLoading] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const disabledIdSet = new Set(disabledIds)
 
   useEffect(() => {
     setLoading(true)
@@ -43,6 +53,7 @@ export function SubjectSearchDepartment({
   const selectedIds = new Set(value.map((s) => s.id))
 
   const toggle = (node: DepartmentNode) => {
+    if (disabledIdSet.has(node.id)) return
     if (selectedIds.has(node.id)) {
       onChange(value.filter((s) => s.id !== node.id))
     } else {
@@ -104,37 +115,52 @@ export function SubjectSearchDepartment({
             {t('empty.departments')}
           </div>
         )}
-        {!loading && tree.map((node) => (
-          <TreeNode
-            key={node.id}
-            node={node}
-            depth={0}
-            expanded={expanded}
-            selectedIds={selectedIds}
-            matchesKeyword={matchesKeyword}
-            onToggle={toggle}
-            onExpand={toggleExpand}
-          />
-        ))}
+        {!loading &&
+          tree.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              expanded={expanded}
+              selectedIds={selectedIds}
+              disabledIds={disabledIdSet}
+              disabledLabel={disabledLabel}
+              matchesKeyword={matchesKeyword}
+              onToggle={toggle}
+              onExpand={toggleExpand}
+            />
+          ))}
       </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <Checkbox
-          checked={includeChildren}
-          onCheckedChange={(v) => onIncludeChildrenChange(v === true)}
-        />
-        {t('includeChildren')}
-      </label>
+      {showIncludeChildrenToggle && (
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <Checkbox
+            checked={includeChildren}
+            onCheckedChange={(v) => onIncludeChildrenChange(v === true)}
+          />
+          {t('includeChildren')}
+        </label>
+      )}
     </div>
   )
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, matchesKeyword, onToggle, onExpand,
+  node,
+  depth,
+  expanded,
+  selectedIds,
+  disabledIds,
+  disabledLabel,
+  matchesKeyword,
+  onToggle,
+  onExpand,
 }: {
   node: DepartmentNode
   depth: number
   expanded: Set<number>
   selectedIds: Set<number>
+  disabledIds: Set<number>
+  disabledLabel?: string
   matchesKeyword: (n: DepartmentNode) => boolean
   onToggle: (n: DepartmentNode) => void
   onExpand: (id: number) => void
@@ -143,11 +169,14 @@ function TreeNode({
 
   const hasChildren = node.children && node.children.length > 0
   const isExpanded = expanded.has(node.id)
+  const isDisabled = disabledIds.has(node.id)
 
   return (
     <>
       <div
-        className="flex items-center gap-1 px-2 py-1.5 cursor-pointer hover:bg-accent"
+        className={`flex items-center gap-1 px-2 py-1.5 ${
+          isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent"
+        }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         {hasChildren ? (
@@ -164,12 +193,16 @@ function TreeNode({
         )}
         <Checkbox
           checked={selectedIds.has(node.id)}
+          disabled={isDisabled}
           onCheckedChange={() => onToggle(node)}
         />
         <Building2 className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm truncate">{node.name}</span>
         {node.member_count != null && (
           <span className="text-xs text-muted-foreground ml-1">({node.member_count})</span>
+        )}
+        {isDisabled && disabledLabel && (
+          <span className="ml-auto text-xs text-muted-foreground">{disabledLabel}</span>
         )}
       </div>
       {hasChildren && isExpanded && node.children!.map((child) => (
@@ -179,6 +212,8 @@ function TreeNode({
           depth={depth + 1}
           expanded={expanded}
           selectedIds={selectedIds}
+          disabledIds={disabledIds}
+          disabledLabel={disabledLabel}
           matchesKeyword={matchesKeyword}
           onToggle={onToggle}
           onExpand={onExpand}

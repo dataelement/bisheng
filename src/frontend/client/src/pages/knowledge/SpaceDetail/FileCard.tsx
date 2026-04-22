@@ -1,4 +1,4 @@
-import { Circle, Download, Edit, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
+import { Download, Edit, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -14,8 +14,9 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -73,6 +74,8 @@ export function FileCard({
     ) && file.errorMessage?.trim()
         ? file.errorMessage.trim()
         : null;
+    const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
+    const approvalReason = file.approvalReason?.trim() || null;
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
@@ -100,6 +103,68 @@ export function FileCard({
         ? "text-[#212121]"
         : "text-[#999]";
 
+    const renderStatusBadge = () => {
+        if (!isAdmin || isFolder) return null;
+
+        const approvalLabel = approvalStatusLabel;
+        const statusReason = failureMessage || approvalReason;
+
+        let badge: React.ReactNode = null;
+        if (approvalLabel) {
+            const rejected = isKnowledgeApprovalRejected(file);
+            badge = (
+                <span
+                    className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
+                        rejected ? "bg-[#fff2f0] text-[#f53f3f]" : "bg-[#e8f3ff] text-[#165dff]",
+                    )}
+                >
+                    <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
+                    {approvalLabel}
+                </span>
+            );
+        } else {
+            const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+            };
+            const item = config[file.status];
+            if (!item) return null;
+            badge = (
+                <span
+                    className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
+                        item.bg,
+                        item.color,
+                    )}
+                >
+                    <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />
+                    {item.label}
+                </span>
+            );
+        }
+
+        if (!badge) return null;
+        if (!statusReason) return badge;
+
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help">
+                        {badge}
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
+                    {statusReason}
+                </TooltipContent>
+            </Tooltip>
+        );
+    };
+
     const getStatusText = () => {
         if (isRenaming) {
             return (
@@ -121,44 +186,12 @@ export function FileCard({
         if (!isAdmin || isFolder) {
             return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
         }
-
-        switch (file.status) {
-            case FileStatus.UPLOADING:
-                return (
-                    <div className="flex items-center flex-1 min-w-0">
-                        <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
-                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
-                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.uploading")}</span>
-                    </div>
-                );
-            case FileStatus.PROCESSING:
-            case FileStatus.REBUILDING:
-                return (
-                    <div className="flex items-center flex-1 min-w-0">
-                        <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
-                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
-                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.parsing")}</span>
-                    </div>
-                );
-            case FileStatus.WAITING:
-                return (
-                    <div className="flex items-center flex-1 min-w-0">
-                        <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
-                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
-                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.queueing")}</span>
-                    </div>
-                );
-            case FileStatus.FAILED:
-            case FileStatus.TIMEOUT:
-                return (
-                    <div className="flex items-center flex-1 min-w-0">
-                        <Circle className="size-1.5 fill-[#f53f3f] text-[#f53f3f] shrink-0 mr-1.5" />
-                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
-                    </div>
-                );
-            default:
-                return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
-        }
+        return (
+            <div className="flex min-w-0 items-center gap-2">
+                <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
+                {renderStatusBadge()}
+            </div>
+        );
     };
 
     const handleCardClick = () => {
@@ -170,7 +203,7 @@ export function FileCard({
             return;
         }
 
-        // if (!isKnowledgeItemPreviewable(file)) return;
+        if (!isKnowledgeItemPreviewable(file)) return;
 
         // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
         // still honor explicit onPreview when provided.
@@ -375,14 +408,6 @@ export function FileCard({
                     <div className="flex items-center text-sm font-medium min-w-0">
                         {getStatusText()}
                     </div>
-                    {failureMessage && (
-                        <p
-                            className="mt-1 text-xs leading-[16px] text-[#f53f3f] line-clamp-2 break-words"
-                            title={failureMessage}
-                        >
-                            {localize("com_knowledge.failure_reason")}: {failureMessage}
-                        </p>
-                    )}
 
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">

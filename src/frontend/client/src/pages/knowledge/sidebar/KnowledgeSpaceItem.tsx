@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pin, PinOff, Settings, Users, LogOut } from "lucide-react";
+import { Building2, MoreHorizontal, Pin, PinOff, Settings, Share2, LogOut } from "lucide-react";
 import { useState } from "react";
 import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -27,7 +27,7 @@ import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
     isActive: boolean;
-    type: "created" | "joined";
+    type: "created" | "joined" | "department";
     onSelect: (space: KnowledgeSpace) => void;
     onUpdate: (space: KnowledgeSpace) => void;
     onDelete: (id: string) => void;
@@ -85,7 +85,11 @@ export default function KnowledgeSpaceItem({
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
-                    <SpaceNotebookIcon active={isActive} />
+                    {type === "department" ? (
+                        <Building2 className={`size-[14px] ${isActive ? "text-primary" : "text-[#86909C]"}`} />
+                    ) : (
+                        <SpaceNotebookIcon active={isActive} />
+                    )}
                 </div>
 
                 {isEditing ? (
@@ -128,7 +132,7 @@ export default function KnowledgeSpaceItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {type === "created" && (
+                        {(type === "created" || type === "department") && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onSettings?.(space)}
@@ -139,14 +143,14 @@ export default function KnowledgeSpaceItem({
                                 </span>
                             </DropdownMenuItem>
                         )}
-                        {(type === "created" || space.role === SpaceRole.ADMIN) && (
+                        {(type === "created" || type === "department" || space.role === SpaceRole.ADMIN) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers?.(space)}
                             >
-                                <Users className={sidebarListMoreMenuIconClassName} />
+                                <Share2 className={sidebarListMoreMenuIconClassName} />
                                 <span className={sidebarListMoreMenuLabelClassName}>
-                                    {localize("com_knowledge.member_management")}
+                                    {localize("com_knowledge.share")}
                                 </span>
                             </DropdownMenuItem>
                         )}
@@ -169,32 +173,53 @@ export default function KnowledgeSpaceItem({
 
                         <SidebarListMoreMenuDivider />
 
-                        <DropdownMenuItem
-                            onClick={async () => {
-                                const actionName = type === "created" ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
-                                const description = type === "created" ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
-                                const ok = await confirm({
-                                    title: localize("com_knowledge.prompt"),
-                                    description,
-                                    confirmText: actionName === localize("com_knowledge.dissolve_space") ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
-                                    cancelText: localize("com_knowledge.cancel")
-                                })
+                        {type !== "department" && (
+                            <DropdownMenuItem
+                                onClick={async () => {
+                                    const actionName = type === "created" ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
+                                    const description = type === "created" ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
+                                    const ok = await confirm({
+                                        title: localize("com_knowledge.prompt"),
+                                        description,
+                                        confirmText: actionName === localize("com_knowledge.dissolve_space") ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
+                                        cancelText: localize("com_knowledge.cancel")
+                                    })
 
-                                if (ok) {
-                                    type === "created" ? onDelete(space.id) : onLeave(space.id);
-                                }
-                            }}
-                            className={sidebarListMoreMenuDangerItemClassName}
-                        >
-                            {type === "created" ? (
+                                    if (ok) {
+                                        type === "created" ? onDelete(space.id) : onLeave(space.id);
+                                    }
+                                }}
+                                className={sidebarListMoreMenuDangerItemClassName}
+                            >
+                                {type === "created" ? (
+                                    <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
+                                ) : (
+                                    <LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                                )}
+                                <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                    {type === "created" ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
+                                </span>
+                            </DropdownMenuItem>
+                        )}
+                        {type === "department" && space.role === SpaceRole.CREATOR && (
+                            <DropdownMenuItem
+                                onClick={async () => {
+                                    const ok = await confirm({
+                                        title: localize("com_knowledge.prompt"),
+                                        description: localize("com_knowledge.confirm_operation"),
+                                        confirmText: localize("com_knowledge.delete"),
+                                        cancelText: localize("com_knowledge.cancel")
+                                    })
+                                    if (ok) onDelete(space.id);
+                                }}
+                                className={sidebarListMoreMenuDangerItemClassName}
+                            >
                                 <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
-                            ) : (
-                                <LogOut className={sidebarListMoreMenuDangerIconClassName} />
-                            )}
-                            <span className={sidebarListMoreMenuDangerLabelClassName}>
-                                {type === "created" ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
-                            </span>
-                        </DropdownMenuItem>
+                                <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                    {localize("com_knowledge.delete_space")}
+                                </span>
+                            </DropdownMenuItem>
+                        )}
                     </SidebarListMoreMenuContent>
                 </DropdownMenu>
             </div>

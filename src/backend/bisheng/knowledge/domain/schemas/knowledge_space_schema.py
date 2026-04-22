@@ -37,6 +37,11 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         description="Current user subscription status",
     )
     user_role: Optional[UserRoleEnum] = Field(default=None, description="Knowledge Space user role")
+    space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
+    department_id: Optional[int] = Field(default=None, description="Bound department id for department spaces")
+    department_name: Optional[str] = Field(default=None, description="Bound department name for department spaces")
+    approval_enabled: Optional[bool] = Field(default=None, description="Whether department-space uploads require approval")
+    sensitive_check_enabled: Optional[bool] = Field(default=None, description="Whether department-space uploads require content safety check")
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):
@@ -45,6 +50,22 @@ class KnowledgeSpaceUpdateReq(BaseModel):
     icon: Optional[str] = Field(None, description="Icon Object Name")
     auth_type: Optional[AuthTypeEnum] = Field(None, description="Authentication Type")
     is_released: bool = Field(default=False, description="Knowledge Space Status")
+
+
+class DepartmentKnowledgeSpaceBatchItem(BaseModel):
+    department_id: int = Field(..., description="Department.id")
+    name: Optional[str] = Field(None, max_length=200, description="Optional custom space name")
+    description: Optional[str] = Field(None, description="Optional custom space description")
+    icon: Optional[str] = Field(None, description="Optional icon object name")
+    auth_type: Optional[AuthTypeEnum] = Field(None, description="Optional auth type override")
+    is_released: Optional[bool] = Field(None, description="Optional release override")
+
+
+class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
+    items: List[DepartmentKnowledgeSpaceBatchItem] = Field(
+        default_factory=list,
+        description="Department knowledge space batch create items",
+    )
 
 
 class FolderCreateReq(BaseModel):
@@ -129,3 +150,7 @@ class RemoveSpaceMemberRequest(BaseModel):
 class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     """Knowledge Space File Response"""
     old_file_level_path: Optional[str] = Field(None, description="Old File Level Path")
+    approval_request_id: Optional[int] = Field(None, description="Approval request id for pending uploads")
+    approval_status: Optional[str] = Field(None, description="Approval status for pending uploads")
+    approval_reason: Optional[str] = Field(None, description="Approval or safety reject reason")
+    is_pending_approval: bool = Field(default=False, description="Whether the file is still pending approval")

@@ -106,6 +106,11 @@ export interface KnowledgeSpace {
 
     /** Optional subscription status (e.g. "subscribed") from detail APIs */
     subscriptionStatus?: string;
+
+    /** "department" when bound to a department, "normal" otherwise */
+    spaceKind?: "normal" | "department";
+    departmentId?: number;
+    departmentName?: string;
 }
 
 /** Space tag entity used by tagging UI */
@@ -151,6 +156,10 @@ export interface KnowledgeFile {
     fileSource?: string;
     /** Path of the existing duplicate file (when status is DUPLICATE) */
     oldFileLevelPath?: string;
+    approvalRequestId?: number;
+    approvalStatus?: string;
+    approvalReason?: string;
+    isPendingApproval?: boolean;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -202,6 +211,10 @@ interface RawSpaceChild {
     error_message?: string;
     remark?: string;
     file_source?: string;
+    approval_request_id?: number;
+    approval_status?: string;
+    approval_reason?: string;
+    is_pending_approval?: boolean;
 }
 
 /** Raw file record returned by addFiles / knowledge file APIs */
@@ -271,6 +284,9 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).subscription_status ??
             (raw as any).subscriptionStatus ??
             undefined,
+        spaceKind: (raw as any).space_kind || "normal",
+        departmentId: (raw as any).department_id ?? undefined,
+        departmentName: (raw as any).department_name ?? undefined,
     };
 }
 
@@ -399,6 +415,10 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
+        approvalRequestId: raw?.approval_request_id !== undefined ? Number(raw.approval_request_id) : undefined,
+        approvalStatus: raw?.approval_status ?? undefined,
+        approvalReason: raw?.approval_reason ?? undefined,
+        isPendingApproval: Boolean(raw?.is_pending_approval),
     };
 }
 
@@ -515,6 +535,20 @@ export async function getManagedSpacesApi(params?: {
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/managed`, {
         params: {
             order_by: params?.order_by ?? 'name',
+        },
+    });
+    return (res?.data || []).map(mapSpace);
+}
+
+/**
+ * Get department knowledge spaces the current user belongs to
+ */
+export async function getDepartmentSpacesApi(params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/department`, {
+        params: {
+            order_by: params?.order_by,
         },
     });
     return (res?.data || []).map(mapSpace);

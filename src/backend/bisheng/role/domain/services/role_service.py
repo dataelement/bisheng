@@ -83,11 +83,10 @@ class RoleService:
             department_id=req.department_id,
             quota_config=req.quota_config,
             remark=req.remark,
+            create_user=login_user.user_id,
         )
         try:
-            created = await RoleDao.ainsert_role(role)
-            await cls._try_set_role_creator(created.id, login_user.user_id)
-            return created
+            return await RoleDao.ainsert_role(role)
         except Exception as e:
             if 'Duplicate entry' in str(e) or 'IntegrityError' in type(e).__name__:
                 raise RoleNameDuplicateError()
@@ -125,6 +124,7 @@ class RoleService:
             department_id=req.department_id,
             quota_config=req.quota_config,
             remark=req.remark,
+            create_user=login_user.user_id,
         )
 
         async with get_async_db_session() as session:
@@ -134,7 +134,6 @@ class RoleService:
             await session.commit()
             await session.refresh(role)
 
-        await cls._try_set_role_creator(role.id, login_user.user_id)
         return role
 
     # ── List ──
@@ -439,7 +438,7 @@ class RoleService:
         cls,
         role_id: int,
         login_user,
-    ) -> None:
+    ) -> Role:
         """Delete role with cascade (AC-07, AC-08)."""
         # AC-07: Builtin protection
         if role_id in BUILTIN_ROLE_IDS:
@@ -458,6 +457,7 @@ class RoleService:
 
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
         await RoleDao.adelete_role(role_id)
+        return role
 
     # ── Menu permissions ──
 
@@ -610,19 +610,8 @@ class RoleService:
         permission_level: str,
         dept_subtree_ids: Optional[set[int]] = None,
     ) -> bool:
-        if permission_level == 'admin':
-            return True
-        if role.role_type == 'global':
-            return False
-        if permission_level == 'dept_admin':
-            return (
-                role.department_id is not None
-                and dept_subtree_ids is not None
-                and role.department_id in dept_subtree_ids
-            )
-        if permission_level == 'tenant_admin':
-            return True
-        return False
+        # Missing creator metadata is treated as readonly for non-admins.
+        return permission_level == 'admin'
 
     @classmethod
     async def _get_user_admin_dept_ids(cls, login_user) -> List[int]:
@@ -818,32 +807,28 @@ class RoleService:
         raise RolePermissionDeniedError()
 
     @classmethod
-    async def _try_set_role_creator(cls, role_id: Optional[int], user_id: Optional[int]) -> None:
-        """Best-effort: write role.create_user for creator tracing if column exists."""
-        if not role_id or not user_id:
-            return
-        try:
-            from sqlalchemy import text
-            from bisheng.core.database import get_async_db_session
-            async with get_async_db_session() as session:
-                await session.execute(
-                    text('UPDATE role SET create_user = :uid WHERE id = :rid'),
-                    {'uid': user_id, 'rid': role_id},
-                )
-                await session.commit()
-        except Exception as e:
-            # Backward-compatible: old schema may not have create_user
-            logger.debug('Skip setting role.create_user for role %s: %s', role_id, e)
+    async def _get_role_creator_ids(cls, roles) -> dict[int, int]:
+        """Resolve role_id -> creator user ID from role table, then audit-log fallback."""
+        role_ids = [int(r.id) for r in roles if getattr(r, 'id', None)]
+        if not role_ids:
+            return {}
+
+        creator_ids = await cls._get_direct_role_creator_ids(role_ids)
+        missing_role_ids = [rid for rid in role_ids if rid not in creator_ids]
+        if not missing_role_ids:
+            return creator_ids
+
+        fallback_ids = await cls._get_audit_log_role_creator_ids(missing_role_ids)
+        creator_ids.update(fallback_ids)
+        return creator_ids
 
     @classmethod
-    async def _get_role_creator_ids(cls, roles) -> dict[int, int]:
-        """Resolve role_id -> create_user if the column exists in the current schema."""
-        role_ids = [r.id for r in roles if getattr(r, 'id', None)]
+    async def _get_direct_role_creator_ids(cls, role_ids: list[int]) -> dict[int, int]:
+        """Read creator IDs from ``role.create_user`` for the given role IDs."""
         if not role_ids:
             return {}
         try:
             from sqlalchemy import text
-            from bisheng.core.database import get_async_db_session
 
             placeholders = ', '.join([f':rid_{i}' for i in range(len(role_ids))])
             params = {f'rid_{i}': rid for i, rid in enumerate(role_ids)}
@@ -855,12 +840,58 @@ class RoleService:
             logger.debug('Skip role creator query: %s', e)
             return {}
 
-        role_to_uid = {}
+        role_to_uid: dict[int, int] = {}
         for row in rows:
             rid = row[0]
             uid = row[1]
             if uid:
-                role_to_uid[rid] = int(uid)
+                role_to_uid[int(rid)] = int(uid)
+        return role_to_uid
+
+    @classmethod
+    async def _get_audit_log_role_creator_ids(cls, role_ids: list[int]) -> dict[int, int]:
+        """Fallback: infer creators from the earliest ``create_role`` audit log per role."""
+        if not role_ids:
+            return {}
+        try:
+            from sqlalchemy import text
+
+            placeholders = ', '.join([f':rid_{i}' for i in range(len(role_ids))])
+            params = {
+                'system_id': 'system',
+                'event_type': 'create_role',
+                'object_type': 'role_conf',
+            }
+            params.update({f'rid_{i}': str(rid) for i, rid in enumerate(role_ids)})
+            sql = text(
+                'SELECT t.object_id, t.operator_id '
+                'FROM ('
+                '  SELECT object_id, operator_id, '
+                '         ROW_NUMBER() OVER (PARTITION BY object_id ORDER BY create_time ASC, id ASC) AS rn '
+                '  FROM auditlog '
+                '  WHERE system_id = :system_id '
+                '    AND event_type = :event_type '
+                '    AND object_type = :object_type '
+                f'    AND object_id IN ({placeholders})'
+                ') t '
+                'WHERE t.rn = 1'
+            )
+
+            async with get_async_db_session() as session:
+                rows = (await session.execute(sql, params)).all()
+        except Exception as e:
+            logger.debug('Skip role creator audit-log fallback query: %s', e)
+            return {}
+
+        role_to_uid: dict[int, int] = {}
+        for row in rows:
+            role_id = row[0]
+            user_id = row[1]
+            if role_id and user_id:
+                try:
+                    role_to_uid[int(role_id)] = int(user_id)
+                except (TypeError, ValueError):
+                    continue
         return role_to_uid
 
     @classmethod

@@ -12,6 +12,11 @@ class SpaceLimitError(BaseErrorCode):
     Msg: str = 'You can create a maximum of 30 Knowledge Spaces'
 
 
+class DepartmentKnowledgeSpaceExistsError(BaseErrorCode):
+    Code: int = 18002
+    Msg: str = 'Department knowledge space already exists'
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = 'Folder does not exist'

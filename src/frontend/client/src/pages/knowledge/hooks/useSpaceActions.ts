@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
     KnowledgeSpace,
-    SortType,
+    SpaceSortType,
     updateSpaceApi,
     deleteSpaceApi,
     unsubscribeSpaceApi,
@@ -13,10 +13,12 @@ import { useLocalize } from "~/hooks";
 
 interface UseSpaceActionsOptions {
     activeSpaceId?: string;
-    createdSortBy: SortType;
-    joinedSortBy: SortType;
+    createdSortBy: SpaceSortType;
+    joinedSortBy: SpaceSortType;
+    departmentSortBy: SpaceSortType;
     createdSpaces: KnowledgeSpace[];
     joinedSpaces: KnowledgeSpace[];
+    departmentSpaces: KnowledgeSpace[];
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
 }
 
@@ -29,8 +31,10 @@ export function useSpaceActions({
     activeSpaceId,
     createdSortBy,
     joinedSortBy,
+    departmentSortBy,
     createdSpaces,
     joinedSpaces,
+    departmentSpaces,
     onSpaceSelect,
 }: UseSpaceActionsOptions) {
     const localize = useLocalize();
@@ -47,16 +51,21 @@ export function useSpaceActions({
         queryClient.setQueryData(["knowledgeSpaces", "joined", joinedSortBy], (old: KnowledgeSpace[] = []) => updater(old));
     };
 
-    const updateBothCaches = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
+    const updateDepartmentCache = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
+        queryClient.setQueryData(["knowledgeSpaces", "department", departmentSortBy], (old: KnowledgeSpace[] = []) => updater(old));
+    };
+
+    const updateAllCaches = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
         updateCreatedCache(updater);
         updateJoinedCache(updater);
+        updateDepartmentCache(updater);
     };
 
     // ── Rename space (double-click inline edit) ──
 
     const handleUpdateSpace = async (space: KnowledgeSpace) => {
         // Optimistic update
-        updateBothCaches(list => list.map(s => s.id === space.id ? space : s));
+        updateAllCaches(list => list.map(s => s.id === space.id ? space : s));
         if (activeSpaceId === space.id) {
             onSpaceSelect(space);
         }
@@ -100,6 +109,19 @@ export function useSpaceActions({
         } else {
             queryClient.setQueryData(
                 ["knowledgeSpaces", "joined", joinedSortBy],
+                (old: KnowledgeSpace[] = []) => old.filter(s => s.id !== spaceId)
+            );
+        }
+
+        // Also check department list for fallback selection
+        if (activeSpaceId === spaceId && !nextActive) {
+            const dept = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "department", departmentSortBy]) || [];
+            const newDept = dept.filter(s => s.id !== spaceId);
+            queryClient.setQueryData(["knowledgeSpaces", "department", departmentSortBy], newDept);
+            if (newDept.length > 0) nextActive = newDept[0];
+        } else {
+            queryClient.setQueryData(
+                ["knowledgeSpaces", "department", departmentSortBy],
                 (old: KnowledgeSpace[] = []) => old.filter(s => s.id !== spaceId)
             );
         }
@@ -149,8 +171,8 @@ export function useSpaceActions({
 
     // ── Pin / Unpin space ──
 
-    const handlePinSpace = async (spaceId: string, pinned: boolean, type: "created" | "joined") => {
-        const targetList = type === "created" ? createdSpaces : joinedSpaces;
+    const handlePinSpace = async (spaceId: string, pinned: boolean, type: "created" | "joined" | "department") => {
+        const targetList = type === "created" ? createdSpaces : type === "department" ? departmentSpaces : joinedSpaces;
         if (pinned && targetList.filter(s => s.isPinned).length >= 5) {
             showToast({ message: localize("com_knowledge.pin_limit_reached"), severity: NotificationSeverity.INFO });
             return;
@@ -158,7 +180,7 @@ export function useSpaceActions({
 
         // Optimistic update
         const updater = (list: KnowledgeSpace[]) => list.map(s => s.id === spaceId ? { ...s, isPinned: pinned } : s);
-        updateBothCaches(updater);
+        updateAllCaches(updater);
 
         if (activeSpaceId === spaceId) {
             const space = targetList.find(s => s.id === spaceId);
@@ -172,7 +194,7 @@ export function useSpaceActions({
         } catch {
             // Rollback
             const rollback = (list: KnowledgeSpace[]) => list.map(s => s.id === spaceId ? { ...s, isPinned: !pinned } : s);
-            updateBothCaches(rollback);
+            updateAllCaches(rollback);
             if (activeSpaceId === spaceId) {
                 const space = targetList.find(s => s.id === spaceId);
                 if (space) onSpaceSelect({ ...space, isPinned: !pinned });

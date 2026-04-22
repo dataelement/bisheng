@@ -1,6 +1,6 @@
 from typing import Any, Optional, List
 
-from fastapi import APIRouter, Depends, Body, Query
+from fastapi import APIRouter, Depends, Body, Query, Request
 from loguru import logger
 from starlette.responses import StreamingResponse
 
@@ -11,6 +11,7 @@ from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, SSEResponse
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    DepartmentKnowledgeSpaceBatchCreateReq,
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
     FileCreateReq, FileRenameReq,
@@ -18,6 +19,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest,
     ChatReq, ChatFolderReq, )
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
+from bisheng.knowledge.domain.services.department_knowledge_space_service import DepartmentKnowledgeSpaceService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 router = APIRouter(prefix='/knowledge/space', tags=['knowledge_space'])
@@ -115,6 +117,54 @@ async def get_my_followed_spaces(
 ) -> Any:
     spaces = await svc.get_my_followed_spaces(order_by)
     return resp_200(spaces)
+
+
+@router.get('/department')
+async def get_my_department_spaces(
+        request: Request,
+        order_by: str = 'update_time',
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    spaces = await DepartmentKnowledgeSpaceService.get_user_department_spaces(
+        request=request,
+        login_user=login_user,
+        order_by=order_by,
+    )
+    return resp_200(spaces)
+
+
+@router.get('/department/all')
+async def get_all_department_spaces(
+        request: Request,
+        order_by: str = 'update_time',
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        spaces = await DepartmentKnowledgeSpaceService.get_all_department_spaces(
+            request=request,
+            login_user=login_user,
+            order_by=order_by,
+        )
+        return resp_200(spaces)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post('/department/batch-create')
+async def batch_create_department_spaces(
+        req: DepartmentKnowledgeSpaceBatchCreateReq,
+        request: Request,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        spaces = await DepartmentKnowledgeSpaceService.batch_create_spaces(
+            request=request,
+            login_user=login_user,
+            req=req,
+        )
+        return resp_200(spaces)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
 
 
 @router.get('/square')

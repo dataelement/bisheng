@@ -15,6 +15,7 @@ interface ChannelLayoutProps {
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
     onCreateChannel?: () => void;
+    onOpenChannelShare?: (channel: Channel) => void;
 }
 
 const MIN_LEFT_WIDTH = 480;
@@ -26,6 +27,7 @@ export function ChannelLayout({
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
+    onOpenChannelShare,
 }: ChannelLayoutProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -100,6 +102,7 @@ export function ChannelLayout({
                     onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}
                     onCreateChannel={onCreateChannel}
+                    onOpenChannelShare={onOpenChannelShare}
                 />
             </div>
 

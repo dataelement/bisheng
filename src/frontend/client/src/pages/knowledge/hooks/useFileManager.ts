@@ -12,18 +12,12 @@ import {
     getSpaceChildrenApi,
     searchSpaceChildrenApi,
 } from "~/api/knowledge";
+import { approvalRequestToKnowledgeFiles, listApprovalRequestsApi } from "~/api/approval";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { useLocalize } from "~/hooks";
-
-/** Statuses that indicate a file is still being processed */
-const PENDING_STATUSES: FileStatus[] = [
-    FileStatus.PROCESSING,
-    FileStatus.WAITING,
-    FileStatus.REBUILDING,
-    FileStatus.UPLOADING,
-];
+import { isKnowledgeItemPending } from "../knowledgeUtils";
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
@@ -86,10 +80,45 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
                         order_sort: sortDirection || undefined,
                         file_status: fileStatusNums,
                     });
-                setFiles(res.data);
-                setTotal(res.total);
+                let mergedData = res.data;
+                let mergedTotal = res.total;
+                if (activeSpace.spaceKind === "department") {
+                    try {
+                        const approvalRes = await listApprovalRequestsApi({
+                            space_id: Number(activeSpace.id),
+                            statuses: ["pending_review", "rejected", "sensitive_rejected", "finalize_failed"],
+                            page: 1,
+                            page_size: 100,
+                        });
+                        let approvalFiles = approvalRes.data.flatMap((row) =>
+                            approvalRequestToKnowledgeFiles(row, activeSpace.id)
+                        );
+                        if (currentFolderId !== undefined) {
+                            approvalFiles = approvalFiles.filter(
+                                (file) => file.parentId === currentFolderId
+                            );
+                        } else {
+                            approvalFiles = approvalFiles.filter((file) => !file.parentId);
+                        }
+                        if (searchQuery.trim()) {
+                            const keyword = searchQuery.trim().toLowerCase();
+                            approvalFiles = approvalFiles.filter((file) =>
+                                file.name.toLowerCase().includes(keyword)
+                            );
+                        }
+                        const existingIds = new Set(res.data.map((file) => file.id));
+                        const uniqueApprovalFiles = approvalFiles.filter((file) => !existingIds.has(file.id));
+                        mergedData = [...uniqueApprovalFiles, ...res.data];
+                        mergedTotal = res.total + uniqueApprovalFiles.length;
+                    } catch {
+                        // Approval list is additive only; degrade gracefully to the
+                        // base file list if approval data cannot be loaded.
+                    }
+                }
+                setFiles(mergedData);
+                setTotal(mergedTotal);
                 setCurrentPage(page);
-                return res.data;
+                return mergedData;
             } catch {
                 showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
                 return [];
@@ -175,7 +204,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
 
     useEffect(() => {
         const hasPending = files.some(
-            (f) => f.status && PENDING_STATUSES.includes(f.status)
+            (f) => isKnowledgeItemPending(f)
         );
         if (!hasPending) return;
 

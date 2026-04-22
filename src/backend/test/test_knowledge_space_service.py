@@ -609,6 +609,10 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=0,
         ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_require_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file',
             return_value=added_file,
         ), patch(
@@ -629,6 +633,105 @@ class TestTupleLifecycle:
         assert parent_tuple.relation == 'parent'
         assert parent_tuple.object == 'knowledge_file:81'
         mock_write_owner.assert_awaited_once_with(service.login_user.user_id, 'knowledge_file', '81')
+
+    @pytest.mark.asyncio
+    async def test_add_file_routes_department_space_to_approval_service(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        approval_request = SimpleNamespace(
+            id=55,
+            status='pending_review',
+            space_id=1,
+            payload_json={'files': [{'file_name': 'doc.txt'}]},
+            safety_reason=None,
+            decision_reason=None,
+        )
+        pending_files = [SimpleNamespace(id=-55001, approval_request_id=55)]
+
+        with patch.object(
+            service, '_require_write_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_require_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_bypass_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.create_department_space_upload_request',
+            new_callable=AsyncMock,
+            return_value=approval_request,
+        ) as mock_create_request, patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.build_pending_file_responses',
+            return_value=pending_files,
+        ) as mock_build_pending, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file',
+        ) as mock_process_one_file:
+            result = await service.add_file(1, ['/tmp/doc.txt'])
+
+        assert result == pending_files
+        mock_create_request.assert_awaited_once()
+        mock_build_pending.assert_called_once_with(approval_request=approval_request)
+        mock_process_one_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_add_file_bypasses_department_space_approval_for_reviewer(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        added_file = _make_file(file_id=83, knowledge_id=1, file_name='doc.txt')
+        added_file.file_size = 1
+
+        with patch.object(
+            service, '_require_write_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.UserRoleDao.aget_user_roles',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_require_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_bypass_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_should_bypass, patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.create_department_space_upload_request',
+            new_callable=AsyncMock,
+        ) as mock_create_request, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file',
+            return_value=added_file,
+        ) as mock_process_one_file, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            result = await service.add_file(1, ['/tmp/doc.txt'])
+
+        assert result[0].id == 83
+        mock_should_bypass.assert_awaited_once()
+        mock_create_request.assert_not_called()
+        mock_process_one_file.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_delete_file_cleans_knowledge_file_tuples(self, service):

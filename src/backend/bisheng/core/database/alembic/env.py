@@ -5,6 +5,9 @@ from sqlalchemy import text
 from alembic import context
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.alembic_helpers.online import (
+    finalize_online_migration_connection,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -84,6 +87,11 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+
+        # SQLAlchemy 2 autobegin can leave a pending DML transaction on
+        # MySQL even when Alembic treats DDL as non-transactional. Commit
+        # it explicitly so backfills and alembic_version updates persist.
+        finalize_online_migration_connection(connection)
 
 
 run_migrations_online()

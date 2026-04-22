@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { LogOut, MoreHorizontal, Pin, PinOff, Settings, Users } from "lucide-react";
+import { LogOut, MoreHorizontal, Pin, PinOff, Settings, Share2 } from "lucide-react";
 import { useState } from "react";
 import { Channel, ChannelRole } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -175,9 +175,9 @@ export default function ChannelItem({
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers(channel)}
                             >
-                                <Users className={sidebarListMoreMenuIconClassName} />
+                                <Share2 className={sidebarListMoreMenuIconClassName} />
                                 <span className={sidebarListMoreMenuLabelClassName}>
-                                    {localize("com_subscription.member_management")}
+                                    {localize("com_subscription.share")}
                                 </span>
                             </DropdownMenuItem>
                         )}

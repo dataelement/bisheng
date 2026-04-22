@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete, func, case
+from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, String, text, Boolean, delete, func, case
 from sqlmodel import Field, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -47,6 +47,23 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
             SQLEnum(MembershipStatusEnum, name='space_channel_member_status_enum'),
             nullable=False,
             server_default=text("'ACTIVE'"),
+        ),
+    )
+    membership_source: str = Field(
+        default='manual',
+        description='manual | department_admin',
+        sa_column=Column(
+            String(32),
+            nullable=False,
+            server_default=text("'manual'"),
+        ),
+    )
+    department_admin_promoted_from_role: Optional[str] = Field(
+        default=None,
+        description='Original role preserved when a manual member is temporarily promoted by department-admin sync',
+        sa_column=Column(
+            String(32),
+            nullable=True,
         ),
     )
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned to top',
@@ -303,6 +320,26 @@ class SpaceChannelMemberDao:
                 SpaceChannelMember.user_id == user_id,
                 SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
                 SpaceChannelMember.user_role == UserRoleEnum.CREATOR,
+            )
+            .order_by(
+                SpaceChannelMember.is_pinned.desc(),
+                SpaceChannelMember.create_time.desc(),
+            )
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def async_get_user_space_members(cls, user_id: int) -> List[SpaceChannelMember]:
+        """Async: Get all active space membership rows for a user."""
+
+        statement = (
+            select(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.user_id == user_id,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
             )
             .order_by(
                 SpaceChannelMember.is_pinned.desc(),

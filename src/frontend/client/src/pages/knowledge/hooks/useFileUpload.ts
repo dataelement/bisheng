@@ -16,7 +16,7 @@ import {
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
-import { getFileTypeFromName, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
+import { getFileTypeFromName, isKnowledgeItemPending, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
 /** A duplicate file entry detected from addFiles response (status === 3) */
@@ -170,7 +170,8 @@ export function useFileUpload({
                 }
 
                 const hasPendingRegisteredFiles = visibleRegisteredFiles.some((file) =>
-                    file.status && PENDING_REGISTERED_FILE_STATUSES.has(file.status)
+                    isKnowledgeItemPending(file) ||
+                    Boolean(file.status && PENDING_REGISTERED_FILE_STATUSES.has(file.status))
                 );
                 if (!hasPendingRegisteredFiles) {
                     await loadFiles(currentPage);

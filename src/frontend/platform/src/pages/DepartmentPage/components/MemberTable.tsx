@@ -307,6 +307,7 @@ export function MemberTable({
           page={page}
           pageSize={20}
           total={total}
+          showTotal={true}
           onChange={handlePageChange}
         />
       </div>

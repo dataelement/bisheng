@@ -477,22 +477,25 @@ class AuditLogService:
     @classmethod
     def create_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=create_role user={user.user_name} ip={ip_address} role_id={role.id}")
-
-        cls._system_log(user, ip_address, [role.group_id], EventType.CREATE_ROLE,
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        cls._system_log(user, ip_address, group_ids, EventType.CREATE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
     def update_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=update_role user={user.user_name} ip={ip_address} role_id={role.id}")
-
-        cls._system_log(user, ip_address, [role.group_id], EventType.UPDATE_ROLE,
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
     def delete_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=delete_role user={user.user_name} ip={ip_address} role_id={role.id}")
-
-        cls._system_log(user, ip_address, [role.group_id], EventType.DELETE_ROLE,
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        cls._system_log(user, ip_address, group_ids, EventType.DELETE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
