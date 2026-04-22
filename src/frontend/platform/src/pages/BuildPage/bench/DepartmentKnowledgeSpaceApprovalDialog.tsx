@@ -17,7 +17,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   space: DepartmentKnowledgeSpaceSummary | null;
-  onSaved?: () => void;
+  onSaved?: (spaceId: number, settings: DepartmentKnowledgeSpaceApprovalSettings) => void;
 }
 
 const DEFAULT_SETTINGS: DepartmentKnowledgeSpaceApprovalSettings = {
@@ -58,7 +58,7 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, spa
       description: t("chatConfig.saveSuccess"),
       variant: "success",
     });
-    onSaved?.();
+    onSaved?.(space.id, res);
     onOpenChange(false);
   };
 

@@ -64,17 +64,27 @@ export default function KnowledgeSpace() {
         }
     }, [user.user_id, user.role]);
 
-    const getAuthTypeLabel = (authType?: string) => {
-        switch (authType) {
-            case 'public':
-                return t("bench.departmentKnowledgeSpaceAuthPublic", "公开");
-            case 'private':
-                return t("bench.departmentKnowledgeSpaceAuthPrivate", "私有");
-            case 'approval':
-                return t("bench.departmentKnowledgeSpaceAuthApproval", "审批");
-            default:
-                return authType || "--";
+    const handleDepartmentSpaceSettingsSaved = (
+        spaceId: number,
+        settings: Pick<DepartmentKnowledgeSpaceSummary, "approval_enabled" | "sensitive_check_enabled">,
+    ) => {
+        setDepartmentSpaces((prev) => prev.map((space) => (
+            space.id === spaceId
+                ? {
+                    ...space,
+                    approval_enabled: settings.approval_enabled,
+                    sensitive_check_enabled: settings.sensitive_check_enabled,
+                }
+                : space
+        )));
+        if (approvalTarget?.id === spaceId) {
+            setApprovalTarget({
+                ...approvalTarget,
+                approval_enabled: settings.approval_enabled,
+                sensitive_check_enabled: settings.sensitive_check_enabled,
+            });
         }
+        void loadDepartmentSpaces();
     };
 
     return (
@@ -246,20 +256,6 @@ export default function KnowledgeSpace() {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="rounded bg-[#E8F3FF] px-2 py-0.5 text-xs text-[#165DFF]">
-                                                                {getAuthTypeLabel(space.auth_type)}
-                                                            </span>
-                                                            <span
-                                                                className={
-                                                                    space.is_released
-                                                                        ? "rounded bg-[#E8FFEA] px-2 py-0.5 text-xs text-[#00B42A]"
-                                                                        : "rounded bg-[#FFF7E8] px-2 py-0.5 text-xs text-[#FF7D00]"
-                                                                }
-                                                            >
-                                                                {space.is_released
-                                                                    ? t("bench.departmentKnowledgeSpacePublished", "已发布")
-                                                                    : t("bench.departmentKnowledgeSpaceUnpublished", "未发布")}
-                                                            </span>
                                                             <Button
                                                                 variant="outline"
                                                                 className="h-7 px-3 bg-gray-50"
@@ -291,7 +287,7 @@ export default function KnowledgeSpace() {
                     if (!open) setApprovalTarget(null);
                 }}
                 space={approvalTarget}
-                onSaved={loadDepartmentSpaces}
+                onSaved={handleDepartmentSpaceSettingsSaved}
             />
         </div>
     );
