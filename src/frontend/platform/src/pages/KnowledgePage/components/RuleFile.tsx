@@ -1,8 +1,7 @@
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { locationContext } from "@/contexts/locationContext";
-import { useContext, useMemo, useEffect, useState, useRef, useCallback } from "react";
+import { useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
@@ -57,8 +56,34 @@ export default function RuleFile({
     isEtl4lm = false
 }: RuleFileProps) {
 
-    const { appConfig } = useContext(locationContext);
-    const { t } = useTranslation('knowledge');
+    const { t, i18n } = useTranslation('knowledge');
+    const isZhLanguage = i18n.resolvedLanguage?.startsWith('zh');
+    const appendTitleTooltipImageSrc = useMemo(
+        () => isZhLanguage ? '/append-title-tooltip-zh.png' : '/append-title-tooltip-intl.png',
+        [isZhLanguage]
+    );
+    const splitLevelTooltipImageSrc = useMemo(
+        () => isZhLanguage ? '/split-level-tooltip-zh.png' : '/split-level-tooltip-intl.png',
+        [isZhLanguage]
+    );
+    const mediumTitleStyle = useMemo(() => ({
+        fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif',
+        fontWeight: 500
+    }), []);
+    const renderTooltipWithImage = useCallback((textKey: string, imageSrc: string, imageAltKey: string, imageClassName = "w-[320px]") => (
+        <div className="space-y-1">
+            <p className="text-sm leading-5 text-white">
+                {t(textKey)}
+            </p>
+            <div className="overflow-hidden rounded-[10px] border border-white/15 bg-white p-1">
+                <img
+                    src={imageSrc}
+                    alt={t(imageAltKey)}
+                    className={`block max-w-full rounded-[8px] ${imageClassName}`}
+                />
+            </div>
+        </div>
+    ), [t]);
 
     // Safely parse originalSplitRule
     const parsedOriginalSplitRule = useMemo(() => {
@@ -156,14 +181,14 @@ export default function RuleFile({
     ];
 
     return (
-        <div className="flex-1 flex flex-col relative max-w-[960px] mx-auto overflow-y-auto pb-10">
+        <div className="relative flex flex-1 flex-col overflow-y-auto pb-6">
             <div className="flex flex-col gap-6">
                 {/* Document Parsing Strategy */}
-                <div className="space-y-3 text-left">
-                    <h3 className="font-bold text-gray-800 text-[14px]">
+                <div className="space-y-4 text-left">
+                    <h3 className="text-[16px] text-[#0f172a]" style={mediumTitleStyle}>
                         {t('docAnalysisStrategy')}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-6 p-4 border rounded-lg bg-white shadow-sm">
+                    <div className="flex flex-col gap-5 rounded-[10px] border border-[#e4e8ee] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                         <div className="flex items-center gap-2">
                             <Checkbox
                                 id="retainImages"
@@ -172,41 +197,46 @@ export default function RuleFile({
                             />
                             <Label htmlFor="retainImages" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                 {t('keepImages')}
-                                <QuestionTooltip content={t('retainImagesTooltip')} />
+                                <QuestionTooltip className="text-[#999999]" content={t('retainImagesTooltip')} />
                             </Label>
                         </div>
 
                         {hasPdf && (
                             <>
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id="forceOcr"
-                                        checked={internalValues.forceOcr}
-                                        onCheckedChange={(e) => handleSettingChange('forceOcr', e)}
-                                    />
-                                    <Label htmlFor="forceOcr" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
-                                        {t('ocrForce')}
-                                        <QuestionTooltip content={t('ocrForceTip')} />
-                                    </Label>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id="enableFormula"
-                                        checked={internalValues.enableFormula}
-                                        onCheckedChange={(e) => handleSettingChange('enableFormula', e)}
-                                    />
-                                    <Label htmlFor="enableFormula" className="text-sm text-gray-700 cursor-pointer">{t('enableRec')}</Label>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id="pageHeaderFooter"
-                                        checked={internalValues.pageHeaderFooter}
-                                        onCheckedChange={(e) => handleSettingChange('pageHeaderFooter', e)}
-                                    />
-                                    <Label htmlFor="pageHeaderFooter" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
-                                        {t('hfFilter')}
-                                        <QuestionTooltip content={t('hfFilterTooltip')} />
-                                    </Label>
+                                <p className="text-sm text-[#999999]">
+                                    {t('pdfOptionsHint', { defaultValue: '检测到上传文件包含 PDF 文件，以下选项可用：' })}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="forceOcr"
+                                            checked={internalValues.forceOcr}
+                                            onCheckedChange={(e) => handleSettingChange('forceOcr', e)}
+                                        />
+                                        <Label htmlFor="forceOcr" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
+                                            {t('ocrForce')}
+                                            <QuestionTooltip className="text-[#999999]" content={t('ocrForceTip')} />
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="enableFormula"
+                                            checked={internalValues.enableFormula}
+                                            onCheckedChange={(e) => handleSettingChange('enableFormula', e)}
+                                        />
+                                        <Label htmlFor="enableFormula" className="text-sm text-gray-700 cursor-pointer">{t('enableRec')}</Label>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="pageHeaderFooter"
+                                            checked={internalValues.pageHeaderFooter}
+                                            onCheckedChange={(e) => handleSettingChange('pageHeaderFooter', e)}
+                                        />
+                                        <Label htmlFor="pageHeaderFooter" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
+                                            {t('hfFilter')}
+                                            <QuestionTooltip className="text-[#999999]" content={t('hfFilterTooltip')} />
+                                        </Label>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -214,38 +244,38 @@ export default function RuleFile({
                 </div>
 
                 {/* Document Slicing Strategy */}
-                <div className="space-y-3 text-left">
-                    <h3 className="font-bold text-gray-800 text-[14px]">
+                <div className="space-y-4 text-left">
+                    <h3 className="text-[16px] text-[#0f172a]" style={mediumTitleStyle}>
                         {t('docSplitStrategy')}
                     </h3>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid gap-4 lg:grid-cols-3">
                         {splitModes.map((mode) => (
                             <div
                                 key={mode.id}
                                 onClick={() => handleSettingChange('splitMode', mode.id)}
                                 className={cn(
-                                    "relative p-4 border rounded-lg cursor-pointer transition-all duration-200 bg-white hover:shadow-md h-[100px]",
+                                    "relative flex h-full min-h-[100px] cursor-pointer flex-col rounded-[10px] border p-4 transition-colors duration-200",
                                     internalValues.splitMode === mode.id
-                                        ? "border-primary bg-primary/5 shadow-sm"
-                                        : "border-gray-200"
+                                        ? "border-primary bg-primary/5"
+                                        : "border-[#e4e8ee] bg-white hover:bg-[#f7f8fa]"
                                 )}
                             >
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-bold text-[14px] text-gray-800">{mode.title}</span>
+                                <div className="mb-1 flex items-start justify-between">
+                                    <span className="text-[14px] text-gray-800" style={mediumTitleStyle}>{mode.title}</span>
                                     {internalValues.splitMode === mode.id
-                                        ? <CheckCircle2 className="size-5 text-primary" />
-                                        : <Circle className="size-5 text-gray-200" />
+                                        ? <CheckCircle2 className="size-5 shrink-0 text-primary" />
+                                        : <Circle className="size-5 shrink-0 text-gray-200" />
                                     }
                                 </div>
-                                <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">
+                                <p className="text-[14px] leading-relaxed text-gray-500 break-words">
                                     {mode.desc}
                                 </p>
                             </div>
                         ))}
                     </div>
 
-                    <div className="mt-4 p-6 bg-gray-50/80 rounded-lg border border-gray-100 flex flex-col gap-4">
+                    <div className="flex flex-col gap-5 rounded-[10px] border border-[#e4e8ee] bg-white p-4 sm:p-5">
                         {internalValues.splitMode === 'auto' && (
                             <div className="flex flex-wrap gap-8">
                                 <div className="flex items-center gap-3">
@@ -339,46 +369,51 @@ export default function RuleFile({
                         )}
 
                         {internalValues.splitMode === 'hierarchical' && (
-                            <div className="flex flex-wrap items-center gap-x-12 gap-y-4">
-                                <div className="flex items-center gap-3">
-                                    <Label htmlFor="maxChunkSize" className="whitespace-nowrap text-sm text-gray-600">
-                                        {t('maxChunkSize')}
-                                    </Label>
-                                    <div className="flex items-center gap-2">
-                                        <div className="relative">
-                                            <Input
-                                                id="maxChunkSize"
-                                                type="number"
-                                                step="100"
-                                                min={0}
-                                                value={internalValues.maxChunkSize}
-                                                onChange={(e) => handleSettingChange('maxChunkSize', e)}
-                                                className="w-[150px] bg-white h-9"
+                            <div className="flex flex-col gap-4">
+                                <div className="flex flex-wrap items-center gap-x-12 gap-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <Label htmlFor="hierarchyLevel" className="whitespace-nowrap text-sm text-gray-600">
+                                            {t('splitLevel')}
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <div className="relative">
+                                                <Input
+                                                    id="hierarchyLevel"
+                                                    type="number"
+                                                    min={1}
+                                                    max={5}
+                                                    value={internalValues.hierarchyLevel}
+                                                    onChange={(e) => handleSettingChange('hierarchyLevel', e)}
+                                                    className="w-[100px] bg-white h-9"
+                                                />
+                                                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">{t('layer')}</span>
+                                            </div>
+                                            <QuestionTooltip
+                                                className="text-[#999]"
+                                                content={renderTooltipWithImage('splitLevelTooltip', splitLevelTooltipImageSrc, 'splitLevelTooltipImageAlt', 'w-[480px]')}
                                             />
-                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{t('characters')}</span>
                                         </div>
-                                        <QuestionTooltip content={t('maxChunkSizeTooltip')} />
                                     </div>
-                                </div>
 
-                                <div className="flex items-center gap-3">
-                                    <Label htmlFor="hierarchyLevel" className="whitespace-nowrap text-sm text-gray-600">
-                                        {t('splitLevel')}
-                                    </Label>
-                                    <div className="flex items-center gap-2">
-                                        <div className="relative">
-                                            <Input
-                                                id="hierarchyLevel"
-                                                type="number"
-                                                min={1}
-                                                max={5}
-                                                value={internalValues.hierarchyLevel}
-                                                onChange={(e) => handleSettingChange('hierarchyLevel', e)}
-                                                className="w-[100px] bg-white h-9"
-                                            />
-                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">{t('layer')}</span>
+                                    <div className="flex items-center gap-3">
+                                        <Label htmlFor="maxChunkSize" className="whitespace-nowrap text-sm text-gray-600">
+                                            {t('maxChunkSize')}
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <div className="relative">
+                                                <Input
+                                                    id="maxChunkSize"
+                                                    type="number"
+                                                    step="100"
+                                                    min={0}
+                                                    value={internalValues.maxChunkSize}
+                                                    onChange={(e) => handleSettingChange('maxChunkSize', e)}
+                                                    className="w-[150px] bg-white h-9"
+                                                />
+                                                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{t('characters')}</span>
+                                            </div>
+                                            <QuestionTooltip className="text-[#999]" content={t('maxChunkSizeTooltip')} />
                                         </div>
-                                        <QuestionTooltip content={t('splitLevelTooltip')} />
                                     </div>
                                 </div>
 
@@ -390,7 +425,10 @@ export default function RuleFile({
                                     />
                                     <Label htmlFor="appendTitle" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                         {t('appendTitle')}
-                                        <QuestionTooltip content={t('appendTitleTooltip')} />
+                                        <QuestionTooltip
+                                            className="text-[#999]"
+                                            content={renderTooltipWithImage('appendTitleTooltip', appendTitleTooltipImageSrc, 'appendTitleTooltipImageAlt')}
+                                        />
                                     </Label>
                                 </div>
                             </div>
