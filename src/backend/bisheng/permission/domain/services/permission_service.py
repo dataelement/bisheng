@@ -22,7 +22,7 @@ import logging
 import re
 from typing import List, Optional, Set
 
-from bisheng.core.openfga.exceptions import FGAConnectionError
+from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
     VALID_RELATIONS,
@@ -275,20 +275,12 @@ class PermissionService:
         """
         if not operations:
             return
+        operations = cls._dedupe_operations(operations)
 
         # Pre-record for crash safety — delete on success
         pre_recorded_ids: List[int] = []
         if crash_safe:
             pre_recorded_ids = await cls._pre_record_failed_tuples(operations)
-
-        writes = [
-            {'user': op.user, 'relation': op.relation, 'object': op.object}
-            for op in operations if op.action == 'write'
-        ]
-        deletes = [
-            {'user': op.user, 'relation': op.relation, 'object': op.object}
-            for op in operations if op.action == 'delete'
-        ]
 
         try:
             fga = cls._get_fga()
@@ -297,17 +289,43 @@ class PermissionService:
                     await cls._save_failed_tuples(operations, 'FGAClient not available')
                 return
 
-            # Chunk writes and deletes to stay within per-request limit
+            # Chunk the original operation list so writes+deletes together stay
+            # within the per-request limit. If a batch trips on duplicate
+            # writes / missing deletes, fall back to single-tuple writes and
+            # treat those idempotent cases as success.
             batch = cls._FGA_BATCH_SIZE
-            w_chunks = [writes[i:i + batch] for i in range(0, len(writes), batch)] if writes else []
-            d_chunks = [deletes[i:i + batch] for i in range(0, len(deletes), batch)] if deletes else []
+            failed_ops: List[TupleOperation] = []
+            for idx in range(0, len(operations), batch):
+                chunk = operations[idx:idx + batch]
+                writes = [
+                    {'user': op.user, 'relation': op.relation, 'object': op.object}
+                    for op in chunk if op.action == 'write'
+                ]
+                deletes = [
+                    {'user': op.user, 'relation': op.relation, 'object': op.object}
+                    for op in chunk if op.action == 'delete'
+                ]
+                try:
+                    await fga.write_tuples(
+                        writes=writes or None,
+                        deletes=deletes or None,
+                    )
+                except FGAWriteError as e:
+                    logger.info(
+                        'Batch tuple write fell back to single writes for %d ops: %s',
+                        len(chunk), e,
+                    )
+                    failed_ops.extend(
+                        await cls._write_operations_individually(fga, chunk),
+                    )
 
-            max_chunks = max(len(w_chunks), len(d_chunks), 1)
-            for idx in range(max_chunks):
-                w = w_chunks[idx] if idx < len(w_chunks) else None
-                d = d_chunks[idx] if idx < len(d_chunks) else None
-                if w or d:
-                    await fga.write_tuples(writes=w, deletes=d)
+            if failed_ops:
+                if not crash_safe:
+                    await cls._save_failed_tuples(
+                        failed_ops,
+                        'OpenFGA single-tuple fallback failed',
+                    )
+                return
 
             # FGA succeeded — clean up pre-recorded FailedTuples
             if pre_recorded_ids:
@@ -318,6 +336,73 @@ class PermissionService:
             if not crash_safe:
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
+
+    @classmethod
+    async def _write_operations_individually(
+        cls,
+        fga,
+        operations: List[TupleOperation],
+    ) -> List[TupleOperation]:
+        """Replay a failed batch one tuple at a time.
+
+        OpenFGA rejects duplicate writes and deletes of already-missing tuples
+        as invalid input. Those cases are semantically idempotent for our
+        callers, so we treat them as success and only return truly failed ops.
+        """
+        failed: List[TupleOperation] = []
+        for op in operations:
+            payload = {
+                'user': op.user,
+                'relation': op.relation,
+                'object': op.object,
+            }
+            try:
+                if op.action == 'write':
+                    await fga.write_tuples(writes=[payload])
+                else:
+                    await fga.write_tuples(deletes=[payload])
+            except FGAWriteError as e:
+                if cls._is_idempotent_tuple_error(op.action, str(e)):
+                    logger.info(
+                        'Ignoring idempotent OpenFGA %s failure for %s %s %s: %s',
+                        op.action, op.user, op.relation, op.object, e,
+                    )
+                    continue
+                failed.append(op)
+            except FGAConnectionError:
+                raise
+            except Exception:
+                failed.append(op)
+        return failed
+
+    @staticmethod
+    def _is_idempotent_tuple_error(action: str, error_msg: str) -> bool:
+        text = error_msg.lower()
+        if action == 'write':
+            return (
+                'already exists' in text
+                or 'cannot write a tuple which already exists' in text
+            )
+        if action == 'delete':
+            return (
+                'did not exist' in text
+                or 'tuple to be deleted did not exist' in text
+            )
+        return False
+
+    @staticmethod
+    def _dedupe_operations(
+        operations: List[TupleOperation],
+    ) -> List[TupleOperation]:
+        seen: set[tuple[str, str, str, str]] = set()
+        deduped: List[TupleOperation] = []
+        for op in operations:
+            key = (op.action, op.user, op.relation, op.object)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(op)
+        return deduped
 
     # Regex to parse FGA subject: "user:7", "department:5#member", "user_group:3#member"
     _SUBJECT_RE = re.compile(r'^(user|department|user_group):(\d+)(#member)?$')
