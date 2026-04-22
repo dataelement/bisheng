@@ -1,6 +1,6 @@
 import { Switch } from "@/components/bs-ui/switch";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
@@ -62,6 +62,9 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange }: P
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}</DialogTitle>
+          <DialogDescription>
+            {t("bench.departmentKnowledgeSpaceApprovalSettingsDesc", "配置部门知识空间上传是否需要审批，以及是否开启内容安全检测。")}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-5 py-2">
           <div className="rounded-lg border border-[#ECECEC] bg-white px-4 py-4">

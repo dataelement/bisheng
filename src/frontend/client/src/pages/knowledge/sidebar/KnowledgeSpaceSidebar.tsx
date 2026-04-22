@@ -176,8 +176,9 @@ export function KnowledgeSpaceSidebar({
         placeholderData: (prev) => prev,
     });
 
-    // Filter department spaces out of joined list to avoid duplication
+    // Filter department spaces out of other sections to avoid duplication
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
+    const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
     const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
 
     // CRUD operations with optimistic updates (mirrors useChannelActions)
@@ -191,7 +192,7 @@ export function KnowledgeSpaceSidebar({
         createdSortBy,
         joinedSortBy,
         departmentSortBy,
-        createdSpaces,
+        createdSpaces: filteredCreatedSpaces,
         joinedSpaces: filteredJoinedSpaces,
         departmentSpaces,
         onSpaceSelect,
@@ -204,13 +205,13 @@ export function KnowledgeSpaceSidebar({
 
             if (departmentSpaces.length > 0) {
                 onSpaceSelect(departmentSpaces[0]);
-            } else if (createdSpaces.length > 0) {
-                onSpaceSelect(createdSpaces[0]);
+            } else if (filteredCreatedSpaces.length > 0) {
+                onSpaceSelect(filteredCreatedSpaces[0]);
             } else if (filteredJoinedSpaces.length > 0) {
                 onSpaceSelect(filteredJoinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, departmentSpaces, createdSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
+    }, [activeSpaceId, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
 
     const toggleSort = (type: "created" | "joined" | "department") => {
         if (type === "created") {
@@ -381,7 +382,7 @@ export function KnowledgeSpaceSidebar({
                             />
                             {!createdCollapsed && (
                                 <div className="space-y-1">
-                                    {createdSpaces.map(s => (
+                                    {filteredCreatedSpaces.map(s => (
                                         <KnowledgeSpaceItem
                                             key={s.id}
                                             space={s}
@@ -396,7 +397,7 @@ export function KnowledgeSpaceSidebar({
                                             onManageMembers={onManageMembers}
                                         />
                                     ))}
-                                    {!createdSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
+                                    {!filteredCreatedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
                                 </div>
                             )}
                         </div>

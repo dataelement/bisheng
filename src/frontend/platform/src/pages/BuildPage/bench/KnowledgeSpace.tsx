@@ -4,6 +4,10 @@ import { CardContent } from "@/components/bs-ui/card";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
+import {
+    getDepartmentKnowledgeSpacesApi,
+    type DepartmentKnowledgeSpaceSummary,
+} from "@/controllers/API/departmentKnowledgeSpace";
 import { userContext } from "@/contexts/userContext";
 import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -31,8 +35,21 @@ export default function KnowledgeSpace() {
     const { formData, setFormData, errors, setErrors, handleSave } = useKnowledgeConfig();
     const [managerOpen, setManagerOpen] = useState(false);
     const [approvalOpen, setApprovalOpen] = useState(false);
+    const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([]);
+    const [departmentSpacesLoading, setDepartmentSpacesLoading] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate();
+
+    const loadDepartmentSpaces = async () => {
+        setDepartmentSpacesLoading(true);
+        const res = await captureAndAlertRequestErrorHoc(
+            getDepartmentKnowledgeSpacesApi({ order_by: "name" }),
+        );
+        if (Array.isArray(res)) {
+            setDepartmentSpaces(res);
+        }
+        setDepartmentSpacesLoading(false);
+    };
 
     // 非 admin 角色跳回应用列表
     useEffect(() => {
@@ -40,6 +57,25 @@ export default function KnowledgeSpace() {
             navigate('/build/apps');
         }
     }, [user, navigate]);
+
+    useEffect(() => {
+        if (user.user_id && user.role === 'admin') {
+            loadDepartmentSpaces();
+        }
+    }, [user.user_id, user.role]);
+
+    const getAuthTypeLabel = (authType?: string) => {
+        switch (authType) {
+            case 'public':
+                return t("bench.departmentKnowledgeSpaceAuthPublic", "公开");
+            case 'private':
+                return t("bench.departmentKnowledgeSpaceAuthPrivate", "私有");
+            case 'approval':
+                return t("bench.departmentKnowledgeSpaceAuthApproval", "审批");
+            default:
+                return authType || "--";
+        }
+    };
 
     return (
         <div className="h-full overflow-y-scroll scrollbar-hide relative border-t">
@@ -119,6 +155,11 @@ export default function KnowledgeSpace() {
                                 </div>
                             </>
 
+                            <div className="mt-6 flex justify-end gap-4">
+                                <Preview onBeforView={handleSave} />
+                                <Button onClick={handleSave}>{t('save')}</Button>
+                            </div>
+
                             <div className="mt-8 border-t border-[#ECECEC] pt-6">
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
@@ -146,12 +187,73 @@ export default function KnowledgeSpace() {
                                         </Button>
                                     </div>
                                 </div>
+                                <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <p className="text-sm font-medium text-[#1D2129]">
+                                                {t("bench.departmentKnowledgeSpaceCreatedList", "已创建知识空间")}
+                                            </p>
+                                            <p className="mt-1 text-sm text-[#86909C]">
+                                                {t("bench.departmentKnowledgeSpaceCreatedListDesc", "已绑定部门的知识空间会统一展示在这里。")}
+                                            </p>
+                                        </div>
+                                        <span className="rounded bg-white px-2.5 py-1 text-xs text-[#4E5969] border border-[#E5E6EB]">
+                                            {departmentSpaces.length}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4 space-y-3">
+                                        {departmentSpacesLoading ? (
+                                            <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
+                                                {t("loading")}
+                                            </div>
+                                        ) : !departmentSpaces.length ? (
+                                            <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
+                                                {t("bench.departmentKnowledgeSpaceCreatedEmpty", "暂无已创建的部门知识空间")}
+                                            </div>
+                                        ) : (
+                                            departmentSpaces.map((space) => (
+                                                <div
+                                                    key={space.id}
+                                                    className="rounded-lg border border-[#E5E6EB] bg-white px-4 py-3"
+                                                >
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="truncate text-sm font-medium text-[#1D2129]">
+                                                                    {space.name}
+                                                                </p>
+                                                                <span className="rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]">
+                                                                    {space.department_name || "--"}
+                                                                </span>
+                                                            </div>
+                                                            <p className="mt-2 text-xs text-[#86909C]">
+                                                                {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className="rounded bg-[#E8F3FF] px-2 py-0.5 text-xs text-[#165DFF]">
+                                                                {getAuthTypeLabel(space.auth_type)}
+                                                            </span>
+                                                            <span
+                                                                className={
+                                                                    space.is_released
+                                                                        ? "rounded bg-[#E8FFEA] px-2 py-0.5 text-xs text-[#00B42A]"
+                                                                        : "rounded bg-[#FFF7E8] px-2 py-0.5 text-xs text-[#FF7D00]"
+                                                                }
+                                                            >
+                                                                {space.is_released
+                                                                    ? t("bench.departmentKnowledgeSpacePublished", "已发布")
+                                                                    : t("bench.departmentKnowledgeSpaceUnpublished", "未发布")}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
-                        <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
                 </CardContent>
             </div>
@@ -159,6 +261,7 @@ export default function KnowledgeSpace() {
             <DepartmentKnowledgeSpaceManagerDialog
                 open={managerOpen}
                 onOpenChange={setManagerOpen}
+                onCreated={loadDepartmentSpaces}
             />
             <DepartmentKnowledgeSpaceApprovalDialog
                 open={approvalOpen}

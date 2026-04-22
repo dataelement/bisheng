@@ -4,6 +4,7 @@ import { Button } from "@/components/bs-ui/button"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -116,6 +117,9 @@ export function DepartmentSpaceDialog({
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>{t("departmentSpace.configure")}</DialogTitle>
+          <DialogDescription>
+            {t("departmentSpace.dialogHint")}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

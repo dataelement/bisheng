@@ -1,6 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { SearchInput } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { batchCreateDepartmentKnowledgeSpacesApi, getDepartmentKnowledgeSpacesApi } from "@/controllers/API/departmentKnowledgeSpace";
@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: () => void;
 }
 
 function flattenDepartmentIds(nodes: DepartmentTreeNode[]): number[] {
@@ -28,7 +29,7 @@ function flattenDepartmentIds(nodes: DepartmentTreeNode[]): number[] {
   return ids;
 }
 
-export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange }: Props) {
+export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCreated }: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [tree, setTree] = useState<DepartmentTreeNode[]>([]);
@@ -127,6 +128,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange }: Pr
       description: t("bench.departmentKnowledgeSpaceCreateSuccess", "部门知识空间创建成功"),
       variant: "success",
     });
+    onCreated?.();
     onOpenChange(false);
   };
 
@@ -187,6 +189,9 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange }: Pr
       <DialogContent className="sm:max-w-[920px]">
         <DialogHeader>
           <DialogTitle>{t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}</DialogTitle>
+          <DialogDescription>
+            {t("bench.departmentKnowledgeSpaceManagerDesc", "选择未绑定知识空间的部门，批量创建部门知识空间。")}
+          </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-[1.1fr_0.9fr] gap-5 py-2">
           <div className="rounded-lg border border-[#ECECEC] bg-white p-4">
