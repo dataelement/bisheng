@@ -284,7 +284,8 @@ const AiChatInput = memo(
                         when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const accept = isLingsi ? (bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight) : "";
+                        const accept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+                        console.log('upload accept :>> ', accept);
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}

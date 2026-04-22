@@ -681,8 +681,9 @@ async def _build_knowledge_search_tool(
         # right auth-check behaviour per KB source.
         space_bucket = [i for i in kb_ids_int if i in space_id_set]
         org_bucket = [i for i in kb_ids_int if i not in space_id_set]
+        failures: list[dict] = []
         try:
-            _formatted, finally_docs = await WorkStationService.queryChunksFromDB(
+            _formatted, finally_docs, failures = await WorkStationService.queryChunksFromDB(
                 question=query,
                 use_knowledge_param=UseKnowledgeBaseParam(
                     knowledge_space_ids=space_bucket,
@@ -721,8 +722,28 @@ async def _build_knowledge_search_tool(
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
         results = [_format_chunk(doc) for doc in docs]
+
+        # Surface per-KB failures as synthetic chunks carrying
+        # <retrieval_error>. The frontend detects these and renders the KB
+        # chip in an error state with the error message, so users see which
+        # KB failed and why instead of the tool silently dropping them.
+        for f in failures or []:
+            kb_name = f.get('name') or ''
+            if not kb_name:
+                # fall back to the name we resolved earlier
+                kb_name = kb_name_by_id.get(str(f.get('id', '')), '')
+            err_text = str(f.get('error') or '').replace('</retrieval_error>', '')
+            results.append(
+                '{'
+                f'<knowledge_base_id>{f.get("id", "")}</knowledge_base_id>\n'
+                f'<knowledge_base_name>{kb_name}</knowledge_base_name>\n'
+                f'<retrieval_error>{err_text}</retrieval_error>'
+                '}'
+            )
+
         logger.info(
             f'[search_kb] returning {len(results)} chunks'
+            f' (ok={len(results) - len(failures or [])} failed={len(failures or [])})'
             f' total_chars={sum(len(r) for r in results)}'
         )
         return json.dumps(results, ensure_ascii=False)
@@ -1169,7 +1190,9 @@ async def _agent_stream_chat_completion(
                 knowledge_bases_info=knowledge_bases_info,
             )
 
-            history = (await WorkStationService.get_chat_history(conversation_id, 8))[:-1]
+            # 20 rows ≈ 10 QA turns; trimmed further inside get_chat_history
+            # by a character-length cap so a long conversation still fits.
+            history = (await WorkStationService.get_chat_history(conversation_id, 10))[:-1]
 
             if image_bases64:
                 content_payload = [{'type': 'text', 'text': user_text}]
@@ -1207,6 +1230,55 @@ async def _agent_stream_chat_completion(
                 f' visual_count={len(image_bases64)}'
                 f' kb_count={len(knowledge_bases_info or [])}'
             )
+
+            # [debug] Dump the exact, UNTRUNCATED payload sent to the LLM to
+            # /tmp/bisheng_agent_dumps/<trace>.json so the full system prompt
+            # and message history can be inspected verbatim.
+            #
+            # Gated behind BISHENG_AGENT_DUMP env var — OFF by default so
+            # there's no I/O overhead in production. To enable for debugging:
+            #   export BISHENG_AGENT_DUMP=1   # then restart the backend
+            # Accepted truthy values: 1, true, yes, on (case-insensitive).
+            import os as _os
+            if _os.environ.get('BISHENG_AGENT_DUMP', '').lower() in ('1', 'true', 'yes', 'on'):
+                try:
+                    from bisheng.core.logger import trace_id_var
+                    trace_id = trace_id_var.get() or 'notrace'
+                except Exception:
+                    trace_id = 'notrace'
+
+                def _serialize_message(m):
+                    content = getattr(m, 'content', '')
+                    if isinstance(content, list):
+                        parts = []
+                        for p in content:
+                            if isinstance(p, dict) and p.get('type') == 'image_url':
+                                parts.append({'type': 'image_url', 'image_url': '<base64 omitted>'})
+                            else:
+                                parts.append(p)
+                        content_out = parts
+                    else:
+                        content_out = content
+                    return {'role': type(m).__name__, 'content': content_out}
+
+                dump_payload = {
+                    'trace_id': trace_id,
+                    'user_id': login_user.user_id,
+                    'conversation_id': conversation_id,
+                    'tool_count': len(langchain_tools),
+                    'tool_names': [t.name for t in langchain_tools],
+                    'kb_count': len(knowledge_bases_info or []),
+                    'system_prompt': sys_prompt,
+                    'messages': [_serialize_message(m) for m in llm_messages],
+                }
+                try:
+                    _os.makedirs('/tmp/bisheng_agent_dumps', exist_ok=True)
+                    dump_path = f'/tmp/bisheng_agent_dumps/{trace_id}.json'
+                    with open(dump_path, 'w', encoding='utf-8') as fp:
+                        json.dump(dump_payload, fp, ensure_ascii=False, indent=2, default=str)
+                    logger.info(f'[agent_chat][dump] wrote full payload -> {dump_path}')
+                except Exception as dump_exc:
+                    logger.warning(f'[agent_chat][dump] failed: {dump_exc}')
 
             # ---- Step 5: execute ----
             if langchain_tools:
