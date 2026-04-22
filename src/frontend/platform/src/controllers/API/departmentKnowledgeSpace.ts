@@ -18,7 +18,7 @@ export interface DepartmentKnowledgeSpaceApprovalSettings {
 export async function getDepartmentKnowledgeSpacesApi(params?: {
   order_by?: "name" | "update_time";
 }): Promise<DepartmentKnowledgeSpaceSummary[]> {
-  return await axios.get(`/api/v1/knowledge/space/department`, { params });
+  return await axios.get(`/api/v1/knowledge/space/department/all`, { params });
 }
 
 export async function batchCreateDepartmentKnowledgeSpacesApi(

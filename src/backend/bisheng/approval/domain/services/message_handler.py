@@ -7,6 +7,8 @@ from bisheng.message.domain.services.approval_handler import ApprovalHandler
 
 
 class DepartmentKnowledgeSpaceUploadApprovalHandler(ApprovalHandler):
+    LEGACY_REJECT_REASON = 'Rejected via legacy message approval route'
+
     def get_action_code(self) -> str:
         return 'request_department_knowledge_space_upload'
 
@@ -25,5 +27,5 @@ class DepartmentKnowledgeSpaceUploadApprovalHandler(ApprovalHandler):
             request_id=int(request_id),
             operator_user_id=operator_user_id,
             action=ApprovalDecisionActionEnum.REJECT,
-            reason=None,
+            reason=self.LEGACY_REJECT_REASON,
         )

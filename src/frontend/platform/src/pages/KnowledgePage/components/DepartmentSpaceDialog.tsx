@@ -12,9 +12,9 @@ import { Label } from "@/components/bs-ui/label"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   batchCreateDepartmentKnowledgeSpacesApi,
-  getManagedKnowledgeSpacesApi,
-  type KnowledgeSpaceSummary,
-} from "@/controllers/API/knowledgeSpace"
+  getDepartmentKnowledgeSpacesApi,
+  type DepartmentKnowledgeSpaceSummary,
+} from "@/controllers/API/departmentKnowledgeSpace"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -32,14 +32,14 @@ export function DepartmentSpaceDialog({
 }: DepartmentSpaceDialogProps) {
   const { t } = useTranslation("bs")
   const [selected, setSelected] = useState<SelectedSubject[]>([])
-  const [managedSpaces, setManagedSpaces] = useState<KnowledgeSpaceSummary[]>([])
+  const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setSelected([])
-      setManagedSpaces([])
+      setDepartmentSpaces([])
       setLoading(false)
       setSubmitting(false)
       return
@@ -47,14 +47,10 @@ export function DepartmentSpaceDialog({
 
     let active = true
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getManagedKnowledgeSpacesApi({ order_by: "name" })).then(
+    captureAndAlertRequestErrorHoc(getDepartmentKnowledgeSpacesApi({ order_by: "name" })).then(
       (res) => {
         if (!active || res === false || !Array.isArray(res)) return
-        setManagedSpaces(
-          res.filter(
-            (space) => space.space_kind === "department" && Boolean(space.department_id)
-          )
-        )
+        setDepartmentSpaces(res)
       }
     ).finally(() => {
       if (active) setLoading(false)
@@ -67,10 +63,10 @@ export function DepartmentSpaceDialog({
 
   const existingDepartmentIds = useMemo(
     () =>
-      managedSpaces
+      departmentSpaces
         .map((space) => space.department_id)
         .filter((departmentId): departmentId is number => typeof departmentId === "number"),
-    [managedSpaces]
+    [departmentSpaces]
   )
 
   const existingDepartmentIdSet = useMemo(
@@ -128,7 +124,7 @@ export function DepartmentSpaceDialog({
             <p className="mt-2">
               {loading
                 ? t("loading")
-                : t("departmentSpace.createdHint", { count: managedSpaces.length })}
+                : t("departmentSpace.createdHint", { count: departmentSpaces.length })}
             </p>
           </div>
 

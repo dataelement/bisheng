@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
@@ -225,6 +226,87 @@ class ApprovalService:
         return sorted(reviewer_ids)
 
     @classmethod
+    async def get_department_space_reviewer_user_ids(
+        cls,
+        *,
+        request: Request,
+        login_user: UserPayload,
+        space_id: int,
+        parent_folder_id: Optional[int],
+        exclude_user_ids: Optional[Iterable[int]] = None,
+    ) -> List[int]:
+        reviewer_ids = await cls._resolve_reviewer_user_ids(
+            request=request,
+            login_user=login_user,
+            space_id=space_id,
+            parent_folder_id=parent_folder_id,
+        )
+        excluded = {int(user_id) for user_id in (exclude_user_ids or [])}
+        return [user_id for user_id in reviewer_ids if user_id not in excluded]
+
+    @classmethod
+    async def should_bypass_department_space_approval(
+        cls,
+        *,
+        request: Request,
+        login_user: UserPayload,
+        space_id: int,
+        parent_folder_id: Optional[int],
+    ) -> bool:
+        reviewer_user_ids = await cls.get_department_space_reviewer_user_ids(
+            request=request,
+            login_user=login_user,
+            space_id=space_id,
+            parent_folder_id=parent_folder_id,
+        )
+        return login_user.user_id in set(reviewer_user_ids)
+
+    @classmethod
+    def _build_system_login_user(
+        cls,
+        *,
+        user_id: int,
+        user_name: str,
+        tenant_id: int,
+    ) -> UserPayload:
+        return UserPayload(
+            user_id=user_id,
+            user_name=user_name,
+            tenant_id=tenant_id,
+            user_role=[-999],
+        )
+
+    @classmethod
+    async def _get_live_reviewer_user_ids_for_row(
+        cls,
+        *,
+        row: ApprovalRequest,
+    ) -> List[int]:
+        return await cls.get_department_space_reviewer_user_ids(
+            request=Request(scope={'type': 'http'}),
+            login_user=cls._build_system_login_user(
+                user_id=row.applicant_user_id,
+                user_name=row.applicant_user_name,
+                tenant_id=row.tenant_id,
+            ),
+            space_id=row.space_id,
+            parent_folder_id=row.parent_folder_id,
+            exclude_user_ids=[row.applicant_user_id],
+        )
+
+    @classmethod
+    async def _can_user_access_request(
+        cls,
+        *,
+        row: ApprovalRequest,
+        login_user: UserPayload,
+    ) -> bool:
+        if login_user.is_admin() or row.applicant_user_id == login_user.user_id:
+            return True
+        live_reviewer_ids = await cls._get_live_reviewer_user_ids_for_row(row=row)
+        return login_user.user_id in set(live_reviewer_ids)
+
+    @classmethod
     async def _run_safety_check(
         cls,
         *,
@@ -370,12 +452,15 @@ class ApprovalService:
             )
             return request_row
 
-        reviewer_user_ids = await cls._resolve_reviewer_user_ids(
+        reviewer_user_ids = await cls.get_department_space_reviewer_user_ids(
             request=request,
             login_user=login_user,
             space_id=space_id,
             parent_folder_id=parent_folder_id,
+            exclude_user_ids=[login_user.user_id],
         )
+        if not reviewer_user_ids:
+            raise ApprovalRequestPermissionDeniedError(msg='No eligible reviewers available for this approval request')
         request_row.reviewer_user_ids = reviewer_user_ids
         request_row = await ApprovalRequestDao.aupdate(request_row)
         message_id = await cls._send_approval_messages(
@@ -446,12 +531,7 @@ class ApprovalService:
         row = await ApprovalRequestDao.aget_by_id(request_id)
         if not row:
             raise ApprovalRequestNotFoundError()
-        allowed = (
-            row.applicant_user_id == login_user.user_id
-            or login_user.is_admin()
-            or login_user.user_id in set(row.reviewer_user_ids or [])
-        )
-        if not allowed:
+        if not await cls._can_user_access_request(row=row, login_user=login_user):
             raise ApprovalRequestPermissionDeniedError()
         return row
 
@@ -465,14 +545,29 @@ class ApprovalService:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[List[ApprovalRequestResp], int]:
-        rows, total = await ApprovalRequestDao.alist(
+        if login_user.is_admin():
+            rows, total = await ApprovalRequestDao.alist(
+                space_id=space_id,
+                applicant_user_id=None,
+                reviewer_user_id=None,
+                statuses=statuses,
+                page=page,
+                page_size=page_size,
+            )
+            return [cls._to_resp(row) for row in rows], total
+
+        candidate_rows = await ApprovalRequestDao.alist_all(
             space_id=space_id,
-            applicant_user_id=None if login_user.is_admin() else login_user.user_id,
-            reviewer_user_id=None if login_user.is_admin() else login_user.user_id,
             statuses=statuses,
-            page=page,
-            page_size=page_size,
         )
+        visible_mask = await asyncio.gather(*[
+            cls._can_user_access_request(row=row, login_user=login_user)
+            for row in candidate_rows
+        ])
+        visible_rows = [row for row, visible in zip(candidate_rows, visible_mask) if visible]
+        total = len(visible_rows)
+        offset = (page - 1) * page_size
+        rows = visible_rows[offset:offset + page_size]
         return [cls._to_resp(row) for row in rows], total
 
     @classmethod
@@ -486,11 +581,10 @@ class ApprovalService:
         payload = dict(request_row.payload_json or {})
         service = KnowledgeSpaceService(
             request=Request(scope={'type': 'http'}),
-            login_user=UserPayload(
+            login_user=cls._build_system_login_user(
                 user_id=request_row.applicant_user_id,
                 user_name=request_row.applicant_user_name,
                 tenant_id=request_row.tenant_id,
-                user_role=[-999],
             ),
         )
         files = await service.add_file(
@@ -520,20 +614,9 @@ class ApprovalService:
             raise ApprovalRequestNotFoundError()
         if row.status != ApprovalRequestStatusEnum.PENDING_REVIEW.value:
             raise ApprovalRequestAlreadyProcessedError()
-        current_reviewer_ids = set(row.reviewer_user_ids or [])
-        current_reviewer_ids.update(
-            await cls._resolve_reviewer_user_ids(
-                request=Request(scope={'type': 'http'}),
-                login_user=UserPayload(
-                    user_id=operator_user_id,
-                    user_name='',
-                    tenant_id=row.tenant_id,
-                    user_role=[-999],
-                ),
-                space_id=row.space_id,
-                parent_folder_id=row.parent_folder_id,
-            )
-        )
+        if operator_user_id == row.applicant_user_id:
+            raise ApprovalRequestPermissionDeniedError(msg='Applicant cannot approve their own request')
+        current_reviewer_ids = set(await cls._get_live_reviewer_user_ids_for_row(row=row))
         if operator_user_id not in current_reviewer_ids:
             raise ApprovalRequestPermissionDeniedError()
         if action == ApprovalDecisionActionEnum.REJECT and not (reason or '').strip():

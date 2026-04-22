@@ -133,6 +133,23 @@ async def get_my_department_spaces(
     return resp_200(spaces)
 
 
+@router.get('/department/all')
+async def get_all_department_spaces(
+        request: Request,
+        order_by: str = 'update_time',
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    try:
+        spaces = await DepartmentKnowledgeSpaceService.get_all_department_spaces(
+            request=request,
+            login_user=login_user,
+            order_by=order_by,
+        )
+        return resp_200(spaces)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
 @router.post('/department/batch-create')
 async def batch_create_department_spaces(
         req: DepartmentKnowledgeSpaceBatchCreateReq,

@@ -59,6 +59,12 @@ class DepartmentKnowledgeSpace(DepartmentKnowledgeSpaceBase, table=True):
 
 class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
     @classmethod
+    async def aget_all(cls) -> List[DepartmentKnowledgeSpace]:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(DepartmentKnowledgeSpace))
+            return result.all()
+
+    @classmethod
     async def acreate(
         cls,
         *,

@@ -175,6 +175,28 @@ class ApprovalRequestDao(ApprovalRequestBase):
             await session.commit()
 
     @classmethod
+    async def alist_all(
+        cls,
+        *,
+        space_id: Optional[int] = None,
+        statuses: Optional[List[str]] = None,
+    ) -> List[ApprovalRequest]:
+        filters = []
+        if space_id is not None:
+            filters.append(ApprovalRequest.space_id == space_id)
+        if statuses:
+            filters.append(ApprovalRequest.status.in_(statuses))
+
+        async with get_async_db_session() as session:
+            stmt = select(ApprovalRequest)
+            if filters:
+                for cond in filters:
+                    stmt = stmt.where(cond)
+            stmt = stmt.order_by(ApprovalRequest.create_time.desc())
+            rows = (await session.exec(stmt)).all()
+        return rows
+
+    @classmethod
     async def alist(
         cls,
         *,

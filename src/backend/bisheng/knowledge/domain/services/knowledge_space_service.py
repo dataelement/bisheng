@@ -1575,16 +1575,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             from bisheng.approval.domain.services.approval_service import ApprovalService
 
             if await ApprovalService.should_require_department_space_approval(knowledge_id):
-                approval_request = await ApprovalService.create_department_space_upload_request(
+                should_bypass_approval = await ApprovalService.should_bypass_department_space_approval(
                     request=self.request,
                     login_user=self.login_user,
                     space_id=knowledge_id,
                     parent_folder_id=parent_id,
-                    file_paths=file_path,
                 )
-                return ApprovalService.build_pending_file_responses(
-                    approval_request=approval_request,
-                )
+                if not should_bypass_approval:
+                    approval_request = await ApprovalService.create_department_space_upload_request(
+                        request=self.request,
+                        login_user=self.login_user,
+                        space_id=knowledge_id,
+                        parent_folder_id=parent_id,
+                        file_paths=file_path,
+                    )
+                    return ApprovalService.build_pending_file_responses(
+                        approval_request=approval_request,
+                    )
 
         level = 0
         file_level_path = ""

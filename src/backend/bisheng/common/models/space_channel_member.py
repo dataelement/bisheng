@@ -58,6 +58,14 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
             server_default=text("'manual'"),
         ),
     )
+    department_admin_promoted_from_role: Optional[str] = Field(
+        default=None,
+        description='Original role preserved when a manual member is temporarily promoted by department-admin sync',
+        sa_column=Column(
+            String(32),
+            nullable=True,
+        ),
+    )
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned to top',
                             sa_column=Column(Boolean, nullable=False, server_default=text('0')))
 

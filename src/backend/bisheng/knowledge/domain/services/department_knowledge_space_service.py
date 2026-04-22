@@ -79,17 +79,17 @@ class DepartmentKnowledgeSpaceService:
                     await svc._grant_space_membership_tuple(space_id, existing)
                     continue
                 if existing.user_role == UserRoleEnum.ADMIN:
+                    if existing.status != MembershipStatusEnum.ACTIVE:
+                        existing.status = MembershipStatusEnum.ACTIVE
+                        await SpaceChannelMemberDao.update(existing)
+                    await svc._grant_space_membership_tuple(space_id, existing)
                     continue
-                await svc._grant_space_membership_tuple(
-                    space_id,
-                    SpaceChannelMember(
-                        business_id=str(space_id),
-                        business_type=BusinessTypeEnum.SPACE,
-                        user_id=admin_user_id,
-                        user_role=UserRoleEnum.ADMIN,
-                        status=MembershipStatusEnum.ACTIVE,
-                    ),
-                )
+                existing.department_admin_promoted_from_role = existing.user_role.value
+                existing.user_role = UserRoleEnum.ADMIN
+                existing.status = MembershipStatusEnum.ACTIVE
+                existing.membership_source = 'department_admin'
+                await SpaceChannelMemberDao.update(existing)
+                await svc._grant_space_membership_tuple(space_id, existing)
                 continue
 
             member = SpaceChannelMember(
@@ -125,17 +125,17 @@ class DepartmentKnowledgeSpaceService:
                 await space_service._grant_space_membership_tuple(space_id, existing)
                 return
             if existing.user_role == UserRoleEnum.ADMIN:
+                if existing.status != MembershipStatusEnum.ACTIVE:
+                    existing.status = MembershipStatusEnum.ACTIVE
+                    await SpaceChannelMemberDao.update(existing)
+                await space_service._grant_space_membership_tuple(space_id, existing)
                 return
-            await space_service._grant_space_membership_tuple(
-                space_id,
-                SpaceChannelMember(
-                    business_id=str(space_id),
-                    business_type=BusinessTypeEnum.SPACE,
-                    user_id=user_id,
-                    user_role=UserRoleEnum.ADMIN,
-                    status=MembershipStatusEnum.ACTIVE,
-                ),
-            )
+            existing.department_admin_promoted_from_role = existing.user_role.value
+            existing.user_role = UserRoleEnum.ADMIN
+            existing.status = MembershipStatusEnum.ACTIVE
+            existing.membership_source = 'department_admin'
+            await SpaceChannelMemberDao.update(existing)
+            await space_service._grant_space_membership_tuple(space_id, existing)
             return
 
         member = SpaceChannelMember(
@@ -161,6 +161,16 @@ class DepartmentKnowledgeSpaceService:
         if existing is None or existing.user_role == UserRoleEnum.CREATOR:
             return
         if existing.membership_source == 'department_admin':
+            previous_role = existing.department_admin_promoted_from_role
+            if previous_role:
+                existing.user_role = UserRoleEnum(previous_role)
+                existing.membership_source = 'manual'
+                existing.department_admin_promoted_from_role = None
+                existing.status = MembershipStatusEnum.ACTIVE
+                await SpaceChannelMemberDao.update(existing)
+                await space_service._revoke_space_membership_tuple(space_id, user_id, UserRoleEnum.ADMIN)
+                await space_service._grant_space_membership_tuple(space_id, existing)
+                return
             await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
             await space_service._revoke_space_membership_tuple(space_id, user_id, existing.user_role)
             return
@@ -275,3 +285,26 @@ class DepartmentKnowledgeSpaceService:
         ]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
         return await svc._format_member_spaces(filtered_members, order_by)
+
+    @classmethod
+    async def get_all_department_spaces(
+        cls,
+        *,
+        request: Request,
+        login_user: UserPayload,
+        order_by: str = 'update_time',
+    ) -> List[KnowledgeSpaceInfoResp]:
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+        cls._ensure_super_admin(login_user)
+        bindings = await DepartmentKnowledgeSpaceDao.aget_all()
+        if not bindings:
+            return []
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(
+            [binding.space_id for binding in bindings],
+            order_by=order_by,
+        )
+        results = [KnowledgeSpaceInfoResp(**space.model_dump()) for space in spaces]
+        svc = KnowledgeSpaceService(request=request, login_user=login_user)
+        return await svc._decorate_department_metadata(results)
