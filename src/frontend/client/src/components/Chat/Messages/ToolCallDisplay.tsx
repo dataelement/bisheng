@@ -96,6 +96,45 @@ function safeHostname(url: string): string {
     try { return new URL(url).hostname; } catch { return url; }
 }
 
+/**
+ * Single web-result chip. Uses the site's own `/favicon.ico` (no third-party
+ * favicon service — Google's s2 endpoint is blocked in mainland China), and
+ * falls back to the Globe icon on load failure.
+ */
+const WebResultChip: FC<{ item: any; chip: string }> = ({ item, chip }) => {
+    const url = item?.url;
+    const host = url ? safeHostname(url) : "";
+    const [faviconFailed, setFaviconFailed] = useState(false);
+    const showFavicon = !!host && !faviconFailed;
+
+    const content = (
+        <span
+            className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
+            title={chip}
+        >
+            {showFavicon ? (
+                <img
+                    src={`https://${host}/favicon.ico`}
+                    alt=""
+                    className="size-[14px] rounded-[2px]"
+                    onError={() => setFaviconFailed(true)}
+                />
+            ) : (
+                <Globe className="size-[14px] text-[#86909C]" />
+            )}
+            <span className="truncate max-w-[14rem]">{chip}</span>
+        </span>
+    );
+
+    return url ? (
+        <a href={url} target="_blank" rel="noreferrer" className="no-underline hover:opacity-80">
+            {content}
+        </a>
+    ) : (
+        content
+    );
+};
+
 /** For web results: dedupe by hostname (or title if no url), preserve search-result order. */
 function normaliseWebResults(items: any[]): any[] {
     const seen = new Set<string>();
@@ -324,45 +363,13 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
 
                         {!toolCall.inflight && !toolCall.error && variant === "web" && webResults.length > 0 && (
                             <div className="flex flex-wrap gap-2">
-                                {webResults.map((item, i) => {
-                                    const chip = extractChipLabel(item, variant);
-                                    const url = item?.url;
-                                    const host = url ? safeHostname(url) : "";
-                                    const favicon = host
-                                        ? `https://www.google.com/s2/favicons?domain=${host}&sz=32`
-                                        : "";
-                                    const content = (
-                                        <span
-                                            className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
-                                            title={chip}
-                                        >
-                                            {favicon ? (
-                                                <img
-                                                    src={favicon}
-                                                    alt=""
-                                                    className="size-[14px] rounded-[2px]"
-                                                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
-                                                />
-                                            ) : (
-                                                <Globe className="size-[14px] text-[#86909C]" />
-                                            )}
-                                            <span className="truncate max-w-[14rem]">{chip}</span>
-                                        </span>
-                                    );
-                                    return url ? (
-                                        <a
-                                            key={i}
-                                            href={url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="no-underline hover:opacity-80"
-                                        >
-                                            {content}
-                                        </a>
-                                    ) : (
-                                        <span key={i}>{content}</span>
-                                    );
-                                })}
+                                {webResults.map((item, i) => (
+                                    <WebResultChip
+                                        key={i}
+                                        item={item}
+                                        chip={extractChipLabel(item, variant)}
+                                    />
+                                ))}
                             </div>
                         )}
                     </div>
