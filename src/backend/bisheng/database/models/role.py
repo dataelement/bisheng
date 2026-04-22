@@ -52,7 +52,7 @@ class Role(RoleBase, table=True):
     )
 
     __table_args__ = (
-        UniqueConstraint('tenant_id', 'role_type', 'role_name', name='uk_tenant_roletype_rolename'),
+        UniqueConstraint('tenant_id', 'role_type', 'role_name', 'department_id', name='uk_tenant_roletype_rolename_scope'),
     )
 
 
@@ -276,13 +276,22 @@ class RoleDao(RoleBase):
                 return await session.scalar(stmt)
 
     @classmethod
-    async def aget_role_by_name(cls, tenant_id: int, role_type: str,
-                                role_name: str) -> Optional[Role]:
-        """Check for duplicate role name within (tenant_id, role_type) scope."""
+    async def aget_role_by_name(
+        cls,
+        tenant_id: int,
+        role_type: str,
+        role_name: str,
+        department_id: Optional[int],
+    ) -> Optional[Role]:
+        """Check for duplicate role name within the same role scope."""
         stmt = select(Role).where(
             Role.role_type == role_type,
             Role.role_name == role_name,
         )
+        if department_id is None:
+            stmt = stmt.where(Role.department_id.is_(None))
+        else:
+            stmt = stmt.where(Role.department_id == department_id)
         # tenant_id filtering is auto-injected by INV-1 for role_type='tenant'
         # For global roles, we also need to check
         async with get_async_db_session() as session:

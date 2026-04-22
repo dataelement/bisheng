@@ -147,6 +147,36 @@ class TestCreateRole:
                 await RoleService.create_role(req, mock_tenant_admin)
 
     @pytest.mark.asyncio
+    async def test_same_name_allowed_in_different_departments(self, mock_tenant_admin):
+        from bisheng.role.domain.services.role_service import RoleService
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+
+        req = RoleCreateRequest(role_name='Existing Role', department_id=10)
+
+        with patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_validate_department', new_callable=AsyncMock), \
+             patch.object(RoleService, '_ensure_create_scope', new_callable=AsyncMock), \
+             patch('bisheng.role.domain.services.role_service.Role') as mock_role_cls, \
+             patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch('bisheng.role.domain.services.role_service.QuotaService') as mock_qs:
+            created_role = MagicMock()
+            created_role.id = 18
+            mock_role_cls.return_value = created_role
+            mock_dao.aget_role_by_name = AsyncMock(return_value=None)
+            mock_dao.ainsert_role = AsyncMock(return_value=created_role)
+            mock_qs.validate_quota_config = MagicMock()
+
+            result = await RoleService.create_role(req, mock_tenant_admin)
+
+        assert result.id == 18
+        mock_dao.aget_role_by_name.assert_awaited_once_with(
+            tenant_id=mock_tenant_admin.tenant_id,
+            role_type='tenant',
+            role_name='Existing Role',
+            department_id=10,
+        )
+
+    @pytest.mark.asyncio
     async def test_invalid_quota_config_raises(self, mock_tenant_admin):
         """AC-10c: Invalid quota_config values → 24005."""
         from bisheng.role.domain.services.role_service import RoleService
@@ -455,6 +485,33 @@ class TestUpdateRole:
             )
 
         assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_update_role_checks_duplicate_name_in_target_department_scope(self, mock_admin_user):
+        from bisheng.role.domain.services.role_service import RoleService
+        from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
+
+        role = _make_role(15, 'Old Name', role_type='tenant', department_id=5)
+        req = RoleUpdateRequest(role_name='New Name', department_id=8)
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch('bisheng.role.domain.services.role_service.QuotaService') as mock_qs, \
+             patch.object(RoleService, '_validate_department', new_callable=AsyncMock):
+            mock_dao.aget_role_by_id = AsyncMock(return_value=role)
+            mock_dao.aget_role_by_name = AsyncMock(return_value=None)
+            mock_dao.update_role = AsyncMock(return_value=role)
+            mock_qs.validate_quota_config = MagicMock()
+
+            await RoleService.update_role(
+                role_id=15, req=req, login_user=mock_admin_user,
+            )
+
+        mock_dao.aget_role_by_name.assert_awaited_once_with(
+            tenant_id=mock_admin_user.tenant_id,
+            role_type='tenant',
+            role_name='New Name',
+            department_id=8,
+        )
 
     @pytest.mark.asyncio
     async def test_tenant_admin_cannot_update_global(self, mock_tenant_admin):

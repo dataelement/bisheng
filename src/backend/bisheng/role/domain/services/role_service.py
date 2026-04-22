@@ -68,6 +68,7 @@ class RoleService:
             tenant_id=login_user.tenant_id,
             role_type=role_type,
             role_name=req.role_name,
+            department_id=req.department_id,
         )
         if existing:
             raise RoleNameDuplicateError()
@@ -109,6 +110,7 @@ class RoleService:
             tenant_id=login_user.tenant_id,
             role_type=role_type,
             role_name=req.role_name,
+            department_id=req.department_id,
         )
         if existing:
             raise RoleNameDuplicateError()
@@ -352,10 +354,12 @@ class RoleService:
 
         # Check duplicate name if changing name (AC-09)
         if req.role_name and req.role_name != role.role_name:
+            target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
                 role_name=req.role_name,
+                department_id=target_department_id,
             )
             if existing and existing.id != role_id:
                 raise RoleNameDuplicateError()
@@ -398,10 +402,12 @@ class RoleService:
             QuotaService.validate_quota_config(req.quota_config)
 
         if req.role_name and req.role_name != role.role_name:
+            target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
                 role_name=req.role_name,
+                department_id=target_department_id,
             )
             if existing and existing.id != role_id:
                 raise RoleNameDuplicateError()
