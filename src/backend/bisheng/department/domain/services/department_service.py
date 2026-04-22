@@ -1091,8 +1091,12 @@ class DepartmentService:
         person_id = (data.person_id or '').strip()
         if not person_id:
             raise DepartmentInvalidRolesError(msg='Person ID is required')
-        if await UserDao.aget_by_external_id(person_id):
+        if await UserDao.aget_login_candidates_by_account(person_id):
             raise DepartmentInvalidRolesError(msg='Person ID already exists')
+        if await UserDao.aexists_disabled_login_account(person_id):
+            raise DepartmentInvalidRolesError(
+                msg='Person ID already belongs to a deleted account. Please restore the original account.',
+            )
 
         pwd_hash = md5_hash(plain)
         user = User(
