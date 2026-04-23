@@ -23,6 +23,7 @@ import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
@@ -39,6 +40,7 @@ import {
   type CitationDisplayData,
   type CitationPreview,
 } from './citationUtils';
+import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
 import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
@@ -204,6 +206,8 @@ type TContentProps = {
   showCursor?: boolean;
   isLatestMessage: boolean;
   citations?: ChatCitation[] | null;
+  messageId?: string;
+  onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
 };
 
 function CitationPreviewCard({
@@ -560,8 +564,17 @@ const Citation = ({
   );
 };
 
-const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, citations }: TContentProps & { webContent: any }) => {
+const Markdown = memo(({
+  content = '',
+  showCursor,
+  isLatestMessage,
+  webContent,
+  citations,
+  messageId,
+  onOpenCitationPanel,
+}: TContentProps & { webContent: any }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
+  const isMobileLayout = useMediaQuery('(max-width: 576px)');
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
 
@@ -715,12 +728,30 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
   }, []);
 
   const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
+    const nextPreview = {
+      detail,
+      itemId,
+      locateChunk,
+    };
+
+    if (!isMobileLayout && onOpenCitationPanel) {
+      onOpenCitationPanel({
+        messageId,
+        content,
+        webContent,
+        citations,
+        referenceItems: [],
+        initialDocumentPreview: nextPreview,
+      });
+      return;
+    }
+
     setDocumentPreview({
       detail,
       itemId,
       locateChunk,
     });
-  }, []);
+  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
 
   // Cursor
   if (isInitializing) {

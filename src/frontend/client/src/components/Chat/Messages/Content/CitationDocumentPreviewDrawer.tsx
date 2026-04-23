@@ -1,6 +1,6 @@
 import { FileText, X } from 'lucide-react';
 import type { ChatCitation } from '~/api/chatApi';
-import { useLocalize, usePrefersMobileLayout } from '~/hooks';
+import { useLocalize } from '~/hooks';
 import useMediaQuery from '~/hooks/useMediaQuery';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import { cn } from '~/utils';
@@ -25,6 +25,12 @@ type CitationDocumentPreviewDrawerProps = {
   onClose: () => void;
 };
 
+type CitationDocumentPreviewContentProps = {
+  preview: CitationDocumentPreviewState | null;
+  compactMode?: boolean;
+  className?: string;
+};
+
 function getExtFromUrl(url: string) {
   const path = url.split('?')[0].split('#')[0];
   return path.split('.').pop()?.toLowerCase() || '';
@@ -45,15 +51,11 @@ function resolveFileType(detail: ChatCitation, rawUrl: string) {
   return name.split('.').pop()?.toLowerCase() || '';
 }
 
-export default function CitationDocumentPreviewDrawer({
+export function CitationDocumentPreviewContent({
   preview,
-  onClose,
-}: CitationDocumentPreviewDrawerProps) {
-  const localize = useLocalize();
-  const isH5 = usePrefersMobileLayout();
-  /** 576 以下：文档预览撑满视口（与订阅文章 H5 全屏阅读一致） */
-  const isLt576 = useMediaQuery('(max-width: 575px)');
-  const isFullBleedMobile = isH5 && isLt576;
+  compactMode = false,
+  className,
+}: CitationDocumentPreviewContentProps) {
   if (!preview || !isRagCitation(preview.detail)) {
     return null;
   }
@@ -66,6 +68,44 @@ export default function CitationDocumentPreviewDrawer({
   const shouldLocateChunk = locateChunk && fileType === 'pdf';
   const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(detail, itemId) : [];
   const targetBBox = bboxes[0] ?? null;
+
+  return (
+    <div className={cn('min-h-0 flex-1', className)}>
+      {fileUrl ? (
+        <FilePreview
+          fileName={fileName}
+          fileType={fileType}
+          fileUrl={fileUrl}
+          highlightBboxes={bboxes}
+          targetBBox={targetBBox}
+          compactMode={compactMode}
+        />
+      ) : (
+        <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+          暂无可预览文件地址
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CitationDocumentPreviewDrawer({
+  preview,
+  onClose,
+}: CitationDocumentPreviewDrawerProps) {
+  const localize = useLocalize();
+  const isH5 = useMediaQuery('(max-width: 576px)');
+  /** 576 以下：文档预览撑满视口（与订阅文章 H5 全屏阅读一致） */
+  const isLt576 = useMediaQuery('(max-width: 575px)');
+  const isFullBleedMobile = isH5 && isLt576;
+  if (!preview || !isRagCitation(preview.detail)) {
+    return null;
+  }
+
+  const { detail } = preview;
+  const fileName = getCitationDocumentName(detail);
+  const rawFileUrl = getCitationDocumentUrl(detail);
+  const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
   const handleDownload = () => {
     if (!fileUrl) return;
     const link = document.createElement('a');
@@ -137,20 +177,7 @@ export default function CitationDocumentPreviewDrawer({
             isH5 && !isFullBleedMobile && 'pb-[78px]',
           )}
         >
-          {fileUrl ? (
-            <FilePreview
-              fileName={fileName}
-              fileType={fileType}
-              fileUrl={fileUrl}
-              highlightBboxes={bboxes}
-              targetBBox={targetBBox}
-              compactMode={isH5}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
-              暂无可预览文件地址
-            </div>
-          )}
+          <CitationDocumentPreviewContent preview={preview} compactMode={isH5} />
         </div>
         {isH5 && (
           <div

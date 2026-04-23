@@ -13,6 +13,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -26,6 +27,8 @@ import Presentation from './Presentation';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import AppAvator from '../Avator';
 
+const CITATION_BROWSER_SMALL_BREAKPOINT = 768;
+const CITATION_MOBILE_BREAKPOINT = 576;
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
@@ -36,6 +39,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [isLingsi, setIsLingsi] = useState(false);
   const [inputText, setInputText] = useState('');
   const isH5 = usePrefersMobileLayout();
+  const isCitationMobile = useMediaQuery(`(max-width: ${CITATION_MOBILE_BREAKPOINT}px)`);
+  const useInlineCitationPanel = useMediaQuery(`(min-width: ${CITATION_BROWSER_SMALL_BREAKPOINT + 1}px)`);
+  const useExpandedCitationPanel = useInlineCitationPanel;
   const [citationPanelPayload, setCitationPanelPayload] = useState<CitationReferencesDesktopPayload | null>(null);
   const [citationPanelOpen, setCitationPanelOpen] = useState(false);
   const citationPanelRef = useRef<HTMLDivElement>(null);
@@ -126,18 +132,22 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   }, [bsConfig, user?.id, setChatModel, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
 
   const handleOpenCitationPanel = useCallback((payload: CitationReferencesDesktopPayload) => {
-    if (isH5) {
+    if (isCitationMobile) {
       return;
     }
 
-    if (citationPanelOpen && citationPanelPayload?.messageId === payload.messageId) {
+    if (
+      citationPanelOpen
+      && citationPanelPayload?.messageId === payload.messageId
+      && !payload.initialDocumentPreview
+    ) {
       setCitationPanelOpen(false);
       return;
     }
 
     setCitationPanelPayload(payload);
     setCitationPanelOpen(true);
-  }, [isH5, citationPanelOpen, citationPanelPayload?.messageId]);
+  }, [isCitationMobile, citationPanelOpen, citationPanelPayload?.messageId]);
 
   const handleCloseCitationPanel = useCallback(() => {
     setCitationPanelOpen(false);
@@ -385,10 +395,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     </div>
 
                     {/* Right: Citation Sidebar (Independent) */}
-                    {!isH5 && citationPanelOpen && citationPanelPayload && (
+                    {!isCitationMobile && useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
                       <div
                         ref={citationPanelRef}
-                        className="flex h-full w-[360px] shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300"
+                        className={cn(
+                          'flex h-full shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300',
+                          useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
+                        )}
                       >
                         <CitationReferencesDrawer
                           panelOnly
@@ -405,7 +418,40 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           webContent={citationPanelPayload.webContent}
                           citations={citationPanelPayload.citations}
                           referenceItems={citationPanelPayload.referenceItems}
+                          initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
                         />
+                      </div>
+                    )}
+                    {!isCitationMobile && !useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
+                      <div className="pointer-events-none fixed inset-0 z-30 flex justify-end p-2">
+                        <button
+                          type="button"
+                          aria-label="关闭参考资料浮层"
+                          className="absolute inset-0 pointer-events-auto bg-transparent"
+                          onClick={handleCloseCitationPanel}
+                        />
+                        <div className="pointer-events-auto flex h-full w-[min(376px,calc(100vw-16px))] flex-col rounded-[12px] bg-[#F6F9FF] p-2 shadow-[0_0_20px_rgba(7,34,88,0.05)] animate-in slide-in-from-right duration-300">
+                          <div className="flex min-h-0 flex-1 overflow-hidden rounded-[12px] bg-white">
+                            <CitationReferencesDrawer
+                              panelOnly
+                              desktopMode="inline-panel"
+                              open={citationPanelOpen}
+                              onOpenChange={(nextOpen) => {
+                                if (!nextOpen) {
+                                  handleCloseCitationPanel();
+                                }
+                              }}
+                              panelClassName="h-full w-full max-w-none rounded-[12px] bg-white"
+                              messageId={citationPanelPayload.messageId}
+                              content={citationPanelPayload.content}
+                              webContent={citationPanelPayload.webContent}
+                              citations={citationPanelPayload.citations}
+                              referenceItems={citationPanelPayload.referenceItems}
+                              initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
+                              desktopPreviewVariant="standard"
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

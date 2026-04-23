@@ -506,6 +506,8 @@ function AssistantBubble({
                             content={regularContent}
                             webContent={webContent}
                             citations={message.citations}
+                            messageId={message.messageId}
+                            onOpenCitationPanel={onOpenCitationPanel}
                             showCursor={showCursor}
                             isLatestMessage={!!isLatest}
                         />
@@ -521,11 +523,11 @@ function AssistantBubble({
                             webContent={webContent}
                             citations={message.citations}
                             messageId={message.messageId}
-                            desktopMode="inline-panel"
-                            open={activeCitationMessageId === message.messageId}
-                            onOpenChange={(nextOpen) => {
+                            desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
+                            open={onOpenCitationPanel ? activeCitationMessageId === message.messageId : undefined}
+                            onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
                                 if (!nextOpen && activeCitationMessageId === message.messageId) {
-                                    onOpenCitationPanel?.({
+                                    onOpenCitationPanel({
                                         messageId: message.messageId,
                                         content: regularContent,
                                         webContent,
@@ -533,7 +535,7 @@ function AssistantBubble({
                                         referenceItems: [],
                                     });
                                 }
-                            }}
+                            }) : undefined}
                             onDesktopOpen={onOpenCitationPanel}
                             actionButtons={
                                 <>
