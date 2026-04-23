@@ -335,7 +335,7 @@ export default function KnowledgeFile() {
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileLibDatabase({ ...param, name: param.keyword })
+        readFileLibDatabase({ ...param, name: param.keyword, permissionId: 'view_kb' })
     )
 
     // Permission levels for badge display

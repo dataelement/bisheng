@@ -257,12 +257,51 @@ def test_get_assistant_filters_by_use_app_and_sets_write_from_edit_app():
     assert mock_filter_ids.call_args_list[1].args[3] == 'edit_app'
 
 
+def test_get_assistant_can_filter_by_view_app():
+    assistant_module = _load_assistant_service_module()
+    AssistantService = assistant_module.AssistantService
+
+    user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        get_user_access_resource_ids=MagicMock(return_value=['asst-1', 'asst-2']),
+    )
+
+    assistant_one = SimpleNamespace(id='asst-1', user_id=9, logo='', model_dump=lambda include=None: {'id': 'asst-1'})
+    assistant_two = SimpleNamespace(id='asst-2', user_id=10, logo='', model_dump=lambda include=None: {'id': 'asst-2'})
+
+    with patch.object(
+        assistant_module.ApplicationPermissionService,
+        'filter_object_ids_by_permission_sync',
+        side_effect=[['asst-1'], []],
+    ) as mock_filter_ids, patch.object(
+        assistant_module.AssistantDao,
+        'get_assistants',
+        return_value=([assistant_one, assistant_two], 2),
+    ), patch.object(
+        AssistantService,
+        'return_simple_assistant_info',
+        side_effect=[SimpleNamespace(id='asst-1'), SimpleNamespace(id='asst-2')],
+    ), patch.object(
+        AssistantService,
+        'get_logo_share_link',
+        return_value='logo-url',
+        create=True,
+    ):
+        data, total = AssistantService.get_assistant(user, page=1, limit=20, permission_id='view_app')
+
+    assert total == 2
+    assert [item.id for item in data] == ['asst-1', 'asst-2']
+    assert mock_filter_ids.call_args_list[0].args[3] == 'view_app'
+    assert mock_filter_ids.call_args_list[1].args[3] == 'edit_app'
+
+
 @pytest.mark.asyncio
 async def test_get_assistant_info_uses_view_or_use_app_permissions():
     assistant_module = _load_assistant_service_module()
     AssistantService = assistant_module.AssistantService
 
-    login_user = SimpleNamespace(user_id=7)
+    login_user = SimpleNamespace(user_id=7, is_admin=lambda: False)
     assistant = SimpleNamespace(id='asst-1', is_delete=False, logo='', model_dump=lambda: {'id': 'asst-1'})
 
     with patch.object(
@@ -286,6 +325,11 @@ async def test_get_assistant_info_uses_view_or_use_app_permissions():
         new_callable=AsyncMock,
         return_value='logo-url',
         create=True,
+    ), patch.object(
+        assistant_module,
+        'user_may_share_app',
+        new_callable=AsyncMock,
+        return_value=False,
     ):
         await AssistantService.get_assistant_info('asst-1', login_user)
 

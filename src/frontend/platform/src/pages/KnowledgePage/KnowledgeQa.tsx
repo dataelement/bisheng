@@ -287,7 +287,7 @@ export default function KnowledgeQa(params) {
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable(
         { cancelLoadingWhenReload: true },
-        (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
+        (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1, permissionId: 'view_kb' })
     );
     const resourceIds = datalist.map((el: any) => String(el.id));
     const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);

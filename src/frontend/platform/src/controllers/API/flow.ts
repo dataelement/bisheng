@@ -169,7 +169,7 @@ export async function readFlowsFromDatabase(page: number = 1, pageSize: number =
 }
 
 /* app list */
-export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type, managed, status }) {
+export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type, managed, status, permissionId = 'use_app' }) {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
     const map = { assistant: 5, skill: 1, flow: 10 }
     const flowType = map[type] ? `&flow_type=${map[type]}` : ''
@@ -177,7 +177,7 @@ export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1
         ? `&managed=${managed}`
         : '';
     const statusStr = (status === 1 || status === 2) ? `&status=${status}` : ''
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/workflow/list?page_num=${page}&page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}`);
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/workflow/list?page_num=${page}&page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}&permission_id=${permissionId}`);
     const newData = data.map(item => {
         if (item.flow_type !== 5) return item
         return {

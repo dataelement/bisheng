@@ -126,7 +126,8 @@ class WorkFlowService(BaseService):
     @classmethod
     async def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int],
                             flow_type: Optional[int], page: int = 1, page_size: int = 10,
-                            managed: bool = False, skip_pagination: bool = False, search_description: bool = False) -> (list[dict], int):
+                            managed: bool = False, skip_pagination: bool = False, search_description: bool = False,
+                            permission_id: str = 'use_app') -> (list[dict], int):
         """Get all the skills (async, ReBAC + 部门管理员隐式可见 兼容)."""
         if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
             return [], 0
@@ -163,9 +164,9 @@ class WorkFlowService(BaseService):
             permission_map = await ApplicationPermissionService.get_app_permission_map_async(
                 user,
                 data,
-                ['use_app', 'edit_app'],
+                ['view_app', 'use_app', 'edit_app'],
             )
-            required_permission = 'edit_app' if managed else 'use_app'
+            required_permission = 'edit_app' if managed else permission_id
             data = [
                 one for one in data
                 if required_permission in permission_map.get(str(one.get('id')), set())

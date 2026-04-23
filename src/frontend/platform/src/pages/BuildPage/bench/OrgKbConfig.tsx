@@ -55,7 +55,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const fetchKbs = async (name: string) => {
         setLoading(true);
         try {
-            const doc: any = await readFileLibDatabase({ page: 1, pageSize: 100, name, type: 0 });
+            const doc: any = await readFileLibDatabase({ page: 1, pageSize: 100, name, type: 0, permissionId: 'use_kb' });
             const merged = ((doc?.data || []) as KnowledgeBase[]).map((k) => ({ ...k, type: 0 }));
             merged.sort((a, b) => {
                 const ta = a.update_time ? new Date(a.update_time).getTime() : 0;

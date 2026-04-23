@@ -377,6 +377,66 @@ async def test_get_all_flows_recomputes_total_for_combined_listing_after_permiss
 
 
 @pytest.mark.asyncio
+async def test_get_all_flows_can_filter_by_view_app():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_merged_rebac_app_resource_ids=AsyncMock(return_value=['wf-1', 'asst-1']),
+        access_check=MagicMock(side_effect=AssertionError('legacy access_check should not be used')),
+    )
+
+    app_rows = [
+        {'id': 'wf-1', 'flow_type': FlowType.WORKFLOW.value, 'user_id': 9, 'logo': '', 'name': 'wf'},
+        {'id': 'asst-1', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 10, 'logo': '', 'name': 'asst'},
+    ]
+
+    permission_map = {
+        'wf-1': {'view_app'},
+        'asst-1': {'use_app'},
+    }
+
+    with patch.object(
+        workflow_module.FlowDao,
+        'aget_all_apps',
+        new_callable=AsyncMock,
+        return_value=(app_rows, 2),
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+        return_value=permission_map,
+    ), patch.object(
+        WorkFlowService,
+        'get_logo_share_link',
+        return_value='logo-url',
+        create=True,
+    ), patch.object(
+        WorkFlowService,
+        'aenrich_apps_can_share',
+        new_callable=AsyncMock,
+        side_effect=lambda _user, data, managed=False: data,
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_all_flows(
+            user=login_user,
+            name='',
+            status=None,
+            tag_id=None,
+            flow_type=None,
+            page=1,
+            page_size=10,
+            managed=False,
+            permission_id='view_app',
+        )
+
+    assert total == 1
+    assert [one['id'] for one in data] == ['wf-1']
+
+
+@pytest.mark.asyncio
 async def test_get_all_flows_managed_listing_requires_edit_app_permission():
     workflow_module = _load_workflow_service_module()
     WorkFlowService = workflow_module.WorkFlowService

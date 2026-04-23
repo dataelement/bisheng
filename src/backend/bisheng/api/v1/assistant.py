@@ -32,8 +32,9 @@ def get_assistant(*,
                   page: Optional[int] = Query(default=1, gt=0, description='Page'),
                   limit: Optional[int] = Query(default=10, gt=0, description='Listings Per Page'),
                   status: Optional[int] = Query(default=None, description='Is online status'),
+                  permission_id: str = Query(default='use_app', description='Fine-grained permission id for assistant list visibility'),
                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    data, total = AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
+    data, total = AssistantService.get_assistant(login_user, name, status, tag_id, page, limit, permission_id)
     return resp_200(PageData(data=data, total=total))
 
 

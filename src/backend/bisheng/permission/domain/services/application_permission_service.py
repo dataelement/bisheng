@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Iterable
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -14,6 +15,8 @@ from bisheng.permission.api.endpoints.resource_permission import (
 )
 from bisheng.permission.domain.application_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.services.permission_service import PermissionService
+
+logger = logging.getLogger(__name__)
 
 _PERMISSION_LEVEL_TO_RELATION = {
     'owner': 'owner',
@@ -283,7 +286,18 @@ class ApplicationPermissionService:
             object_type,
             object_id,
         )
-        return bool(set(permission_ids) & effective_permissions)
+        required_permissions = set(permission_ids)
+        allowed = bool(required_permissions & effective_permissions)
+        if not allowed:
+            logger.warning(
+                'application permission denied user=%s object=%s:%s required=%s effective=%s',
+                getattr(login_user, 'user_id', None),
+                object_type,
+                object_id,
+                sorted(required_permissions),
+                sorted(effective_permissions),
+            )
+        return allowed
 
     @classmethod
     def has_any_permission_sync(
@@ -298,4 +312,15 @@ class ApplicationPermissionService:
             object_type,
             object_id,
         )
-        return bool(set(permission_ids) & effective_permissions)
+        required_permissions = set(permission_ids)
+        allowed = bool(required_permissions & effective_permissions)
+        if not allowed:
+            logger.warning(
+                'application permission denied(sync) user=%s object=%s:%s required=%s effective=%s',
+                getattr(login_user, 'user_id', None),
+                object_type,
+                object_id,
+                sorted(required_permissions),
+                sorted(effective_permissions),
+            )
+        return allowed

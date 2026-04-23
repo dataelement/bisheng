@@ -40,7 +40,7 @@ export default function KnowledgeSelect({
     const pageRef = useRef(1)
     const typeRef = useRef(type === 'qa' ? 1 : 0)
     const reload = (page, name) => {
-        readFileLibDatabase({ page, pageSize: 60, name, type: typeRef.current }).then(res => {
+        readFileLibDatabase({ page, pageSize: 60, name, type: typeRef.current, permissionId: 'use_kb' }).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))

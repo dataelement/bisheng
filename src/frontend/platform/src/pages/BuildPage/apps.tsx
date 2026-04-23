@@ -101,7 +101,7 @@ export default function apps() {
     const navigate = useNavigate()
 
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: false }, (param) =>
-        getAppsApi(param)
+        getAppsApi({ ...param, permissionId: 'view_app' })
     )
 
     // Permission management state

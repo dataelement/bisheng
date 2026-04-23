@@ -53,7 +53,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     const hasMoreRef = useRef(true)
     const reload = (page, name) => {
         if (page > 1 && !hasMoreRef.current) return
-        readFileLibDatabase({ page, pageSize, name, type: 0 }).then(res => {
+        readFileLibDatabase({ page, pageSize, name, type: 0, permissionId: 'use_kb' }).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))

@@ -46,7 +46,8 @@ class AssistantService(BaseService, AssistantUtils):
                       status: int | None = None,
                       tag_id: int | None = None,
                       page: int = 1,
-                      limit: int = 20) -> (List[AssistantSimpleInfo], int):
+                      limit: int = 20,
+                      permission_id: str = 'use_app') -> (List[AssistantSimpleInfo], int):
         """
         Get list of assistants
         """
@@ -68,7 +69,7 @@ class AssistantService(BaseService, AssistantUtils):
                 user,
                 'assistant',
                 assistant_ids_extra,
-                'use_app',
+                permission_id,
             )
             res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
                                                      assistant_ids)

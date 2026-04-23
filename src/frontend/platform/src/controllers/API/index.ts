@@ -232,11 +232,11 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  * type 0文件库 1qa库
  */
-export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0 }) {
+export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0, permissionId = 'use_kb' }) {
     try {
         const response: { data: any[], total: number } = await axios.get('/api/v1/knowledge', {
             params: {
-                permission_id: 'view_kb',
+                permission_id: permissionId,
                 page_num: page,
                 page_size: pageSize,
                 name,

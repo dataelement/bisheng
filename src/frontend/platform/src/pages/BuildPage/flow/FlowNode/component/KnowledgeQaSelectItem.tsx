@@ -17,7 +17,7 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
 
     const pageRef = useRef(1)
     const reload = (page, name) => {
-        readFileLibDatabase({ page, pageSize: 60, name, type: 1 }).then(res => {
+        readFileLibDatabase({ page, pageSize: 60, name, type: 1, permissionId: 'use_kb' }).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))

@@ -337,10 +337,12 @@ async def read_flows(*,
                      page_size: int = Query(default=10, description='Items per page'),
                      page_num: int = Query(default=1, description='Page'),
                      status: int = None,
-                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
+                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions'),
+                     permission_id: str = Query(default='use_app', description='Fine-grained permission id for non-managed app lists')):
     """Read all flows."""
     data, total = await WorkFlowService.get_all_flows(
         login_user, name, status, tag_id, flow_type, page_num, page_size, managed,
+        permission_id=permission_id,
     )
     return resp_200(data={
         'data': data,
