@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
@@ -12,6 +13,8 @@ from bisheng.permission.api.endpoints.resource_permission import (
 from bisheng.permission.domain.knowledge_library_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.domain.services.permission_service import PermissionService
+
+logger = logging.getLogger(__name__)
 
 
 _KNOWLEDGE_ACCESS_RELATION = {
@@ -45,7 +48,16 @@ class KnowledgePermissionService:
             login_user=login_user,
             knowledge_id=knowledge_id,
         )
-        return permission_id in effective_permission_ids
+        allowed = permission_id in effective_permission_ids
+        if not allowed:
+            logger.warning(
+                'knowledge permission denied user=%s knowledge_id=%s permission_id=%s effective_permissions=%s',
+                getattr(login_user, 'user_id', None),
+                knowledge_id,
+                permission_id,
+                sorted(effective_permission_ids),
+            )
+        return allowed
 
     @classmethod
     def check_permission_id_sync(

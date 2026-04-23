@@ -80,15 +80,23 @@ export default function apps() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: false }, (param) =>
         getAppsApi(param)
     )
 
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
-    const resourceIds = dataSource.map((item: any) => String(item.id));
-    const { levels: permLevels, loading: permLoading } = usePermissionLevels('workflow', resourceIds);
+    const workflowResourceIds = dataSource
+        .filter((item: any) => item.flow_type !== AppNumType.ASSISTANT)
+        .map((item: any) => String(item.id));
+    const assistantResourceIds = dataSource
+        .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
+        .map((item: any) => String(item.id));
+    const { levels: workflowPermLevels, loading: workflowPermLoading } = usePermissionLevels('workflow', workflowResourceIds);
+    const { levels: assistantPermLevels, loading: assistantPermLoading } = usePermissionLevels('assistant', assistantResourceIds);
+    const permLevels = { ...workflowPermLevels, ...assistantPermLevels };
+    const permLoading = workflowPermLoading || assistantPermLoading;
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const canRead = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
     const canEdit = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
