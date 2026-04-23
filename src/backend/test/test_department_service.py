@@ -9,6 +9,7 @@ Follows the pragmatic test-first approach: ORM + Service tested together.
 
 import pytest
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import StaticPool
@@ -116,9 +117,10 @@ def session(svc_engine):
 
 class _MockLoginUser:
     """Minimal mock of LoginUser for testing."""
-    def __init__(self, user_id=1, user_role=None):
+    def __init__(self, user_id=1, user_role=None, tenant_id=1):
         self.user_id = user_id
         self.user_role = user_role if user_role is not None else [1]  # AdminRole=1
+        self.tenant_id = tenant_id
 
 
 class _NonAdminUser:
@@ -547,6 +549,73 @@ class TestPermission:
 
         with pytest.raises(DepartmentPermissionDeniedError):
             await _check_permission(_NonAdminUser())
+
+    @pytest.mark.asyncio
+    async def test_get_tree_allows_tenant_admin_full_tree(self):
+        from bisheng.database.models.department import DepartmentDao
+        from bisheng.department.domain.services.department_service import DepartmentService
+
+        login_user = _MockLoginUser(user_id=7, user_role=[2], tenant_id=1)
+        root = SimpleNamespace(
+            id=1,
+            dept_id='BS@root',
+            name='Root',
+            parent_id=None,
+            path='/1/',
+            sort_order=0,
+            source='local',
+            status='active',
+        )
+        child = SimpleNamespace(
+            id=2,
+            dept_id='BS@child',
+            name='Child',
+            parent_id=1,
+            path='/1/2/',
+            sort_order=0,
+            source='local',
+            status='active',
+        )
+
+        dept_result = MagicMock()
+        dept_result.all.return_value = [root, child]
+        count_result = MagicMock()
+        count_result.all.return_value = [(1, 3), (2, 1)]
+        db_session = MagicMock()
+        db_session.exec = AsyncMock(side_effect=[dept_result, count_result])
+
+        @asynccontextmanager
+        async def fake_session():
+            yield db_session
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch.object(
+            DepartmentDao, 'aget_user_admin_departments',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_perm_check, patch(
+            'bisheng.department.domain.services.department_service._is_registration_enabled',
+            return_value=True,
+        ):
+            tree = await DepartmentService.aget_tree(login_user)
+
+        assert [node.id for node in tree] == [1]
+        assert tree[0].member_count == 3
+        assert [child.id for child in tree[0].children] == [2]
+        assert tree[0].children[0].member_count == 1
+        mock_perm_check.assert_awaited_once_with(
+            user_id=login_user.user_id,
+            relation='admin',
+            object_type='tenant',
+            object_id=str(login_user.tenant_id),
+            login_user=login_user,
+        )
 
 
 class TestLocalMemberCreate:
