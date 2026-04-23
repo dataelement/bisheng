@@ -544,7 +544,12 @@ export default function Knowledge() {
                         }
                     }}
                     onSquareStatusChange={(id, status) => {
-                        setSquareStatusOverride((prev) => ({ ...prev, [String(id)]: status }));
+                        setSquareStatusOverride((prev) => {
+                            if (prev[String(id)] === status) {
+                                return prev;
+                            }
+                            return { ...prev, [String(id)]: status };
+                        });
                     }}
                 />
             </div>

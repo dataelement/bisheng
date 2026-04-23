@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -49,20 +49,56 @@ export function KnowledgeSpacePreviewDrawer({
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
+    const [loadingSpace, setLoadingSpace] = useState(false);
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
+    const initialSpaceRef = useRef<KnowledgeSpace | null>(initialSpace);
+    const onOpenChangeRef = useRef(onOpenChange);
+    const onSquareStatusChangeRef = useRef(onSquareStatusChange);
+    const lastSyncedSquareStatusRef = useRef<string | null>(null);
+    const localizeRef = useRef(localize);
+    const showToastRef = useRef(showToast);
+
+    useEffect(() => {
+        initialSpaceRef.current = initialSpace;
+    }, [initialSpace]);
+
+    useEffect(() => {
+        onOpenChangeRef.current = onOpenChange;
+    }, [onOpenChange]);
+
+    useEffect(() => {
+        onSquareStatusChangeRef.current = onSquareStatusChange;
+    }, [onSquareStatusChange]);
+
+    useEffect(() => {
+        localizeRef.current = localize;
+    }, [localize]);
+
+    useEffect(() => {
+        showToastRef.current = showToast;
+    }, [showToast]);
 
     const syncPreviewStatus = (info: KnowledgeSpace) => {
+        const emitSquareStatus = (nextStatus: "join" | "joined" | "pending" | "rejected") => {
+            const syncKey = `${String(info.id)}:${nextStatus}`;
+            if (lastSyncedSquareStatusRef.current === syncKey) {
+                return;
+            }
+            lastSyncedSquareStatusRef.current = syncKey;
+            onSquareStatusChangeRef.current?.(String(info.id), nextStatus);
+        };
+
         const subscriptionStatus = String(info.subscriptionStatus ?? info.squareStatus ?? "").toLowerCase();
         if (subscriptionStatus === "rejected") {
             setStatus("rejected");
-            onSquareStatusChange?.(String(info.id), "rejected");
+            emitSquareStatus("rejected");
             return;
         }
         if (info.isPending || subscriptionStatus === "pending") {
             setStatus("pending");
-            onSquareStatusChange?.(String(info.id), "pending");
+            emitSquareStatus("pending");
             return;
         }
         if (
@@ -73,11 +109,11 @@ export function KnowledgeSpacePreviewDrawer({
             info.role === SpaceRole.ADMIN
         ) {
             setStatus("joined");
-            onSquareStatusChange?.(String(info.id), "joined");
+            emitSquareStatus("joined");
             return;
         }
         setStatus("none");
-        onSquareStatusChange?.(String(info.id), "join");
+        emitSquareStatus("join");
     };
 
     /**
@@ -96,7 +132,10 @@ export function KnowledgeSpacePreviewDrawer({
         if (!open || !spaceId) return;
         console.info("[KnowledgeSpacePreviewDrawer] open", { open, spaceId });
 
-        setSpace(null);
+        const fallbackSpace = initialSpaceRef.current;
+
+        setLoadingSpace(true);
+        setSpace(fallbackSpace ?? null);
         setStatus("none");
         setFilesPreview([]);
         setChildrenPage(1);
@@ -104,6 +143,11 @@ export function KnowledgeSpacePreviewDrawer({
         setParentStack([]);
         setParentNameStack([]);
         setLoadingChildrenMore(false);
+        lastSyncedSquareStatusRef.current = null;
+
+        if (fallbackSpace) {
+            syncPreviewStatus(fallbackSpace);
+        }
 
         // 1) Top detail: GET /api/v1/knowledge/space/{space_id}/info
         getSpaceInfoApi(spaceId)
@@ -120,15 +164,21 @@ export function KnowledgeSpacePreviewDrawer({
             })
             .catch(() => {
                 console.warn("[KnowledgeSpacePreviewDrawer] load space info failed", { spaceId });
-                if (initialSpace) {
-                    setSpace(initialSpace);
-                    syncPreviewStatus(initialSpace);
+                if (fallbackSpace) {
+                    setSpace(fallbackSpace);
+                    syncPreviewStatus(fallbackSpace);
                     return;
                 }
-                showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
-                onOpenChange(false);
+                showToastRef.current({
+                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                onOpenChangeRef.current(false);
+            })
+            .finally(() => {
+                setLoadingSpace(false);
             });
-    }, [open, spaceId, initialSpace, localize, onOpenChange, onSquareStatusChange]);
+    }, [open, spaceId]);
 
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
@@ -321,7 +371,7 @@ export function KnowledgeSpacePreviewDrawer({
                         <X className="size-4" />
                     </button>
                 )}
-                {space && (
+                {space ? (
                     <>
                         <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
                             <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold touch-mobile:pr-10">
@@ -468,6 +518,10 @@ export function KnowledgeSpacePreviewDrawer({
                             )}
                         </div>
                     </>
+                ) : (
+                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-[#86909c] touch-mobile:px-0">
+                        {loadingSpace ? localize("com_knowledge.loading") : localize("com_knowledge.space_invalid_or_deleted")}
+                    </div>
                 )}
             </SheetContent>
         </Sheet>
