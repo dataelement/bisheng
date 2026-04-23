@@ -13,6 +13,46 @@ def mock_admin_user():
 class TestRelationModelBindings:
 
     @pytest.mark.asyncio
+    async def test_update_relation_model_marks_explicit_empty_permissions(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import update_relation_model
+        from bisheng.permission.domain.schemas.permission_schema import RelationModelUpdateRequest
+
+        models = [{
+            'id': 'custom_empty',
+            'name': 'Empty',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_app'],
+            'permissions_explicit': False,
+            'is_system': False,
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
+            new_callable=AsyncMock,
+        ) as mock_save_relation_models:
+            await update_relation_model(
+                model_id='custom_empty',
+                request=RelationModelUpdateRequest(name='Still Empty', permissions=[]),
+                login_user=mock_admin_user,
+            )
+
+        saved = mock_save_relation_models.await_args.args[0]
+        assert saved == [{
+            'id': 'custom_empty',
+            'name': 'Still Empty',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': [],
+            'permissions_explicit': True,
+            'is_system': False,
+        }]
+
+    @pytest.mark.asyncio
     async def test_rebinding_same_relation_skips_tuple_write(self, mock_admin_user):
         from bisheng.permission.api.endpoints.resource_permission import authorize_resource
         from bisheng.permission.domain.schemas.permission_schema import (
