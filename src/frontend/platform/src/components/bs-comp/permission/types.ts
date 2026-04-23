@@ -2,6 +2,7 @@
 
 export type ResourceType =
   | 'knowledge_space'
+  | 'knowledge_library'
   | 'folder'
   | 'knowledge_file'
   | 'workflow'
