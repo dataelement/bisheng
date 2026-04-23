@@ -97,7 +97,7 @@ describe("department knowledge space dialogs", () => {
     expect(childRow).toHaveAttribute("data-depth", "1");
   });
 
-  it("keeps the content safety switch visible in approval settings", async () => {
+  it("hides the content safety switch when the frontend flag is off", async () => {
     mockedGetDepartmentKnowledgeSpaceApprovalSettingsApi.mockResolvedValue({
       approval_enabled: true,
       sensitive_check_enabled: false,
@@ -113,6 +113,7 @@ describe("department knowledge space dialogs", () => {
           department_id: 1,
           department_name: "研发部",
         }}
+        showSensitiveCheckControl={false}
       />,
     );
 
@@ -121,8 +122,8 @@ describe("department knowledge space dialogs", () => {
     });
 
     expect(screen.getByText("开启部门知识空间上传审批")).toBeInTheDocument();
-    expect(screen.getByText("开启内容安全检测")).toBeInTheDocument();
-    expect(screen.getByText("开启后，上传文件会先做内容安全检测，通过后才会进入人工审批。")).toBeInTheDocument();
-    expect(screen.getAllByRole("switch")).toHaveLength(2);
+    expect(screen.queryByText("开启内容安全检测")).not.toBeInTheDocument();
+    expect(screen.queryByText("开启后，上传文件会先做内容安全检测，通过后才会进入人工审批。")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
   });
 });

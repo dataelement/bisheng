@@ -18,6 +18,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   space: DepartmentKnowledgeSpaceSummary | null;
   onSaved?: (spaceId: number, settings: DepartmentKnowledgeSpaceApprovalSettings) => void;
+  showSensitiveCheckControl?: boolean;
 }
 
 const DEFAULT_SETTINGS: DepartmentKnowledgeSpaceApprovalSettings = {
@@ -25,7 +26,13 @@ const DEFAULT_SETTINGS: DepartmentKnowledgeSpaceApprovalSettings = {
   sensitive_check_enabled: false,
 };
 
-export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, space, onSaved }: Props) {
+export function DepartmentKnowledgeSpaceApprovalDialog({
+  open,
+  onOpenChange,
+  space,
+  onSaved,
+  showSensitiveCheckControl = true,
+}: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [form, setForm] = useState<DepartmentKnowledgeSpaceApprovalSettings>(DEFAULT_SETTINGS);
@@ -95,25 +102,27 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, spa
             </div>
           </div>
 
-          <div className="rounded-lg border border-[#ECECEC] bg-white px-4 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1 space-y-1">
-                <Label className="bisheng-label">
-                  {t("bench.departmentKnowledgeSpaceSensitiveCheckEnabled", "开启内容安全检测")}
-                </Label>
-                <p className="text-sm text-[#86909C]">
-                  {t("bench.departmentKnowledgeSpaceSensitiveCheckEnabledDesc", "开启后，上传文件会先做内容安全检测，通过后才会进入人工审批。")}
-                </p>
-              </div>
-              <div className="shrink-0 pt-1">
-                <Switch
-                  checked={form.sensitive_check_enabled}
-                  disabled={loading}
-                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, sensitive_check_enabled: checked }))}
-                />
+          {showSensitiveCheckControl && (
+            <div className="rounded-lg border border-[#ECECEC] bg-white px-4 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <Label className="bisheng-label">
+                    {t("bench.departmentKnowledgeSpaceSensitiveCheckEnabled", "开启内容安全检测")}
+                  </Label>
+                  <p className="text-sm text-[#86909C]">
+                    {t("bench.departmentKnowledgeSpaceSensitiveCheckEnabledDesc", "开启后，上传文件会先做内容安全检测，通过后才会进入人工审批。")}
+                  </p>
+                </div>
+                <div className="shrink-0 pt-1">
+                  <Switch
+                    checked={form.sensitive_check_enabled}
+                    disabled={loading}
+                    onCheckedChange={(checked) => setForm((prev) => ({ ...prev, sensitive_check_enabled: checked }))}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
