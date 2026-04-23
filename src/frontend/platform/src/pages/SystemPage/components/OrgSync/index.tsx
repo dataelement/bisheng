@@ -1,5 +1,3 @@
-import { PlusIcon } from "@/components/bs-icons"
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import {
@@ -10,16 +8,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useOrgSyncStore } from "@/store/orgSyncStore"
-import { OrgSyncConfig } from "@/types/api/orgSync"
+import { OrgSyncLog } from "@/types/api/orgSync"
 import { formatIsoDateTime } from "@/util/utils"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ProviderDialog } from "./ProviderDialog"
-import { SyncLogModal } from "./SyncLogModal"
-import { TestConnectionButton } from "./TestConnectionButton"
+import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog"
+
+const PAGE_SIZE = 20
 
 function RunStatusBadge({ status }: { status: string | null | undefined }) {
   const { t } = useTranslation("orgSync")
@@ -34,165 +31,111 @@ function RunStatusBadge({ status }: { status: string | null | undefined }) {
   return <Badge variant={variantMap[status] || "outline"}>{label}</Badge>
 }
 
+function hasErrorDetails(log: OrgSyncLog): boolean {
+  return Array.isArray(log.error_details) && log.error_details.length > 0
+}
+
+/**
+ * 仅展示网关掉 HMAC 推送写入的 org_sync_log（扁平列表 + 详情）。
+ */
 export default function OrgSync() {
   const { t } = useTranslation("orgSync")
-  const { message } = useToast()
 
-  const configs = useOrgSyncStore((s) => s.configs)
+  const gatewayLogs = useOrgSyncStore((s) => s.gatewayLogs)
+  const gatewayTotal = useOrgSyncStore((s) => s.gatewayTotal)
   const loading = useOrgSyncStore((s) => s.loading)
-  const fetchConfigs = useOrgSyncStore((s) => s.fetchConfigs)
-  const editingConfig = useOrgSyncStore((s) => s.editingConfig)
-  const setEditingConfig = useOrgSyncStore((s) => s.setEditingConfig)
-  const deleteConfig = useOrgSyncStore((s) => s.deleteConfig)
-  const executeSync = useOrgSyncStore((s) => s.executeSync)
+  const page = useOrgSyncStore((s) => s.page)
+  const fetchGatewayLogs = useOrgSyncStore((s) => s.fetchGatewayLogs)
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [logModalConfig, setLogModalConfig] = useState<OrgSyncConfig | null>(null)
+  const [detailLog, setDetailLog] = useState<OrgSyncLog | null>(null)
 
   useEffect(() => {
-    fetchConfigs()
-  }, [fetchConfigs])
+    captureAndAlertRequestErrorHoc(fetchGatewayLogs(1))
+  }, [fetchGatewayLogs])
 
-  const handleCreate = () => {
-    setEditingConfig(null)
-    setDialogOpen(true)
+  const maxPage = useMemo(
+    () => Math.max(1, Math.ceil(gatewayTotal / PAGE_SIZE)),
+    [gatewayTotal]
+  )
+
+  const goPrev = () => {
+    if (page <= 1) return
+    const next = page - 1
+    captureAndAlertRequestErrorHoc(fetchGatewayLogs(next))
   }
 
-  const handleEdit = (config: OrgSyncConfig) => {
-    setEditingConfig(config)
-    setDialogOpen(true)
-  }
-
-  const handleExecute = (config: OrgSyncConfig) => {
-    bsConfirm({
-      title: t("confirmExecute.title"),
-      desc: t("confirmExecute.desc", { name: config.config_name }),
-      okTxt: t("actions.execute"),
-      onOk: (close: () => void) => {
-        captureAndAlertRequestErrorHoc(executeSync(config.id)).then((ok) => {
-          if (ok !== false) {
-            message({
-              title: t("executeSuccess.title"),
-              description: t("executeSuccess.desc"),
-              variant: "success",
-            })
-          }
-          close()
-        })
-      },
-    })
-  }
-
-  const handleDelete = (config: OrgSyncConfig) => {
-    bsConfirm({
-      title: t("confirmDelete.title"),
-      desc: t("confirmDelete.desc", { name: config.config_name }),
-      okTxt: t("actions.delete"),
-      onOk: (close: () => void) => {
-        captureAndAlertRequestErrorHoc(deleteConfig(config.id)).then((ok) => {
-          if (ok !== false) {
-            message({
-              title: t("deleteSuccess"),
-              description: config.config_name,
-              variant: "success",
-            })
-          }
-          close()
-        })
-      },
-    })
+  const goNext = () => {
+    if (page >= maxPage) return
+    const next = page + 1
+    captureAndAlertRequestErrorHoc(fetchGatewayLogs(next))
   }
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">{t("title")}</h2>
-          <p className="text-sm text-muted-foreground">{t("description")}</p>
-        </div>
-        <Button onClick={handleCreate}>
-          <PlusIcon className="mr-1" />
-          {t("actions.create")}
-        </Button>
+      <div>
+        <h2 className="text-lg font-semibold">{t("title")}</h2>
+        <p className="text-sm text-muted-foreground">{t("description")}</p>
       </div>
 
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("columns.configName")}</TableHead>
-              <TableHead>{t("columns.provider")}</TableHead>
-              <TableHead>{t("columns.syncStatus")}</TableHead>
-              <TableHead>{t("columns.lastSync")}</TableHead>
-              <TableHead>{t("columns.lastResult")}</TableHead>
-              <TableHead className="text-right">
-                {t("columns.actions")}
-              </TableHead>
+              <TableHead>{t("columns.time")}</TableHead>
+              <TableHead>{t("columns.status")}</TableHead>
+              <TableHead>{t("columns.deptSummary")}</TableHead>
+              <TableHead>{t("columns.memberSummary")}</TableHead>
+              <TableHead>{t("columns.hasErrors")}</TableHead>
+              <TableHead className="text-right">{t("columns.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && configs.length === 0 ? (
+            {loading && gatewayLogs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
                   {t("loading")}
                 </TableCell>
               </TableRow>
-            ) : configs.length === 0 ? (
+            ) : gatewayLogs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
                   {t("emptyHint")}
                 </TableCell>
               </TableRow>
             ) : (
-              configs.map((config) => (
-                <TableRow key={config.id}>
-                  <TableCell className="font-medium">{config.config_name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {t(`providers.${config.provider}`, config.provider)}
-                    </Badge>
+              gatewayLogs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell className="whitespace-nowrap font-mono text-xs">
+                    {formatIsoDateTime(log.end_time || log.start_time)}
                   </TableCell>
                   <TableCell>
-                    {config.sync_status === "running" ? (
-                      <Badge variant="outline">{t("syncStatus.running")}</Badge>
+                    <RunStatusBadge status={log.status} />
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs text-muted-foreground">
+                      +{log.dept_created} / ~{log.dept_updated} / ×{log.dept_archived}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs text-muted-foreground">
+                      +{log.member_created} / ~{log.member_updated} / 🚫
+                      {log.member_disabled} / ↻{log.member_reactivated}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {hasErrorDetails(log) ? (
+                      <Badge variant="destructive">{t("columns.yes")}</Badge>
                     ) : (
-                      <Badge variant="secondary">{t("syncStatus.idle")}</Badge>
+                      <span className="text-muted-foreground">{t("columns.no")}</span>
                     )}
                   </TableCell>
-                  <TableCell>{formatIsoDateTime(config.last_sync_at)}</TableCell>
-                  <TableCell>
-                    <RunStatusBadge status={config.last_sync_result} />
-                  </TableCell>
-                  <TableCell className="flex justify-end gap-2">
-                    <TestConnectionButton configId={config.id} />
+                  <TableCell className="text-right">
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={config.sync_status === "running"}
-                      onClick={() => handleExecute(config)}
+                      onClick={() => setDetailLog(log)}
                     >
-                      {t("actions.execute")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEdit(config)}
-                    >
-                      {t("actions.edit")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setLogModalConfig(config)}
-                    >
-                      {t("actions.viewLogs")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleDelete(config)}
-                    >
-                      {t("actions.delete")}
+                      {t("actions.viewDetail")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -202,18 +145,34 @@ export default function OrgSync() {
         </Table>
       </div>
 
-      <ProviderDialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open)
-          if (!open) setEditingConfig(null)
-        }}
-        editingConfig={editingConfig}
-      />
-      <SyncLogModal
-        config={logModalConfig}
-        onClose={() => setLogModalConfig(null)}
-      />
+      {gatewayTotal > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            {t("pagination.total", { total: gatewayTotal })}{" "}
+            {t("pagination.pageOf", { page, maxPage })}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page <= 1 || loading}
+              onClick={goPrev}
+            >
+              {t("pagination.prev")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= maxPage || loading}
+              onClick={goNext}
+            >
+              {t("pagination.next")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <GatewayLogDetailDialog log={detailLog} onClose={() => setDetailLog(null)} />
     </div>
   )
 }

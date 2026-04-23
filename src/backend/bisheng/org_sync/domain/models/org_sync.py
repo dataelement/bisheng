@@ -430,6 +430,27 @@ class OrgSyncLogDao:
             result = await session.exec(data_stmt)
             return result.all(), total
 
+    @classmethod
+    async def aget_gateway_sso_logs(
+        cls, page: int = 1, limit: int = 20,
+    ) -> Tuple[List[OrgSyncLog], int]:
+        """Paginated gateway push logs (F014 HMAC ``sso_realtime``), newest first.
+
+        One row per gateway round-trip (``flush_log``). Excludes F015
+        ``trigger_type='event'`` reconcile / audit rows.
+        """
+        async with get_async_db_session() as session:
+            base = select(OrgSyncLog).where(
+                OrgSyncLog.trigger_type == 'sso_realtime',
+            )
+            count_stmt = select(func.count()).select_from(base.subquery())
+            total = await session.scalar(count_stmt) or 0
+            data_stmt = base.order_by(OrgSyncLog.id.desc())
+            if page and limit:
+                data_stmt = data_stmt.offset((page - 1) * limit).limit(limit)
+            result = await session.exec(data_stmt)
+            return result.all(), total
+
     # ------------------------------------------------------------------
     # F015 event-row helpers
     # ------------------------------------------------------------------
