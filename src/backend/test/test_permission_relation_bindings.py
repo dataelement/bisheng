@@ -123,3 +123,76 @@ class TestRelationModelBindings:
 
         revoke = mock_authorize.await_args.kwargs['revokes'][0]
         assert revoke.include_children is False
+
+    @pytest.mark.asyncio
+    async def test_get_bindings_migrates_legacy_knowledge_library_bindings(self):
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+        raw_bindings = [{
+            'key': 'knowledge_space:12:user:7:viewer:-',
+            'resource_type': 'knowledge_space',
+            'resource_id': '12',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'custom_viewer',
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission.ConfigDao.aget_config_by_key',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(value='[]'),
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission.json.loads',
+            return_value=raw_bindings,
+        ), patch(
+            'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=12, type=0)],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings:
+            result = await _get_bindings()
+
+        assert result[0]['resource_type'] == 'knowledge_library'
+        assert result[0]['resource_id'] == '12'
+        assert result[0]['key'].startswith('knowledge_library:12:')
+        mock_save_bindings.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_get_bindings_keeps_real_knowledge_space_bindings(self):
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+        raw_bindings = [{
+            'key': 'knowledge_space:22:user:7:viewer:-',
+            'resource_type': 'knowledge_space',
+            'resource_id': '22',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'custom_viewer',
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission.ConfigDao.aget_config_by_key',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(value='[]'),
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission.json.loads',
+            return_value=raw_bindings,
+        ), patch(
+            'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=22, type=3)],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings:
+            result = await _get_bindings()
+
+        assert result[0]['resource_type'] == 'knowledge_space'
+        assert result[0]['key'] == 'knowledge_space:22:user:7:viewer:-'
+        mock_save_bindings.assert_not_awaited()

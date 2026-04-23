@@ -131,9 +131,13 @@ async def _get_bindings() -> list[dict]:
     if not row or not (row.value or '').strip():
         return []
     try:
-        return json.loads(row.value or '[]')
+        bindings = json.loads(row.value or '[]')
     except Exception:
         return []
+    normalized = await _migrate_legacy_knowledge_library_bindings(bindings)
+    if normalized != bindings:
+        await _save_bindings(normalized)
+    return normalized
 
 
 async def _save_bindings(bindings: list[dict]) -> None:
@@ -141,6 +145,42 @@ async def _save_bindings(bindings: list[dict]) -> None:
         _RELATION_MODEL_BINDINGS_KEY,
         json.dumps(bindings, ensure_ascii=False),
     )
+
+
+async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> list[dict]:
+    legacy_ids = {
+        int(binding.get('resource_id'))
+        for binding in bindings
+        if binding.get('resource_type') == 'knowledge_space'
+        and str(binding.get('resource_id', '')).isdigit()
+    }
+    if not legacy_ids:
+        return bindings
+
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+    knowledge_rows = await KnowledgeDao.aget_list_by_ids(sorted(legacy_ids))
+    knowledge_type_map = {row.id: row.type for row in knowledge_rows}
+
+    normalized: list[dict] = []
+    for binding in bindings:
+        migrated = dict(binding)
+        resource_type = migrated.get('resource_type')
+        resource_id = migrated.get('resource_id')
+        if resource_type == 'knowledge_space' and str(resource_id).isdigit():
+            knowledge_type = knowledge_type_map.get(int(resource_id))
+            if knowledge_type is not None and knowledge_type != KnowledgeTypeEnum.SPACE.value:
+                migrated['resource_type'] = 'knowledge_library'
+                migrated['key'] = _binding_key_with_scope(
+                    'knowledge_library',
+                    str(resource_id),
+                    migrated.get('subject_type'),
+                    int(migrated.get('subject_id')),
+                    migrated.get('relation'),
+                    migrated.get('include_children'),
+                )
+        normalized.append(migrated)
+    return normalized
 
 
 def _normalize_binding_include_children(subject_type: str, include_children) -> bool | None:
