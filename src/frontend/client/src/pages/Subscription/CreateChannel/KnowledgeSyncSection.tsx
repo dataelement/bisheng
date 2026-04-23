@@ -257,7 +257,7 @@ export default function KnowledgeSyncSection({
                         {localize?.("com_subscription.sync_to_knowledge_space") ||
                             "同步至知识空间"}
                     </span>
-                    <span className="text-[12px] text-[#86909C]">
+                    <span className="text-[14px] font-normal text-[#999999]">
                         {localize?.("com_subscription.sync_to_knowledge_space_hint") ||
                             "该频道下的内容会自动同步到知识空间"}
                     </span>
@@ -311,8 +311,8 @@ export default function KnowledgeSyncSection({
                             </span>
                             <span
                                 className={
-                                    "text-[14px] " +
-                                    (noSubChannels ? "text-[#C9CDD4]" : "text-[#86909C]")
+                                    "text-[14px] font-normal " +
+                                    (noSubChannels ? "text-[#C9CDD4]" : "text-[#999999]")
                                 }
                             >
                                 {localize?.("com_subscription.per_sub_channel_sync_hint") ||

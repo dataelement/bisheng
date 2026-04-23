@@ -1,5 +1,5 @@
 import { GripVertical, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { getAllLabelsApi, updateHomeLabelApi } from '~/api/apps';
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components";
@@ -24,6 +24,30 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
 
     const { showToast } = useToastContext();
     const localize = useLocalize();
+
+    const [isAllTagsScrolling, setIsAllTagsScrolling] = useState(false);
+    const allTagsScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [isDisplayListScrolling, setIsDisplayListScrolling] = useState(false);
+    const displayListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleAllTagsScroll = () => {
+        setIsAllTagsScrolling(true);
+        if (allTagsScrollTimerRef.current) clearTimeout(allTagsScrollTimerRef.current);
+        allTagsScrollTimerRef.current = setTimeout(() => setIsAllTagsScrolling(false), 500);
+    };
+
+    const handleDisplayListScroll = () => {
+        setIsDisplayListScrolling(true);
+        if (displayListScrollTimerRef.current) clearTimeout(displayListScrollTimerRef.current);
+        displayListScrollTimerRef.current = setTimeout(() => setIsDisplayListScrolling(false), 500);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (allTagsScrollTimerRef.current) clearTimeout(allTagsScrollTimerRef.current);
+            if (displayListScrollTimerRef.current) clearTimeout(displayListScrollTimerRef.current);
+        };
+    }, []);
 
     useEffect(() => {
         async function init() {
@@ -129,12 +153,16 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                     </div>
                 </DialogHeader>
 
-                <div className="flex min-h-0 flex-1 flex-col border-t border-[#E5E6EB] min-[769px]:flex-row">
-                    <div className="flex min-h-0 min-w-0 flex-col border-[#E5E6EB] max-[768px]:max-h-[min(42vh,360px)] max-[768px]:flex-none min-[769px]:flex-1 min-[769px]:border-r">
+                <div className="flex min-h-0 flex-1 flex-col min-[769px]:flex-row">
+                    <div className="flex min-h-0 min-w-0 flex-col max-[768px]:max-h-[min(42vh,360px)] max-[768px]:flex-none min-[769px]:flex-1">
                         <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-[#1D2129]">
                             {localize('com_label_all_tags')}
                         </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 max-[768px]:pb-3">
+                        <div
+                            className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-on-scroll px-4 pb-4 max-[768px]:pb-3"
+                            onScroll={handleAllTagsScroll}
+                            data-scrolling={isAllTagsScrolling ? 'true' : 'false'}
+                        >
                             <div className="flex flex-wrap gap-2">
                                 {labels.map((l) => (
                                     <button
@@ -142,7 +170,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                         type="button"
                                         onClick={() => handleSelect(l.value)}
                                         className={cn(
-                                            'inline-flex max-w-full items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors',
+                                            'inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-3 py-0 text-sm leading-none transition-colors',
                                             l.selected
                                                 ? 'border-[#335CFF] bg-[#E8F0FF] text-[#335CFF]'
                                                 : 'border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]',
@@ -160,14 +188,18 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                         </div>
                     </div>
 
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#E5E6EB] min-[769px]:border-t-0">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-[#1D2129] max-[768px]:pt-2">
                             <span>{localize('com_label_display_tags')}</span>
                             <span className="ml-2 font-normal text-[#86909C]">
                                 {selected.length}/{MAX_HOME_LABELS}
                             </span>
                         </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 max-[768px]:pb-3">
+                        <div
+                            className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-on-scroll px-4 pb-4 max-[768px]:pb-3"
+                            onScroll={handleDisplayListScroll}
+                            data-scrolling={isDisplayListScrolling ? 'true' : 'false'}
+                        >
                             <DragDropContext onDragEnd={handleDragEnd}>
                                 <Droppable droppableId="home-label-order">
                                     {(dropProvided) => (
@@ -187,15 +219,15 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                                             ref={dragProvided.innerRef}
                                                             {...dragProvided.draggableProps}
                                                             {...dragProvided.dragHandleProps}
-                                                            className="flex w-full cursor-grab items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-2 py-2.5 shadow-sm active:cursor-grabbing"
+                                                            className="flex h-8 min-h-8 w-full cursor-grab items-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white px-2 py-0 active:cursor-grabbing"
                                                         >
-                                                            <GripVertical className="size-4 shrink-0 text-[#C9CDD4]" />
-                                                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#1D2129]">
+                                                            <GripVertical className="size-3.5 shrink-0 text-[#C9CDD4]" />
+                                                            <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-[#1D2129]">
                                                                 {b.label}
                                                             </span>
                                                             <button
                                                                 type="button"
-                                                                className="inline-flex shrink-0 rounded p-1 text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+                                                                className="inline-flex size-6 shrink-0 items-center justify-center rounded text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
                                                                 aria-label={localize('com_label_remove_display')}
                                                                 onMouseDown={(e) => e.stopPropagation()}
                                                                 onTouchStart={(e) => e.stopPropagation()}
@@ -204,7 +236,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                                                     handleDelete(b.value);
                                                                 }}
                                                             >
-                                                                <X className="size-4" />
+                                                                <X className="size-3.5" />
                                                             </button>
                                                         </div>
                                                     )}
@@ -219,16 +251,16 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                     </div>
                 </div>
 
-                <DialogFooter className="shrink-0 gap-3 border-t border-[#E5E6EB] px-5 py-4 max-[768px]:!flex-row max-[768px]:!flex-nowrap max-[768px]:pb-[max(1rem,env(safe-area-inset-bottom))] min-[769px]:justify-end">
+                <DialogFooter className="shrink-0 gap-3 px-5 py-4 max-[768px]:!flex-row max-[768px]:!flex-nowrap max-[768px]:pb-[max(1rem,env(safe-area-inset-bottom))] min-[769px]:justify-end">
                     <Button
                         variant="outline"
-                        className="h-10 min-w-[96px] rounded-lg border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] max-[768px]:h-11 max-[768px]:min-w-0 max-[768px]:flex-1"
+                        className="h-8 rounded-[6px] border-[#E5E6EB] bg-white px-4 text-[14px] font-normal text-[#4E5969] hover:bg-[#F7F8FA] max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
                         onClick={handleCancel}
                     >
                         {localize('com_label_cancel')}
                     </Button>
                     <Button
-                        className="h-10 min-w-[96px] rounded-lg bg-[#335CFF] hover:bg-[#2A4AE0] max-[768px]:h-11 max-[768px]:min-w-0 max-[768px]:flex-1"
+                        className="h-8 rounded-[6px] bg-[#335CFF] px-4 text-[14px] font-normal hover:bg-[#2A4AE0] max-[768px]:h-8 max-[768px]:min-w-0 max-[768px]:flex-1"
                         onClick={handleConfirm}
                     >
                         {localize('com_label_save')}

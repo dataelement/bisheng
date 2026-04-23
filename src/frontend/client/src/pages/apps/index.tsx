@@ -60,7 +60,7 @@ export default function AppCenter() {
                         {exploreLink}
                     </header>
                     <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0">
-                        <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+                        <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                     </div>
                 </>
             ) : (
@@ -84,7 +84,7 @@ export default function AppCenter() {
                             </div>
                         </div>
                         <div className="shrink-0 min-w-[120px] w-auto">
-                            <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
+                            <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                         </div>
                     </div>
                 </>

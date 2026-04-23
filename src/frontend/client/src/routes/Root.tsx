@@ -63,7 +63,7 @@ export default function Root() {
                   {/* 会话列表 */}
                   <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
                   {/* 会话消息面板区(路由) */}
-                  <div className="relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
+                  <div className="ml-2 relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
                     {showMobileNav && isSmallScreen ? (
                       <MobileNav
                         variant="chat"

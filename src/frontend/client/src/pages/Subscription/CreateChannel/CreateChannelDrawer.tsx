@@ -251,18 +251,20 @@ export function CreateChannelDrawer({
                         onScroll={handleBodyScroll}
                         data-scrolling={isBodyScrolling ? "true" : "false"}
                     >
-                    <button
-                        type="button"
-                        onClick={() => handleClose(false)}
-                        className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary fixed top-4 right-4 z-[60] rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
-                    >
-                        <XIcon className="size-4" />
-                        <span className="sr-only">Close</span>
-                    </button>
                     <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
-                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
-                            {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
-                        </SheetTitle>
+                        <div className="flex items-center justify-between gap-3">
+                            <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                                {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
+                            </SheetTitle>
+                            <button
+                                type="button"
+                                onClick={() => handleClose(false)}
+                                className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary shrink-0 rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
+                            >
+                                <XIcon className="size-4" />
+                                <span className="sr-only">Close</span>
+                            </button>
+                        </div>
                     </SheetHeader>
 
                     {form.showSuccess && !isEditMode ? (
@@ -682,7 +684,7 @@ export function CreateChannelDrawer({
 
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
-                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-6 pb-5 pt-10 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                        <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
