@@ -100,6 +100,19 @@ def unmerge_and_read_sheet(sheet_obj):
             for c in range(min_col, max_col + 1):
                 data_grid[r - 1][c - 1] = top_left_cell_value
 
+    # Some Excel files keep an oversized used-range with thousands of trailing empty columns.
+    # Trim only the tailing all-empty columns so Markdown generation reflects the real data area.
+    max_non_empty_col = 0
+    for row in data_grid:
+        for col_idx in range(len(row) - 1, -1, -1):
+            cell_value = row[col_idx]
+            if cell_value is not None and str(cell_value).strip() != "":
+                max_non_empty_col = max(max_non_empty_col, col_idx + 1)
+                break
+
+    if max_non_empty_col > 0:
+        data_grid = [row[:max_non_empty_col] for row in data_grid]
+
     return data_grid
 
 

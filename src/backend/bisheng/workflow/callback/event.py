@@ -46,6 +46,10 @@ class OutputMsgData(BaseModel):
     files: List[dict] = Field(default_factory=list, description='Output files', exclude=True)
     output_key: str = Field(default="", description='Whether the message is stream')
     source_documents: Optional[Any] = Field(default=None, description='Source documents')
+    citation_registry_items: List[CitationRegistryItemSchema] = Field(
+        default_factory=list,
+        description='Citation registry items for persistence',
+    )
 
 
 class OutputMsgInputData(OutputMsgData):

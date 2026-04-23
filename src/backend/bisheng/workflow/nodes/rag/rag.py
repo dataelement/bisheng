@@ -21,6 +21,10 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.common.citation_keys import (
+    WORKFLOW_CITATION_REGISTRY_ITEMS_KEY,
+    WORKFLOW_SOURCE_DOCUMENTS_KEY,
+)
 from bisheng.workflow.common.knowledge import RagUtils
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
@@ -89,9 +93,10 @@ class RagNode(RagUtils):
 
         qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
         source_documents_with_citations = annotate_rag_documents_with_citations(source_documents)
-        cache_citation_registry_items_sync(
-            collect_rag_citation_registry_items(source_documents_with_citations)
-        )
+        citation_items = collect_rag_citation_registry_items(source_documents_with_citations)
+        cache_citation_registry_items_sync(citation_items)
+        self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, source_documents_with_citations)
+        self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
         inputs = {
             "context": source_documents_with_citations,
         }
@@ -117,7 +122,8 @@ class RagNode(RagUtils):
                                   msg=result,
                                   unique_id=unique_id,
                                   output_key=output_key,
-                                  source_documents=source_documents_with_citations))
+                                  source_documents=source_documents_with_citations,
+                                  citation_registry_items=citation_items))
             else:
                 # If there is a streaming output, the streaming end event is triggered, Because of the need tosource_documentSo do a streaming end event here
                 self.callback_manager.on_stream_over(StreamMsgOverData(
@@ -127,6 +133,7 @@ class RagNode(RagUtils):
                     reasoning_content=llm_callback.reasoning_content,
                     unique_id=unique_id,
                     source_documents=source_documents_with_citations,
+                    citation_registry_items=citation_items,
                     output_key=output_key,
                 ))
 

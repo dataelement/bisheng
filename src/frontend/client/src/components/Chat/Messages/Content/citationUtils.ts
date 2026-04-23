@@ -44,6 +44,25 @@ export function normalizeCitationMarkers(content: string) {
     .replace(/\\u[eE]202/g, CITATION_END);
 }
 
+function padTimeUnit(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+export function formatCitationWebDate(value?: string | null) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return '';
+  }
+
+  const normalizedValue = rawValue.replace(/\//g, '-');
+  const parsedDate = new Date(normalizedValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return rawValue;
+  }
+
+  return `${parsedDate.getFullYear()}-${padTimeUnit(parsedDate.getMonth() + 1)}-${padTimeUnit(parsedDate.getDate())} ${padTimeUnit(parsedDate.getHours())}:${padTimeUnit(parsedDate.getMinutes())}`;
+}
+
 function parseCitationRef(ref: string) {
   const lastColonIndex = ref.lastIndexOf(':');
   if (lastColonIndex < 0) {
@@ -107,30 +126,58 @@ export function transformPrivateCitations(content: string) {
   const citationMap: Record<string, CitationDisplayData> = {};
   const groupIndexMap: Record<string, number> = {};
   let nextGroupLabel = 1;
-  const transformedContent = normalizedCitationContent.replace(new RegExp(`${CITATION_START}([\\s\\S]*?)${CITATION_END}`, 'g'), (_, rawRefs: string) => {
-    const refs = rawRefs
-      .split(CITATION_SEPARATOR)
-      .map((item) => item.trim())
-      .filter(Boolean);
+  const buildCitationPlaceholder = (ref: string) => {
+    const normalizedRef = ref.trim();
+    if (!normalizedRef) {
+      return '';
+    }
 
-    return refs
-      .map((ref) => {
-        if (!citationMap[ref]) {
-          const displayData = buildCitationDisplayData(ref);
-          if (displayData) {
-            const groupId = `${displayData.type}_${displayData.groupKey}_${displayData.itemId}`;
-            if (!groupIndexMap[groupId]) {
-              groupIndexMap[groupId] = nextGroupLabel;
-              nextGroupLabel += 1;
-            }
-            displayData.label = groupIndexMap[groupId];
-            citationMap[ref] = displayData;
-          }
+    if (!citationMap[normalizedRef]) {
+      const displayData = buildCitationDisplayData(normalizedRef);
+      if (displayData) {
+        const groupId = `${displayData.type}_${displayData.groupKey}_${displayData.itemId}`;
+        if (!groupIndexMap[groupId]) {
+          groupIndexMap[groupId] = nextGroupLabel;
+          nextGroupLabel += 1;
         }
-        return citationMap[ref] ? `[citationref:${ref}]` : '';
-      })
-      .join('');
-  });
+        displayData.label = groupIndexMap[groupId];
+        citationMap[normalizedRef] = displayData;
+      }
+    }
+
+    return citationMap[normalizedRef] ? `[citationref:${normalizedRef}]` : '';
+  };
+
+  let transformedContent = '';
+  let currentRef = '';
+  let isInsideCitation = false;
+
+  for (const char of normalizedCitationContent) {
+    if (!isInsideCitation) {
+      if (char === CITATION_START) {
+        isInsideCitation = true;
+        currentRef = '';
+        continue;
+      }
+      transformedContent += char;
+      continue;
+    }
+
+    if (char === CITATION_SEPARATOR) {
+      transformedContent += buildCitationPlaceholder(currentRef);
+      currentRef = '';
+      continue;
+    }
+
+    if (char === CITATION_END) {
+      transformedContent += buildCitationPlaceholder(currentRef);
+      currentRef = '';
+      isInsideCitation = false;
+      continue;
+    }
+
+    currentRef += char;
+  }
 
   return { transformedContent, citationMap };
 }
@@ -248,7 +295,7 @@ export function getLegacyCitationPreview(webContent: any, label?: number): Citat
     title: item.title || item.url || `引用 ${label}`,
     snippet: item.snippet || item.content || '',
     sourceName: item.source || item.url || '网页',
-    sourceMeta: item.datePublished || item.date || '',
+    sourceMeta: formatCitationWebDate(item.datePublished || item.date || ''),
     link: item.url,
     type: 'web',
   };
@@ -285,7 +332,7 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
       title: item?.title || payload.title || payload.url || `引用 ${data.label ?? ''}`,
       snippet: extractWebSnippetContent(item?.snippet || payload.snippet),
       sourceName: payload.source || payload.url || '网页',
-      sourceMeta: payload.datePublished || '',
+      sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
       type,
     };
@@ -314,7 +361,7 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
       title: payload.title || payload.url || `引用 ${data.label ?? ''}`,
       snippet: '',
       sourceName: payload.source || payload.url || '网页',
-      sourceMeta: payload.datePublished || '',
+      sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
       type,
     };
