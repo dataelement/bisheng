@@ -223,6 +223,49 @@ def test_judge_knowledge_access_uses_permission_service_sync_bridge():
     )
 
 
+def test_update_knowledge_uses_permission_service_write_sync_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7)
+    db_knowledge = SimpleNamespace(
+        id=41,
+        user_id=12,
+        name='old',
+        description='old-desc',
+        model_dump=lambda: {
+            'id': 41,
+            'name': 'new',
+            'description': 'new-desc',
+            'type': 0,
+            'user_id': 12,
+        },
+    )
+    req = SimpleNamespace(knowledge_id=41, name='new', description='new-desc')
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.query_by_id',
+        return_value=db_knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_sync',
+    ) as mock_ensure_write, patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.get_knowledge_by_name',
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.update_one',
+        return_value=db_knowledge,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.UserDao.get_user',
+        return_value=SimpleNamespace(user_name='owner'),
+    ):
+        KnowledgeService.update_knowledge(MagicMock(), login_user, req)
+
+    mock_ensure_write.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=12,
+        knowledge_id=41,
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_readable_knowledge_uses_permission_service_bridge():
     KnowledgeService = _load_service_class()
@@ -276,4 +319,44 @@ async def test_get_writable_knowledge_uses_permission_service_bridge():
         login_user=login_user,
         owner_user_id=9,
         knowledge_id=22,
+    )
+
+
+@pytest.mark.asyncio
+async def test_retry_files_uses_permission_service_write_async_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(id=51, user_id=13)
+    db_file = SimpleNamespace(id=91, knowledge_id=51)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeFileDao.aget_file_by_ids',
+        new_callable=AsyncMock,
+        return_value=[db_file],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_async',
+        new_callable=AsyncMock,
+    ) as mock_ensure_write, patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeService.process_retry_files',
+        new_callable=AsyncMock,
+        return_value=([], []),
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeService.upload_knowledge_file_hook',
+    ):
+        await KnowledgeService.retry_files(
+            request=MagicMock(),
+            login_user=login_user,
+            req_data={'file_objs': [{'id': 91}]},
+        )
+
+    mock_ensure_write.assert_awaited_once_with(
+        login_user=login_user,
+        owner_user_id=13,
+        knowledge_id=51,
     )

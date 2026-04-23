@@ -385,10 +385,13 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
-        # judge access
-        if not login_user.access_check(
-                db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=db_knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         if knowledge.name and knowledge.name != db_knowledge.name:
@@ -419,9 +422,13 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge:
             raise NotFoundError.http_exception()
 
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge_id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         # Cleaned vectorData in
@@ -657,9 +664,13 @@ class KnowledgeService(KnowledgeUtils):
             cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
@@ -673,9 +684,13 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
         failed_files = []
         # Process each file
@@ -757,9 +772,13 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
@@ -790,10 +809,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
 
         req_data["knowledge_id"] = knowledge.id
 
