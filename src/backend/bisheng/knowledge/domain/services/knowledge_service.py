@@ -251,8 +251,11 @@ class KnowledgeService(KnowledgeUtils):
             if login_user.user_id == one.user_id:
                 copiable = True
             else:
-                copiable = login_user.access_check(
-                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                copiable = cls.permission_service.check_access_sync(
+                    login_user=login_user,
+                    owner_user_id=one.user_id,
+                    knowledge_id=one.id,
+                    access_type=AccessType.KNOWLEDGE_WRITE,
                 )
             res.append(
                 KnowledgeRead(
@@ -272,9 +275,11 @@ class KnowledgeService(KnowledgeUtils):
         if not login_user.is_admin():
             filter_knowledge = []
             for one in db_knowledge:
-                # Determine if the user has permission
-                if login_user.access_check(
-                        one.user_id, str(one.id), AccessType.KNOWLEDGE
+                if cls.permission_service.check_access_sync(
+                        login_user=login_user,
+                        owner_user_id=one.user_id,
+                        knowledge_id=one.id,
+                        access_type=AccessType.KNOWLEDGE,
                 ):
                     filter_knowledge.append(one)
         if not filter_knowledge:
@@ -958,9 +963,13 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_read_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         res = KnowledgeFileDao.get_file_by_filters(
@@ -993,8 +1002,11 @@ class KnowledgeService(KnowledgeUtils):
         return (
             finally_res,
             total,
-            login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
+            cls.permission_service.check_access_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+                access_type=AccessType.KNOWLEDGE_WRITE,
             ),
         )
 
@@ -1048,9 +1060,14 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), access_type
-        ):
+        try:
+            cls.permission_service.ensure_access_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+                access_type=access_type,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
         return db_knowledge
 

@@ -81,3 +81,53 @@ async def test_ensure_access_async_raises_when_rebac_denies():
                 knowledge_id=20,
                 access_type=AccessType.KNOWLEDGE,
             )
+
+
+def test_check_access_sync_uses_knowledge_library_rebac():
+    service = KnowledgePermissionService()
+    login_user = SimpleNamespace(user_id=7)
+
+    def _close_and_allow(coro):
+        coro.close()
+        return True
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service._run_async_safe',
+        side_effect=_close_and_allow,
+    ) as mock_run_async:
+        allowed = service.check_access_sync(
+            login_user=login_user,
+            owner_user_id=99,
+            knowledge_id=23,
+            access_type=AccessType.KNOWLEDGE,
+        )
+
+    assert allowed is True
+    assert mock_run_async.call_args.args[0].cr_code.co_name == 'check'
+
+
+def test_ensure_access_sync_raises_when_rebac_denies():
+    service = KnowledgePermissionService()
+    login_user = SimpleNamespace(user_id=7)
+
+    class _Denied(Exception):
+        pass
+
+    def _close_and_deny(coro):
+        coro.close()
+        return False
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service._run_async_safe',
+        side_effect=_close_and_deny,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.UnAuthorizedError',
+        _Denied,
+    ):
+        with pytest.raises(_Denied):
+            service.ensure_access_sync(
+                login_user=login_user,
+                owner_user_id=99,
+                knowledge_id=24,
+                access_type=AccessType.KNOWLEDGE_WRITE,
+            )

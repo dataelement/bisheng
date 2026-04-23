@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
 
@@ -161,6 +162,65 @@ def test_delete_knowledge_hook_deletes_knowledge_library_tuples():
         KnowledgeService.delete_knowledge_hook(MagicMock(), login_user, knowledge)
 
     mock_delete_tuples.assert_called_once_with('knowledge_library', '13')
+
+
+def test_get_knowledge_info_uses_permission_service_sync_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(is_admin=lambda: False, user_id=7)
+    knowledge = SimpleNamespace(id=31, user_id=9, model_dump=lambda: {})
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.get_list_by_ids',
+        return_value=[knowledge],
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'check_access_sync',
+        return_value=True,
+    ) as mock_check_access, patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeService.convert_knowledge_read',
+        return_value=['ok'],
+    ) as mock_convert:
+        result = KnowledgeService.get_knowledge_info(
+            request=MagicMock(),
+            login_user=login_user,
+            knowledge_id=[31],
+        )
+
+    assert result == ['ok']
+    mock_check_access.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=9,
+        knowledge_id=31,
+        access_type=AccessType.KNOWLEDGE,
+    )
+    mock_convert.assert_called_once_with(login_user, [knowledge])
+
+
+def test_judge_knowledge_access_uses_permission_service_sync_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(id=32, user_id=10)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_access_sync',
+    ) as mock_ensure_access:
+        result = KnowledgeService.judge_knowledge_access(
+            login_user=login_user,
+            knowledge_id=32,
+            access_type=AccessType.KNOWLEDGE_WRITE,
+        )
+
+    assert result is knowledge
+    mock_ensure_access.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=10,
+        knowledge_id=32,
+        access_type=AccessType.KNOWLEDGE_WRITE,
+    )
 
 
 @pytest.mark.asyncio
