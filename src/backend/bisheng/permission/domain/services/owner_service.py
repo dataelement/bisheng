@@ -15,6 +15,12 @@ from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantIt
 logger = logging.getLogger(__name__)
 
 
+def _close_coroutine(coro) -> None:
+    close = getattr(coro, 'close', None)
+    if callable(close):
+        close()
+
+
 def _run_async_safe(coro):
     """Run an async coroutine from a sync context, handling event loop issues.
 
@@ -29,20 +35,28 @@ def _run_async_safe(coro):
         future = asyncio.run_coroutine_threadsafe(coro, loop)
         return future.result(timeout=10)
     except RuntimeError:
-        # No running loop in this thread. Under FastAPI/Starlette sync
-        # endpoints we are usually inside an AnyIO worker thread and should
-        # hop back to the main event loop instead of creating a fresh loop.
-        try:
-            import anyio
+        pass
 
-            async def _await(awaitable):
-                return await awaitable
+    # No running loop in this thread. Under FastAPI/Starlette sync
+    # endpoints we are usually inside an AnyIO worker thread and should
+    # hop back to the main event loop instead of creating a fresh loop.
+    try:
+        import anyio
 
-            return anyio.from_thread.run(_await, coro)
-        except Exception:
-            # No AnyIO worker-thread bridge available — safe to create a loop.
-            pass
-        return asyncio.run(coro)
+        async def _await(awaitable):
+            return await awaitable
+
+        return anyio.from_thread.run(_await, coro)
+    except RuntimeError as exc:
+        if 'AnyIO worker thread' not in str(exc):
+            _close_coroutine(coro)
+            raise
+    except Exception:
+        _close_coroutine(coro)
+        raise
+
+    # Standalone sync context without an AnyIO worker-thread bridge.
+    return asyncio.run(coro)
 
 
 # SpaceChannelMember role → FGA relation mapping (shared by KnowledgeSpace + Channel dual-write)

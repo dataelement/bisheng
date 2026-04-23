@@ -256,8 +256,9 @@ class PermissionService:
                     operations.append(TupleOperation(
                         action='write', user=fga_user, relation=grant.relation, object=fga_object,
                     ))
-            if grant.subject_type == 'user':
-                affected_user_ids.add(grant.subject_id)
+            affected_user_ids.update(await cls._affected_user_ids_for_subject(
+                grant.subject_type, grant.subject_id, grant.include_children,
+            ))
 
         for revoke in (revokes or []):
             fga_users = await cls._expand_subject(
@@ -268,8 +269,9 @@ class PermissionService:
                     operations.append(TupleOperation(
                         action='delete', user=fga_user, relation=revoke.relation, object=fga_object,
                     ))
-            if revoke.subject_type == 'user':
-                affected_user_ids.add(revoke.subject_id)
+            affected_user_ids.update(await cls._affected_user_ids_for_subject(
+                revoke.subject_type, revoke.subject_id, revoke.include_children,
+            ))
 
         if not operations:
             return
@@ -1257,6 +1259,51 @@ class PermissionService:
 
         logger.warning('Unknown subject type: %s', subject_type)
         return []
+
+    @classmethod
+    async def _affected_user_ids_for_subject(
+        cls,
+        subject_type: str,
+        subject_id: int,
+        include_children: bool = True,
+    ) -> Set[int]:
+        """Expand an auth subject to concrete user ids for cache invalidation."""
+        if subject_type == 'user':
+            return {int(subject_id)}
+
+        if subject_type == 'department':
+            from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+            department_ids = {int(subject_id)}
+            if include_children:
+                dept = await DepartmentDao.aget_by_id(subject_id)
+                if dept is not None and getattr(dept, 'path', None):
+                    subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path)
+                    department_ids = {int(one) for one in subtree_ids}
+
+            if not department_ids:
+                return set()
+
+            membership_lists = await asyncio.gather(*[
+                UserDepartmentDao.aget_user_ids_by_department(department_id)
+                for department_id in sorted(department_ids)
+            ])
+            affected: Set[int] = set()
+            for user_ids in membership_lists:
+                affected.update(int(user_id) for user_id in user_ids)
+            return affected
+
+        if subject_type == 'user_group':
+            from bisheng.database.models.user_group import UserGroupDao
+
+            rows = await UserGroupDao.aget_group_users([subject_id])
+            return {
+                int(row.user_id)
+                for row in rows
+                if getattr(row, 'user_id', None) is not None
+            }
+
+        return set()
 
     @classmethod
     async def _get_resource_creator(

@@ -19,6 +19,8 @@ from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
     set_current_tenant_id,
+    set_visible_tenant_ids,
+    strict_tenant_filter,
 )
 
 # Pre-mock modules that trigger import chain issues
@@ -130,6 +132,44 @@ class TestSelectAutoFilter:
 
         assert len(results) == 1
         assert results[0].name == 't1_item'
+
+    def test_select_uses_visible_tenant_ids_in_list(self, session):
+        with bypass_tenant_filter():
+            session.add(_TenantTestItem(name='root_item', tenant_id=1))
+            session.add(_TenantTestItem(name='leaf_item', tenant_id=5))
+            session.add(_TenantTestItem(name='other_item', tenant_id=9))
+            session.commit()
+
+        _set_mock_settings(enabled=False)
+        tenant_token = set_current_tenant_id(5)
+        visible_token = set_visible_tenant_ids(frozenset({5, 1}))
+        try:
+            results = session.exec(select(_TenantTestItem)).all()
+        finally:
+            current_tenant_id.reset(tenant_token)
+            from bisheng.core.context.tenant import visible_tenant_ids
+            visible_tenant_ids.reset(visible_token)
+
+        assert {one.name for one in results} == {'root_item', 'leaf_item'}
+
+    def test_strict_filter_overrides_visible_tenant_ids(self, session):
+        with bypass_tenant_filter():
+            session.add(_TenantTestItem(name='root_item', tenant_id=1))
+            session.add(_TenantTestItem(name='leaf_item', tenant_id=5))
+            session.commit()
+
+        _set_mock_settings(enabled=False)
+        tenant_token = set_current_tenant_id(5)
+        visible_token = set_visible_tenant_ids(frozenset({5, 1}))
+        try:
+            with strict_tenant_filter():
+                results = session.exec(select(_TenantTestItem)).all()
+        finally:
+            current_tenant_id.reset(tenant_token)
+            from bisheng.core.context.tenant import visible_tenant_ids
+            visible_tenant_ids.reset(visible_token)
+
+        assert [one.name for one in results] == ['leaf_item']
 
 
 class TestInsertAutoFill:
