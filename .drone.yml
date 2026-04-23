@@ -292,13 +292,12 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       port: 22
       command_timeout: 10m
       script: |
-        BRANCH=feat/2.5.0
         echo "=======同步 109 backend 源码======="
         cd /opt/server/bisheng-dev
-        git fetch origin ${BRANCH}
-        git checkout origin/${BRANCH} -- src/backend
+        git fetch origin feat/2.5.0
+        git checkout origin/feat/2.5.0 -- src/backend
         echo "=======重启 backend / worker======="
-        cd docker
+        cd /opt/server/bisheng-dev/docker
         docker-compose restart backend backend_worker
         sleep 15
         echo "=======执行数据库迁移======="
@@ -325,22 +324,16 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         - NEXUS_USER
         - NEXUS_PASSWORD
       script: |
-        IMAGE_TAG=feat_2.5.0
         echo "=======准备 3003 前端发布======="
-        IMAGE_REF=192.168.106.8:6082/dataelement/bisheng-frontend:${IMAGE_TAG}
         docker login -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" http://192.168.106.8:6082 || true
-        if ! docker pull "$IMAGE_REF"; then
-          IMAGE_REF=cr.dataelem.com/dataelement/bisheng-frontend:${IMAGE_TAG}
-          docker pull "$IMAGE_REF"
-        fi
-        TMP_C=drone_bisheng_frontend_${IMAGE_TAG}
-        docker rm -f "$TMP_C" || true
-        docker create --name "$TMP_C" "$IMAGE_REF"
+        docker rm -f drone_bisheng_frontend_feat_2_5_0 || true
+        docker pull 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0 || docker pull cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0
+        docker create --name drone_bisheng_frontend_feat_2_5_0 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0 || docker create --name drone_bisheng_frontend_feat_2_5_0 cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0
         mkdir -p /data/webroot/bisheng-dev /data/webroot/client-dev
         rm -rf /data/webroot/bisheng-dev/* /data/webroot/client-dev/*
-        docker cp "$TMP_C":/usr/share/nginx/html/platform/. /data/webroot/bisheng-dev/
-        docker cp "$TMP_C":/usr/share/nginx/html/client/. /data/webroot/client-dev/
-        docker rm -f "$TMP_C"
+        docker cp drone_bisheng_frontend_feat_2_5_0:/usr/share/nginx/html/platform/. /data/webroot/bisheng-dev/
+        docker cp drone_bisheng_frontend_feat_2_5_0:/usr/share/nginx/html/client/. /data/webroot/client-dev/
+        docker rm -f drone_bisheng_frontend_feat_2_5_0
         curl -fsI http://127.0.0.1:3003/
         curl -fsI http://127.0.0.1:3003/workspace/c/new
 
