@@ -24,6 +24,7 @@ import { userContext } from "@/contexts/userContext"
 import {
   createRelationModelApi,
   deleteRelationModelApi,
+  getKnowledgeLibraryPermissionTemplateApi,
   getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
   getRelationModelsApi,
@@ -168,6 +169,7 @@ export default function RolesAndPermissions() {
   const { user } = useContext(userContext)
   const [types, setTypes] = useState<RebacSchemaType[] | null>(null)
   const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
+  const [knowledgeLibraryTemplate, setKnowledgeLibraryTemplate] = useState<PermissionTemplateSection | null>(null)
   const [relationModels, setRelationModels] = useState<RelationModel[]>([])
   const [modelId, setModelId] = useState<string>("owner")
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
@@ -203,10 +205,14 @@ export default function RolesAndPermissions() {
   useEffect(() => {
     if (user?.role !== "admin") {
       setKnowledgeTemplate(null)
+      setKnowledgeLibraryTemplate(null)
       return
     }
     captureAndAlertRequestErrorHoc(getKnowledgeSpacePermissionTemplateApi(), () => true).then((res) => {
       if (res) setKnowledgeTemplate(res)
+    })
+    captureAndAlertRequestErrorHoc(getKnowledgeLibraryPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setKnowledgeLibraryTemplate(res)
     })
   }, [user?.role])
 
@@ -215,8 +221,11 @@ export default function RolesAndPermissions() {
     if (knowledgeTemplate) {
       sections[0] = knowledgeTemplate as TemplateSection
     }
+    if (knowledgeLibraryTemplate) {
+      sections[2] = knowledgeLibraryTemplate as TemplateSection
+    }
     return sections
-  }, [knowledgeTemplate])
+  }, [knowledgeTemplate, knowledgeLibraryTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
     return templateSections.flatMap((section) =>
