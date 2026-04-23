@@ -69,7 +69,7 @@ export default function Subscription() {
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelShareOpen, setChannelShareOpen] = useState(false);
     const [channelShareChannel, setChannelShareChannel] = useState<Channel | null>(null);
-    const [channelShareInitialTab, setChannelShareInitialTab] = useState<"share" | "members">("share");
+    const [channelShareInitialTab, setChannelShareInitialTab] = useState<"share" | "members" | "permission">("share");
     const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
@@ -79,7 +79,7 @@ export default function Subscription() {
 
     const openChannelShareDialog = (
         channel: Channel,
-        initialTab: "share" | "members" = "share",
+        initialTab: "share" | "members" | "permission" = "share",
     ) => {
         setChannelShareChannel(channel);
         setChannelShareInitialTab(initialTab);
