@@ -431,27 +431,25 @@ class WorkStationService(BaseService):
             logger.exception(f'queryChunksFromDB error: {exc}')
             return [], None, failures
 
-    # Rough character-length cap applied AFTER the per-row limit. Caps the
-    # combined history size so one or two very long AI replies (e.g. 5 KB
-    # markdown walkthroughs) can't blow past the model context window.
-    # ~40 000 chars ≈ 20 000 tokens for Chinese-heavy content, which still
-    # leaves room for the system prompt, tools schema, current message, and
-    # the generated response even on 32 K-context models.
-    _HISTORY_CHAR_CAP = 40000
-
     @classmethod
-    async def get_chat_history(cls, chat_id: str, size: int = 4):
+    async def get_chat_history(cls, chat_id: str, size: int = 4,
+                               max_tokens: Optional[int] = None):
         """Build LLM-consumable chat history, backward compatible with both
         legacy plain-text messages and v2.5 JSON-formatted messages.
 
         Two-stage trimming:
           1. DB returns the MOST RECENT ``size`` rows in chronological order
              (see aget_messages_by_chat_id — fixed to DESC LIMIT + reverse).
-          2. If the combined character length exceeds ``_HISTORY_CHAR_CAP``,
-             drop oldest entries one at a time until back under the cap. This
-             is a conservative stand-in for proper token budgeting: we never
-             want to silently chop the user's latest message, so we always
-             drop from the FRONT (oldest) of the built ``chat_history`` list.
+          2. If the combined token count exceeds ``max_tokens``, drop oldest
+             entries one at a time until the remainder fits. Token counting
+             uses tiktoken (cl100k_base) with a char-based fallback — see
+             chat_service._count_tokens. We always drop from the FRONT
+             (oldest) of the list so the latest user/AI turn is preserved.
+
+        ``max_tokens`` is resolved by the caller (typically from
+        ``daily_chat.history_max_tokens`` in the DB config). If ``None`` the
+        token-cap stage is skipped — keep this for callers that only want
+        row-count trimming or that manage budgeting themselves.
         """
         import re as _re
 
@@ -497,31 +495,35 @@ class WorkStationService(BaseService):
                 content = _re.sub(r':::web\n[\s\S]*?\n:::', '', content).strip()
                 chat_history.append(AIMessage(content=content))
 
-        # Char-length cap: drop oldest until total content length ≤ cap.
-        # Keep at least the most recent pair so the model still sees some
-        # context; if a single most-recent message alone exceeds the cap,
-        # leave it untouched (the LLM layer will error, which is preferable
-        # to silently dropping the latest turn).
-        def _msg_len(m) -> int:
-            c = getattr(m, 'content', '')
-            if isinstance(c, str):
-                return len(c)
-            try:
-                return len(str(c))
-            except Exception:
-                return 0
+        # Token-count cap: drop oldest until total tokens ≤ max_tokens.
+        # Keep at least one message (the most recent) so the model still
+        # sees some context; if that single message alone exceeds the cap,
+        # leave it untouched — the LLM layer will raise, which is more
+        # actionable than silently chopping the latest turn.
+        if max_tokens is not None and max_tokens > 0 and chat_history:
+            from .chat_service import _count_tokens  # local import avoids cycle
 
-        total = sum(_msg_len(m) for m in chat_history)
-        dropped = 0
-        while total > cls._HISTORY_CHAR_CAP and len(chat_history) > 1:
-            popped = chat_history.pop(0)
-            total -= _msg_len(popped)
-            dropped += 1
-        if dropped:
-            logger.info(
-                f'history char-cap trimmed {dropped} oldest messages '
-                f'(final_chars={total} cap={cls._HISTORY_CHAR_CAP})'
-            )
+            def _msg_tokens(m) -> int:
+                c = getattr(m, 'content', '')
+                if isinstance(c, str):
+                    return _count_tokens(c)
+                try:
+                    return _count_tokens(str(c))
+                except Exception:
+                    return 0
+
+            per_msg = [_msg_tokens(m) for m in chat_history]
+            total = sum(per_msg)
+            dropped = 0
+            while total > max_tokens and len(chat_history) > 1:
+                chat_history.pop(0)
+                total -= per_msg.pop(0)
+                dropped += 1
+            if dropped:
+                logger.info(
+                    f'history token-cap trimmed {dropped} oldest messages '
+                    f'(final_tokens={total} cap={max_tokens})'
+                )
 
         logger.info(f'loaded {len(chat_history)} chat history for chat_id {chat_id}')
         return chat_history

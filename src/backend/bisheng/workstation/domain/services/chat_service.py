@@ -319,6 +319,66 @@ async def _get_agent_max_iterations() -> int:
         return DEFAULT_AGENT_MAX_ITERATIONS
 
 
+DEFAULT_HISTORY_MAX_TOKENS = 8000
+
+
+async def _get_history_max_tokens() -> int:
+    """Return the DB-configured token budget for chat history injected into
+    the LLM prompt.
+
+    Reads `daily_chat.history_max_tokens` from the DB config (via
+    ConfigService.aget_daily_chat_conf). Any failure path returns
+    DEFAULT_HISTORY_MAX_TOKENS. Schema validator normalises
+    missing/invalid/<=0 values upstream, so this is a defensive wrapper.
+    """
+    try:
+        from bisheng.common.services.config_service import settings as bisheng_settings
+        conf = await bisheng_settings.aget_daily_chat_conf()
+        n = int(conf.history_max_tokens)
+        return n if n > 0 else DEFAULT_HISTORY_MAX_TOKENS
+    except Exception as exc:
+        logger.warning(
+            f'Failed to read history_max_tokens, falling back to '
+            f'{DEFAULT_HISTORY_MAX_TOKENS}: {exc}'
+        )
+        return DEFAULT_HISTORY_MAX_TOKENS
+
+
+# Lazily-cached tiktoken encoder — `cl100k_base` is the tokenizer for
+# gpt-4 / gpt-5 family and is a reasonable universal estimator. It may
+# slightly over-count for Chinese (which leans conservative — preferable
+# when enforcing a budget) and slightly under-count for Claude (safe
+# direction too: we'd drop a tiny bit more than strictly necessary).
+_HISTORY_TOKENIZER = None
+
+
+def _count_tokens(text: str) -> int:
+    """Count tokens in `text` using tiktoken's cl100k_base encoding; fall
+    back to a simple char heuristic if tiktoken cannot be loaded (e.g.
+    offline install without the bundled BPE files). Used only for the
+    history budget guardrail — accuracy within ~15% is sufficient.
+    """
+    if not text:
+        return 0
+    global _HISTORY_TOKENIZER
+    if _HISTORY_TOKENIZER is None:
+        try:
+            import tiktoken  # already a transitive dep via assistant_base
+            _HISTORY_TOKENIZER = tiktoken.get_encoding('cl100k_base')
+        except Exception as exc:
+            logger.warning(
+                f'tiktoken unavailable, falling back to char/2 estimator: {exc}'
+            )
+            _HISTORY_TOKENIZER = False  # sentinel: never retry
+    if _HISTORY_TOKENIZER is False:
+        # Rough estimator: ~2 chars per token for Chinese-heavy text.
+        return max(1, len(text) // 2)
+    try:
+        return len(_HISTORY_TOKENIZER.encode(text))
+    except Exception:
+        return max(1, len(text) // 2)
+
+
 def _build_user_content(
         question: str,
         file_context: str = '',
@@ -1190,9 +1250,17 @@ async def _agent_stream_chat_completion(
                 knowledge_bases_info=knowledge_bases_info,
             )
 
-            # 20 rows ≈ 10 QA turns; trimmed further inside get_chat_history
-            # by a character-length cap so a long conversation still fits.
-            history = (await WorkStationService.get_chat_history(conversation_id, 10))[:-1]
+            # Row-count ceiling just limits DB work; the real trimming
+            # happens inside get_chat_history via the token cap
+            # (daily_chat.history_max_tokens in config.yaml).
+            history_max_tokens = await _get_history_max_tokens()
+            history = (
+                await WorkStationService.get_chat_history(
+                    conversation_id,
+                    size=10,
+                    max_tokens=history_max_tokens,
+                )
+            )[:-1]
 
             if image_bases64:
                 content_payload = [{'type': 'text', 'text': user_text}]
