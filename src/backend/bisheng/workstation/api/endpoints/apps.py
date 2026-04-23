@@ -39,7 +39,7 @@ def get_recommended_apps(login_user=LoginUserDep):
         kwargs['status'] = FlowStatus.ONLINE.value
         kwargs['user_id'] = login_user.user_id
         kwargs['id_extra'] = login_user.get_user_access_resource_ids(
-            [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+            [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
         )
     data, _ = FlowDao.get_all_apps(**kwargs)
 
@@ -106,7 +106,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     if login_user.is_admin():
         apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
     else:
-        id_extra = login_user.get_merged_rebac_app_resource_ids(for_write=False)
+        id_extra = await login_user.aget_merged_rebac_app_resource_ids(for_write=False)
         apps, _ = await FlowDao.aget_all_apps(
             id_list=flow_ids,
             status=FlowStatus.ONLINE.value,
