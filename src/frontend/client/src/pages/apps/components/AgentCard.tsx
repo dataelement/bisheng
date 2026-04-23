@@ -79,14 +79,16 @@ export function AgentCard({
                 >
                   {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onShare(agent);
-                  }}
-                >
-                  {localize('com_app_share_app')}
-                </DropdownMenuItem>
+                {agent.can_share === true ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShare(agent);
+                    }}
+                  >
+                    {localize('com_app_share_app')}
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -162,16 +164,18 @@ export function AgentCard({
         </div>
       ) : (
         <div className="hidden h-[28px] w-full min-w-0 items-stretch justify-center gap-1 group-hover/card:flex coarse-pointer:flex">
-          <Button
-            onClick={(e) => {
-              e.stopPropagation();
-              onShare(agent);
-            }}
-            variant="outline"
-            className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
-          >
-            {localize('com_app_share_app')}
-          </Button>
+          {agent.can_share === true ? (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare(agent);
+              }}
+              variant="outline"
+              className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
+            >
+              {localize('com_app_share_app')}
+            </Button>
+          ) : null}
           <Button
             onClick={(e) => {
               e.stopPropagation();

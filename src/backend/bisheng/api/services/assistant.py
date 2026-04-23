@@ -27,6 +27,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.permission.domain.workflow_app_permission import user_may_share_app
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -138,10 +139,12 @@ class AssistantService(BaseService, AssistantUtils):
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
                                                                  knowledge_list)
         assistant.logo = await cls.get_logo_share_link_async(assistant.logo)
+        can_share = await user_may_share_app(login_user, 'assistant', assistant_id)
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=tool_list,
                              flow_list=flow_list,
-                             knowledge_list=knowledge_list)
+                             knowledge_list=knowledge_list,
+                             can_share=can_share)
 
     @classmethod
     async def get_one_assistant(cls, assistant_id: str) -> Optional[Assistant]:
@@ -202,10 +205,12 @@ class AssistantService(BaseService, AssistantUtils):
         if shared_children:
             assistant.is_shared = True
 
+        can_share = await user_may_share_app(login_user, 'assistant', str(assistant.id))
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=[],
                              flow_list=[],
-                             knowledge_list=[])
+                             knowledge_list=[],
+                             can_share=can_share)
 
     @classmethod
     def create_assistant_hook(cls, request: Request, assistant: Assistant, user_payload: UserPayload) -> bool:
@@ -341,10 +346,12 @@ class AssistantService(BaseService, AssistantUtils):
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
         cls.update_assistant_hook(request, login_user, assistant)
+        can_share = await user_may_share_app(login_user, 'assistant', str(assistant.id))
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=tool_list,
                              flow_list=flow_list,
-                             knowledge_list=knowledge_list)
+                             knowledge_list=knowledge_list,
+                             can_share=can_share)
 
     @classmethod
     def update_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:

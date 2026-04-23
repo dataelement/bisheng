@@ -42,6 +42,7 @@ from bisheng.core.context.tenant import (
 from bisheng.utils.http_middleware import (
     _check_is_global_super,
     _decode_jwt_subject,
+    _extract_http_access_token,
 )
 
 
@@ -78,7 +79,7 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
             # JWT decode, no Redis read, no FGA check.
             return await call_next(request)
 
-        token = request.cookies.get('access_token_cookie')
+        token = _extract_http_access_token(request)
         if not token:
             return await call_next(request)
 

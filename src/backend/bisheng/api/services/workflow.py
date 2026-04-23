@@ -15,8 +15,11 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType, Flow
-from bisheng.database.models.flow import UserLinkType
+from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
+from bisheng.permission.domain.workflow_app_permission import (
+    batch_user_may_share_app,
+    object_type_for_flow_type,
+)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
@@ -91,6 +94,36 @@ class WorkFlowService(BaseService):
         return data
 
     @classmethod
+    async def aenrich_apps_can_share(cls, user: UserPayload, data: list[dict], managed: bool = False) -> list[dict]:
+        """Set ``can_share`` from ReBAC relation-model ``share_app`` (fail-closed when unknown type)."""
+        if not data:
+            return data
+        if user.is_admin() or managed:
+            for one in data:
+                one['can_share'] = True
+            return data
+        entries: list[tuple[dict, Optional[str]]] = []
+        pairs: list[tuple[str, str]] = []
+        for one in data:
+            ot = object_type_for_flow_type(int(one.get('flow_type') or 0))
+            entries.append((one, ot))
+            if ot:
+                pairs.append((ot, str(one['id'])))
+        if not pairs:
+            for one, ot in entries:
+                one['can_share'] = False
+            return data
+        flags = await batch_user_may_share_app(user, pairs)
+        fi = 0
+        for one, ot in entries:
+            if not ot:
+                one['can_share'] = False
+            else:
+                one['can_share'] = bool(flags[fi])
+                fi += 1
+        return data
+
+    @classmethod
     async def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int],
                             flow_type: Optional[int], page: int = 1, page_size: int = 10,
                             managed: bool = False, skip_pagination: bool = False, search_description: bool = False) -> (list[dict], int):
@@ -148,6 +181,7 @@ class WorkFlowService(BaseService):
             end_index = start_index + page_size
             data = data[start_index:end_index]
         data = cls.add_extra_field(user, data, managed, writeable_ids=writeable_ids)
+        data = await cls.aenrich_apps_can_share(user, data, managed)
 
         return data, total
 
@@ -382,9 +416,9 @@ class WorkFlowService(BaseService):
         return workflow_event
 
     @classmethod
-    def get_frequently_used_flows(cls, user: UserPayload, user_link_type: str,
-                                  page: int = 1,
-                                  page_size: int = 8) -> (list[dict], int):
+    async def get_frequently_used_flows(cls, user: UserPayload, user_link_type: str,
+                                        page: int = 1,
+                                        page_size: int = 8) -> (list[dict], int):
         """
         Get common skills
         """
@@ -420,6 +454,7 @@ class WorkFlowService(BaseService):
         data = data[start_index:end_index]
 
         data = cls.add_extra_field(user, data)
+        data = await cls.aenrich_apps_can_share(user, data)
 
         return data, total
 
@@ -434,7 +469,7 @@ class WorkFlowService(BaseService):
         return is_new
 
     @classmethod
-    def get_uncategorized_flows(
+    async def get_uncategorized_flows(
         cls,
         user: UserPayload,
         page: int = 1,
@@ -471,6 +506,8 @@ class WorkFlowService(BaseService):
         # <g id="Bold">Medical Treatment:</g>logo URL, convert relative paths to full accessible links
         for one in data:
             one['logo'] = cls.get_logo_share_link(one['logo'])
+
+        data = await cls.aenrich_apps_can_share(user, data)
 
         return data, total
 

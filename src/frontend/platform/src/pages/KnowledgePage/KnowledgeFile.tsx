@@ -13,7 +13,6 @@ import {
 import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { RelationLevel } from "@/components/bs-comp/permission/types";
@@ -537,9 +536,8 @@ export default function KnowledgeFile() {
                                             <BookIcon className="text-primary size-10" />
                                         </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
                                                 {el.name}
-                                                <PermissionBadge level={permLevels[String(el.id)]} />
                                             </div>
                                             <Tip
                                                 side="top"
