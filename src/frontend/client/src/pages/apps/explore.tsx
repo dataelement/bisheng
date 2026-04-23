@@ -49,12 +49,14 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
 
                 {/* 按纽区域：平时隐藏，hover时显示 */}
                 <div className="hidden group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                        className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
-                    >
-                        {localize('com_app_share_app')}
-                    </button>
+                    {agent.can_share === true ? (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onShare(agent); }}
+                            className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
+                        >
+                            {localize('com_app_share_app')}
+                        </button>
+                    ) : null}
                     <button
                         onClick={(e) => { e.stopPropagation(); onClick(agent); }}
                         className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
@@ -164,6 +166,7 @@ export default function ExplorePlaza() {
     }
 
     const handleShare = async (agent: any) => {
+        if (agent.can_share !== true) return;
         const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
         try {
             await copyText(shareUrl);

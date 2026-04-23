@@ -75,6 +75,7 @@ export function useAppCenter() {
   /** Copy share link to clipboard */
   const shareApp = useCallback(
     async (app: AppItem) => {
+      if (app.can_share !== true) return;
       const url = getAppShareUrl(app.id, app.flow_type);
       try {
         await copyText(url);

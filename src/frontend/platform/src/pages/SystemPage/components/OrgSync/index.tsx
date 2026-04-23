@@ -45,13 +45,12 @@ export default function OrgSync() {
   const gatewayTotal = useOrgSyncStore((s) => s.gatewayTotal)
   const loading = useOrgSyncStore((s) => s.loading)
   const page = useOrgSyncStore((s) => s.page)
-  const fetchGatewayLogs = useOrgSyncStore((s) => s.fetchGatewayLogs)
 
   const [detailLog, setDetailLog] = useState<OrgSyncLog | null>(null)
 
   useEffect(() => {
-    captureAndAlertRequestErrorHoc(fetchGatewayLogs(1))
-  }, [fetchGatewayLogs])
+    captureAndAlertRequestErrorHoc(useOrgSyncStore.getState().fetchGatewayLogs(1))
+  }, [])
 
   const maxPage = useMemo(
     () => Math.max(1, Math.ceil(gatewayTotal / PAGE_SIZE)),
@@ -61,13 +60,13 @@ export default function OrgSync() {
   const goPrev = () => {
     if (page <= 1) return
     const next = page - 1
-    captureAndAlertRequestErrorHoc(fetchGatewayLogs(next))
+    captureAndAlertRequestErrorHoc(useOrgSyncStore.getState().fetchGatewayLogs(next))
   }
 
   const goNext = () => {
     if (page >= maxPage) return
     const next = page + 1
-    captureAndAlertRequestErrorHoc(fetchGatewayLogs(next))
+    captureAndAlertRequestErrorHoc(useOrgSyncStore.getState().fetchGatewayLogs(next))
   }
 
   return (

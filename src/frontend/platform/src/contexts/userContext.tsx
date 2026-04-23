@@ -134,6 +134,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             // 是否有访问后台权限
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
 
+            const BASE_URL = __APP_ENV__.BASE_URL
+
             // v2.5 角色菜单使用 admin 作为管理端父级；旧数据可能仍为 backend（WebMenuResource 遗留）
             const adminMenuKeys = new Set([
                 'backend',
@@ -147,14 +149,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 'system_config',
                 'mark_task',
             ])
+            // 部门管理员在 v2.5 允许进入管理端（至少可管理其权限范围内数据）；
+            // 仅依赖 web_menu 会把这类账号误判成无权限（error=90001）。
             const canAccessPlatform =
-                res.role === 'admin' || web_menu.some((k: string) => adminMenuKeys.has(k))
+                res.role === 'admin'
+                || Boolean(res.is_department_admin)
+                || Boolean(res.can_manage_user_groups)
+                || web_menu.some((k: string) => adminMenuKeys.has(k))
             if (!canAccessPlatform) {
-                location.href = `${location.origin}/workspace/c/new?error=90001`;
-                return;
+                // 避免把用户踢回工作台并携带 error=90001（影响登录体验）；
+                // 无后台权限时在管理端内落到 403，由后端接口继续做细粒度鉴权。
+                history.pushState(null, '', BASE_URL + '/403')
+                return
             }
 
-            const BASE_URL = __APP_ENV__.BASE_URL
             const pathName = location.pathname.replace(BASE_URL, '');
 
             // Jump to the route based on permissions 

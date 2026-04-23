@@ -3,6 +3,7 @@ import copy
 from typing import List, Dict, AsyncGenerator, Union
 
 from fastapi import Request
+from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
@@ -21,6 +22,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
+from bisheng.permission.domain.workflow_app_permission import user_may_share_app
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -187,7 +189,9 @@ class FlowService(BaseService):
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
 
-        return resp_200(data=flow_info)
+        payload = jsonable_encoder(flow_info)
+        payload['can_share'] = await user_may_share_app(login_user, 'workflow', flow_id)
+        return resp_200(data=payload)
 
     @classmethod
     async def get_compare_tasks(cls, user: UserPayload, req: FlowCompareReq) -> List:

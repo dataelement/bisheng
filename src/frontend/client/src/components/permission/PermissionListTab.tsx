@@ -13,7 +13,6 @@ import type {
 import { Building2, Loader2, RotateCcw, Trash2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
-import { PermissionBadge } from "./PermissionBadge";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 
 const SUBJECT_ICONS = {
@@ -239,7 +238,7 @@ export function PermissionListTab({
                     </td>
                     <td className="py-2">
                       {isOwner ? (
-                        <PermissionBadge level="owner" />
+                        <span className="text-sm text-gray-500">{localize("com_permission.level_owner")}</span>
                       ) : (
                         <RelationSelect
                           value={entry.model_id || entry.relation}

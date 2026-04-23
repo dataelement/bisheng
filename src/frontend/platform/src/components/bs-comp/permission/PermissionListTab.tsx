@@ -13,7 +13,6 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Building2, Loader2, RotateCcw, Trash2, User, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PermissionBadge } from "./PermissionBadge"
 import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { PermissionEntry, RelationLevel, ResourceType } from "./types"
 
@@ -261,7 +260,7 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
                 </TableCell>
                 <TableCell>
                   {isOwner ? (
-                    <PermissionBadge level="owner" />
+                    <span className="text-sm text-muted-foreground">{t('level.owner')}</span>
                   ) : (
                     <RelationSelect
                       value={entry.model_id || entry.relation}

@@ -71,11 +71,12 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.4.0
+    image: dataelement/bisheng-backend:v2.5-local
     ports:
       - "7860:7860"
     environment:
       TZ: Asia/Shanghai
+      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -91,6 +92,11 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
+      # 开发/热修：挂载本地 endpoints，使 GET /api/v1/all 等兼容路由无需重打镜像
+      - ../src/backend/bisheng/api/v1/endpoints.py:/app/bisheng/api/v1/endpoints.py:ro
+      # Bearer + 禁用账号校验在 http_middleware；镜像默认只读 Cookie，不挂则 Platform 永不被踢下线
+      - ../src/backend/bisheng/utils/http_middleware.py:/app/bisheng/utils/http_middleware.py:ro
+      - ../src/backend/bisheng/common/middleware/admin_scope.py:/app/bisheng/common/middleware/admin_scope.py:ro
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh api  # 启动api服务
@@ -106,14 +112,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # openfga 官方镜像无 HEALTHCHECK，Compose v5 无法用 service_healthy
       openfga:
-        condition: service_healthy
+        condition: service_started
 
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.4.0
+    image: dataelement/bisheng-backend:v2.5-local
     environment:
       TZ: Asia/Shanghai
+      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -139,11 +147,12 @@ services:
       redis:
         condition: service_healthy
       openfga:
-        condition: service_healthy
+        condition: service_started
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v2.4.0
+    # 注意：此处为 Hub 的 latest，未必与自建镜像 backend:v2.5-local 同版本；界面偏旧请 pull 最新或按源码 build（见 AGENTS / 部署文档）
+    image: dataelement/bisheng-frontend:latest
     ports:
       - "3001:3001"
     environment:
