@@ -1132,3 +1132,7 @@ class UserDepartmentDao:
                 )
             )
             return result.first() is not None
+
+
+# Register ``department_admin_grant`` on SQLModel metadata for migrations / create_all.
+import bisheng.database.models.department_admin_grant  # noqa: F401, E402

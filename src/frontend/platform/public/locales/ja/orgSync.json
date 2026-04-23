@@ -1,8 +1,8 @@
 {
   "title": "組織同期",
-  "description": "WeChat Work や Feishu などの外部システムから部門とメンバー情報を自動同期します。",
+  "description": "ゲートウェイ HMAC プッシュのみ（リクエストごとに org_sync_log が 1 行）。一覧の「メンバー」の「~」は本バッチで login-sync が成功した人数（変更なし含む）。部門責任者の FGA 反映にはメンバー詳細取得が必要です。詳細の「バッチ要約」を参照。",
   "loading": "読み込み中...",
-  "emptyHint": "同期ソースが未設定です。右上のボタンから作成してください。",
+  "emptyHint": "ゲートウェイ同期のログはまだありません。同期 API 呼び出し後に表示されます。",
   "providers": {
     "wecom": "WeChat Work",
     "feishu": "Feishu",
@@ -24,11 +24,13 @@
     "scheduled": "スケジュール"
   },
   "columns": {
-    "configName": "名称",
-    "provider": "種類",
-    "syncStatus": "同期状態",
-    "lastSync": "最終同期",
-    "lastResult": "最終結果",
+    "time": "終了時刻",
+    "status": "状態",
+    "deptSummary": "部門の変化",
+    "memberSummary": "メンバーの変化",
+    "hasErrors": "詳細あり",
+    "yes": "はい",
+    "no": "いいえ",
     "actions": "操作"
   },
   "actions": {
@@ -38,6 +40,7 @@
     "test": "接続テスト",
     "execute": "今すぐ同期",
     "viewLogs": "ログ",
+    "viewDetail": "詳細",
     "save": "保存",
     "cancel": "キャンセル",
     "close": "閉じる",
@@ -122,5 +125,25 @@
     "startTime": "開始",
     "endTime": "終了",
     "empty": "同期ログはまだありません"
+  },
+  "gatewayDetail": {
+    "title": "ゲートウェイ同期レコード",
+    "status": "結果",
+    "configId": "設定 ID",
+    "startTime": "開始時刻",
+    "endTime": "終了時刻",
+    "counterHint": "「~」= 本バッチで login-sync が成功したメンバー数。「+」「🚫」「↻」はゲートウェイ一括プッシュでは多く 0。",
+    "batchSummaryTitle": "バッチ要約（ゲートウェイ → bisheng）",
+    "batchSummaryLine": "メンバー成功 {{ok}} / 失敗 {{fail}}；payload に部門責任者リストあり {{leaders}} 名；部門 upsert {{deptUpsert}}、remove {{deptRemove}}。",
+    "errorsTitle": "エラー・警告の詳細",
+    "colType": "種類",
+    "colExternalId": "外部 ID",
+    "colMessage": "内容"
+  },
+  "pagination": {
+    "total": "全 {{total}} 件",
+    "pageOf": "{{page}} / {{maxPage}} ページ",
+    "prev": "前へ",
+    "next": "次へ"
   }
 }

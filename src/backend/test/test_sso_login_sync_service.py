@@ -51,11 +51,13 @@ def _user(user_id=7, delete=0, source='sso', external_id='u1',
 
 
 def _dept(ext, *, id=1, path='/', is_deleted=0, is_tenant_root=0,
-          mounted_tenant_id=None):
+          mounted_tenant_id=None, source='sso', status='active'):
     return SimpleNamespace(
         id=id, external_id=ext, path=path, is_deleted=is_deleted,
         is_tenant_root=is_tenant_root,
         mounted_tenant_id=mounted_tenant_id,
+        source=source,
+        status=status,
     )
 
 
@@ -295,6 +297,177 @@ class TestTenantStatusBlocks:
 # =========================================================================
 # Existing-user update path (attributes dirty)
 # =========================================================================
+
+@pytest.mark.asyncio
+class TestDepartmentAdminFgaReconcile:
+
+    async def test_omitted_admin_field_skips_membership_query(self, patches, monkeypatch):
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        aget_ud = AsyncMock(return_value=[])
+        m.UserDepartmentDao.aget_user_departments = aget_ud
+        monkeypatch.setattr(
+            m.DepartmentAdminGrantDao, 'aget_by_user_and_departments',
+            AsyncMock(side_effect=AssertionError('grant query should not run')),
+        )
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        await LoginSyncService.execute(_payload(), request_ip='')
+
+        aget_ud.assert_not_awaited()
+
+    async def test_empty_admin_list_removes_fga_admin_on_sso_member_dept(
+        self, patches, monkeypatch,
+    ):
+        from bisheng.department.domain.services import (
+            department_change_handler as dch,
+        )
+        from bisheng.sso_sync.domain.schemas.payloads import (
+            LoginSyncRequest,
+            UserAttrsDTO,
+        )
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        m.UserDepartmentDao.aget_user_departments = AsyncMock(
+            return_value=[SimpleNamespace(department_id=11)],
+        )
+        m.DepartmentDao.aget_by_ids = AsyncMock(
+            return_value=[_dept('D1', id=11)],
+        )
+        monkeypatch.setattr(
+            m.DepartmentAdminGrantDao, 'aget_by_user_and_departments',
+            AsyncMock(return_value=[
+                SimpleNamespace(department_id=11, grant_source='sso'),
+            ]),
+        )
+        adelete = AsyncMock()
+        monkeypatch.setattr(m.DepartmentAdminGrantDao, 'adelete', adelete)
+        exec_mock = AsyncMock()
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        payload = LoginSyncRequest(
+            external_user_id='u1',
+            primary_dept_external_id='D1',
+            secondary_dept_external_ids=[],
+            department_admin_external_ids=[],
+            user_attrs=UserAttrsDTO(name='Alice', email='a@x.com'),
+            ts=1000,
+        )
+
+        with patch.object(dch.DepartmentChangeHandler, 'execute_async', exec_mock):
+            await LoginSyncService.execute(payload, request_ip='')
+
+        exec_mock.assert_awaited_once()
+        call_ops = exec_mock.await_args.args[0]
+        assert len(call_ops) == 1
+        op = call_ops[0]
+        assert op.action == 'delete'
+        assert op.relation == 'admin'
+        assert op.user == 'user:7'
+        assert op.object == 'department:11'
+        adelete.assert_awaited_once_with(7, 11)
+
+    async def test_manual_admin_marker_skips_fga_on_empty_leader_list(
+        self, patches, monkeypatch,
+    ):
+        from bisheng.department.domain.services import (
+            department_change_handler as dch,
+        )
+        from bisheng.sso_sync.domain.schemas.payloads import (
+            LoginSyncRequest,
+            UserAttrsDTO,
+        )
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        m.UserDepartmentDao.aget_user_departments = AsyncMock(
+            return_value=[SimpleNamespace(department_id=11)],
+        )
+        m.DepartmentDao.aget_by_ids = AsyncMock(
+            return_value=[_dept('D1', id=11)],
+        )
+        monkeypatch.setattr(
+            m.DepartmentAdminGrantDao, 'aget_by_user_and_departments',
+            AsyncMock(return_value=[
+                SimpleNamespace(department_id=11, grant_source='manual'),
+            ]),
+        )
+        exec_mock = AsyncMock()
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        payload = LoginSyncRequest(
+            external_user_id='u1',
+            primary_dept_external_id='D1',
+            secondary_dept_external_ids=[],
+            department_admin_external_ids=[],
+            user_attrs=UserAttrsDTO(name='Alice', email='a@x.com'),
+            ts=1000,
+        )
+
+        with patch.object(dch.DepartmentChangeHandler, 'execute_async', exec_mock):
+            await LoginSyncService.execute(payload, request_ip='')
+
+        exec_mock.assert_not_awaited()
+
+    async def test_leader_dept_grants_admin_tuple(self, patches, monkeypatch):
+        from bisheng.department.domain.services import (
+            department_change_handler as dch,
+        )
+        from bisheng.sso_sync.domain.schemas.payloads import (
+            LoginSyncRequest,
+            UserAttrsDTO,
+        )
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        m.UserDepartmentDao.aget_user_departments = AsyncMock(
+            return_value=[SimpleNamespace(department_id=11)],
+        )
+        m.DepartmentDao.aget_by_ids = AsyncMock(
+            return_value=[_dept('D1', id=11)],
+        )
+        monkeypatch.setattr(
+            m.DepartmentAdminGrantDao, 'aget_by_user_and_departments',
+            AsyncMock(return_value=[]),
+        )
+        aupsert = AsyncMock()
+        monkeypatch.setattr(m.DepartmentAdminGrantDao, 'aupsert', aupsert)
+        exec_mock = AsyncMock()
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        payload = LoginSyncRequest(
+            external_user_id='u1',
+            primary_dept_external_id='D1',
+            secondary_dept_external_ids=[],
+            department_admin_external_ids=['D1'],
+            user_attrs=UserAttrsDTO(name='Alice', email='a@x.com'),
+            ts=1000,
+        )
+
+        with patch.object(dch.DepartmentChangeHandler, 'execute_async', exec_mock):
+            await LoginSyncService.execute(payload, request_ip='')
+
+        exec_mock.assert_awaited_once()
+        call_ops = exec_mock.await_args.args[0]
+        assert len(call_ops) == 1
+        op = call_ops[0]
+        assert op.action == 'write'
+        assert op.relation == 'admin'
+        from bisheng.database.models.department_admin_grant import (
+            DEPARTMENT_ADMIN_GRANT_SOURCE_SSO,
+        )
+        aupsert.assert_awaited_once_with(7, 11, DEPARTMENT_ADMIN_GRANT_SOURCE_SSO)
+
 
 @pytest.mark.asyncio
 class TestExistingUserAttrUpdate:

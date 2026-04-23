@@ -1,8 +1,8 @@
 {
   "title": "组织同步",
-  "description": "从企业微信、飞书等第三方系统自动同步部门与成员信息。",
+  "description": "仅展示网关掉 HMAC 推送产生的同步记录（org_sync_log，每次请求一行）。列表中「成员变更」的「~」表示本批次成功执行 login-sync 的人数（含资料未变）；部门负责人写入 FGA 依赖网关拉取成员详情，见详情内「批次摘要」。",
   "loading": "加载中...",
-  "emptyHint": "尚未配置任何同步源，点击右上角创建",
+  "emptyHint": "暂无网关同步记录。网关调用部门/成员等同步接口并成功落库后，将在此显示。",
   "providers": {
     "wecom": "企业微信",
     "feishu": "飞书",
@@ -24,11 +24,13 @@
     "scheduled": "定时"
   },
   "columns": {
-    "configName": "配置名称",
-    "provider": "类型",
-    "syncStatus": "同步状态",
-    "lastSync": "上次同步",
-    "lastResult": "上次结果",
+    "time": "结束时间",
+    "status": "状态",
+    "deptSummary": "部门变更",
+    "memberSummary": "成员变更",
+    "hasErrors": "含错误明细",
+    "yes": "是",
+    "no": "否",
     "actions": "操作"
   },
   "actions": {
@@ -38,6 +40,7 @@
     "test": "测试连接",
     "execute": "立即同步",
     "viewLogs": "查看日志",
+    "viewDetail": "详情",
     "save": "保存",
     "cancel": "取消",
     "close": "关闭",
@@ -122,5 +125,25 @@
     "startTime": "开始时间",
     "endTime": "结束时间",
     "empty": "暂无同步记录"
+  },
+  "gatewayDetail": {
+    "title": "网关同步记录",
+    "status": "结果",
+    "configId": "配置 ID",
+    "startTime": "开始时间",
+    "endTime": "结束时间",
+    "counterHint": "「~」= 本批成员 login-sync 成功人数；「+」新建、「🚫」禁用、「↻」恢复 等字段在网关整批推送中多为 0。",
+    "batchSummaryTitle": "批次摘要（网关 → bisheng）",
+    "batchSummaryLine": "成员成功 {{ok}} / 失败 {{fail}}；payload 中含部门负责人列表的成员 {{leaders}} 人；部门 upsert {{deptUpsert}}、remove {{deptRemove}}。",
+    "errorsTitle": "错误与告警明细",
+    "colType": "类型",
+    "colExternalId": "外部 ID",
+    "colMessage": "说明"
+  },
+  "pagination": {
+    "total": "共 {{total}} 条",
+    "pageOf": "第 {{page}} / {{maxPage}} 页",
+    "prev": "上一页",
+    "next": "下一页"
   }
 }
