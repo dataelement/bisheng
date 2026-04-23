@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel, ChannelRole, getChannelDetailApi } from "~/api/channels";
+import { canOpenPermissionDialog } from "~/api/permission";
 import { ChannelMemberManagementPanel } from "~/components/ChannelMemberManagementPanel";
+import { PermissionGrantTab, PermissionListTab } from "~/components/permission";
 import {
     Button,
     Dialog,
@@ -18,7 +20,11 @@ import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 
-type ChannelShareTab = "share" | "members";
+const SHARE_TAB = "share";
+const MEMBERS_TAB = "members";
+const PERMISSION_TAB = "permission";
+
+type ChannelShareTab = typeof SHARE_TAB | typeof MEMBERS_TAB | typeof PERMISSION_TAB;
 
 interface ChannelShareDialogProps {
     open: boolean;
@@ -37,6 +43,7 @@ export function ChannelShareDialog({
     const { showToast } = useToastContext();
     const [activeTab, setActiveTab] = useState<ChannelShareTab>(initialTab);
     const [copied, setCopied] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const { data: channelDetail } = useQuery({
         queryKey: ["channelShareDialogDetail", channel?.id],
@@ -50,23 +57,42 @@ export function ChannelShareDialog({
 
     const canManageMembers =
         channel?.role === ChannelRole.CREATOR || channel?.role === ChannelRole.ADMIN;
+    const { data: canManagePermission = canManageMembers } = useQuery({
+        queryKey: ["channelShareDialogPermission", channel?.id],
+        queryFn: async () => {
+            if (!channel?.id) return false;
+            return await canOpenPermissionDialog("channel", channel.id);
+        },
+        enabled: open && !!channel?.id,
+        staleTime: 60_000,
+    });
     const showShareTab = channelDetail ? channelDetail.visibility !== "private" : canManageMembers;
     const showMembersTab = canManageMembers;
-    useEffect(() => {
-        if (!open) return;
-        setActiveTab(initialTab);
-        setCopied(false);
-    }, [open, initialTab]);
+    const showPermissionTab = Boolean(channel?.id) && canManagePermission;
+
+    const resolveVisibleTab = useCallback((preferred: ChannelShareTab): ChannelShareTab => {
+        if (preferred === SHARE_TAB && showShareTab) return SHARE_TAB;
+        if (preferred === MEMBERS_TAB && showMembersTab) return MEMBERS_TAB;
+        if (preferred === PERMISSION_TAB && showPermissionTab) return PERMISSION_TAB;
+        if (showShareTab) return SHARE_TAB;
+        if (showMembersTab) return MEMBERS_TAB;
+        if (showPermissionTab) return PERMISSION_TAB;
+        return preferred;
+    }, [showMembersTab, showPermissionTab, showShareTab]);
 
     useEffect(() => {
         if (!open) return;
-        if (activeTab === "share" && !showShareTab && showMembersTab) {
-            setActiveTab("members");
+        setActiveTab(resolveVisibleTab(initialTab));
+        setCopied(false);
+    }, [channel?.id, initialTab, open, resolveVisibleTab]);
+
+    useEffect(() => {
+        if (!open) return;
+        const nextTab = resolveVisibleTab(activeTab);
+        if (nextTab !== activeTab) {
+            setActiveTab(nextTab);
         }
-        if (activeTab === "members" && !showMembersTab && showShareTab) {
-            setActiveTab("share");
-        }
-    }, [activeTab, open, showMembersTab, showShareTab]);
+    }, [activeTab, open, resolveVisibleTab]);
 
     const shareLink = useMemo(() => {
         if (!channel?.id || typeof window === "undefined") return "";
@@ -80,7 +106,9 @@ export function ChannelShareDialog({
     const dialogTitle = `${
         showShareTab
             ? localize("com_subscription.share")
-            : localize("com_subscription.management_member")
+            : showMembersTab
+                ? localize("com_subscription.management_member")
+                : localize("com_permission.dialog_title")
     } - ${channel.name}`;
 
     const sharePanel = (
@@ -127,12 +155,44 @@ export function ChannelShareDialog({
             <ChannelMemberManagementPanel
                 channelId={channel.id}
                 currentUserRole={channel.role}
-                active={open && activeTab === "members"}
+                active={open && activeTab === MEMBERS_TAB}
             />
         </div>
     );
 
-    const hasMultipleTabs = showShareTab && showMembersTab;
+    const handleGrantSuccess = () => {
+        setRefreshKey((key) => key + 1);
+        setActiveTab(PERMISSION_TAB);
+    };
+
+    const permissionPanel = (
+        <>
+            <TabsList className="bg-surface-primary-alt p-1">
+                <TabsTrigger value="list">
+                    {localize("com_permission.tab_list")}
+                </TabsTrigger>
+                <TabsTrigger value="grant">
+                    {localize("com_permission.tab_grant")}
+                </TabsTrigger>
+            </TabsList>
+            <TabsContent value="list" className="p-0">
+                <PermissionListTab
+                    resourceType="channel"
+                    resourceId={channel.id}
+                    refreshKey={refreshKey}
+                />
+            </TabsContent>
+            <TabsContent value="grant" className="p-0">
+                <PermissionGrantTab
+                    resourceType="channel"
+                    resourceId={channel.id}
+                    onSuccess={handleGrantSuccess}
+                />
+            </TabsContent>
+        </>
+    );
+
+    const hasMultipleTabs = [showShareTab, showMembersTab, showPermissionTab].filter(Boolean).length > 1;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -144,25 +204,46 @@ export function ChannelShareDialog({
                 {hasMultipleTabs ? (
                     <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ChannelShareTab)}>
                         <TabsList className="bg-surface-primary-alt p-1">
-                            <TabsTrigger value="share">
-                                {localize("com_subscription.share")}
-                            </TabsTrigger>
-                            <TabsTrigger value="members">
-                                {localize("com_subscription.member_management")}
-                            </TabsTrigger>
+                            {showShareTab && (
+                                <TabsTrigger value={SHARE_TAB}>
+                                    {localize("com_subscription.share")}
+                                </TabsTrigger>
+                            )}
+                            {showMembersTab && (
+                                <TabsTrigger value={MEMBERS_TAB}>
+                                    {localize("com_subscription.member_management")}
+                                </TabsTrigger>
+                            )}
+                            {showPermissionTab && (
+                                <TabsTrigger value={PERMISSION_TAB}>
+                                    {localize("com_permission.manage_permission")}
+                                </TabsTrigger>
+                            )}
                         </TabsList>
-                        <TabsContent value="share" className="p-0">
-                            {sharePanel}
-                        </TabsContent>
-                        <TabsContent value="members" className="flex min-h-0 flex-1 p-0">
-                            {memberPanel}
-                        </TabsContent>
+                        {showShareTab && (
+                            <TabsContent value={SHARE_TAB} className="p-0">
+                                {sharePanel}
+                            </TabsContent>
+                        )}
+                        {showMembersTab && (
+                            <TabsContent value={MEMBERS_TAB} className="flex min-h-0 flex-1 p-0">
+                                {memberPanel}
+                            </TabsContent>
+                        )}
+                        {showPermissionTab && (
+                            <TabsContent value={PERMISSION_TAB} className="p-0">
+                                <Tabs defaultValue="list">{permissionPanel}</Tabs>
+                            </TabsContent>
+                        )}
                     </Tabs>
-                ) : activeTab === "share" || (showShareTab && !showMembersTab) ? (
+                ) : showShareTab ? (
                     sharePanel
-                ) : (
+                ) : showMembersTab ? (
                     memberPanel
-                )}
+                ) : showPermissionTab ? (
+                    <Tabs defaultValue="list">{permissionPanel}</Tabs>
+                ) : null
+                }
             </DialogContent>
         </Dialog>
     );
