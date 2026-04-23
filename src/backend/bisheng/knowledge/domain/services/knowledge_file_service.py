@@ -15,15 +15,9 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
 from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.open_endpoints.domain.schemas.knowledge import DeleteUserMetadataReq
-from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.user.domain.models.user import UserDao
-
-
-_KNOWLEDGE_FILE_ACCESS_RELATION = {
-    AccessType.KNOWLEDGE: 'can_read',
-    AccessType.KNOWLEDGE_WRITE: 'can_edit',
-}
 
 
 class KnowledgeFileService:
@@ -40,19 +34,12 @@ class KnowledgeFileService:
             knowledge_model,
             access_type: AccessType,
     ) -> None:
-        relation = _KNOWLEDGE_FILE_ACCESS_RELATION.get(access_type)
-        if relation is None:
-            allowed = await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), access_type,
-            )
-        else:
-            allowed = await PermissionService.check(
-                user_id=login_user.user_id,
-                relation=relation,
-                object_type='knowledge_library',
-                object_id=str(knowledge_model.id),
-                login_user=login_user,
-            )
+        allowed = await KnowledgePermissionService().check_access_async(
+            login_user=login_user,
+            owner_user_id=knowledge_model.user_id,
+            knowledge_id=knowledge_model.id,
+            access_type=access_type,
+        )
         if not allowed:
             raise UnAuthorizedError()
 
