@@ -6,11 +6,10 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getAssistantModelConfig } from "@/controllers/API/finetune";
 import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { Check, Plus } from "lucide-react";
-import { forwardRef, useEffect, useMemo, useState } from "react";
+import { forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -33,28 +32,13 @@ interface ModelManagementProps {
 }
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
     ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onVisualToggle }, ref) => {
-        const { llmOptions } = useModel();
+        // `assistant` mode hits /api/v1/llm/assistant/llm_list which is already
+        // filtered to the admin-configured assistant allowlist (default model
+        // and its server are placed first). Avoids the fetch-all + client-side
+        // filter round-trip.
+        const { llmOptions: assistantLlmOptions } = useModel('assistant');
         const { t } = useTranslation();
         const navigate = useNavigate();
-
-        // Assistant-scoped model id allowlist (from 系统模型设置-助手模型)
-        const [assistantModelIds, setAssistantModelIds] = useState<Set<string> | null>(null);
-        useEffect(() => {
-            getAssistantModelConfig().then((cfg) => {
-                const list = (cfg && cfg.llm_list) || [];
-                setAssistantModelIds(new Set(list.map((it: any) => String(it.model_id))));
-            }).catch(() => setAssistantModelIds(new Set()));
-        }, []);
-
-        const assistantLlmOptions = useMemo(() => {
-            if (!assistantModelIds) return [];
-            return llmOptions
-                .map((server) => ({
-                    ...server,
-                    children: (server.children || []).filter((m: any) => assistantModelIds.has(String(m.value))),
-                }))
-                .filter((server) => server.children.length > 0);
-        }, [llmOptions, assistantModelIds]);
 
         const selectFooter = (
             <div
