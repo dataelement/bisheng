@@ -327,7 +327,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         - NEXUS_PASSWORD
       script: |
         echo "=======准备 3003 前端发布======="
-        frontend_container="drone_bisheng_frontend_feat_2_5_0_$(date +%s)_$$"
+        frontend_container="drone_bisheng_frontend_feat_2_5_0_$(date +%s%N)"
         trap 'docker rm -f "$frontend_container" >/dev/null 2>&1 || true' EXIT
         docker login -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" http://192.168.106.8:6082 || true
         docker pull 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0 || docker pull cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0

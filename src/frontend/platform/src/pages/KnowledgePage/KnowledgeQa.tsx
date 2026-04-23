@@ -413,7 +413,7 @@ export default function KnowledgeQa(params) {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
-                                    if (!canEdit(el)) return;
+                                    if (!canReadRow(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/qalib/${el.id}`);
