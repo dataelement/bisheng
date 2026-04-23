@@ -211,3 +211,61 @@ async def test_filter_knowledge_ids_by_permission_async_honors_custom_model_perm
     ):
         assert await service.filter_knowledge_ids_by_permission_async(login_user, [12], 'use_kb') == []
         assert await service.filter_knowledge_ids_by_permission_async(login_user, [12], 'view_kb') == [12]
+
+
+@pytest.mark.asyncio
+async def test_filter_knowledge_ids_by_permission_async_reads_legacy_knowledge_space_tuples():
+    service = KnowledgePermissionService()
+    login_user = SimpleNamespace(
+        user_id=7,
+        get_user_group_ids=AsyncMock(return_value=[]),
+    )
+    fake_fga = SimpleNamespace(
+        read_tuples=AsyncMock(side_effect=lambda object: (
+            [] if object == 'knowledge_library:13'
+            else [{'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_space:13'}]
+        )),
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service._get_relation_models',
+        new_callable=AsyncMock,
+        return_value=[{
+            'id': 'custom_view_only',
+            'name': '只看不用',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_kb'],
+            'permissions_explicit': True,
+            'is_system': False,
+        }],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service._get_bindings',
+        new_callable=AsyncMock,
+        return_value=[{
+            'resource_type': 'knowledge_library',
+            'resource_id': '13',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'custom_view_only',
+        }],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService._get_fga',
+        return_value=fake_fga,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService._legacy_alias_object_types',
+        new_callable=AsyncMock,
+        return_value=['knowledge_space'],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.DepartmentDao.aget_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        assert await service.filter_knowledge_ids_by_permission_async(login_user, [13], 'use_kb') == []
+        assert await service.filter_knowledge_ids_by_permission_async(login_user, [13], 'view_kb') == [13]

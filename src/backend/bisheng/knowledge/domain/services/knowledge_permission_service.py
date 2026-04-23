@@ -154,6 +154,8 @@ class KnowledgePermissionService:
         fga = PermissionService._get_fga()
         if fga is not None:
             tuples = await fga.read_tuples(object=f'knowledge_library:{knowledge_id}')
+            for legacy_type in await PermissionService._legacy_alias_object_types('knowledge_library', str(knowledge_id)):
+                tuples.extend(await fga.read_tuples(object=f'{legacy_type}:{knowledge_id}'))
             effective_permissions: set[str] = set()
             for tuple_data in tuples:
                 tuple_user = tuple_data.get('user')
