@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 # Valid OpenFGA resource types
 VALID_RESOURCE_TYPES = {
-    'knowledge_space', 'folder', 'knowledge_file',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file',
     'workflow', 'assistant', 'tool', 'channel', 'dashboard',
 }
 

@@ -81,7 +81,7 @@ def test_tenant_admin_does_not_inherit(types_by_name):
 
 
 @pytest.mark.parametrize('resource_type', [
-    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file', 'channel',
     'workflow', 'assistant', 'tool', 'dashboard',
     'llm_server', 'llm_model',
 ])
@@ -94,7 +94,7 @@ def test_resource_has_shared_with_relation(types_by_name, resource_type):
 
 
 @pytest.mark.parametrize('resource_type', [
-    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file', 'channel',
     'workflow', 'assistant', 'tool', 'dashboard',
     'llm_server', 'llm_model',
 ])
@@ -111,7 +111,7 @@ def test_resource_viewer_chains_shared_with_member(types_by_name, resource_type)
 
 
 @pytest.mark.parametrize('resource_type', [
-    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file', 'channel',
     'workflow', 'assistant', 'tool', 'dashboard',
     'llm_server', 'llm_model',
 ])
@@ -128,7 +128,7 @@ def test_resource_viewer_drut_uses_only_valid_relations(types_by_name, resource_
 
 
 @pytest.mark.parametrize('resource_type', [
-    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file', 'channel',
     'workflow', 'assistant', 'tool', 'dashboard',
     'llm_server', 'llm_model',
 ])
@@ -141,7 +141,7 @@ def test_resource_manager_excludes_tenant(types_by_name, resource_type):
 
 
 @pytest.mark.parametrize('resource_type', [
-    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file', 'channel',
     'workflow', 'assistant', 'tool', 'dashboard',
     'llm_server', 'llm_model',
 ])
@@ -160,6 +160,16 @@ def test_resource_viewer_three_standard_sources_preserved(types_by_name):
     assert {'type': 'user'} in viewer_types
     assert {'type': 'department', 'relation': 'member'} in viewer_types
     assert {'type': 'user_group', 'relation': 'member'} in viewer_types
+
+
+def test_folder_parent_accepts_knowledge_library(types_by_name):
+    parent_types = types_by_name['folder']['metadata']['relations']['parent']['directly_related_user_types']
+    assert {'type': 'knowledge_library'} in parent_types
+
+
+def test_knowledge_file_parent_accepts_knowledge_library(types_by_name):
+    parent_types = types_by_name['knowledge_file']['metadata']['relations']['parent']['directly_related_user_types']
+    assert {'type': 'knowledge_library'} in parent_types
 
 
 # ── LLM types preallocation (F020 dependency) ────────────────────
@@ -192,6 +202,6 @@ def test_llm_model_has_full_pyramid(types_by_name):
 # ── Type count ───────────────────────────────────────────────────
 
 
-def test_total_type_count_is_15():
-    """v2.5.1 model: user + system + tenant + department + user_group + 10 resources = 15."""
-    assert len(AUTHORIZATION_MODEL['type_definitions']) == 15
+def test_total_type_count_is_16():
+    """v2.5.1 model: user + system + tenant + department + user_group + 11 resources = 16."""
+    assert len(AUTHORIZATION_MODEL['type_definitions']) == 16

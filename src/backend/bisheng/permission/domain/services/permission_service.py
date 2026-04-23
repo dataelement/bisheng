@@ -678,9 +678,26 @@ class PermissionService:
 
         async with get_async_db_session() as session:
             if object_type == 'knowledge_space':
-                from bisheng.knowledge.domain.models.knowledge import Knowledge
+                from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 
-                stmt = select(Knowledge.id).where(col(Knowledge.user_id).in_(uids))
+                stmt = select(Knowledge.id).where(
+                    col(Knowledge.user_id).in_(uids),
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                )
+                result = await session.exec(stmt)
+                rows = result.all()
+                return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
+            if object_type == 'knowledge_library':
+                from bisheng.knowledge.domain.models.knowledge import Knowledge
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+                stmt = select(Knowledge.id).where(
+                    col(Knowledge.user_id).in_(uids),
+                    Knowledge.type.in_([
+                        KnowledgeTypeEnum.NORMAL.value,
+                        KnowledgeTypeEnum.QA.value,
+                    ]),
+                )
                 result = await session.exec(stmt)
                 rows = result.all()
                 return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
@@ -798,8 +815,18 @@ class PermissionService:
 
             if object_type == 'knowledge_space':
                 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
                 ks = await KnowledgeDao.aquery_by_id(int(object_id))
-                return ks.user_id if ks else None
+                return ks.user_id if ks and ks.type == KnowledgeTypeEnum.SPACE.value else None
+
+            if object_type == 'knowledge_library':
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+                kb = await KnowledgeDao.aquery_by_id(int(object_id))
+                if kb and kb.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
+                    return kb.user_id
+                return None
 
             if object_type == 'knowledge_file':
                 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
@@ -897,7 +924,8 @@ class PermissionService:
 
         F013 only enforces tenant gating for primary resource types that carry
         an owning tenant_id we can look up cheaply (workflow, assistant,
-        knowledge_space). Other types (folder, knowledge_file, channel, tool,
+        knowledge_space / knowledge_library). Other types (folder,
+        knowledge_file, channel, tool,
         dashboard, llm_*) inherit visibility via their parent or are not yet
         wired to multi-tenant; for those, returning None falls through to the
         existing FGA chain which still honors tenant#shared_to#member at the
@@ -914,8 +942,17 @@ class PermissionService:
                 return obj.tenant_id if obj else None
             if object_type == 'knowledge_space':
                 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
                 obj = await KnowledgeDao.aquery_by_id(int(object_id))
-                return obj.tenant_id if obj else None
+                return obj.tenant_id if obj and obj.type == KnowledgeTypeEnum.SPACE.value else None
+            if object_type == 'knowledge_library':
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+                obj = await KnowledgeDao.aquery_by_id(int(object_id))
+                if obj and obj.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
+                    return obj.tenant_id
+                return None
         except Exception as e:  # noqa: BLE001 — defensive degradation
             logger.warning(
                 '_resolve_resource_tenant failed for %s:%s: %s',
