@@ -182,7 +182,7 @@ class KnowledgeService(KnowledgeUtils):
     ) -> Tuple[List[KnowledgeRead], int]:
         # F008: 列表可见性 = OpenFGA `can_read`（与 PRD「使用知识库」/关系模型 can_read 一致）。
         # 与「当前用户创建」的知识库 ID 取并集：避免 list_objects 滞后、缓存或计算差异导致创建者看不到自己的库。
-        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_space')
+        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_library')
         if accessible_ids is not None:
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
                 login_user.user_id, knowledge_type,
@@ -363,7 +363,7 @@ class KnowledgeService(KnowledgeUtils):
     ):
         # F008: Write owner tuple to OpenFGA (INV-2)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_space', str(knowledge.id))
+        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_library', str(knowledge.id))
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -464,7 +464,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # F008: Clean up all FGA tuples for this resource (AC-03)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.delete_resource_tuples_sync('knowledge_space', str(knowledge.id))
+        OwnerService.delete_resource_tuples_sync('knowledge_library', str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
