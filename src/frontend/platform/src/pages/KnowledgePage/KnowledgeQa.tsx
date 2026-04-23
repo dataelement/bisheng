@@ -4,8 +4,10 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { RelationLevel } from "@/components/bs-comp/permission/types";
-import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -18,7 +20,7 @@ import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { useTable } from "@/util/hook";
-import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Shield, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -280,6 +282,8 @@ export default function KnowledgeQa(params) {
     const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
     const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
     const [modalKey, setModalKey] = useState(0);
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable(
         { cancelLoadingWhenReload: true },
@@ -418,16 +422,17 @@ export default function KnowledgeQa(params) {
                             >
                                 <TableCell className="font-medium max-w-[280px]">
                                     <div className="flex items-center gap-2">
-                                        <div className="flex items-center justify-center size-12 text-white rounded-[4px] w-[40px] h-[40px]">
-                                            <QaIcon className="text-primary size-10" />
-                                        </div>
-                                        <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
-                                                {el.name}
+                                            <div className="flex items-center justify-center size-12 text-white rounded-[4px] w-[40px] h-[40px]">
+                                                <QaIcon className="text-primary size-10" />
                                             </div>
-                                            <QuestionTooltip
-                                                content={el.description || ''}
-                                                error={false}
+                                            <div>
+                                                <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
+                                                    {el.name}
+                                                    <PermissionBadge level={permLevels[String(el.id)]} />
+                                                </div>
+                                                <QuestionTooltip
+                                                    content={el.description || ''}
+                                                    error={false}
                                                 className="w-full text-start"
                                             >
                                                 <div className="truncate max-w-[400px] text-[12px] text-[#5A5A5A] pt-1">
@@ -459,6 +464,10 @@ export default function KnowledgeQa(params) {
                                             onValueChange={(selectedValue) => {
                                                 setSelectOpenId(null);
                                                 switch (selectedValue) {
+                                                    case 'permission':
+                                                        setPermTarget({ id: String(el.id), name: el.name });
+                                                        setPermDialogOpen(true);
+                                                        break;
                                                     case 'copy':
                                                         canUseCopy(el) &&
                                                             el.state === KnowledgeBaseStatus.Published &&
@@ -494,6 +503,14 @@ export default function KnowledgeQa(params) {
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="z-50 overflow-visible"
                                             >
+                                                {canManageResource(permLevels, el.id) && (
+                                                    <SelectItem showIcon={false} value="permission">
+                                                        <div className="flex gap-2 items-center">
+                                                            <Shield className="w-4 h-4" />
+                                                            {t('managePermission', { ns: 'permission' })}
+                                                        </div>
+                                                    </SelectItem>
+                                                )}
                                                 <Tip content={!canUseCopy(el) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
@@ -577,6 +594,16 @@ export default function KnowledgeQa(params) {
                     onLoadEnd={reload}
                     mode="edit"
                     currentLib={currentSettingLib}
+                />
+            )}
+
+            {permTarget && (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="knowledge_library"
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
                 />
             )}
         </div>
