@@ -8,7 +8,10 @@
   "supportedFormatsWithImages": "Supported file formats: pdf (including scanned documents), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp; each file supports up to {{maxSize}}MB; pdf supports traceability positioning.",
   "supportedFormatsWithoutImages": "Supported file formats: pdf, txt, docx, doc, ppt, pptx, md, html, xls, xlsx, csv, each file supports up to {{maxSize}}MB",
   "pagination": {
-    "totalRecords": "Total {{total}}"
+    "totalRecords": "Total {{total}}",
+    "totalWithPageSize": "Total {{total}} items, {{pageSize}} per page",
+    "totalPrefix": "Total ",
+    "totalSuffixWithPageSize": " items, {{pageSize}} per page"
   },
   "example": {
     "buttons": "Buttons",

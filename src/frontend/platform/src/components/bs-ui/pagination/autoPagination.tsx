@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
 import { Input } from '../input';
 import { useTranslation } from 'react-i18next';
@@ -63,66 +62,74 @@ const AutoPagination = ({
         handleJumpPage();
     };
 
-    const renderPaginationItems = () => {
-        const items = [];
-        const startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
-        const endPage = Math.min(totalPages || 1, startPage + maxVisiblePages - 1);
+    const getPageNumbers = (): (number | "ellipsis")[] => {
+        const safeTotalPages = Math.max(1, totalPages);
+        const pages: (number | "ellipsis")[] = [];
 
-        if (page !== 1) {
-            items.push(
-                <PaginationItem key="start">
-                    <PaginationLink href="javascript:;" onClick={() => handlePageChange(1)}>
-                        <ChevronsLeft />
-                    </PaginationLink>
-                </PaginationItem>
-            );
+        if (safeTotalPages <= maxVisiblePages) {
+            for (let i = 1; i <= safeTotalPages; i++) pages.push(i);
+            return pages;
         }
 
-        items.push(
-            <PaginationItem key="previous">
-                <PaginationPrevious href="javascript:;"
-                    className={page === startPage && 'text-gray-400'}
-                    onClick={() => handlePageChange(page - 1)} />
-            </PaginationItem>
-        );
-
-        for (let i = startPage; i <= endPage; i++) {
-            items.push(
-                <PaginationItem key={i}>
-                    <PaginationLink href="javascript:;"
-                        className={page === i ? 'font-bold' : 'text-gray-500'}
-                        onClick={() => handlePageChange(i)} isActive={i === page}>
-                        {i}
-                    </PaginationLink>
-                </PaginationItem>
-            );
+        if (page <= 3) {
+            pages.push(1, 2, 3, 4, "ellipsis", safeTotalPages);
+            return pages;
         }
 
-        items.push(
-            <PaginationItem key="next">
-                <PaginationNext href="javascript:;"
-                    className={page === endPage && 'text-gray-400'}
-                    onClick={() => handlePageChange(page + 1)} />
-            </PaginationItem>
-        );
-
-        if (page !== totalPages) {
-            items.push(
-                <PaginationItem key="end">
-                    <PaginationLink href="javascript:;" onClick={() => handlePageChange(totalPages)} >
-                        <ChevronsRight />
-                    </PaginationLink>
-                </PaginationItem>
-            );
+        if (page >= safeTotalPages - 2) {
+            pages.push(1, "ellipsis", safeTotalPages - 3, safeTotalPages - 2, safeTotalPages - 1, safeTotalPages);
+            return pages;
         }
 
-        return items;
+        pages.push(1, "ellipsis", page - 1, page, page + 1, "ellipsis", safeTotalPages);
+        return pages;
     };
 
     return (
         <Pagination className={className}>
             <PaginationContent>
-                {renderPaginationItems()}
+                {showTotal && (
+                    <PaginationItem key="total">
+                        <span className="text-sm text-[#86909c] mr-2 whitespace-nowrap">
+                            {t('pagination.totalPrefix', { ns: 'bs' })}
+                            <span className="text-[#335CFF]">{total}</span>
+                            {t('pagination.totalSuffixWithPageSize', { ns: 'bs', pageSize })}
+                        </span>
+                    </PaginationItem>
+                )}
+
+                <PaginationItem key="previous">
+                    <PaginationPrevious
+                        href="javascript:;"
+                        className={page <= 1 ? 'pointer-events-none text-gray-400' : ''}
+                        onClick={() => handlePageChange(page - 1)}
+                    />
+                </PaginationItem>
+
+                {getPageNumbers().map((item, idx) => (
+                    <PaginationItem key={`${item}-${idx}`}>
+                        {item === "ellipsis" ? (
+                            <span className="px-1 text-[#86909c]">...</span>
+                        ) : (
+                            <PaginationLink
+                                href="javascript:;"
+                                className={page === item ? 'font-bold' : 'text-gray-500'}
+                                onClick={() => handlePageChange(item)}
+                                isActive={item === page}
+                            >
+                                {item}
+                            </PaginationLink>
+                        )}
+                    </PaginationItem>
+                ))}
+
+                <PaginationItem key="next">
+                    <PaginationNext
+                        href="javascript:;"
+                        className={page >= Math.max(1, totalPages) ? 'pointer-events-none text-gray-400' : ''}
+                        onClick={() => handlePageChange(page + 1)}
+                    />
+                </PaginationItem>
 
                 {/* Conditionally render the "Jump to Page" input */}
                 {showJumpInput && (
@@ -140,12 +147,6 @@ const AutoPagination = ({
                             />
                             <span>{pageText}</span>
                         </div>
-                    </PaginationItem>
-                )}
-                {/* Conditionally render total count */}
-                {showTotal && (
-                    <PaginationItem key="total">
-                        <span className="text-sm text-[#86909c] ml-2">{t('pagination.totalRecords', { ns: 'bs', total })}</span>
                     </PaginationItem>
                 )}
             </PaginationContent>

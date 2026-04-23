@@ -8,7 +8,10 @@
   "supportedFormatsWithImages": "サポートされているファイル形式は pdf（スキャン含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp です。各ファイルの最大サイズは {{maxSize}}MB です。pdf はトレーサビリティ位置特定をサポートします。",
   "supportedFormatsWithoutImages": "サポートされているファイル形式は pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv です。各ファイルの最大サイズは {{maxSize}}MB です。",
   "pagination": {
-    "totalRecords": "合計 {{total}} 件の記録"
+    "totalRecords": "合計 {{total}} 件の記録",
+    "totalWithPageSize": "合計 {{total}} 件、1ページ {{pageSize}} 件",
+    "totalPrefix": "合計 ",
+    "totalSuffixWithPageSize": " 件、1ページ {{pageSize}} 件"
   },
   "example": {
     "buttons": "ボタン一覧",
