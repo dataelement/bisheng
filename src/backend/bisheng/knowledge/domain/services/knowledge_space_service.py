@@ -691,15 +691,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if effective_permissions:
             return effective_permissions
 
-        space_resource = next((item for item in reversed(lineage) if item[0] == 'knowledge_space'), None)
-        if space_resource:
-            space = await KnowledgeDao.aquery_by_id(space_resource[1])
-            if space and space.auth_type == AuthTypeEnum.PUBLIC:
-                # Public space visibility is a product-level compatibility rule:
-                # without explicit bindings, public resources still expose the
-                # viewer defaults for read-only operations.
-                return default_permission_ids_for_relation('viewer')
-
         # Final legacy fallback: if the tuple has no model binding metadata, we
         # derive the built-in defaults from the highest OpenFGA relation level.
         level = await PermissionService.get_permission_level(
@@ -771,8 +762,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        if space.auth_type == AuthTypeEnum.PUBLIC:
-            return space
         allowed = await PermissionService.check(
             user_id=self.login_user.user_id,
             relation='can_read',

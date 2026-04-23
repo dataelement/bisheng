@@ -89,28 +89,27 @@ def _install_schema_stubs() -> None:
         audit_log_module.AuditLogService = _DummyAuditLogService
         sys.modules['bisheng.api.services.audit_log'] = audit_log_module
 
-    if 'bisheng.knowledge.domain.services.knowledge_service' not in sys.modules:
-        knowledge_service_module = ModuleType('bisheng.knowledge.domain.services.knowledge_service')
+    knowledge_service_module = ModuleType('bisheng.knowledge.domain.services.knowledge_service')
 
-        class _DummyKnowledgeService:
-            @staticmethod
-            def delete_knowledge_file_in_vector(*args, **kwargs):
-                return None
+    class _DummyKnowledgeService:
+        @staticmethod
+        def delete_knowledge_file_in_vector(*args, **kwargs):
+            return None
 
-            @staticmethod
-            def delete_knowledge_file_in_minio(*args, **kwargs):
-                return None
+        @staticmethod
+        def delete_knowledge_file_in_minio(*args, **kwargs):
+            return None
 
-            @staticmethod
-            def process_one_file(*args, **kwargs):
-                return None
+        @staticmethod
+        def process_one_file(*args, **kwargs):
+            return None
 
-            @staticmethod
-            def get_file_share_url(*args, **kwargs):
-                return ('original', 'preview')
+        @staticmethod
+        def get_file_share_url(*args, **kwargs):
+            return ('original', 'preview')
 
-        knowledge_service_module.KnowledgeService = _DummyKnowledgeService
-        sys.modules['bisheng.knowledge.domain.services.knowledge_service'] = knowledge_service_module
+    knowledge_service_module.KnowledgeService = _DummyKnowledgeService
+    sys.modules['bisheng.knowledge.domain.services.knowledge_service'] = knowledge_service_module
 
     if 'bisheng.knowledge.domain.services.knowledge_audit_telemetry_service' not in sys.modules:
         telemetry_module = ModuleType('bisheng.knowledge.domain.services.knowledge_audit_telemetry_service')
@@ -149,15 +148,16 @@ def _install_schema_stubs() -> None:
 
     if 'bisheng.worker' not in sys.modules:
         worker_module = ModuleType('bisheng.worker')
-
-        class _DummyCeleryTask:
-            @staticmethod
-            def delay(*args, **kwargs):
-                return None
-
-        worker_module.rebuild_knowledge_celery = _DummyCeleryTask()
         worker_module.__path__ = []
         sys.modules['bisheng.worker'] = worker_module
+    worker_module = sys.modules['bisheng.worker']
+
+    class _DummyCeleryTask:
+        @staticmethod
+        def delay(*args, **kwargs):
+            return None
+
+    worker_module.rebuild_knowledge_celery = _DummyCeleryTask()
 
     if 'bisheng.worker.knowledge' not in sys.modules:
         worker_knowledge_module = ModuleType('bisheng.worker.knowledge')
@@ -202,6 +202,7 @@ def _make_space(
         user_id: int = 1,
         auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
         state: int = KnowledgeState.PUBLISHED.value,
+        is_released: bool = False,
 ) -> Knowledge:
     return Knowledge(
         id=space_id,
@@ -211,7 +212,7 @@ def _make_space(
         description='desc',
         model='model-1',
         state=state,
-        is_released=False,
+        is_released=is_released,
         auth_type=auth_type,
     )
 
@@ -298,6 +299,69 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value=False,
         ) as mock_check:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.get_space_info(1)
+
+        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+
+    @pytest.mark.asyncio
+    async def test_released_approval_space_still_requires_read_permission(self, service):
+        approval_space = _make_space(
+            auth_type=AuthTypeEnum.APPROVAL,
+            is_released=True,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=approval_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_check:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.get_space_info(1)
+
+        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+
+    @pytest.mark.asyncio
+    async def test_released_public_space_still_requires_read_permission(self, service):
+        public_space = _make_space(
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=True,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_check:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.get_space_info(1)
+
+        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+
+    @pytest.mark.asyncio
+    async def test_released_public_space_still_requires_view_space_permission(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, is_released=True)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_check, patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value=set(),
+        ):
             with pytest.raises(SpacePermissionDeniedError):
                 await service.get_space_info(1)
 
@@ -609,6 +673,10 @@ class TestSpaceOwnershipValidation:
             new_callable=AsyncMock,
             return_value=public_space,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
             return_value=foreign_file,
@@ -652,6 +720,10 @@ class TestSpaceOwnershipValidation:
             new_callable=AsyncMock,
             return_value=public_space,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
             return_value=foreign_file,
@@ -673,6 +745,10 @@ class TestSpaceOwnershipValidation:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
@@ -1346,6 +1422,42 @@ class TestFineGrainedPermissionRuntime:
             )
 
         assert permission_ids == {'view_file'}
+
+    @pytest.mark.asyncio
+    async def test_public_space_without_rebac_relation_has_no_default_permission_ids(self, service):
+        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
+        fake_fga = _FakeReadTuplesFGA({'knowledge_space:1': []})
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            permission_ids = await service._get_effective_permission_ids(
+                'knowledge_space',
+                1,
+            )
+
+        assert permission_ids == set()
 
     @pytest.mark.asyncio
     async def test_batch_download_denied_without_download_file_permission(self, service):
