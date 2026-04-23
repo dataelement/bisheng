@@ -24,6 +24,7 @@ type CitationReferencesDrawerProps = {
   webContent?: any;
   citations?: ChatCitation[] | null;
   buttonClassName?: string;
+  actionButtons?: React.ReactNode;
 };
 
 function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
@@ -174,6 +175,7 @@ export default function CitationReferencesDrawer({
   webContent,
   citations,
   buttonClassName,
+  actionButtons,
 }: CitationReferencesDrawerProps) {
   const isH5 = usePrefersMobileLayout();
   const [open, setOpen] = useState(false);
@@ -311,19 +313,27 @@ export default function CitationReferencesDrawer({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={cn(
-          'inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[13px] leading-none text-[#86909C] transition-colors hover:bg-[#F2F3F5] hover:text-[#4E5969]',
-          buttonClassName,
-        )}
+      <div
+        className={cn('flex h-6 items-center', actionButtons ? 'w-[196px] gap-3' : 'w-[112px]', buttonClassName)}
       >
-        <CitationSourceIconStack icons={referenceEntryIcons} />
-        <span>参考资料</span>
-        <span className="text-[#165DFF]">{references.length}</span>
-        <ChevronRight className="size-4" />
-      </button>
+        {actionButtons && <div className="flex items-center gap-1">{actionButtons}</div>}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            'flex h-6 w-[112px] items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors',
+            open ? 'bg-[#F2F3F5]' : 'bg-transparent hover:bg-[#F7F7F7]',
+          )}
+        >
+          <div className="flex h-5 w-11 shrink-0 items-center overflow-hidden">
+            <CitationSourceIconStack icons={referenceEntryIcons} />
+          </div>
+          <div className="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap">
+            <span className="whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+            <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
+          </div>
+        </button>
+      </div>
 
       {open && (
         <>
