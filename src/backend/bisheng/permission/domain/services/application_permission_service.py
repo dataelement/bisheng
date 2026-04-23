@@ -275,3 +275,18 @@ class ApplicationPermissionService:
             object_id,
         )
         return bool(set(permission_ids) & effective_permissions)
+
+    @classmethod
+    def has_any_permission_sync(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str,
+        permission_ids: Iterable[str],
+    ) -> bool:
+        effective_permissions = cls.get_effective_permission_ids_sync(
+            login_user,
+            object_type,
+            object_id,
+        )
+        return bool(set(permission_ids) & effective_permissions)

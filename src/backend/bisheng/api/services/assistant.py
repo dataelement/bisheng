@@ -231,7 +231,12 @@ class AssistantService(BaseService, AssistantUtils):
             raise AssistantNotExistsError()
 
         # Judgment Authorization
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
+        if not ApplicationPermissionService.has_any_permission_sync(
+            login_user,
+            'assistant',
+            str(assistant.id),
+            ['delete_app'],
+        ):
             raise UnAuthorizedError()
 
         AssistantDao.delete_assistant(assistant)
@@ -361,7 +366,13 @@ class AssistantService(BaseService, AssistantUtils):
         if not assistant:
             raise AssistantNotExistsError()
         # Determine permissions
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
+        required_permission = 'publish_app' if status == AssistantStatus.ONLINE.value else 'unpublish_app'
+        if not ApplicationPermissionService.has_any_permission_sync(
+            login_user,
+            'assistant',
+            str(assistant.id),
+            [required_permission],
+        ):
             raise UnAuthorizedError()
         # Equal status without modification
         if assistant.status == status:
@@ -427,7 +438,12 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
         # Determine permissions
-        if not user_payload.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
+        if not ApplicationPermissionService.has_any_permission_sync(
+            user_payload,
+            'assistant',
+            str(assistant.id),
+            ['edit_app'],
+        ):
             raise UnAuthorizedError()
 
         # Changes are not allowed when online

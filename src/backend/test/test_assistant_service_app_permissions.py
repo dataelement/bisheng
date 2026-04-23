@@ -124,6 +124,7 @@ def _load_assistant_service_module():
             get_all_assistants=lambda *args, **kwargs: ([], 0),
             get_assistants=lambda *args, **kwargs: ([], 0),
             aget_one_assistant=AsyncMock(),
+            get_one_assistant=lambda *args, **kwargs: None,
         )
         assistant_model_module.AssistantLinkDao = SimpleNamespace(get_assistant_link=AsyncMock(return_value=[]))
         assistant_model_module.AssistantStatus = SimpleNamespace(ONLINE=SimpleNamespace(value=1))
@@ -169,6 +170,10 @@ def _load_assistant_service_module():
             @staticmethod
             def filter_object_ids_by_permission_sync(login_user, object_type, object_ids, permission_id):
                 return object_ids
+
+            @staticmethod
+            def has_any_permission_sync(login_user, object_type, object_id, permission_ids):
+                return True
 
             @staticmethod
             async def has_any_permission_async(login_user, object_type, object_id, permission_ids):
@@ -289,4 +294,101 @@ async def test_get_assistant_info_uses_view_or_use_app_permissions():
         'assistant',
         'asst-1',
         ['view_app', 'use_app'],
+    )
+
+
+def test_delete_assistant_requires_delete_app_permission():
+    assistant_module = _load_assistant_service_module()
+    AssistantService = assistant_module.AssistantService
+    login_user = SimpleNamespace(user_id=7)
+    assistant = SimpleNamespace(id='asst-2', user_id=11, name='assistant', desc='', logo='')
+
+    with patch.object(
+        assistant_module.AssistantDao,
+        'get_one_assistant',
+        return_value=assistant,
+        create=True,
+    ), patch.object(
+        assistant_module.ApplicationPermissionService,
+        'has_any_permission_sync',
+        return_value=True,
+        create=True,
+    ) as mock_has_permission, patch.object(
+        assistant_module.AssistantDao,
+        'delete_assistant',
+        create=True,
+    ), patch.object(
+        AssistantService,
+        'delete_assistant_hook',
+    ), patch.object(
+        assistant_module.telemetry_service,
+        'log_event_sync',
+    ):
+        AssistantService.delete_assistant(MagicMock(), login_user, 'asst-2')
+
+    mock_has_permission.assert_called_once_with(
+        login_user,
+        'assistant',
+        'asst-2',
+        ['delete_app'],
+    )
+
+
+def test_check_update_permission_requires_edit_app_permission():
+    assistant_module = _load_assistant_service_module()
+    AssistantService = assistant_module.AssistantService
+    user_payload = SimpleNamespace(user_id=7)
+    assistant = SimpleNamespace(id='asst-3', user_id=12, status=0)
+
+    with patch.object(
+        assistant_module.ApplicationPermissionService,
+        'has_any_permission_sync',
+        return_value=True,
+        create=True,
+    ) as mock_has_permission:
+        AssistantService.check_update_permission(assistant, user_payload)
+
+    mock_has_permission.assert_called_once_with(
+        user_payload,
+        'assistant',
+        'asst-3',
+        ['edit_app'],
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_status_uses_publish_and_unpublish_permissions():
+    assistant_module = _load_assistant_service_module()
+    AssistantService = assistant_module.AssistantService
+    login_user = SimpleNamespace(user_id=7)
+    assistant = SimpleNamespace(id='asst-4', user_id=13, status=0)
+
+    with patch.object(
+        assistant_module.AssistantDao,
+        'get_one_assistant',
+        return_value=assistant,
+        create=True,
+    ), patch.object(
+        assistant_module.ApplicationPermissionService,
+        'has_any_permission_sync',
+        return_value=True,
+        create=True,
+    ) as mock_has_permission, patch.object(
+        assistant_module.AssistantDao,
+        'update_assistant',
+        create=True,
+    ), patch.object(
+        assistant_module.telemetry_service,
+        'log_event_sync',
+    ), patch.object(
+        AssistantService,
+        'update_assistant_hook',
+    ):
+        await AssistantService.update_status(MagicMock(), login_user, 'asst-4', 0)
+
+    mock_has_permission.assert_called_once_with(
+        login_user,
+        'assistant',
+        'asst-4',
+        ['unpublish_app'],
     )
