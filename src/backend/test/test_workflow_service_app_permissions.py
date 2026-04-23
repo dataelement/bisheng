@@ -241,6 +241,208 @@ async def test_get_all_flows_filters_by_use_app_and_sets_write_from_edit_app():
             managed=False,
         )
 
-    assert total == 2
+    assert total == 1
     assert [one['id'] for one in data] == ['asst-1']
     assert data[0]['write'] is True
+
+
+@pytest.mark.asyncio
+async def test_get_all_flows_specific_type_repaginates_after_permission_filter():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_merged_rebac_app_resource_ids=AsyncMock(return_value=['asst-1', 'asst-2', 'asst-3']),
+        access_check=MagicMock(side_effect=AssertionError('legacy access_check should not drive write flag')),
+    )
+
+    app_rows = [
+        {'id': 'asst-1', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 10, 'logo': '', 'name': 'asst-1'},
+        {'id': 'asst-2', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 11, 'logo': '', 'name': 'asst-2'},
+        {'id': 'asst-3', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 12, 'logo': '', 'name': 'asst-3'},
+    ]
+
+    permission_map = {
+        'asst-1': {'use_app'},
+        'asst-2': {'use_app'},
+        'asst-3': {'view_app'},
+    }
+
+    with patch.object(
+        workflow_module.FlowDao,
+        'aget_all_apps',
+        new_callable=AsyncMock,
+        return_value=(app_rows, 3),
+    ) as mock_aget_all_apps, patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+        return_value=permission_map,
+    ), patch.object(
+        WorkFlowService,
+        'get_logo_share_link',
+        return_value='logo-url',
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_all_flows(
+            user=login_user,
+            name='',
+            status=None,
+            tag_id=None,
+            flow_type=FlowType.ASSISTANT.value,
+            page=2,
+            page_size=1,
+            managed=False,
+        )
+
+    assert mock_aget_all_apps.await_args.args[7] == 0
+    assert mock_aget_all_apps.await_args.args[8] == 0
+    assert total == 2
+    assert [one['id'] for one in data] == ['asst-2']
+
+
+@pytest.mark.asyncio
+async def test_get_all_flows_recomputes_total_for_combined_listing_after_permission_filter():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_merged_rebac_app_resource_ids=AsyncMock(return_value=['wf-1', 'asst-1']),
+        access_check=MagicMock(side_effect=AssertionError('legacy access_check should not be used')),
+    )
+
+    app_rows = [
+        {'id': 'wf-1', 'flow_type': FlowType.WORKFLOW.value, 'user_id': 9, 'logo': '', 'name': 'wf'},
+        {'id': 'asst-1', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 10, 'logo': '', 'name': 'asst'},
+    ]
+
+    permission_map = {
+        'wf-1': {'view_app'},
+        'asst-1': {'use_app', 'edit_app'},
+    }
+
+    with patch.object(
+        workflow_module.FlowDao,
+        'aget_all_apps',
+        new_callable=AsyncMock,
+        return_value=(app_rows, 2),
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+        return_value=permission_map,
+    ), patch.object(
+        WorkFlowService,
+        'get_logo_share_link',
+        return_value='logo-url',
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_all_flows(
+            user=login_user,
+            name='',
+            status=None,
+            tag_id=None,
+            flow_type=None,
+            page=1,
+            page_size=10,
+            managed=False,
+        )
+
+    assert total == 1
+    assert [one['id'] for one in data] == ['asst-1']
+
+
+@pytest.mark.asyncio
+async def test_get_all_flows_managed_listing_requires_edit_app_permission():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_merged_rebac_app_resource_ids=AsyncMock(return_value=['asst-1']),
+        access_check=MagicMock(side_effect=AssertionError('legacy access_check should not drive write flag')),
+    )
+
+    app_rows = [
+        {'id': 'asst-1', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 10, 'logo': '', 'name': 'asst'},
+    ]
+
+    with patch.object(
+        workflow_module.FlowDao,
+        'aget_all_apps',
+        new_callable=AsyncMock,
+        return_value=(app_rows, 1),
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+        return_value={'asst-1': {'edit_app'}},
+    ) as mock_permission_map, patch.object(
+        WorkFlowService,
+        'get_logo_share_link',
+        return_value='logo-url',
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_all_flows(
+            user=login_user,
+            name='',
+            status=None,
+            tag_id=None,
+            flow_type=FlowType.ASSISTANT.value,
+            page=1,
+            page_size=10,
+            managed=True,
+        )
+
+    mock_permission_map.assert_awaited_once()
+    assert total == 1
+    assert [one['id'] for one in data] == ['asst-1']
+    assert data[0]['write'] is True
+
+
+@pytest.mark.asyncio
+async def test_update_flow_status_uses_publish_and_unpublish_permissions():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(user_id=7)
+    db_flow = SimpleNamespace(id='wf-9', user_id=10, name='wf', status=0)
+    version_info = SimpleNamespace(flow_id='wf-9')
+
+    with patch.object(
+        workflow_module.FlowDao,
+        'aget_flow_by_id',
+        new_callable=AsyncMock,
+        return_value=db_flow,
+        create=True,
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'has_any_permission_async',
+        new_callable=AsyncMock,
+        return_value=True,
+        create=True,
+    ) as mock_has_permission, patch.object(
+        workflow_module.FlowVersionDao,
+        'aget_version_by_id',
+        new_callable=AsyncMock,
+        return_value=version_info,
+        create=True,
+    ), patch.object(
+        workflow_module.FlowDao,
+        'aupdate_flow',
+        new_callable=AsyncMock,
+        create=True,
+    ):
+        await WorkFlowService.update_flow_status(login_user, 'wf-9', 1, 0)
+
+    mock_has_permission.assert_awaited_once_with(
+        login_user,
+        'workflow',
+        'wf-9',
+        ['unpublish_app'],
+    )

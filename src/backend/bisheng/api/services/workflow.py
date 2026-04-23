@@ -108,7 +108,7 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        if flow_type is None:
+        if flow_type is None or not user.is_admin():
             query_page = 0
             query_page_size = 0
 
@@ -138,7 +138,7 @@ class WorkFlowService(BaseService):
                 for app_id, permission_ids in permission_map.items()
                 if 'edit_app' in permission_ids
             }
-        if flow_type is None and not skip_pagination:
+        if not skip_pagination:
             total = len(data)
             start_index = (page - 1) * page_size
             end_index = start_index + page_size
@@ -221,7 +221,13 @@ class WorkFlowService(BaseService):
         db_flow = await FlowDao.aget_flow_by_id(flow_id)
         if not db_flow:
             raise NotFoundError()
-        if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
+        required_permission = 'publish_app' if status == FlowStatus.ONLINE.value else 'unpublish_app'
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'workflow',
+            str(flow_id),
+            [required_permission],
+        ):
             raise UnAuthorizedError()
 
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
