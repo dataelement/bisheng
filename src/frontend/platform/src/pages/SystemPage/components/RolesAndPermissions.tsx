@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
 import { userContext } from "@/contexts/userContext"
 import {
+  getApplicationPermissionTemplateApi,
   createRelationModelApi,
   deleteRelationModelApi,
   getKnowledgeLibraryPermissionTemplateApi,
@@ -169,6 +170,7 @@ export default function RolesAndPermissions() {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
   const [types, setTypes] = useState<RebacSchemaType[] | null>(null)
+  const [applicationTemplate, setApplicationTemplate] = useState<PermissionTemplateSection | null>(null)
   const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
   const [knowledgeLibraryTemplate, setKnowledgeLibraryTemplate] = useState<PermissionTemplateSection | null>(null)
   const [toolTemplate, setToolTemplate] = useState<PermissionTemplateSection | null>(null)
@@ -206,11 +208,15 @@ export default function RolesAndPermissions() {
 
   useEffect(() => {
     if (user?.role !== "admin") {
+      setApplicationTemplate(null)
       setKnowledgeTemplate(null)
       setKnowledgeLibraryTemplate(null)
       setToolTemplate(null)
       return
     }
+    captureAndAlertRequestErrorHoc(getApplicationPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setApplicationTemplate(res)
+    })
     captureAndAlertRequestErrorHoc(getKnowledgeSpacePermissionTemplateApi(), () => true).then((res) => {
       if (res) setKnowledgeTemplate(res)
     })
@@ -227,6 +233,9 @@ export default function RolesAndPermissions() {
     if (knowledgeTemplate) {
       sections[0] = knowledgeTemplate as TemplateSection
     }
+    if (applicationTemplate) {
+      sections[1] = applicationTemplate as TemplateSection
+    }
     if (knowledgeLibraryTemplate) {
       sections[2] = knowledgeLibraryTemplate as TemplateSection
     }
@@ -234,7 +243,7 @@ export default function RolesAndPermissions() {
       sections.splice(3, 0, toolTemplate as TemplateSection)
     }
     return sections
-  }, [knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
+  }, [applicationTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
     return templateSections.flatMap((section) =>

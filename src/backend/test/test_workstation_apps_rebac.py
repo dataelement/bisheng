@@ -149,3 +149,42 @@ async def test_get_used_apps_uses_async_merged_rebac_helper():
         await module.get_used_apps(login_user=login_user, page=1, limit=20)
 
     login_user.aget_merged_rebac_app_resource_ids.assert_awaited_once_with(for_write=False)
+
+
+@pytest.mark.asyncio
+async def test_pin_used_app_requires_use_app_permission():
+    module = _load_apps_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    app_info = SimpleNamespace(
+        id='wf-1',
+        user_id=9,
+        flow_type=module.FlowType.WORKFLOW.value,
+        status=module.FlowStatus.ONLINE.value,
+    )
+
+    with patch.object(
+        module.FlowDao,
+        'aget_flow_by_id',
+        new_callable=AsyncMock,
+        return_value=app_info,
+        create=True,
+    ), patch.object(
+        module.ApplicationPermissionService,
+        'has_any_permission_async',
+        new_callable=AsyncMock,
+        return_value=True,
+        create=True,
+    ) as mock_has_permission, patch.object(
+        module.UserLinkDao,
+        'add_user_link',
+        return_value=(None, True),
+        create=True,
+    ):
+        await module.pin_used_app(login_user=login_user, data=SimpleNamespace(flow_id='wf-1'))
+
+    mock_has_permission.assert_awaited_once_with(
+        login_user,
+        'workflow',
+        'wf-1',
+        ['use_app'],
+    )

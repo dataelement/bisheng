@@ -62,6 +62,10 @@ export async function getKnowledgeSpacePermissionTemplateApi(): Promise<Permissi
   return await axios.get(`/api/v1/permissions/permission-templates/knowledge-space`)
 }
 
+export async function getApplicationPermissionTemplateApi(): Promise<PermissionTemplateSection> {
+  return await axios.get(`/api/v1/permissions/permission-templates/application`)
+}
+
 export async function getKnowledgeLibraryPermissionTemplateApi(): Promise<PermissionTemplateSection> {
   return await axios.get(`/api/v1/permissions/permission-templates/knowledge-library`)
 }

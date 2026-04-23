@@ -12,6 +12,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 
 from ..dependencies import LoginUserDep
 from ...domain.services.workstation_service import WorkStationService
@@ -149,13 +150,18 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
         raise UsedAppNotOnlineError(flow_id=flow_id)
 
     if app_info.flow_type == FlowType.ASSISTANT.value:
-        access_type = AccessType.ASSISTANT_READ
+        object_type = 'assistant'
     elif app_info.flow_type == FlowType.WORKFLOW.value:
-        access_type = AccessType.WORKFLOW
+        object_type = 'workflow'
     else:
         raise UsedAppNotFoundError(flow_id=flow_id)
 
-    if not await login_user.async_access_check(app_info.user_id, flow_id, access_type):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        object_type,
+        str(flow_id),
+        ['use_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     _, is_new = UserLinkDao.add_user_link(

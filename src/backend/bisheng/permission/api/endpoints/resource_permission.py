@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.permission.domain.application_permission_template import APPLICATION_PERMISSION_TEMPLATE
 from bisheng.permission.domain.knowledge_library_permission_template import KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE
 from bisheng.permission.domain.knowledge_space_permission_template import KNOWLEDGE_SPACE_PERMISSION_TEMPLATE
 from bisheng.permission.domain.tool_permission_template import TOOL_PERMISSION_TEMPLATE
@@ -612,6 +613,16 @@ async def get_knowledge_space_permission_template(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     return resp_200(KNOWLEDGE_SPACE_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/application')
+async def get_application_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for application permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(APPLICATION_PERMISSION_TEMPLATE)
 
 
 @router.get('/permission-templates/knowledge-library')
