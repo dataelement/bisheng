@@ -1,3 +1,4 @@
+export * from './HubModuleNavTabs';
 export * from './ExportConversation';
 export * from './SettingsTabs/';
 export { default as MobileNav } from './MobileNav';

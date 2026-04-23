@@ -24,6 +24,8 @@ export interface ExpandableSearchFieldProps
     titleWhenCollapsed?: string;
     /** Tailwind width when expanded (default 220px，与消息提醒一致) */
     expandedWidthClassName?: string;
+    /** Always show the full input (no icon-only collapsed state); better for mobile / app center */
+    alwaysExpanded?: boolean;
     showClearButton?: boolean;
     containerClassName?: string;
 }
@@ -40,6 +42,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             placeholder,
             titleWhenCollapsed,
             expandedWidthClassName = "w-[220px]",
+            alwaysExpanded = false,
             showClearButton = false,
             className,
             containerClassName,
@@ -67,24 +70,36 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             [ref]
         );
 
-        const [showExpanded, setShowExpanded] = useState(() => !!value.trim());
+        const [showExpanded, setShowExpanded] = useState(() => alwaysExpanded || !!value.trim());
 
         useEffect(() => {
             if (value.trim()) setShowExpanded(true);
         }, [value]);
 
-        const expanded = showExpanded || !!value.trim();
+        /** Collapse to icon when alwaysExpanded turns off (e.g. viewport crosses mobile breakpoint); avoid collapsing while focused */
+        useEffect(() => {
+            if (alwaysExpanded) return;
+            if (!value.trim() && !inputFocused) {
+                setShowExpanded(false);
+            }
+        }, [alwaysExpanded, value, inputFocused]);
+
+        const expanded = alwaysExpanded || showExpanded || !!value.trim();
 
         /** 展开且聚焦：蓝框（编辑态）；展开有失焦但有内容：灰框（仅展示关键词） */
         const showActiveChrome = expanded && inputFocused;
 
         /** 收起 → 展开后立刻聚焦（父组件常不传 ref，原先 ref.current 恒为 null 导致无法聚焦） */
         useLayoutEffect(() => {
+            if (alwaysExpanded) {
+                wasExpandedRef.current = true;
+                return;
+            }
             if (expanded && !wasExpandedRef.current) {
                 inputRef.current?.focus({ preventScroll: true });
             }
             wasExpandedRef.current = expanded;
-        }, [expanded]);
+        }, [expanded, alwaysExpanded]);
 
         const focusInput = useCallback(() => {
             requestAnimationFrame(() => {
@@ -104,6 +119,9 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
         const handleBlur: FocusEventHandler<HTMLInputElement> = (e) => {
             onBlur?.(e);
             setInputFocused(false);
+            if (alwaysExpanded) {
+                return;
+            }
             const v = e.currentTarget.value.trim();
             if (!v) {
                 setShowExpanded(false);
@@ -127,12 +145,12 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     containerClassName
                 )}
                 onClick={() => {
-                    if (!disabled && !expanded) {
+                    if (!disabled && !alwaysExpanded && !expanded) {
                         setShowExpanded(true);
                         focusInput();
                     }
                 }}
-                title={expanded ? undefined : titleWhenCollapsed ?? placeholder}
+                title={expanded || alwaysExpanded ? undefined : titleWhenCollapsed ?? placeholder}
             >
                 <div
                     className={cn(
@@ -154,7 +172,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     onKeyDown={handleKeyDown}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
-                    tabIndex={expanded ? 0 : -1}
+                    tabIndex={expanded || alwaysExpanded ? 0 : -1}
                     className={cn(
                         "flex-1 min-w-0 h-full text-[14px] font-normal text-[#1d2129] bg-transparent outline-none placeholder:text-[#C9CDD4] placeholder:font-normal",
                         "transition-[opacity] duration-200 ease-out motion-reduce:transition-none",

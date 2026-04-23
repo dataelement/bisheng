@@ -118,7 +118,7 @@ export function transformPrivateCitations(content: string) {
         if (!citationMap[ref]) {
           const displayData = buildCitationDisplayData(ref);
           if (displayData) {
-            const groupId = `${displayData.type}_${displayData.groupKey}`;
+            const groupId = `${displayData.type}_${displayData.groupKey}_${displayData.itemId}`;
             if (!groupIndexMap[groupId]) {
               groupIndexMap[groupId] = nextGroupLabel;
               nextGroupLabel += 1;

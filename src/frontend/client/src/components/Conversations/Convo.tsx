@@ -48,6 +48,7 @@ export default function Conversation({
   const { showToast } = useToastContext();
   const { conversationId, title } = conversation;
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const renameActionsRef = useRef<HTMLDivElement | null>(null);
   const [titleInput, setTitleInput] = useState(title);
   const [renaming, setRenaming] = useState(false);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
@@ -147,6 +148,17 @@ export default function Conversation({
     [title, onRename]
   );
 
+  const handleRenameBlur = useCallback(
+    (e: FocusEvent<HTMLInputElement>) => {
+      const nextFocused = e.relatedTarget as Node | null;
+      if (nextFocused && renameActionsRef.current?.contains(nextFocused)) {
+        return;
+      }
+      onRename(e);
+    },
+    [onRename]
+  );
+
   const cancelRename = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
       e.preventDefault();
@@ -184,11 +196,12 @@ export default function Conversation({
             value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onBlur={handleRenameBlur}
             aria-label={`${localize("com_ui_rename")} ${localize(
               "com_ui_chat"
             )}`}
           />
-          <div className="flex gap-1">
+          <div ref={renameActionsRef} className="flex gap-1">
             <button
               onClick={cancelRename}
               aria-label={`${localize("com_ui_cancel")} ${localize(

@@ -44,7 +44,9 @@ interface AiMessageBubbleProps {
 // --- Copy button with feedback ---
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
-    const handleCopy = useCallback(() => {
+    const handleCopy = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
         copyText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -54,10 +56,11 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
             title="复制"
+            aria-label="复制"
         >
-            {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+            {copied ? <CheckIcon size={14} className="text-[#818181]" /> : <CopyIcon size={14} className="text-[#818181]" />}
         </button>
     );
 }
@@ -507,6 +510,31 @@ function AssistantBubble({
                             content={regularContent}
                             webContent={webContent}
                             citations={message.citations}
+                            actionButtons={
+                                <>
+                                    <CopyButton text={regularContent} />
+                                    {onRegenerate && (
+                                        <button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                onRegenerate();
+                                            }}
+                                            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                            title="刷新"
+                                            aria-label="刷新"
+                                        >
+                                            <RefreshCwIcon size={14} className="text-[#818181]" />
+                                        </button>
+                                    )}
+                                    <TextToSpeechButton
+                                        className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                        messageId={message.messageId || ""}
+                                        text={regularContent}
+                                    />
+                                </>
+                            }
                         />
                         {/* Reference Sources */}
                         {message.source !== 0 && (
@@ -525,21 +553,6 @@ function AssistantBubble({
                                 />
                             </div>
                         )}
-                        <CopyButton text={regularContent} />
-                        {onRegenerate && (
-                            <button
-                                type="button"
-                                onClick={onRegenerate}
-                                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                title="regenerate"
-                            >
-                                <RefreshCwIcon size={16} />
-                            </button>
-                        )}
-                        <TextToSpeechButton
-                            messageId={message.messageId || ""}
-                            text={regularContent}
-                        />
                         {/* Sibling paging */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />

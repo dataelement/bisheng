@@ -403,7 +403,7 @@ export default function Subscription() {
     }
 
     return (
-        <div className="relative flex h-full flex-col touch-desktop:flex-row">
+        <div className="relative flex h-full min-h-0 flex-col touch-desktop:flex-row">
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <ChannelSquare
@@ -621,7 +621,11 @@ export default function Subscription() {
                         setShowAiAssistant={setShowAiAssistant}
                         onCloseAiAssistant={() => {
                             if (enteredFullscreenViaAiRef.current) {
-                                // Entered fullscreen via AI button → exit fullscreen entirely
+                                // H5：从 AI 返回正文全屏层，不直接关回列表；大屏：经 AI 进入则整页退出
+                                if (isH5) {
+                                    setShowAiAssistant(false);
+                                    return;
+                                }
                                 setFullScreenArticle(null);
                                 setShowAiAssistant(false);
                                 enteredFullscreenViaAiRef.current = false;

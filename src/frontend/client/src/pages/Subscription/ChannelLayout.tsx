@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { AiAssistantPanel } from "./AiChat/AiAssistantPanel";
 import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
 import { useResizablePanel } from "./hooks/useResizablePanel";
@@ -33,6 +34,8 @@ export function ChannelLayout({
     const isH5 = usePrefersMobileLayout();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    /** H5：AI 助手全屏叠在文章详情上，返回时回到正文（不与正文左右分屏） */
+    const [h5AiAssistantOpen, setH5AiAssistantOpen] = useState(false);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -48,9 +51,11 @@ export function ChannelLayout({
     const handleArticleSelect = useCallback(async (article: Article | null) => {
         if (!article) {
             setSelectedArticle(null);
+            setH5AiAssistantOpen(false);
             return;
         }
 
+        setH5AiAssistantOpen(false);
         // 先用列表数据快速展示
         setSelectedArticle(article);
         setDetailLoading(true);
@@ -149,23 +154,46 @@ export function ChannelLayout({
                     <div className="flex h-11 shrink-0 items-center gap-2 border-b border-[#e5e6eb] px-2">
                         <button
                             type="button"
-                            onClick={() => setSelectedArticle(null)}
+                            onClick={() => {
+                                if (h5AiAssistantOpen) {
+                                    setH5AiAssistantOpen(false);
+                                    return;
+                                }
+                                setSelectedArticle(null);
+                            }}
                             className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
                             aria-label={localize("com_ui_go_back")}
                         >
                             <ChevronLeft className="size-5" />
                         </button>
                         <span className="min-w-0 flex-1 truncate text-left text-[14px] font-medium text-[#1D2129]">
-                            {selectedArticle.title}
+                            {h5AiAssistantOpen
+                                ? localize("com_subscription.ai_assistant")
+                                : selectedArticle.title}
                         </span>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-hidden">
+                    <div className="relative min-h-0 flex-1 overflow-hidden">
                         <ArticleDetail
                             article={selectedArticle}
                             loading={detailLoading}
                             onFullScreen={() => onFullScreen?.(selectedArticle, false)}
-                            onAiAssistant={() => onFullScreen?.(selectedArticle, true)}
+                            onAiAssistant={() => setH5AiAssistantOpen(true)}
                         />
+                        {h5AiAssistantOpen ? (
+                            <div
+                                className="absolute inset-0 z-[40] flex flex-col bg-white"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label={localize("com_subscription.ai_assistant")}
+                            >
+                                <AiAssistantPanel
+                                    compactMobileChrome
+                                    features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                                    articleDocId={selectedArticle.id}
+                                    onClose={() => setH5AiAssistantOpen(false)}
+                                />
+                            </div>
+                        ) : null}
                     </div>
                 </div>
             )}

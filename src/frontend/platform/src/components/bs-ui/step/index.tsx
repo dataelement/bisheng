@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import React from "react";
+import { cname } from "../utils";
 /**
  * 
 组件参数说明：
@@ -15,6 +16,7 @@ interface StepProgressProps {
     currentStep?: number;
     align?: "left" | "center" | "right";
     labels?: string[];
+    className?: string;
 }
 
 /**
@@ -31,7 +33,8 @@ export default function StepProgress({
     steps = 2,
     currentStep = 1,
     align = "left",
-    labels = []
+    labels = [],
+    className = ""
 }: StepProgressProps) {
     steps = labels.length || steps;
     // 处理边界情况
@@ -43,7 +46,7 @@ export default function StepProgress({
     };
 
     return (
-        <div className={`flex items-center gap-6 my-6 px-12 text-md font-bold ${alignmentClasses[align]}`}>
+        <div className={cname("flex items-center gap-4 text-sm font-medium", alignmentClasses[align], className)}>
             {Array.from({ length: steps }).map((_, index) => {
                 const isCompleted = index < validatedStep - 1;
                 const isCurrent = index === validatedStep - 1;
@@ -53,14 +56,19 @@ export default function StepProgress({
                         <div className="flex items-center gap-2">
                             {/* 圆形指示器 */}
                             <div
-                                className={`size-[26px] rounded-full flex items-center justify-center text-[#fff] transition-colors
-                    ${isCompleted || isCurrent ? "bg-primary " : "bg-primary/30"}`}
+                                className={cname(
+                                    "flex size-6 items-center justify-center rounded-full text-xs font-semibold text-white transition-colors",
+                                    isCompleted || isCurrent ? "bg-primary" : "bg-primary/35"
+                                )}
                             >
-                                {isCompleted ? <Check size={16} /> : <span>{index + 1}</span>}
+                                {isCompleted ? <Check size={14} /> : <span>{index + 1}</span>}
                             </div>
                             {/* 步骤文字 */}
                             <span
-                                className={`transition-colors ${isCompleted || isCurrent ? "text-primary" : "text-gray-600"}`}
+                                className={cname(
+                                    "whitespace-nowrap text-sm transition-colors",
+                                    isCompleted || isCurrent ? "text-primary" : "text-gray-500"
+                                )}
                             >
                                 {labels[index] || `第 ${index + 1} 步`}
                             </span>
@@ -68,7 +76,10 @@ export default function StepProgress({
                         {/* 步骤连接线 */}
                         {index !== steps - 1 && (
                             <div
-                                className={`h-[1px] flex-grow transition-colors max-w-10 ${isCompleted ? "bg-primary" : "bg-gray-300"}`}
+                                className={cname(
+                                    "h-px w-8 transition-colors md:w-12",
+                                    isCompleted ? "bg-primary" : "bg-gray-300"
+                                )}
                             />
                         )}
                     </React.Fragment>

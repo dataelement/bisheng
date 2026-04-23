@@ -1,6 +1,6 @@
 import { ChevronLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
@@ -66,11 +66,19 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
     );
 }
 
+/** 应用中心 / 探索广场进入时带 from=center|explore；分享链接等无此参数 — H5 侧栏不展示四大模块 Tab */
+function useShowMobileHubTabs() {
+    const { search } = useLocation();
+    const from = new URLSearchParams(search).get('from');
+    return from === 'center' || from === 'explore';
+}
+
 export function SideNav() {
     const navigate = useNavigate();
     const localize = useLocalize();
     const { fid: flowId, type: flowType } = useParams();
     const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
+    const showMobileHubTabs = useShowMobileHubTabs();
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -118,13 +126,20 @@ export function SideNav() {
                 </span>
             </div>
 
-            {/* Top module tabs — H5 only (MainLayout hub nav handles PC) */}
-            <div className="hidden touch-mobile:block pt-8">
-                <SideNavModuleTabs />
-            </div>
+            {/* Top module tabs — H5 仅应用中心/探索进入时展示；分享应用侧栏只保留会话历史等 */}
+            {showMobileHubTabs ? (
+                <div className="hidden touch-mobile:block pt-8">
+                    <SideNavModuleTabs />
+                </div>
+            ) : null}
 
-            {/* App card */}
-            <div className="shrink-0">
+            {/* App card — PC 始终展示；H5 仅应用中心/探索进入时展示，分享入口只保留下方会话列表 */}
+            <div
+                className={cn(
+                    'shrink-0',
+                    !showMobileHubTabs && 'hidden touch-desktop:block',
+                )}
+            >
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
                     style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
@@ -174,7 +189,12 @@ export function SideNav() {
             </div>
 
             {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
+            <div
+                className={cn(
+                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0',
+                    !showMobileHubTabs && 'touch-mobile:pt-8',
+                )}
+            >
                 {groups.length === 0 ? (
                     <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
                         <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">

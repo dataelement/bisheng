@@ -58,4 +58,6 @@ export interface DepartmentUpdateForm {
   name?: string
   sort_order?: number
   default_role_ids?: number[]
+  /** 与名称、默认角色一并提交时全量替换部门管理员；不传则不改 */
+  admin_user_ids?: number[]
 }

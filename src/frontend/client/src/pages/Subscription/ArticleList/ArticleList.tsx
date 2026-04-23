@@ -89,6 +89,8 @@ export function ArticleList({
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const tabsScrollRef = useRef<HTMLDivElement>(null);
+    const [tabsScrollShadow, setTabsScrollShadow] = useState({ left: false, right: false });
     const searchQuery = useDebounce(searchKey, 500);
     const queryClient = useQueryClient();
 
@@ -111,6 +113,24 @@ export function ArticleList({
             .filter(s => s.id)
             .map(s => ({ id: s.id, label: s.source_name || s.name || '' }));
     }, [channelDetail?.source_infos]);
+
+    const subChannels = useMemo(() => {
+        return (channelDetail?.filter_rules || [])
+            .filter(fr => fr.channel_type === "sub" && fr.name)
+            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
+            .sort((a, b) => {
+                const getPriority = (name: string) => {
+                    const ch = name.charAt(0);
+                    if (/[a-zA-Z]/.test(ch)) return 0;
+                    if (/\d/.test(ch)) return 1;
+                    return 2;
+                };
+                const pa = getPriority(a.name);
+                const pb = getPriority(b.name);
+                if (pa !== pb) return pa - pb;
+                return a.name.localeCompare(b.name, "zh-CN");
+            });
+    }, [channelDetail?.filter_rules]);
 
     const PAGE_SIZE = 20;
 
@@ -218,31 +238,45 @@ export function ArticleList({
         listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
     };
 
+    const updateTabsScrollShadow = useCallback(() => {
+        const el = tabsScrollRef.current;
+        if (!el) {
+            setTabsScrollShadow({ left: false, right: false });
+            return;
+        }
+        const { scrollLeft, scrollWidth, clientWidth } = el;
+        const overflow = scrollWidth - clientWidth;
+        const eps = 2;
+        setTabsScrollShadow({
+            left: scrollLeft > eps,
+            right: overflow > eps && scrollLeft < overflow - eps,
+        });
+    }, []);
+
     // 处理子频道切换（改为 name 模式）
     const handleSubChannelChange = (subChannelName: string) => {
         localStorage.setItem(`selectedSubChannelName-${channel.id}`, subChannelName === "all" ? "" : subChannelName);
         setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
     };
 
+    useEffect(() => {
+        const id = requestAnimationFrame(() => updateTabsScrollShadow());
+        return () => cancelAnimationFrame(id);
+    }, [subChannels.length, channel.id, updateTabsScrollShadow]);
 
-    // Extract sub-channels from channel detail's filter_rules
-    const subChannels = (channelDetail?.filter_rules || [])
-        .filter(fr => fr.channel_type === 'sub' && fr.name)
-        .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
-        .sort((a, b) => {
-            // Sort by first character priority: letters > digits > Chinese/other
-            const getPriority = (name: string) => {
-                const ch = name.charAt(0);
-                if (/[a-zA-Z]/.test(ch)) return 0;
-                if (/\d/.test(ch)) return 1;
-                return 2;
-            };
-            const pa = getPriority(a.name);
-            const pb = getPriority(b.name);
-            if (pa !== pb) return pa - pb;
-            return a.name.localeCompare(b.name, 'zh-CN');
-        });
-
+    useEffect(() => {
+        const el = tabsScrollRef.current;
+        if (!el || typeof ResizeObserver === "undefined") {
+            return;
+        }
+        const ro = new ResizeObserver(() => updateTabsScrollShadow());
+        ro.observe(el);
+        window.addEventListener("resize", updateTabsScrollShadow);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener("resize", updateTabsScrollShadow);
+        };
+    }, [channel.id, updateTabsScrollShadow]);
 
     return (
         <div className="flex h-full w-full flex-1 flex-col">
@@ -307,7 +341,7 @@ export function ArticleList({
                             {channelDetail?.name || channel.name}
                         </h1>
                         <Tooltip>
-                            <TooltipTrigger className="cursor-pointer">
+                            <TooltipTrigger className="hidden shrink-0 cursor-pointer fine-pointer:inline-flex">
                                 <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
                             </TooltipTrigger>
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-[240px]">
@@ -345,7 +379,24 @@ export function ArticleList({
 
                 {/* 子频道 Tabs + 搜索/筛选 — md+ 横向；H5 纵向 */}
                 <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:items-center touch-desktop:justify-between touch-desktop:gap-0">
-                    <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
+                    <div className="relative min-w-0">
+                        {tabsScrollShadow.left ? (
+                            <div
+                                className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
+                                aria-hidden
+                            />
+                        ) : null}
+                        {tabsScrollShadow.right ? (
+                            <div
+                                className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-7 bg-gradient-to-l from-white from-20% to-transparent"
+                                aria-hidden
+                            />
+                        ) : null}
+                        <div
+                            ref={tabsScrollRef}
+                            onScroll={updateTabsScrollShadow}
+                            className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
+                        >
                         <button
                             type="button"
                             onClick={() => handleSubChannelChange("all")}
@@ -371,19 +422,32 @@ export function ArticleList({
                                 {sub.name}
                             </button>
                         ))}
+                        </div>
                     </div>
 
-                    <div className="flex w-full min-w-0 flex-col gap-2 touch-desktop:ml-4 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:items-center touch-desktop:gap-3">
+                    <div
+                        className={cn(
+                            "flex w-full min-w-0 flex-col gap-2",
+                            "range-576-768:flex-row range-576-768:items-center range-576-768:gap-3",
+                            "touch-desktop:ml-4 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:items-center touch-desktop:gap-3"
+                        )}
+                    >
                         <SearchInput
                             key={channel.id}
                             value={searchKey}
                             onChange={setSearchQuery}
                             placeholder={localize("com_subscription.search_articles_of_interest")}
-                            className="w-full min-w-0 touch-desktop:w-auto"
+                            className="w-full min-w-0 range-576-768:flex-1 range-576-768:min-w-0 touch-desktop:w-auto"
                         />
 
-                        {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排（避免整行贴右） */}
-                        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 touch-desktop:contents">
+                        {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排；576–768 与桌面同为单行 */}
+                        <div
+                            className={cn(
+                                "flex w-full min-w-0 flex-wrap items-center justify-start gap-2 lt-576:justify-end",
+                                "range-576-768:contents",
+                                "touch-desktop:contents"
+                            )}
+                        >
                             <MultiSourceSelect
                                 className="h-8 min-w-[140px] max-w-full shrink-0 touch-desktop:w-auto touch-desktop:min-w-[140px]"
                                 options={sourceOptions}

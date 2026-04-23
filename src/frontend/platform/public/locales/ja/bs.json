@@ -8,7 +8,10 @@
   "supportedFormatsWithImages": "サポートされているファイル形式は pdf（スキャン含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp です。各ファイルの最大サイズは {{maxSize}}MB です。pdf はトレーサビリティ位置特定をサポートします。",
   "supportedFormatsWithoutImages": "サポートされているファイル形式は pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv です。各ファイルの最大サイズは {{maxSize}}MB です。",
   "pagination": {
-    "totalRecords": "合計 {{total}} 件の記録"
+    "totalRecords": "合計 {{total}} 件の記録",
+    "totalWithPageSize": "合計 {{total}} 件、1ページ {{pageSize}} 件",
+    "totalPrefix": "合計 ",
+    "totalSuffixWithPageSize": " 件、1ページ {{pageSize}} 件"
   },
   "example": {
     "buttons": "ボタン一覧",
@@ -216,6 +219,7 @@
       "dashboard": "ダッシュボード数の上限"
     },
     "userCount": "利用ユーザー数",
+    "columnResizeHint": "縦線をドラッグして列幅を調整",
     "skillAuthorization": "スキル権限付与",
     "knowledgeAuthorization": "ナレッジベース権限付与",
     "boardAuthorization": "ボード権限",
@@ -1925,7 +1929,7 @@
   "department.parentDept": "上位部門",
   "department.deptId": "部門ID",
   "department.admins": "部門管理者",
-  "department.adminsHint": "下でユーザーを検索・選択し、「管理者として追加」で OpenFGA に反映します（OpenFGA が必要です）。",
+  "department.adminsHint": "保存時に管理者の関係を OpenFGA に反映します。OpenFGA の起動とバックエンドからの接続を確認してください。",
   "department.addAdmins": "管理者として追加",
   "department.pickAdminFirst": "部門管理者にするユーザーを選択してください",
   "department.loadUserForEditFailed": "ユーザー情報を読み込めませんでした。しばらくしてから再度お試しください。",
@@ -1940,6 +1944,11 @@
   "department.confirmRestore": "この部門を復元しますか？復元後は再び編集可能になります。",
   "department.archivedNotice": "この部門はアーカイブ済みのため編集できません。完全に削除することができます。",
   "department.archivedTag": "（アーカイブ済み）",
+  "department.sectionBasic": "基本情報",
+  "department.sectionPermissions": "権限とロール",
+  "department.adminSelectPlaceholder": "検索して部門管理者を選択",
+  "department.searchUsersPlaceholder": "ユーザー名で検索…",
+  "department.settingsLoadFailed": "部門設定の読み込みに失敗しました",
   "department.settings": "部門設定",
   "department.members": "メンバー一覧",
   "department.trafficControl": "トラフィック制御",

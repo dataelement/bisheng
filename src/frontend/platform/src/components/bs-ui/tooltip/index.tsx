@@ -44,9 +44,11 @@ export const QuestionTooltip = ({
                     <CircleHelp className={`w-3.5 h-3.5 ${error && 'text-red-500'}`} />
                 )}
             </TooltipTrigger>
-            <TooltipContent className={error && 'bg-red-500/80'}>
-                <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
-            </TooltipContent>
+            <Portal>
+                <TooltipContent className={error && 'bg-red-500/80'}>
+                    <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
+                </TooltipContent>
+            </Portal>
         </Tooltip>
     </TooltipProvider>
 );

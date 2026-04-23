@@ -503,7 +503,7 @@ export default function Knowledge() {
     // Knowledge square view
     if (showKnowledgeSquare) {
         return (
-            <div className="relative h-full flex">
+            <div className="relative flex h-full min-h-0">
                 <KnowledgeSquare
                     onBack={() => {
                         setShowKnowledgeSquare(false);
@@ -536,7 +536,7 @@ export default function Knowledge() {
     }
 
     return (
-        <div className="relative h-full flex">
+        <div className="relative flex h-full min-h-0">
             {/* Drag and Drop Overlay */}
             {isDragging && (
                 <div

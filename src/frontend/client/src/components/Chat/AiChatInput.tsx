@@ -12,6 +12,7 @@ import {
     useState,
     type KeyboardEvent,
 } from "react";
+import { useRecoilValue } from "recoil";
 import { File_Accept } from "~/common";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
@@ -24,6 +25,7 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
@@ -132,6 +134,11 @@ const AiChatInput = memo(
             fileUpload = true,
             voiceInput = true,
         } = features ?? {};
+
+        // Upload size limit comes from /api/v1/env (Recoil bishengConfState),
+        // not /api/v1/workstation/config. bsConfig does not carry this field,
+        // so reading it from bsConfig would silently fall back to 50MB.
+        const envConfig = useRecoilValue(bishengConfState);
 
         const isControlled = externalValue !== undefined;
         const [internalText, setInternalText] = useState("");
@@ -277,7 +284,8 @@ const AiChatInput = memo(
                         when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const accept = isLingsi ? (bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight) : "";
+                        const accept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+                        console.log('upload accept :>> ', accept);
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
@@ -286,7 +294,7 @@ const AiChatInput = memo(
                             disabled={filesDisabled}
                             hideTrigger={agentMode && !isLingsi}
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
-                            size={bsConfig?.uploaded_files_maximum_size || 50}
+                            size={envConfig?.uploaded_files_maximum_size || 50}
                             onChange={(files: any) => {
                                 setFileUploading(!files);
                                 setChatFiles(files);

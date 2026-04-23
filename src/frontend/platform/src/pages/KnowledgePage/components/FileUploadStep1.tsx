@@ -64,10 +64,10 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
 
         }
     }, [initialFiles]);
-    return <div className={`relative h-full max-w-[1200px] mx-auto flex flex-col px-10 pt-4 ${hidden ? 'hidden' : ''}`}>
+    return <div className={`relative mx-auto flex h-full w-full max-w-[1120px] flex-col pb-28 pt-6 ${hidden ? 'hidden' : ''}`}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
-            progressClassName='max-h-[460px]'
+            progressClassName=''
             knowledgeId={kid}
             onSelectFile={(count) => {
                 setFileCount(count)
@@ -76,7 +76,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             onFileChange={handleFileChange}
             initialFiles={initialFiles}
         />
-        <div className="flex justify-end gap-4 mt-8">
+        <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
             <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>{t("uploadDirectly")}</Button>
             <Button disabled={loading || !finish} onClick={() => {
                 onNext(filesRef.current)

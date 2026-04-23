@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import {
     ArrowUp,
     Copy,
@@ -31,6 +31,8 @@ interface ArticleDetailProps {
 
 export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
     const localize = useLocalize();
+    /** 小屏文章详情已是全幅叠层，不提供「全屏」入口；对话与正文分屏仅在大屏 */
+    const isNarrowShell = usePrefersMobileLayout();
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [scale, setScale] = useState(1);
     const [showBackTop, setShowBackTop] = useState(false);
@@ -231,14 +233,18 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                         >
                             <AddSpaceIcon className="size-3.5" />{localize("com_subscription.add_to_knowledge_space")}</button>}
 
-                        {(!screenFull || (showFullScreenBtn && aiAssistantOpen)) && <button
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
-                            onClick={() => {
-                                screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
-                                    onFullScreen?.();
-                            }}
-                        >
-                            <FullScreenIcon className="size-3.5" />{localize("com_subscription.fullscreen")}</button>}
+                        {!isNarrowShell && (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
+                            <button
+                                type="button"
+                                className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                                onClick={() => {
+                                    screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
+                                        onFullScreen?.();
+                                }}
+                            >
+                                <FullScreenIcon className="size-3.5" />{localize("com_subscription.fullscreen")}
+                            </button>
+                        ) : null}
 
                         <div className="ml-auto flex gap-3 items-center">
                             {screenFull && <div className="flex items-center text-[12px]">

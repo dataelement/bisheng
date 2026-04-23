@@ -1,5 +1,5 @@
 import { Minus, Plus, Search, X, XCircle } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { NotificationSeverity } from "~/common";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
@@ -7,6 +7,7 @@ import { Input } from "~/components/ui/Input";
 import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
+import useMediaQuery from "~/hooks/useMediaQuery";
 import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm, useToastContext } from "~/Providers";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
@@ -22,6 +23,57 @@ import {
 
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
+
+/** 网站行：非 hover 设备始终下划线 + 外链箭头，点击新开页（与桌面 hover 露出一致的可发现性） */
+function WebsiteSourceLink({
+    name,
+    url,
+    maxLen = 20,
+    noHover,
+    onNavigate,
+}: {
+    name: string;
+    url: string;
+    maxLen?: number;
+    /** `(hover: none)` 时为主要输入不可悬停的设备 */
+    noHover: boolean;
+    onNavigate: (e: MouseEvent<HTMLSpanElement>) => void;
+}) {
+    return (
+        <span
+            role="link"
+            tabIndex={0}
+            className={cn(
+                "inline-flex max-w-full cursor-pointer items-center align-middle transition-colors",
+                noHover
+                    ? "text-[#165DFF]"
+                    : "group/link text-[#1D2129] hover:text-[#165DFF]",
+            )}
+            onClick={onNavigate}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    (e.currentTarget as HTMLElement).click();
+                }
+            }}
+        >
+            <span
+                className={cn(
+                    "truncate",
+                    noHover ? "underline underline-offset-2" : "hover:underline hover:underline-offset-2",
+                )}
+            >
+                {truncateName(name, maxLen)}
+            </span>
+            <ChannelRightSmallUpIcon
+                className={cn(
+                    "ml-0.5 size-4 shrink-0 transition-opacity",
+                    noHover ? "text-[#165DFF] opacity-100" : "opacity-0 group-hover/link:opacity-100",
+                )}
+            />
+        </span>
+    );
+}
 
 interface AddSourceDropdownProps {
     sources: InformationSource[];
@@ -41,6 +93,7 @@ export function AddSourceDropdown({
     resetToken
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
+    const noHoverDevice = useMediaQuery("(hover: none)");
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
     const confirm = useConfirm();
     const { showToast } = useToastContext();
@@ -168,32 +221,19 @@ export function AddSourceDropdown({
                                             )}
                                         </div>
                                         <span className="flex-1 text-[14px] text-[#1D2129] truncate">
-                                            <span
-                                                className={cn(
-                                                    "inline-flex items-center max-w-full align-middle",
-                                                    s.type === "website" && s.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
-                                                )}
-                                                onClick={
-                                                    s.type === "website" && s.url
-                                                        ? (e) => {
-                                                            e.stopPropagation();
-                                                            window.open(s.url, "_blank");
-                                                        }
-                                                        : undefined
-                                                }
-                                            >
-                                                <span
-                                                    className={cn(
-                                                        "truncate",
-                                                        s.type === "website" && s.url && "hover:underline"
-                                                    )}
-                                                >
-                                                    {truncateName(s.name)}
-                                                </span>
-                                                {s.type === "website" && s.url && (
-                                                    <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
-                                                )}
-                                            </span>
+                                            {s.type === "website" && s.url ? (
+                                                <WebsiteSourceLink
+                                                    name={s.name}
+                                                    url={s.url}
+                                                    noHover={noHoverDevice}
+                                                    onNavigate={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(s.url, "_blank");
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span className="truncate">{truncateName(s.name)}</span>
+                                            )}
                                             <span className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]">
                                                 {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
                                             </span>
@@ -402,32 +442,22 @@ export function AddSourceDropdown({
                                                         )}
                                                     </div>
                                                     <span className="min-w-0 truncate text-[14px] text-[#1D2129]">
-                                                        <span
-                                                            className={cn(
-                                                                "inline-flex max-w-full items-center align-middle",
-                                                                source.type === "website" && source.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
-                                                            )}
-                                                            onClick={
-                                                                source.type === "website" && source.url
-                                                                    ? (e) => {
-                                                                          e.stopPropagation();
-                                                                          window.open(source.url, "_blank");
-                                                                      }
-                                                                    : undefined
-                                                            }
-                                                        >
-                                                            <span
-                                                                className={cn(
-                                                                    "truncate",
-                                                                    source.type === "website" && source.url && "hover:underline"
-                                                                )}
-                                                            >
+                                                        {source.type === "website" && source.url ? (
+                                                            <WebsiteSourceLink
+                                                                name={source.name}
+                                                                url={source.url}
+                                                                maxLen={MAX_NAME_DISPLAY}
+                                                                noHover={noHoverDevice}
+                                                                onNavigate={(e) => {
+                                                                    e.stopPropagation();
+                                                                    window.open(source.url, "_blank");
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <span className="truncate">
                                                                 {truncateName(source.name, MAX_NAME_DISPLAY)}
                                                             </span>
-                                                            {source.type === "website" && source.url && (
-                                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 flex-shrink-0 opacity-0 transition-opacity group-hover/link:opacity-100" />
-                                                            )}
-                                                        </span>
+                                                        )}
                                                         {mgr.isSearchMode && (
                                                             <span
                                                                 className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]"

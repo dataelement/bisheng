@@ -8,7 +8,10 @@
   "supportedFormatsWithImages": "Supported file formats: pdf (including scanned documents), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp; each file supports up to {{maxSize}}MB; pdf supports traceability positioning.",
   "supportedFormatsWithoutImages": "Supported file formats: pdf, txt, docx, doc, ppt, pptx, md, html, xls, xlsx, csv, each file supports up to {{maxSize}}MB",
   "pagination": {
-    "totalRecords": "Total {{total}}"
+    "totalRecords": "Total {{total}}",
+    "totalWithPageSize": "Total {{total}} items, {{pageSize}} per page",
+    "totalPrefix": "Total ",
+    "totalSuffixWithPageSize": " items, {{pageSize}} per page"
   },
   "example": {
     "buttons": "Buttons",
@@ -214,6 +217,7 @@
       "dashboard": "Dashboard count limit"
     },
     "userCount": "Users",
+    "columnResizeHint": "Drag the line to resize column width",
     "skillAuthorization": "Skill",
     "knowledgeAuthorization": "Knowledge",
     "boardAuthorization": "Board",
@@ -1968,7 +1972,7 @@
   "department.parentDept": "Parent Department",
   "department.deptId": "Department ID",
   "department.admins": "Department Admins",
-  "department.adminsHint": "Search and select users below, then click Add as admins to persist in OpenFGA (OpenFGA must be running).",
+  "department.adminsHint": "Saving writes admin assignments to OpenFGA. Ensure OpenFGA is deployed and reachable from the backend.",
   "department.addAdmins": "Add as admins",
   "department.pickAdminFirst": "Select at least one user to set as department admin",
   "department.loadUserForEditFailed": "Could not load full user details. Please try again later.",
@@ -1983,6 +1987,11 @@
   "department.confirmRestore": "Are you sure you want to restore this department? It will become editable again.",
   "department.archivedNotice": "This department has been archived and cannot be edited. You may permanently delete it.",
   "department.archivedTag": "(Archived)",
+  "department.sectionBasic": "Basic information",
+  "department.sectionPermissions": "Permissions & roles",
+  "department.adminSelectPlaceholder": "Search and select department admins",
+  "department.searchUsersPlaceholder": "Search by username…",
+  "department.settingsLoadFailed": "Failed to load department settings",
   "department.settings": "Department Settings",
   "department.members": "Members",
   "department.trafficControl": "Traffic Control",

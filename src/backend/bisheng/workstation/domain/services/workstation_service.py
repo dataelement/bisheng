@@ -307,8 +307,16 @@ class WorkStationService(BaseService):
         use_knowledge_param: UseKnowledgeBaseParam,
         max_token: int,
         login_user: UserPayload,
-    ) -> tuple[list[str], Optional[list[dict]]]:
-        """Query relevant knowledge blocks from the database."""
+    ) -> tuple[list[str], Optional[list[dict]], list[dict]]:
+        """Query relevant knowledge blocks from the database.
+
+        Returns (formatted_results, finally_docs, failures) where `failures`
+        is a list of per-KB error descriptors:
+            {'id': int, 'name': str, 'error': str}
+        Caller (search_knowledge_bases) surfaces these to the UI as failed
+        KB chips with the error message.
+        """
+        failures: list[dict] = []
         try:
             knowledge_ids = []
             if use_knowledge_param.organization_knowledge_ids:
@@ -326,60 +334,123 @@ class WorkStationService(BaseService):
             )
             knowledge_vector_list.update(knowledge_space_list)
 
-            all_milvus, all_milvus_filter = [], []
-            all_es, all_es_filter = [], []
-            multi_milvus_retriever, multi_es_retriever = None, None
-            for _, vectorstore_info in knowledge_vector_list.items():
+            # Per-KB failure isolation — a single KB whose embedding model is
+            # broken (e.g. expired Volcengine key → 403) must not poison the
+            # whole batch. Run each KB's retriever independently; record
+            # failures so the caller can render them in the UI as failed KB
+            # chips instead of silently dropping them.
+            finally_docs: list = []
+            kb_succeed: list = []
+            max_total_docs = 100  # parity with old MultiRetriever finally_k
+
+            for kb_id, vectorstore_info in knowledge_vector_list.items():
+                if len(finally_docs) >= max_total_docs:
+                    break
                 milvus_vectorstore = vectorstore_info.get('milvus')
                 es_vectorstore = vectorstore_info.get('es')
-                all_milvus.append(milvus_vectorstore)
-                all_milvus_filter.append({'k': 100, 'param': {'ef': 110}})
-                all_es.append(es_vectorstore)
-                all_es_filter.append({'k': 100})
-            if all_milvus:
-                multi_milvus_retriever = MultiRetriever(
-                    vectors=all_milvus,
-                    search_kwargs=all_milvus_filter,
-                    finally_k=100,
-                )
-            if all_es:
-                multi_es_retriever = MultiRetriever(
-                    vectors=all_es,
-                    search_kwargs=all_es_filter,
-                    finally_k=100,
-                )
-            knowledge_retriever_tool = KnowledgeRetrieverTool(
-                vector_retriever=multi_milvus_retriever,
-                elastic_retriever=multi_es_retriever,
-                max_content=max_token,
-                rrf_remove_zero_score=True,
-                sort_by_source_and_index=True,
-            )
-
-            finally_docs = await knowledge_retriever_tool.ainvoke({'query': question})
-            if not finally_docs:
-                return [], []
-
-            prompt_context = ''
-            if not prompt_context:
-                formatted_results = []
-                for doc in finally_docs:
-                    file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
-                    content = doc.page_content.strip()
-                    formatted_results.append(
-                        f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
+                kb_row = vectorstore_info.get('knowledge')
+                kb_name = getattr(kb_row, 'name', '') or ''
+                if milvus_vectorstore is None and es_vectorstore is None:
+                    logger.info(
+                        f'[queryChunksFromDB] kb={kb_id} no vectorstore, skip'
                     )
-                return formatted_results, finally_docs
+                    failures.append({
+                        'id': int(kb_id) if isinstance(kb_id, (int, str)) and str(kb_id).isdigit() else kb_id,
+                        'name': kb_name,
+                        'error': '知识库未初始化向量存储',
+                    })
+                    continue
 
-            return [prompt_context], finally_docs
+                try:
+                    per_kb_milvus = (
+                        MultiRetriever(
+                            vectors=[milvus_vectorstore],
+                            search_kwargs=[{'k': 100, 'param': {'ef': 110}}],
+                            finally_k=100,
+                        )
+                        if milvus_vectorstore is not None else None
+                    )
+                    per_kb_es = (
+                        MultiRetriever(
+                            vectors=[es_vectorstore],
+                            search_kwargs=[{'k': 100}],
+                            finally_k=100,
+                        )
+                        if es_vectorstore is not None else None
+                    )
+                    per_kb_tool = KnowledgeRetrieverTool(
+                        vector_retriever=per_kb_milvus,
+                        elastic_retriever=per_kb_es,
+                        max_content=max_token,
+                        rrf_remove_zero_score=True,
+                        sort_by_source_and_index=True,
+                    )
+                    kb_docs = await per_kb_tool.ainvoke({'query': question})
+                    docs_count = len(kb_docs) if kb_docs else 0
+                    if kb_docs:
+                        finally_docs.extend(kb_docs)
+                    kb_succeed.append(kb_id)
+                    logger.info(
+                        f'[queryChunksFromDB] kb={kb_id} ok docs={docs_count}'
+                    )
+                except Exception as exc:
+                    err_msg = str(exc) or exc.__class__.__name__
+                    failures.append({
+                        'id': int(kb_id) if isinstance(kb_id, (int, str)) and str(kb_id).isdigit() else kb_id,
+                        'name': kb_name,
+                        'error': err_msg,
+                    })
+                    logger.warning(
+                        f'[queryChunksFromDB] kb={kb_id} failed: {err_msg}'
+                    )
+                    continue
+
+            if failures:
+                logger.warning(
+                    f'[queryChunksFromDB] partial failure:'
+                    f' succeed={kb_succeed}'
+                    f' failed={[f["id"] for f in failures]}'
+                )
+
+            if not finally_docs:
+                return [], [], failures
+
+            # Cap to match old MultiRetriever finally_k=100 ceiling.
+            if len(finally_docs) > max_total_docs:
+                finally_docs = finally_docs[:max_total_docs]
+
+            formatted_results = []
+            for doc in finally_docs:
+                file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
+                content = doc.page_content.strip()
+                formatted_results.append(
+                    f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
+                )
+            return formatted_results, finally_docs, failures
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
-            return [], None
+            return [], None, failures
 
     @classmethod
-    async def get_chat_history(cls, chat_id: str, size: int = 4):
+    async def get_chat_history(cls, chat_id: str, size: int = 4,
+                               max_tokens: Optional[int] = None):
         """Build LLM-consumable chat history, backward compatible with both
-        legacy plain-text messages and v2.5 JSON-formatted messages."""
+        legacy plain-text messages and v2.5 JSON-formatted messages.
+
+        Two-stage trimming:
+          1. DB returns the MOST RECENT ``size`` rows in chronological order
+             (see aget_messages_by_chat_id — fixed to DESC LIMIT + reverse).
+          2. If the combined token count exceeds ``max_tokens``, drop oldest
+             entries one at a time until the remainder fits. Token counting
+             uses tiktoken (cl100k_base) with a char-based fallback — see
+             chat_service._count_tokens. We always drop from the FRONT
+             (oldest) of the list so the latest user/AI turn is preserved.
+
+        ``max_tokens`` is resolved by the caller (typically from
+        ``daily_chat.history_max_tokens`` in the DB config). If ``None`` the
+        token-cap stage is skipped — keep this for callers that only want
+        row-count trimming or that manage budgeting themselves.
+        """
         import re as _re
 
         chat_history = []
@@ -423,6 +494,36 @@ class WorkStationService(BaseService):
                 content = _re.sub(r':::thinking\n[\s\S]*?\n:::', '', raw)
                 content = _re.sub(r':::web\n[\s\S]*?\n:::', '', content).strip()
                 chat_history.append(AIMessage(content=content))
+
+        # Token-count cap: drop oldest until total tokens ≤ max_tokens.
+        # Keep at least one message (the most recent) so the model still
+        # sees some context; if that single message alone exceeds the cap,
+        # leave it untouched — the LLM layer will raise, which is more
+        # actionable than silently chopping the latest turn.
+        if max_tokens is not None and max_tokens > 0 and chat_history:
+            from .chat_service import _count_tokens  # local import avoids cycle
+
+            def _msg_tokens(m) -> int:
+                c = getattr(m, 'content', '')
+                if isinstance(c, str):
+                    return _count_tokens(c)
+                try:
+                    return _count_tokens(str(c))
+                except Exception:
+                    return 0
+
+            per_msg = [_msg_tokens(m) for m in chat_history]
+            total = sum(per_msg)
+            dropped = 0
+            while total > max_tokens and len(chat_history) > 1:
+                chat_history.pop(0)
+                total -= per_msg.pop(0)
+                dropped += 1
+            if dropped:
+                logger.info(
+                    f'history token-cap trimmed {dropped} oldest messages '
+                    f'(final_tokens={total} cap={max_tokens})'
+                )
 
         logger.info(f'loaded {len(chat_history)} chat history for chat_id {chat_id}')
         return chat_history

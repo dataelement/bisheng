@@ -2,9 +2,16 @@ import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
 import { ChannelPinGrayIcon, ChannelPinIcon, ChannelUnpinGrayIcon } from '~/components/icons/channels';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '~/components/ui';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
+import { MoreVertical } from 'lucide-react';
 
 interface AgentCardProps {
   agent: AppItem;
@@ -22,6 +29,7 @@ export function AgentCard({
   onShare,
 }: AgentCardProps) {
   const localize = useLocalize();
+  const isMobileCard = useMediaQuery('(max-width: 576px)');
   return (
     <div
       className={cn(
@@ -41,41 +49,85 @@ export function AgentCard({
           </p>
         </div>
 
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTogglePin(agent);
-                }}
-                className={cn(
-                  'group/pin flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] p-1 transition-colors',
-                  'border border-transparent hover:border-[#E5E6EB] hover:bg-[#f7f8fa]',
-                  isPinned
-                    ? 'opacity-100'
-                    : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100 coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto',
-                )}
-                aria-label={
-                  isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
-                }
-              >
-                {isPinned ? (
-                  <span className="relative inline-flex size-[18px] items-center justify-center">
-                    <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
-                    <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
-                  </span>
-                ) : (
-                  <ChannelPinGrayIcon className="size-[18px] shrink-0" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {isMobileCard ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePin(agent);
+              }}
+              className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5]"
+              aria-label={
+                isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
+              }
+            >
+              {isPinned ? (
+                <ChannelPinIcon className="size-[16px] shrink-0" />
+              ) : (
+                <ChannelPinGrayIcon className="size-[16px] shrink-0" />
+              )}
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E6EB] bg-white text-[#86909C] hover:bg-[#F7F8FA]"
+                  aria-label={localize('com_ui_more')}
+                >
+                  <MoreVertical className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[120px]">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShare(agent);
+                  }}
+                >
+                  {localize('com_app_share_app')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePin(agent);
+                  }}
+                  className={cn(
+                    'group/pin flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] p-1 transition-colors',
+                    'border border-transparent hover:border-[#E5E6EB] hover:bg-[#f7f8fa]',
+                    isPinned
+                      ? 'opacity-100'
+                      : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100 coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto',
+                  )}
+                  aria-label={
+                    isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
+                  }
+                >
+                  {isPinned ? (
+                    <span className="relative inline-flex size-[18px] items-center justify-center">
+                      <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
+                      <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
+                    </span>
+                  ) : (
+                    <ChannelPinGrayIcon className="size-[18px] shrink-0" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       {/* Description */}
@@ -83,46 +135,55 @@ export function AgentCard({
         {agent.description || '暂无描述内容...'}
       </div>
 
-      {/* Tags (Hidden on hover) */}
-      <div className="flex gap-1 items-start mt-auto group-hover/card:hidden coarse-pointer:hidden overflow-hidden flex-wrap h-[26px]">
-        {agent.tags && agent.tags.length > 0 ? (
-          agent.tags.slice(0, 3).map((tag, idx) => (
-            <div
-              key={idx}
-              className="bg-[#f2f3f5] text-[#4e5969] px-2 py-0.5 rounded-[4px] text-[12px] font-['PingFang_SC'] font-normal leading-[20px] whitespace-nowrap"
-            >
-              {tag.name}
+      {isMobileCard ? (
+        <div className="mt-auto flex w-full min-w-0 items-center justify-between gap-1">
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <div className="flex items-center gap-1 overflow-hidden whitespace-nowrap">
+              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: '精选' }]).map((tag, idx) => (
+                <div
+                  key={idx}
+                  className="shrink-0 rounded-[4px] bg-[#f2f3f5] px-2 py-0.5 text-[12px] font-normal leading-[20px] text-[#4e5969]"
+                >
+                  {tag.name}
+                </div>
+              ))}
             </div>
-          ))
-        ) : (
-          <div className="bg-[#f2f3f5] text-[#4e5969] px-2 py-0.5 rounded-[4px] text-[12px] font-['PingFang_SC'] font-normal leading-[20px] whitespace-nowrap">
-            精选
+            <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white to-transparent" />
           </div>
-        )}
-      </div>
-
-      {/* Action Buttons (Visible only on hover) */}
-      <div className="hidden group-hover/card:flex coarse-pointer:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
-        <Button
-          onClick={(e) => {
-            e.stopPropagation();
-            onShare(agent);
-          }}
-          variant="outline"
-          className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px] font-normal"
-        >
-          {localize('com_app_share_app')}
-        </Button>
-        <Button
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartChat(agent);
-          }}
-          className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px] font-normal"
-        >
-          {localize('com_app_start_chat')}
-        </Button>
-      </div>
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartChat(agent);
+            }}
+            variant="outline"
+            className="h-6 shrink-0 rounded-[6px] border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] hover:bg-[#F7F8FA]"
+          >
+            {localize('com_app_start_chat')}
+          </Button>
+        </div>
+      ) : (
+        <div className="hidden h-[28px] w-full min-w-0 items-stretch justify-center gap-1 group-hover/card:flex coarse-pointer:flex">
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare(agent);
+            }}
+            variant="outline"
+            className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
+          >
+            {localize('com_app_share_app')}
+          </Button>
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartChat(agent);
+            }}
+            className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
+          >
+            {localize('com_app_start_chat')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

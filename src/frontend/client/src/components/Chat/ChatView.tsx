@@ -70,26 +70,51 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     } catch { /* ignore */ }
 
     // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
+    // Priority: non-empty localStorage > admin-configured default_checked.
+    // A stored `[]` is treated as "not saved" so admin defaults still apply
+    // (the "start new conversation" button writes [], and we don't want that
+    // to permanently lock defaults out). When the KB feature is disabled by
+    // admin, clear the state regardless.
     try {
-      const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
-      if (raw) {
-        setSelectedOrgKbs(JSON.parse(raw));
+      if ((bsConfig as any)?.knowledgeBase?.enabled === false) {
+        setSelectedOrgKbs([]);
       } else {
-        const defaults = ((bsConfig as any)?.orgKbs || [])
-          .filter((k: any) => k.default_checked)
-          .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
-        setSelectedOrgKbs(defaults);
+        const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
+        let saved: any[] | null = null;
+        if (raw) {
+          try {
+            const v = JSON.parse(raw);
+            if (Array.isArray(v)) saved = v;
+          } catch { /* ignore parse errors */ }
+        }
+        if (saved && saved.length > 0) {
+          setSelectedOrgKbs(saved);
+        } else {
+          const defaults = ((bsConfig as any)?.orgKbs || [])
+            .filter((k: any) => k.default_checked)
+            .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
+          setSelectedOrgKbs(defaults);
+        }
       }
     } catch { /* ignore */ }
 
-    // Agent tool groups (parent-level). AgentToolSelector still seeds from
-    // default_checked on first run; localStorage overrides that when present.
+    // Agent tool groups (parent-level). Same priority rule: non-empty local
+    // wins; empty/missing falls through so AgentToolSelector can seed from
+    // admin-configured default_checked.
     try {
       const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
+      let saved: any[] | null = null;
       if (raw) {
-        setSelectedAgentTools(JSON.parse(raw));
+        try {
+          const v = JSON.parse(raw);
+          if (Array.isArray(v)) saved = v;
+        } catch { /* ignore parse errors */ }
+      }
+      if (saved && saved.length > 0) {
+        setSelectedAgentTools(saved);
         setAgentToolsInitialized(true);
       }
+      // else: leave initialized=false so AgentToolSelector applies defaults.
     } catch { /* ignore */ }
 
     memoReadyRef.current = true;
@@ -217,87 +242,87 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             const loadingExistingConvo = isLoading && conversationId !== 'new';
             const useMessagesLayout = hasMessages || loadingExistingConvo;
             return (
-          <div className={cn(
-            showCode ? 'hidden' : 'flex flex-col relative',
-            useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
-          )}>
-            {/* Content area */}
-            {isLoading && conversationId !== 'new' ? (
-              <div className="flex h-screen items-center justify-center">
-                <Spinner className="opacity-0" />
-              </div>
-            ) : hasMessages ? (
-              /* Messages — using new AiChatMessages (v2.5: flat, no sibling tree) */
-              <AiChatMessages
-                messages={messages}
-                conversationId={activeConvoId}
-                title={chatTitle}
-                isLoading={false}
-                isStreaming={isStreaming}
-                shareToken={shareToken}
-                knowledgeChatLayout
-                contentWidthClassName="max-w-[768px] mx-auto"
-                onRegenerate={regenerate}
-                flatMode
-              />
-            ) : (
-              /* Landing page — preserved for welcome + Lingsi mode switch */
-              <Landing
-                lingsi={isLingsi}
-                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
-                setLingsi={setIsLingsi}
-                isNew={isNew}
-              />
-            )}
+              <div className={cn(
+                showCode ? 'hidden' : 'flex flex-col relative',
+                useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
+              )}>
+                {/* Content area */}
+                {isLoading && conversationId !== 'new' ? (
+                  <div className="flex h-screen items-center justify-center">
+                    <Spinner className="opacity-0" />
+                  </div>
+                ) : hasMessages ? (
+                  /* Messages — using new AiChatMessages (v2.5: flat, no sibling tree) */
+                  <AiChatMessages
+                    messages={messages}
+                    conversationId={activeConvoId}
+                    title={chatTitle}
+                    isLoading={false}
+                    isStreaming={isStreaming}
+                    shareToken={shareToken}
+                    knowledgeChatLayout
+                    contentWidthClassName="max-w-[768px] mx-auto"
+                    onRegenerate={regenerate}
+                    flatMode
+                  />
+                ) : (
+                  /* Landing page — preserved for welcome + Lingsi mode switch */
+                  <Landing
+                    lingsi={isLingsi}
+                    lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
+                    setLingsi={setIsLingsi}
+                    isNew={isNew}
+                  />
+                )}
 
-            {/* Input area — using new AiChatInput */}
-            {!shareToken && <div className="w-full max-w-[800px] mx-auto touch-mobile:max-w-full touch-mobile:px-3 shrink-0">
-              {isLingsi ?
-                <LinsightChatInput
-                  disabled={!!shareToken}
-                  isStreaming={isStreaming}
-                  isLingsi
-                  onSend={handleSend}
-                  onStop={stopGenerating}
-                  onNewChat={() => {
-                    setSelectedOrgKbs([]);
-                    setSearchType('');
-                    clearConversation();
-                    // Navigate to /c/new to show Landing
-                    navigate('/c/new');
-                    // Trigger sidebar to sync
-                    document.getElementById('create-convo-btn')?.click();
-                  }}
-                  value={inputText}
-                  onChange={setInputText}
-                  bsConfig={bsConfig}
-                  setShowCode={setShowCode}
-                />
-                : <AiChatInput
-                  disabled={!bsConfig?.models?.length || !!shareToken}
-                  isStreaming={isStreaming}
-                  onScrollToBottom={() => { }}
-                  modelOptions={bsConfig?.models}
-                  modelValue={chatModel.id}
-                  onModelChange={(val) => {
-                    const model = bsConfig?.models?.find((m) => m.id === val);
-                    setChatModel({
-                      id: Number(val),
-                      name: model?.displayName || '',
-                    });
-                  }}
-                  onSend={handleSend}
-                  onStop={stopGenerating}
-                  value={inputText}
-                  onChange={setInputText}
-                  bsConfig={bsConfig}
-                  selectedOrgKbs={selectedOrgKbs}
-                  onSelectedOrgKbsChange={setSelectedOrgKbs}
-                  searchType={searchType}
-                  onSearchTypeChange={setSearchType}
-                />}
-            </div>}
-          </div>
+                {/* Input area — using new AiChatInput */}
+                {!shareToken && <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0">
+                  {isLingsi ?
+                    <LinsightChatInput
+                      disabled={!!shareToken}
+                      isStreaming={isStreaming}
+                      isLingsi
+                      onSend={handleSend}
+                      onStop={stopGenerating}
+                      onNewChat={() => {
+                        setSelectedOrgKbs([]);
+                        setSearchType('');
+                        clearConversation();
+                        // Navigate to /c/new to show Landing
+                        navigate('/c/new');
+                        // Trigger sidebar to sync
+                        document.getElementById('create-convo-btn')?.click();
+                      }}
+                      value={inputText}
+                      onChange={setInputText}
+                      bsConfig={bsConfig}
+                      setShowCode={setShowCode}
+                    />
+                    : <AiChatInput
+                      disabled={!bsConfig?.models?.length || !!shareToken}
+                      isStreaming={isStreaming}
+                      onScrollToBottom={() => { }}
+                      modelOptions={bsConfig?.models}
+                      modelValue={chatModel.id}
+                      onModelChange={(val) => {
+                        const model = bsConfig?.models?.find((m) => m.id === val);
+                        setChatModel({
+                          id: Number(val),
+                          name: model?.displayName || '',
+                        });
+                      }}
+                      onSend={handleSend}
+                      onStop={stopGenerating}
+                      value={inputText}
+                      onChange={setInputText}
+                      bsConfig={bsConfig}
+                      selectedOrgKbs={selectedOrgKbs}
+                      onSelectedOrgKbsChange={setSelectedOrgKbs}
+                      searchType={searchType}
+                      onSearchTypeChange={setSearchType}
+                    />}
+                </div>}
+              </div>
             );
           })()}
 

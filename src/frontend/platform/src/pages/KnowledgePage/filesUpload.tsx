@@ -8,7 +8,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
@@ -38,7 +38,6 @@ const repeatFileI18nRmark = (files, t) => files.map(file => {
 export default function FilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
-  const location = useLocation();
   const { id: knowledgeId } = useParams(); // Get knowledge base ID from route
   const { message } = useToast();
   const [permissionChecked, setPermissionChecked] = useState(false);
@@ -327,113 +326,118 @@ export default function FilesUpload() {
           <LoadingIcon />
         </div>
       )}
-      {/* Top return bar */}
-      <div className="pt-4 px-4">
-        <div className="flex items-center mb-4">
-          <Button
-            variant="outline"
-            size="icon"
-            className="bg-main size-8"
-            onClick={() => navigate(-1)}
-          >
-            <ChevronLeft />
-          </Button>
-          <span className="text-foreground text-sm font-black pl-4">{t('backToKnowledge')}</span>
-        </div>
-
-        {/* Normal mode step progress (4 steps) */}
-        <StepProgress
-          align="center"
-          currentStep={currentStep}
-          labels={getNormalStepLabels(t)}
-        />
-      </div>
-
-      {/* Step content area (normal mode exclusive steps) */}
-      <div className="flex flex-1 overflow-hidden px-4">
-        <div className="w-full overflow-y-auto">
-          <div className="h-full">
-            {/* Step 1: File upload (normal mode exclusive) */}
-            {currentStep === 1 && (
-              hasEditPermission &&
-              <FileUploadStep1
-                onNext={handleStep1Next}
-                onSave={handleSaveByDefaultConfig}
-                kId={knowledgeId} // Pass knowledge base ID
-                initialFiles={resultFiles}
-              />
-            )}
-            {/* Step 2: Segmentation strategy - only added 2 props */}
-            {currentStep === 2 && (
-              <div className={currentStep === 2 ? "block" : "hidden"}>
-                <FileUploadStep2
-                  ref={fileUploadStep2Ref}
-                  step={currentStep}
-                  resultFiles={resultFiles}
-                  isSubmitting={isSubmitting}
-                  onNext={handleStep2Next}
-                  onPrev={handleBack}
-                  kId={knowledgeId}
-                  persistState={step2PersistState} // Added: Pass saved state
-                  onPersistStateChange={setStep2PersistState} // Added: Pass state update callback
-                />
-              </div>
-            )}
-
-
-            {/* Step 3: Original text comparison */}
-            {currentStep === 3 && segmentRules && (
-              <div className="block"> {/* When step 3 is displayed, step 2 is hidden but not unmounted */}
-                <PreviewResult
-                  rules={segmentRules.rules}
-                  resultFiles={resultFiles}
-                  handlePreviewResult={handlePreviewResult}
-                  onPrev={handleBack}
-                  onNext={() => {
-                    handleSave(segmentRules);
-                  }}
-                  onDeleteFile={(filePath) => {
-                    setSegmentRules(prev => (
-                      {
-                        ...prev,
-                        rules: {
-                          ...prev.rules,
-                          fileList: prev.rules.fileList.filter(file => file.filePath !== filePath)
-                        }
-                      }
-                    ))
-                    setResultFiles(prev => (
-                      prev.filter(file => file.file_path !== filePath)
-                    ))
-                  }}
-                  step={currentStep}
-                  previewCount={0}
-                  applyEachCell={segmentRules.applyEachCell}
-                  cellGeneralConfig={segmentRules.cellGeneralConfig}
-                  kId={knowledgeId}
-                  showPreview={true}
-                />
-
-                {/* Step 3 bottom buttons */}
-                <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
-                  <Button variant="outline" onClick={handleBack}>
-                    {t('previousStep')}
-                  </Button>
-                  <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
-                    {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
-                    {t('nextStep')}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-
-            {/* Step 4: Data processing */}
-            {currentStep === 4 && (
-              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0} />
-            )}
+      <div className="relative px-4 pt-4">
+        <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
+          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
+              onClick={() => navigate(-1)}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledge')}</span>
           </div>
         </div>
+        <div className="mx-auto max-w-[1180px]">
+          <div className="min-w-0 overflow-hidden">
+            <StepProgress
+              align="center"
+              currentStep={currentStep}
+              labels={getNormalStepLabels(t)}
+              className="my-0 min-w-0 px-0"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden px-4 pb-4 pt-3">
+        {currentStep === 2 ? (
+          // Step 2: bounded-height layout so inner left/right panels can scroll independently
+          <div className="mx-auto flex w-full max-w-[1180px] flex-col overflow-hidden rounded-[14px] bg-white px-6">
+            <div className="flex min-h-0 flex-1 flex-col">
+              <FileUploadStep2
+                ref={fileUploadStep2Ref}
+                step={currentStep}
+                resultFiles={resultFiles}
+                isSubmitting={isSubmitting}
+                onNext={handleStep2Next}
+                onPrev={handleBack}
+                kId={knowledgeId}
+                persistState={step2PersistState} // Added: Pass saved state
+                onPersistStateChange={setStep2PersistState} // Added: Pass state update callback
+              />
+            </div>
+          </div>
+        ) : (
+          // Steps 1 / 3 / 4: original outer scroll behavior (whole content scrolls together)
+          <div className="mx-auto w-full max-w-[1180px] overflow-y-auto rounded-[14px] bg-white px-6">
+            <div className="h-full">
+              {/* Step 1: File upload (normal mode exclusive) */}
+              {currentStep === 1 && (
+                hasEditPermission &&
+                <FileUploadStep1
+                  onNext={handleStep1Next}
+                  onSave={handleSaveByDefaultConfig}
+                  kId={knowledgeId} // Pass knowledge base ID
+                  initialFiles={resultFiles}
+                />
+              )}
+
+              {/* Step 3: Original text comparison */}
+              {currentStep === 3 && segmentRules && (
+                <div className="block"> {/* When step 3 is displayed, step 2 is hidden but not unmounted */}
+                  <PreviewResult
+                    rules={segmentRules.rules}
+                    resultFiles={resultFiles}
+                    handlePreviewResult={handlePreviewResult}
+                    onPrev={handleBack}
+                    onNext={() => {
+                      handleSave(segmentRules);
+                    }}
+                    onDeleteFile={(filePath) => {
+                      setSegmentRules(prev => (
+                        {
+                          ...prev,
+                          rules: {
+                            ...prev.rules,
+                            fileList: prev.rules.fileList.filter(file => file.filePath !== filePath)
+                          }
+                        }
+                      ))
+                      setResultFiles(prev => (
+                        prev.filter(file => file.file_path !== filePath)
+                      ))
+                    }}
+                    step={currentStep}
+                    previewCount={0}
+                    applyEachCell={segmentRules.applyEachCell}
+                    cellGeneralConfig={segmentRules.cellGeneralConfig}
+                    kId={knowledgeId}
+                    showPreview={true}
+                  />
+
+                  <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
+                    <Button variant="outline" onClick={handleBack}>
+                      {t('previousStep')}
+                    </Button>
+                    <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
+                      {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+                      {t('nextStep')}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+
+              {/* Step 4: Data processing */}
+              {currentStep === 4 && (
+                <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0} />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Duplicate file reminder dialog (shared for normal mode) */}

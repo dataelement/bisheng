@@ -14,16 +14,10 @@ import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useLocalize } from "~/hooks";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
-import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "~/utils";
-import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import { appsSectionLinkTarget, lastSectionPaths } from "~/layouts/appModuleNavPaths";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
-import BookOpenIcon from "~/components/ui/icon/BookOpen";
-import GlobeIcon from "~/components/ui/icon/Globe";
-import HomeIcon from "~/components/ui/icon/Home";
-import LinkIcon from "~/components/ui/icon/Link";
+import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -44,79 +38,6 @@ interface KnowledgeSpaceSidebarProps {
 
 // Sort cycle: update_time → name → update_time
 const SORT_CYCLE = [SpaceSortType.UPDATE_TIME, SpaceSortType.NAME];
-
-function KnowledgeMobileDrawerNavTabs({ onAfterPick }: { onAfterPick?: () => void }) {
-    const { pathname } = useLocation();
-    const localize = useLocalize();
-    const { user } = useAuthContext();
-    const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
-        ? ((user as { plugins: string[] }).plugins)
-        : null;
-    const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
-    const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
-    const links = [
-        {
-            section: "home",
-            to: lastSectionPaths.home || "/c/new",
-            icon: HomeIcon,
-            label: localize("com_nav_home"),
-            isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-            closeOnPick: true,
-        },
-        {
-            section: "apps",
-            to: appsSectionLinkTarget(),
-            icon: GlobeIcon,
-            label: localize("com_nav_app_center"),
-            isActive: /^\/apps(\/|$)/.test(pathname) || /^\/app\//.test(pathname),
-            closeOnPick: true,
-        },
-        {
-            section: "channel",
-            to: lastSectionPaths.channel || "/channel",
-            icon: LinkIcon,
-            label: localize("com_ui_channel"),
-            isActive: pathname.startsWith("/channel"),
-            closeOnPick: false,
-        },
-        {
-            section: "knowledge",
-            to: lastSectionPaths.knowledge || "/knowledge",
-            icon: BookOpenIcon,
-            label: localize("com_knowledge.knowledge_space"),
-            isActive: pathname.startsWith("/knowledge"),
-            closeOnPick: false,
-        },
-    ].filter((link) => {
-        if (link.section === "channel") return showSubscriptionTab;
-        if (link.section === "knowledge") return showKnowledgeSpaceTab;
-        return true;
-    });
-
-    return (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-[#e5e6eb] px-2 py-2">
-            {links.map((link) => {
-                const Icon = link.icon;
-                return (
-                    <NavLink
-                        key={link.section}
-                        to={link.to}
-                        title={link.label}
-                        onClick={() => {
-                            if (link.closeOnPick) onAfterPick?.();
-                        }}
-                        className={cn(
-                            "flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[#f2f3f5]",
-                            link.isActive && "bg-[#e6edfc]",
-                        )}
-                    >
-                        <Icon className={cn("size-5 shrink-0", link.isActive ? "text-[#335CFF]" : "text-[#818181]")} />
-                    </NavLink>
-                );
-            })}
-        </div>
-    );
-}
 
 function getSortLabel(sort: SpaceSortType, localize: any) {
     return sort === SpaceSortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
@@ -240,7 +161,7 @@ export function KnowledgeSpaceSidebar({
     }, [mobileDrawerMode]);
 
     return (
-        <div className={`relative flex-shrink-0 ${mobileDrawerMode ? "h-full min-h-0 w-full" : ""}`}>
+        <div className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}>
             <div
                 className={[
                     `h-full bg-white flex flex-col overflow-hidden ${collapsed ? "" : "border-r border-[#e5e6eb]"}`,
@@ -277,7 +198,13 @@ export function KnowledgeSpaceSidebar({
                         </div>
                     </div>
                 ) : null}
-                {mobileDrawerMode ? <KnowledgeMobileDrawerNavTabs onAfterPick={onDrawerClose} /> : null}
+                {mobileDrawerMode ? (
+                    <HubModuleNavTabs
+                        onLinkClick={(link) => {
+                            if (link.closeDrawerOnNavigate) onDrawerClose?.();
+                        }}
+                    />
+                ) : null}
                 {/* Top actions */}
                 <div className={collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 py-3" : "px-3 py-5"}>
                     {mobileDrawerMode ? (
@@ -335,7 +262,7 @@ export function KnowledgeSpaceSidebar({
                     }}
                 >
                     <div
-                        className="h-full overflow-y-auto scroll-on-scroll px-3 pb-5"
+                        className="h-full overflow-y-auto overscroll-y-contain scroll-on-scroll px-3 pb-5"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
