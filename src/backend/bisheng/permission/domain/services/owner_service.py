@@ -20,7 +20,8 @@ def _run_async_safe(coro):
 
     In FastAPI threadpool threads, asyncio.run() creates a new event loop which
     cannot share connections (aiomysql, Redis) with the main loop. This helper
-    detects the running loop and uses run_coroutine_threadsafe() when available.
+    first attempts to hop back to the request loop via AnyIO's worker-thread
+    bridge, then falls back to a standalone loop only when no bridge exists.
     """
     try:
         loop = asyncio.get_running_loop()
@@ -28,7 +29,19 @@ def _run_async_safe(coro):
         future = asyncio.run_coroutine_threadsafe(coro, loop)
         return future.result(timeout=10)
     except RuntimeError:
-        # No running loop — safe to create one
+        # No running loop in this thread. Under FastAPI/Starlette sync
+        # endpoints we are usually inside an AnyIO worker thread and should
+        # hop back to the main event loop instead of creating a fresh loop.
+        try:
+            import anyio
+
+            async def _await(awaitable):
+                return await awaitable
+
+            return anyio.from_thread.run(_await, coro)
+        except Exception:
+            # No AnyIO worker-thread bridge available — safe to create a loop.
+            pass
         return asyncio.run(coro)
 
 

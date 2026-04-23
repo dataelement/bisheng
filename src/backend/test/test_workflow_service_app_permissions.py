@@ -122,7 +122,9 @@ def _load_workflow_service_module():
             get_resources_by_tags_batch=lambda *args, **kwargs: [],
             get_tags_by_resource=lambda *args, **kwargs: {},
         )
-        tag_module.TagBusinessTypeEnum = SimpleNamespace
+        tag_module.TagBusinessTypeEnum = SimpleNamespace(
+            APPLICATION=SimpleNamespace(value='application'),
+        )
         sys.modules['bisheng.database.models.tag'] = tag_module
 
         user_link_module = ModuleType('bisheng.database.models.user_link')
@@ -229,6 +231,12 @@ async def test_get_all_flows_filters_by_use_app_and_sets_write_from_edit_app():
         'get_logo_share_link',
         return_value='logo-url',
         create=True,
+    ), patch.object(
+        WorkFlowService,
+        'aenrich_apps_can_share',
+        new_callable=AsyncMock,
+        side_effect=lambda _user, data, managed=False: data,
+        create=True,
     ):
         data, total = await WorkFlowService.get_all_flows(
             user=login_user,
@@ -285,6 +293,12 @@ async def test_get_all_flows_specific_type_repaginates_after_permission_filter()
         'get_logo_share_link',
         return_value='logo-url',
         create=True,
+    ), patch.object(
+        WorkFlowService,
+        'aenrich_apps_can_share',
+        new_callable=AsyncMock,
+        side_effect=lambda _user, data, managed=False: data,
+        create=True,
     ):
         data, total = await WorkFlowService.get_all_flows(
             user=login_user,
@@ -339,6 +353,12 @@ async def test_get_all_flows_recomputes_total_for_combined_listing_after_permiss
         WorkFlowService,
         'get_logo_share_link',
         return_value='logo-url',
+        create=True,
+    ), patch.object(
+        WorkFlowService,
+        'aenrich_apps_can_share',
+        new_callable=AsyncMock,
+        side_effect=lambda _user, data, managed=False: data,
         create=True,
     ):
         data, total = await WorkFlowService.get_all_flows(
@@ -446,3 +466,108 @@ async def test_update_flow_status_uses_publish_and_unpublish_permissions():
         'wf-9',
         ['unpublish_app'],
     )
+
+
+@pytest.mark.asyncio
+async def test_get_frequently_used_flows_awaits_async_app_visibility_helper():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+    workflow_module.UserLinkType = SimpleNamespace(
+        app=SimpleNamespace(value=[SimpleNamespace(value='app')]),
+    )
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_merged_rebac_app_resource_ids=AsyncMock(return_value=['asst-1']),
+        get_merged_rebac_app_resource_ids=MagicMock(
+            side_effect=AssertionError('sync helper should not be used in async flow lists'),
+        ),
+    )
+
+    app_rows = [
+        {'id': 'asst-1', 'flow_type': FlowType.ASSISTANT.value, 'user_id': 10, 'logo': '', 'name': 'asst'},
+    ]
+
+    with patch.object(
+        workflow_module.UserLinkDao,
+        'get_user_link',
+        return_value=[SimpleNamespace(type_detail='asst-1')],
+        create=True,
+    ), patch.object(
+        workflow_module.FlowDao,
+        'get_all_apps',
+        return_value=(app_rows, 1),
+    ) as mock_get_all_apps, patch.object(
+        WorkFlowService,
+        'add_extra_field',
+        return_value=app_rows,
+        create=True,
+    ), patch.object(
+        WorkFlowService,
+        'aenrich_apps_can_share',
+        new_callable=AsyncMock,
+        return_value=app_rows,
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_frequently_used_flows(login_user, 'app', 1, 8)
+
+    login_user.aget_merged_rebac_app_resource_ids.assert_awaited_once_with(for_write=False)
+    login_user.get_merged_rebac_app_resource_ids.assert_not_called()
+    assert mock_get_all_apps.call_args.kwargs['id_extra'] == ['asst-1']
+    assert total == 1
+    assert data == app_rows
+
+
+@pytest.mark.asyncio
+async def test_get_uncategorized_flows_awaits_async_app_visibility_helper():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_merged_rebac_app_resource_ids=AsyncMock(return_value=['wf-1']),
+        get_merged_rebac_app_resource_ids=MagicMock(
+            side_effect=AssertionError('sync helper should not be used in async flow lists'),
+        ),
+    )
+
+    app_rows = [
+        {'id': 'wf-1', 'flow_type': FlowType.WORKFLOW.value, 'user_id': 10, 'logo': '/logo.png', 'name': 'wf'},
+    ]
+
+    with patch.object(
+        workflow_module.TagDao,
+        'search_tags',
+        return_value=[],
+        create=True,
+    ), patch.object(
+        workflow_module.FlowDao,
+        'get_all_apps',
+        return_value=(app_rows, 1),
+    ) as mock_get_all_apps, patch.object(
+        WorkFlowService,
+        'get_logo_share_link',
+        return_value='logo-url',
+        create=True,
+    ), patch.object(
+        WorkFlowService,
+        'aenrich_apps_can_share',
+        new_callable=AsyncMock,
+        return_value=[{
+            'id': 'wf-1',
+            'flow_type': FlowType.WORKFLOW.value,
+            'user_id': 10,
+            'logo': 'logo-url',
+            'name': 'wf',
+        }],
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_uncategorized_flows(login_user, 1, 8, None)
+
+    login_user.aget_merged_rebac_app_resource_ids.assert_awaited_once_with(for_write=False)
+    login_user.get_merged_rebac_app_resource_ids.assert_not_called()
+    assert mock_get_all_apps.call_args.args[5] == ['wf-1']
+    assert total == 1
+    assert data[0]['logo'] == 'logo-url'

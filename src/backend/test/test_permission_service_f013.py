@@ -111,6 +111,48 @@ async def test_l3_skipped_when_resolver_returns_none(login_user_factory, patch_r
     fake_fga.check.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_get_permission_level_respects_l3_visibility_gate(login_user_factory, patch_resolver):
+    """permission_level must not report access when check() would be denied by tenant visibility."""
+    user = login_user_factory(visible=[1])
+    fake_fga = MagicMock()
+    fake_fga.batch_check = AsyncMock(return_value=[False, False, False, True])
+    with patch_resolver(9), \
+            patch.object(PermissionService, '_is_shared_to', AsyncMock(return_value=False)), \
+            patch.object(PermissionService, '_get_fga', return_value=fake_fga):
+        result = await PermissionService.get_permission_level(
+            user_id=100, object_type='workflow', object_id='wf-1', login_user=user,
+        )
+    assert result is None
+    fake_fga.batch_check.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_list_accessible_ids_filters_objects_failing_tenant_gate(login_user_factory):
+    """list_accessible_ids must not surface objects that check() would reject."""
+    user = login_user_factory(visible=[1])
+    fake_fga = MagicMock()
+    fake_fga.list_objects = AsyncMock(return_value=['workflow:wf-1'])
+    with patch.object(PermissionService, '_get_fga', return_value=fake_fga), \
+            patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects',
+                  new_callable=AsyncMock, return_value=None), \
+            patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_list_objects',
+                  new_callable=AsyncMock), \
+            patch.object(PermissionService, '_resource_ids_by_creator_user_ids',
+                         AsyncMock(return_value=[])), \
+            patch.object(PermissionService, '_resource_ids_implicit_dept_admin_scope',
+                         AsyncMock(return_value=[])), \
+            patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
+                         AsyncMock(return_value=[])), \
+            patch.object(PermissionService, '_resource_tenant_map',
+                         AsyncMock(return_value={'wf-1': 9})), \
+            patch.object(PermissionService, '_is_shared_to', AsyncMock(return_value=False)):
+        result = await PermissionService.list_accessible_ids(
+            user_id=100, relation='can_read', object_type='workflow', login_user=user,
+        )
+    assert result == []
+
+
 # ── L4 Child admin shortcut ─────────────────────────────────────
 
 

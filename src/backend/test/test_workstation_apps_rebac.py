@@ -6,9 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
-from bisheng.database.models.role_access import AccessType
-
-
 def _install_apps_endpoint_stubs() -> None:
     if 'bisheng.workstation.api' not in sys.modules:
         workstation_api_module = ModuleType('bisheng.workstation.api')
@@ -33,6 +30,10 @@ def _install_apps_endpoint_stubs() -> None:
         class _DummyWorkflowService:
             @staticmethod
             def add_extra_field(login_user, data, managed=False):
+                return data
+
+            @staticmethod
+            async def aenrich_apps_can_share(login_user, data, managed=False):
                 return data
 
         workflow_module.WorkFlowService = _DummyWorkflowService
@@ -63,12 +64,12 @@ def _install_apps_endpoint_stubs() -> None:
         workstation_error_module.UsedAppNotOnlineError = lambda *args, **kwargs: Exception('offline')
         sys.modules['bisheng.common.errcode.workstation'] = workstation_error_module
 
-    if 'bisheng.database.models.flow' not in sys.modules:
-        flow_module = ModuleType('bisheng.database.models.flow')
-        flow_module.FlowDao = SimpleNamespace(get_all_apps=lambda **kwargs: ([], 0), aget_all_apps=lambda **kwargs: ([], 0))
-        flow_module.FlowStatus = SimpleNamespace(ONLINE=SimpleNamespace(value=2))
-        flow_module.FlowType = SimpleNamespace(ASSISTANT=SimpleNamespace(value=5), WORKFLOW=SimpleNamespace(value=10))
-        sys.modules['bisheng.database.models.flow'] = flow_module
+        if 'bisheng.database.models.flow' not in sys.modules:
+            flow_module = ModuleType('bisheng.database.models.flow')
+            flow_module.FlowDao = SimpleNamespace(get_all_apps=lambda **kwargs: ([], 0), aget_all_apps=lambda **kwargs: ([], 0))
+            flow_module.FlowStatus = SimpleNamespace(ONLINE=SimpleNamespace(value=2))
+            flow_module.FlowType = SimpleNamespace(ASSISTANT=SimpleNamespace(value=5), WORKFLOW=SimpleNamespace(value=10))
+            sys.modules['bisheng.database.models.flow'] = flow_module
 
     for mod_name, attrs in {
         'bisheng.database.models.message': {'ChatMessageDao': SimpleNamespace()},
@@ -114,22 +115,23 @@ def _load_apps_endpoint_module():
     return module
 
 
-def test_get_recommended_apps_uses_supported_access_types_only():
+@pytest.mark.asyncio
+async def test_get_recommended_apps_uses_async_merged_rebac_helper():
     module = _load_apps_endpoint_module()
     login_user = MagicMock()
     login_user.is_admin.return_value = False
     login_user.user_id = 7
-    login_user.get_user_access_resource_ids.return_value = ['wf-1', 'asst-1']
+    login_user.aget_merged_rebac_app_resource_ids = AsyncMock(return_value=['wf-1', 'asst-1'])
 
     config = SimpleNamespace(recommendedApps=['wf-1', 'asst-1'])
 
     with patch.object(module.WorkStationService, 'get_config', return_value=config), \
          patch.object(module.FlowDao, 'get_all_apps', return_value=([], 0)), \
          patch.object(module.WorkFlowService, 'add_extra_field', return_value=[]):
-        module.get_recommended_apps(login_user=login_user)
+        await module.get_recommended_apps(login_user=login_user)
 
-    login_user.get_user_access_resource_ids.assert_called_once_with(
-        [AccessType.WORKFLOW, AccessType.ASSISTANT_READ],
+    login_user.aget_merged_rebac_app_resource_ids.assert_awaited_once_with(
+        for_write=False,
     )
 
 @pytest.mark.asyncio

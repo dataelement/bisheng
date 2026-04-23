@@ -142,3 +142,60 @@ def test_filter_tool_ids_by_permission_sync_uses_system_relation_defaults():
 
     assert filtered_use == ['12', '13']
     assert filtered_edit == ['13']
+
+
+@pytest.mark.asyncio
+async def test_has_any_permission_async_unions_implicit_scope_permissions():
+    login_user = SimpleNamespace(
+        user_id=7,
+        get_user_group_ids=AsyncMock(return_value=[]),
+    )
+    fake_fga = SimpleNamespace(
+        read_tuples=AsyncMock(return_value=[
+            {'user': 'user:7', 'relation': 'viewer', 'object': 'tool:12'},
+        ]),
+    )
+
+    with patch(
+        'bisheng.permission.domain.services.tool_permission_service._get_relation_models',
+        new_callable=AsyncMock,
+        return_value=[{
+            'id': 'custom_view_only',
+            'name': '只看不用',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_tool'],
+            'permissions_explicit': True,
+            'is_system': False,
+        }],
+    ), patch(
+        'bisheng.permission.domain.services.tool_permission_service._get_bindings',
+        new_callable=AsyncMock,
+        return_value=[{
+            'resource_type': 'tool',
+            'resource_id': '12',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'custom_view_only',
+        }],
+    ), patch(
+        'bisheng.permission.domain.services.tool_permission_service.PermissionService._get_fga',
+        return_value=fake_fga,
+    ), patch(
+        'bisheng.permission.domain.services.tool_permission_service.PermissionService.get_implicit_permission_level',
+        new_callable=AsyncMock,
+        return_value='can_manage',
+    ), patch(
+        'bisheng.permission.domain.services.tool_permission_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.permission.domain.services.tool_permission_service.DepartmentDao.aget_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        assert await ToolPermissionService.has_any_permission_async(
+            login_user, '12', ['manage_tool_owner'],
+        ) is True

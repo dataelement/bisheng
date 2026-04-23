@@ -9,7 +9,6 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
@@ -40,8 +39,8 @@ async def get_recommended_apps(login_user=LoginUserDep):
     if not login_user.is_admin():
         kwargs['status'] = FlowStatus.ONLINE.value
         kwargs['user_id'] = login_user.user_id
-        kwargs['id_extra'] = login_user.get_user_access_resource_ids(
-            [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+        kwargs['id_extra'] = await login_user.aget_merged_rebac_app_resource_ids(
+            for_write=False,
         )
     data, _ = FlowDao.get_all_apps(**kwargs)
 

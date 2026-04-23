@@ -138,10 +138,10 @@ class ToolPermissionService:
         if binding_department_paths is None:
             binding_department_paths = await cls._get_binding_department_paths(bindings)
 
+        effective_permissions: set[str] = set()
         fga = PermissionService._get_fga()
         if fga is not None:
             tuples = await fga.read_tuples(object=f'tool:{tool_type_id}')
-            effective_permissions: set[str] = set()
             for tuple_data in tuples:
                 tuple_user = tuple_data.get('user')
                 relation = tuple_data.get('relation')
@@ -157,8 +157,17 @@ class ToolPermissionService:
                 )
                 model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
                 effective_permissions.update(cls._permission_ids_for_relation(relation, model))
-            if effective_permissions:
-                return effective_permissions
+
+        implicit_level = await PermissionService.get_implicit_permission_level(
+            user_id=login_user.user_id,
+            object_type='tool',
+            object_id=str(tool_type_id),
+            login_user=login_user,
+        )
+        implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
+        effective_permissions.update(cls._permission_ids_for_relation(implicit_relation or ''))
+        if effective_permissions:
+            return effective_permissions
 
         level = await PermissionService.get_permission_level(
             user_id=login_user.user_id,

@@ -439,7 +439,7 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         else:
-            flow_id_extra = user.get_merged_rebac_app_resource_ids(for_write=False)
+            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=False)
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, user_id=user.user_id,
                                            id_extra=flow_id_extra, page=0, limit=0)
         data = cls.filter_supported_apps(data)
@@ -494,7 +494,7 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
         else:
-            flow_id_extra = user.get_merged_rebac_app_resource_ids(for_write=False)
+            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=False)
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)
