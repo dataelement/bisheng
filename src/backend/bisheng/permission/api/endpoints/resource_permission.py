@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.permission.domain.knowledge_library_permission_template import KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE
 from bisheng.permission.domain.knowledge_space_permission_template import KNOWLEDGE_SPACE_PERMISSION_TEMPLATE
+from bisheng.permission.domain.tool_permission_template import TOOL_PERMISSION_TEMPLATE
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
@@ -621,3 +622,13 @@ async def get_knowledge_library_permission_template(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     return resp_200(KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/tool')
+async def get_tool_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for tool permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(TOOL_PERMISSION_TEMPLATE)

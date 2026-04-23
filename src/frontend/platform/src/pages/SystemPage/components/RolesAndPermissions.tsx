@@ -28,6 +28,7 @@ import {
   getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
   getRelationModelsApi,
+  getToolPermissionTemplateApi,
   type PermissionTemplateSection,
   type RebacSchemaType,
   type RelationModel,
@@ -170,6 +171,7 @@ export default function RolesAndPermissions() {
   const [types, setTypes] = useState<RebacSchemaType[] | null>(null)
   const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
   const [knowledgeLibraryTemplate, setKnowledgeLibraryTemplate] = useState<PermissionTemplateSection | null>(null)
+  const [toolTemplate, setToolTemplate] = useState<PermissionTemplateSection | null>(null)
   const [relationModels, setRelationModels] = useState<RelationModel[]>([])
   const [modelId, setModelId] = useState<string>("owner")
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
@@ -206,6 +208,7 @@ export default function RolesAndPermissions() {
     if (user?.role !== "admin") {
       setKnowledgeTemplate(null)
       setKnowledgeLibraryTemplate(null)
+      setToolTemplate(null)
       return
     }
     captureAndAlertRequestErrorHoc(getKnowledgeSpacePermissionTemplateApi(), () => true).then((res) => {
@@ -213,6 +216,9 @@ export default function RolesAndPermissions() {
     })
     captureAndAlertRequestErrorHoc(getKnowledgeLibraryPermissionTemplateApi(), () => true).then((res) => {
       if (res) setKnowledgeLibraryTemplate(res)
+    })
+    captureAndAlertRequestErrorHoc(getToolPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setToolTemplate(res)
     })
   }, [user?.role])
 
@@ -224,8 +230,11 @@ export default function RolesAndPermissions() {
     if (knowledgeLibraryTemplate) {
       sections[2] = knowledgeLibraryTemplate as TemplateSection
     }
+    if (toolTemplate) {
+      sections.splice(3, 0, toolTemplate as TemplateSection)
+    }
     return sections
-  }, [knowledgeTemplate, knowledgeLibraryTemplate])
+  }, [knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
     return templateSections.flatMap((section) =>

@@ -21,6 +21,7 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
+from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType, GptsToolsTypeRead
@@ -45,7 +46,12 @@ class ToolServices(BaseModel):
             # When getting a list of custom tools, you need to include a list of tools available to the user
             access_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_READ])
             if access_resources:
-                tool_type_ids_extra = [int(access) for access in access_resources]
+                filtered_ids = ToolPermissionService.filter_tool_ids_by_permission_sync(
+                    self.login_user,
+                    [int(access) for access in access_resources],
+                    'use_tool',
+                )
+                tool_type_ids_extra = [int(access) for access in filtered_ids]
         if is_preset is None:
             # Get a list of all tools visible to the user
             all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra)
@@ -77,7 +83,12 @@ class ToolServices(BaseModel):
             else:
                 if write_tool_type is None:
                     write_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
-                    write_tool_type = {int(x): True for x in write_resources}
+                    filtered_write = ToolPermissionService.filter_tool_ids_by_permission_sync(
+                        self.login_user,
+                        [int(x) for x in write_resources],
+                        'edit_tool',
+                    )
+                    write_tool_type = {int(x): True for x in filtered_write}
                 one.write = write_tool_type.get(one.id, False)
             one.children = tool_type_children.get(one.id, [])
 
@@ -156,8 +167,11 @@ class ToolServices(BaseModel):
         if not tool_type or tool_type.is_preset != ToolPresetType.PRESET.value:
             raise NotFoundError()
 
-        if not await self.login_user.async_access_check(tool_type.user_id, str(tool_type.id),
-                                                        AccessType.GPTS_TOOL_WRITE):
+        if not await ToolPermissionService.has_any_permission_async(
+            self.login_user,
+            str(tool_type.id),
+            ['edit_tool'],
+        ):
             raise UnAuthorizedError()
 
         if tool_type.extra is None:
@@ -357,8 +371,11 @@ class ToolServices(BaseModel):
         if tool_type and tool_type.id != exist_tool_type.id:
             raise ToolTypeRepeatError()
         # Determine if there are update permissions
-        if not await self.login_user.async_access_check(exist_tool_type.user_id, str(exist_tool_type.id),
-                                                        AccessType.GPTS_TOOL_WRITE):
+        if not await ToolPermissionService.has_any_permission_async(
+            self.login_user,
+            str(exist_tool_type.id),
+            ['edit_tool'],
+        ):
             raise UnAuthorizedError()
 
         res = await self._update_gpts_tools(exist_tool_type, req)
@@ -378,8 +395,11 @@ class ToolServices(BaseModel):
         if exist_tool_type.is_preset == ToolPresetType.PRESET.value:
             raise ToolTypeIsPresetError()
         # Determine if there are update permissions
-        if not await self.login_user.async_access_check(exist_tool_type.user_id, str(exist_tool_type.id),
-                                                        AccessType.GPTS_TOOL_WRITE):
+        if not await ToolPermissionService.has_any_permission_async(
+            self.login_user,
+            str(exist_tool_type.id),
+            ['delete_tool'],
+        ):
             raise UnAuthorizedError()
 
         await GptsToolsDao.delete_tool_type(tool_type_id)
