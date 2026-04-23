@@ -160,7 +160,7 @@ export default function index() {
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
-                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide pb-10">
                         {/* <ToggleSection
                             title={t('chatConfig.workstationEntry')}
                             enabled={formData.menuShow}

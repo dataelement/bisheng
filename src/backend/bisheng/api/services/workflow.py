@@ -96,7 +96,10 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        if flow_type is None:
+        # skip_pagination=True means the caller will sort and paginate in-memory
+        # (e.g. chat.py), so we must return ALL rows from DB regardless of flow_type.
+        # Otherwise the caller would double-paginate and subsequent pages would be empty.
+        if flow_type is None or skip_pagination:
             query_page = 0
             query_page_size = 0
 
