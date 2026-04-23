@@ -101,7 +101,7 @@ export default function AppCenter() {
                         <AppEmptyState query={searchQuery} />
                     </div>
                 ) : (
-                    <div className="grid w-full relative gap-x-3 gap-y-3.5 grid-cols-2 [@media(min-width:768px)]:grid-cols-4">
+                    <div className="grid w-full relative gap-x-3 gap-y-3.5 grid-cols-1 [@media(min-width:768px)]:grid-cols-2 [@media(min-width:1024px)]:grid-cols-4">
                         {apps.map((agent) => (
                             <AgentCard
                                 key={agent.id}

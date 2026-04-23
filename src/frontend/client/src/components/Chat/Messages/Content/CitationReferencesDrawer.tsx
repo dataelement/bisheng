@@ -97,14 +97,12 @@ function CitationReferenceCard({
   isLoading,
   hasError,
   onOpenDocumentPreview,
-  isH5 = false,
 }: {
   item: CitationReferenceItem;
   detail: ChatCitation | null;
   isLoading: boolean;
   hasError: boolean;
   onOpenDocumentPreview: (detail: ChatCitation) => void;
-  isH5?: boolean;
 }) {
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
@@ -113,64 +111,6 @@ function CitationReferenceCard({
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const sourceMetaText = [preview?.sourceName, preview?.sourceMeta].filter(Boolean).join(' | ');
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
-
-  if (isH5) {
-    return (
-      <div className="border-b border-[#F2F3F5] py-3">
-        <div className="mb-2 flex items-center justify-between gap-2 text-[13px] leading-5 text-[#86909C]">
-          <div className="flex min-w-0 items-center gap-2">
-            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
-            <span className="min-w-0 truncate">{sourceMetaText || (isWeb ? '网页来源' : '知识库')}</span>
-          </div>
-          <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#F2F3F5] text-[12px] leading-none text-[#86909C]">
-            {item.data.label}
-          </span>
-        </div>
-
-        <div className="min-w-0 text-[16px] font-semibold leading-6 text-[#1D2129]">
-          {canOpenDocument ? (
-            <button
-              type="button"
-              onClick={() => onOpenDocumentPreview(detail!)}
-              className="min-w-0 truncate text-left hover:text-[#165DFF] hover:underline"
-              title={title}
-            >
-              {title}
-            </button>
-          ) : preview?.link ? (
-            <a
-              href={preview.link}
-              target="_blank"
-              rel="noreferrer"
-              className="min-w-0 truncate hover:text-[#165DFF] hover:underline"
-              title={title}
-            >
-              {title}
-            </a>
-          ) : (
-            <span className="min-w-0 truncate" title={title}>{title}</span>
-          )}
-        </div>
-
-        <div className="mt-1 text-[13px] leading-5 text-[#86909C] line-clamp-2">
-          {preview?.snippet || '暂无内容摘要'}
-        </div>
-
-        {(isLoading || hasError) && (
-          <div className="mt-2 min-h-[22px] text-[13px] leading-[22px] text-[#4E5969]">
-            {isLoading ? (
-              <span className="inline-flex items-center gap-2 text-[#86909C]">
-                <Loader2 className="size-3.5 animate-spin" />
-                加载溯源详情...
-              </span>
-            ) : hasError ? (
-              <span className="text-[#86909C]">溯源详情加载失败</span>
-            ) : null}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   const titleContent = canOpenDocument ? (
     <button
@@ -525,17 +465,15 @@ export default function CitationReferencesDrawer({
     <>
       <div className={cn(
         'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
-        isH5 ? 'h-14 px-4' : 'h-14 px-3',
+        'h-14 px-3',
       )}>
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
-            {isH5 ? `参考来源 ${references.length}` : '参考资料'}
+            参考资料
           </h2>
-          {!isH5 && (
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
-              {references.length}
-            </span>
-          )}
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
+            {references.length}
+          </span>
         </div>
         <button
           type="button"
@@ -549,7 +487,7 @@ export default function CitationReferencesDrawer({
 
       <div className={cn(
         'flex-1 overflow-y-auto',
-        isH5 ? 'px-4 py-1' : 'space-y-3 px-3 py-4',
+        'space-y-3 px-3 py-4',
       )}>
         {references.length > 0 ? (
           references.map((item) => {
@@ -561,7 +499,6 @@ export default function CitationReferencesDrawer({
                 detail={detail}
                 isLoading={!!loadingMap[item.data.citationId]}
                 hasError={!!errorMap[item.data.citationId]}
-                isH5={isH5}
                 onOpenDocumentPreview={handleOpenDocumentPreview}
               />
             );
@@ -683,8 +620,8 @@ export default function CitationReferencesDrawer({
             className={cn(
               'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
               isH5
-                ? 'inset-x-0 bottom-0 max-h-[78vh] rounded-t-2xl border-t border-[#E5E6EB]'
-                : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB]',
+                ? 'inset-0'
+                : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
             )}
             aria-label="参考资料"
           >

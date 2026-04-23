@@ -335,7 +335,7 @@ function CitationPreviewCard({
       <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <span
-          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} flex-1`}
+          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} min-w-0 truncate`}
           title={preview.title}
         >
           {ragTitleParts.name || preview.title}
@@ -535,7 +535,7 @@ const Citation = ({
           onClick={handleCitationClick}
           onMouseEnter={() => handleOpenChange(true)}
           onMouseLeave={scheduleClose}
-          className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
+          className={`ml-1 inline-flex min-h-5 min-w-5 cursor-pointer items-center justify-center rounded-xl px-1.5 py-0.5 text-[0.85em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
         >
           <span>{children}</span>
         </button>

@@ -1,4 +1,4 @@
-import { FileText, X } from 'lucide-react';
+import { Download, FileText, X } from 'lucide-react';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize } from '~/hooks';
 import useMediaQuery from '~/hooks/useMediaQuery';
@@ -95,9 +95,7 @@ export default function CitationDocumentPreviewDrawer({
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
   const isH5 = useMediaQuery('(max-width: 576px)');
-  /** 576 以下：文档预览撑满视口（与订阅文章 H5 全屏阅读一致） */
-  const isLt576 = useMediaQuery('(max-width: 575px)');
-  const isFullBleedMobile = isH5 && isLt576;
+  const isFullBleedMobile = isH5;
   if (!preview || !isRagCitation(preview.detail)) {
     return null;
   }
@@ -128,9 +126,6 @@ export default function CitationDocumentPreviewDrawer({
         className={cn(
           'z-[60] flex flex-col bg-white',
           isFullBleedMobile && 'fixed inset-0',
-          isH5 &&
-            !isFullBleedMobile &&
-            'fixed inset-x-0 bottom-0 top-[44px] rounded-t-2xl',
           !isH5 &&
             'fixed inset-y-0 right-0 w-[min(860px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
         )}
@@ -148,16 +143,25 @@ export default function CitationDocumentPreviewDrawer({
             {(!isH5 || isFullBleedMobile) && (
               <FileText className="size-4 shrink-0 text-[#165DFF]" />
             )}
-            {(!isH5 || isFullBleedMobile) && (
-              <h2
-                className={cn(
-                  'min-w-0 truncate font-semibold text-[#1D2129]',
-                  isH5 ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
-                )}
-                title={fileName}
+            <h2
+              className={cn(
+                'min-w-0 truncate font-semibold text-[#1D2129]',
+                isH5 ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
+              )}
+              title={fileName}
+            >
+              {fileName}
+            </h2>
+            {isH5 && (
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={!fileUrl}
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
+                aria-label={localize("com_knowledge.download_file")}
               >
-                {fileName}
-              </h2>
+                <Download className="size-4" />
+              </button>
             )}
           </div>
           <button
@@ -173,31 +177,10 @@ export default function CitationDocumentPreviewDrawer({
         <div
           className={cn(
             'min-h-0 flex-1',
-            isFullBleedMobile && 'pb-[calc(4.875rem+env(safe-area-inset-bottom,0px))]',
-            isH5 && !isFullBleedMobile && 'pb-[78px]',
           )}
         >
           <CitationDocumentPreviewContent preview={preview} compactMode={isH5} />
         </div>
-        {isH5 && (
-          <div
-            className={cn(
-              'absolute inset-x-0 bottom-0 z-10 border-t border-[#F2F3F5] bg-white px-4',
-              isFullBleedMobile
-                ? 'pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-3'
-                : 'py-3',
-            )}
-          >
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={!fileUrl}
-              className="inline-flex h-11 w-full items-center justify-center rounded-[8px] border border-[#335CFF] bg-white text-[16px] font-medium leading-none text-[#335CFF] disabled:cursor-not-allowed disabled:border-[#C9CDD4] disabled:text-[#C9CDD4]"
-            >
-              {localize("com_knowledge.download_file")}
-            </button>
-          </div>
-        )}
       </aside>
     </>
   );

@@ -1,12 +1,13 @@
 import { ArrowLeft, Loader2 } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
 import AppAvator from '~/components/Avator'
+import { AiChatIcon, ShareOutlineIcon } from "~/components/icons"
 import { Button } from "~/components/ui/Button"
-import { useLocalize } from "~/hooks"
+import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks"
 import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
 import { AgentNavigation } from './components/AgentNavigation'
@@ -17,6 +18,7 @@ const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 // --- 组件：智能体卡片 (广场版 Horizontal) ---
 const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
     const localize = useLocalize();
+    const isMobileCard = usePrefersMobileLayout();
     return (
         <div
             onClick={() => onClick(agent)}
@@ -38,9 +40,31 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
 
             {/* 右侧内容 */}
             <div className="flex flex-[1_0_0] flex-col h-full items-start min-w-px relative">
-                <p className="font-['PingFang_SC'] font-medium leading-[20px] text-[#212121] text-[14px] truncate w-full">
-                    {agent.name}
-                </p>
+                <div className="flex w-full items-center justify-between gap-2">
+                    <p className="font-['PingFang_SC'] font-medium leading-[20px] text-[#212121] text-[14px] truncate">
+                        {agent.name}
+                    </p>
+                    {isMobileCard && (
+                        <div className="flex shrink-0 items-center justify-end gap-[10px]">
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onShare(agent); }}
+                                className="inline-flex items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-1 text-[#4E5969] hover:bg-[#F2F3F5]"
+                                aria-label={localize('com_app_share_app')}
+                            >
+                                <ShareOutlineIcon className="size-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onClick(agent); }}
+                                className="inline-flex items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-1 text-[#4E5969] hover:bg-[#F2F3F5]"
+                                aria-label={localize('com_app_start_chat')}
+                            >
+                                <AiChatIcon className="size-3.5" stroke="#4E5969" />
+                            </button>
+                        </div>
+                    )}
+                </div>
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
                 <p className="mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2 group-hover:hidden">
@@ -48,20 +72,22 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 </p>
 
                 {/* 按纽区域：平时隐藏，hover时显示 */}
-                <div className="hidden group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                        className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
-                    >
-                        {localize('com_app_share_app')}
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                        className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
-                    >
-                        {localize('com_app_start_chat')}
-                    </button>
-                </div>
+                {!isMobileCard && (
+                    <div className="hidden group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onShare(agent); }}
+                            className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
+                        >
+                            {localize('com_app_share_app')}
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onClick(agent); }}
+                            className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
+                        >
+                            {localize('com_app_start_chat')}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -85,6 +111,14 @@ export default function ExplorePlaza() {
     const navigate = useNavigate()
     const { showToast } = useToastContext()
     const localize = useLocalize()
+    const isAtLeast768 = useMediaQuery('(min-width: 768px)')
+    const isAtLeast1024 = useMediaQuery('(min-width: 1024px)')
+
+    const exploreCols = useMemo(() => {
+        // Keep Explore Plaza one column fewer than App Center, with minimum 1.
+        const appCenterCols = isAtLeast1024 ? 4 : isAtLeast768 ? 2 : 1;
+        return Math.max(1, appCenterCols - 1);
+    }, [isAtLeast768, isAtLeast1024]);
 
     // Modify Fetch Function
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
@@ -217,7 +251,10 @@ export default function ExplorePlaza() {
 
             {/* 智能体网格 */}
             <main className="w-full max-w-[1000px] px-5">
-                <div className="grid w-full gap-[12px] grid-cols-2 [@media(min-width:768px)]:grid-cols-4">
+                <div
+                    className="grid w-full gap-[12px]"
+                    style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
+                >
                     {agents.map((agent, idx) => (
                         <ExploreCard key={`${agent.id}-${idx}`} agent={agent} onClick={handleCardClick} onShare={handleShare} />
                     ))}

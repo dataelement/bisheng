@@ -423,34 +423,32 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       </div>
                     )}
                     {!isCitationMobile && !useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
-                      <div className="pointer-events-none fixed inset-0 z-30 flex justify-end p-2">
+                      <div className="pointer-events-none fixed inset-0 z-30 flex justify-end">
                         <button
                           type="button"
                           aria-label="关闭参考资料浮层"
                           className="absolute inset-0 pointer-events-auto bg-transparent"
                           onClick={handleCloseCitationPanel}
                         />
-                        <div className="pointer-events-auto flex h-full w-[min(376px,calc(100vw-16px))] flex-col rounded-[12px] bg-[#F6F9FF] p-2 shadow-[0_0_20px_rgba(7,34,88,0.05)] animate-in slide-in-from-right duration-300">
-                          <div className="flex min-h-0 flex-1 overflow-hidden rounded-[12px] bg-white">
-                            <CitationReferencesDrawer
-                              panelOnly
-                              desktopMode="inline-panel"
-                              open={citationPanelOpen}
-                              onOpenChange={(nextOpen) => {
-                                if (!nextOpen) {
-                                  handleCloseCitationPanel();
-                                }
-                              }}
-                              panelClassName="h-full w-full max-w-none rounded-[12px] bg-white"
-                              messageId={citationPanelPayload.messageId}
-                              content={citationPanelPayload.content}
-                              webContent={citationPanelPayload.webContent}
-                              citations={citationPanelPayload.citations}
-                              referenceItems={citationPanelPayload.referenceItems}
-                              initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
-                              desktopPreviewVariant="standard"
-                            />
-                          </div>
+                        <div className="pointer-events-auto flex h-full w-[min(520px,calc(100vw-24px))] flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300">
+                          <CitationReferencesDrawer
+                            panelOnly
+                            desktopMode="inline-panel"
+                            open={citationPanelOpen}
+                            onOpenChange={(nextOpen) => {
+                              if (!nextOpen) {
+                                handleCloseCitationPanel();
+                              }
+                            }}
+                            panelClassName="h-full w-full max-w-none bg-white"
+                            messageId={citationPanelPayload.messageId}
+                            content={citationPanelPayload.content}
+                            webContent={citationPanelPayload.webContent}
+                            citations={citationPanelPayload.citations}
+                            referenceItems={citationPanelPayload.referenceItems}
+                            initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
+                            desktopPreviewVariant="standard"
+                          />
                         </div>
                       </div>
                     )}

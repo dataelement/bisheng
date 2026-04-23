@@ -51,23 +51,14 @@ export function AgentCard({
 
         {isMobileCard ? (
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTogglePin(agent);
-              }}
-              className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5]"
-              aria-label={
-                isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
-              }
-            >
-              {isPinned ? (
+            {isPinned ? (
+              <span
+                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C]"
+                aria-label={localize('com_app_unpin_tooltip')}
+              >
                 <ChannelPinIcon className="size-[16px] shrink-0" />
-              ) : (
-                <ChannelPinGrayIcon className="size-[16px] shrink-0" />
-              )}
-            </button>
+              </span>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -80,6 +71,14 @@ export function AgentCard({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[120px]">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePin(agent);
+                  }}
+                >
+                  {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();

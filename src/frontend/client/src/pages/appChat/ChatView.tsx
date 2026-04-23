@@ -48,7 +48,13 @@ export default function ChatView({ data, cid, v, readOnly }) {
     }, [flowId, flowType, location.search, navigate, setConversations]);
 
     const messages = chatState?.messages || [];
-
+    const activeConversation = useMemo(
+        () => conversations.find((item) => item.id === cid),
+        [conversations, cid]
+    );
+    const headerTitle = [activeConversation?.title, data?.name]
+        .map((item) => String(item || "").trim())
+        .find(Boolean) || localize('com_ui_new_chat');
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
         conversations.length === 0 &&
@@ -64,7 +70,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
     return <div className="relative h-full flex flex-col">
         <HeaderTitle
             readOnly={readOnly}
-            conversation={{ title: data.name, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
+            conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
         />
         <div className="min-h-0 flex-1 flex flex-col bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">
             {showChatEmptyState ? (

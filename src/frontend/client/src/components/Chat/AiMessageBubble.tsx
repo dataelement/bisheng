@@ -502,15 +502,15 @@ function AssistantBubble({
                                 <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                             </div>
                         ) : (
-                        <Markdown
-                            content={regularContent}
-                            webContent={webContent}
-                            citations={message.citations}
-                            messageId={message.messageId}
-                            onOpenCitationPanel={onOpenCitationPanel}
-                            showCursor={showCursor}
-                            isLatestMessage={!!isLatest}
-                        />
+                            <Markdown
+                                content={regularContent}
+                                webContent={webContent}
+                                citations={message.citations}
+                                messageId={message.messageId}
+                                onOpenCitationPanel={onOpenCitationPanel}
+                                showCursor={showCursor}
+                                isLatestMessage={!!isLatest}
+                            />
                         )}
                     </div>
                 )}
@@ -540,21 +540,7 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} />
-                                    {onRegenerate && (
-                                        <button
-                                            type="button"
-                                            onClick={(event) => {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                onRegenerate();
-                                            }}
-                                            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
-                                            title="刷新"
-                                            aria-label="刷新"
-                                        >
-                                            <RefreshCwIcon size={14} className="text-[#818181]" />
-                                        </button>
-                                    )}
+
                                     <TextToSpeechButton
                                         className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
                                         messageId={message.messageId || ""}
