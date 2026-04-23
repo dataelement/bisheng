@@ -6,6 +6,7 @@ from typing import Iterable
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.flow import FlowType
+from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.api.endpoints.resource_permission import (
     _get_bindings,
     _get_relation_models,
@@ -28,6 +29,20 @@ _FLOW_TYPE_TO_OBJECT_TYPE = {
 
 
 class ApplicationPermissionService:
+    @staticmethod
+    def get_effective_permission_ids_sync(
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str,
+    ) -> set[str]:
+        return _run_async_safe(
+            ApplicationPermissionService.get_effective_permission_ids_async(
+                login_user,
+                object_type,
+                object_id,
+            )
+        )
+
     @staticmethod
     def _permission_ids_for_relation(relation: str, model: dict | None = None) -> set[str]:
         if model is not None:
@@ -214,3 +229,49 @@ class ApplicationPermissionService:
 
         pairs = await asyncio.gather(*[_one(row) for row in rows])
         return {row_id: perms for row_id, perms in pairs}
+
+    @classmethod
+    def get_app_permission_map_sync(
+        cls,
+        login_user: UserPayload,
+        rows: list[dict],
+        permission_ids: Iterable[str],
+    ) -> dict[str, set[str]]:
+        return _run_async_safe(cls.get_app_permission_map_async(login_user, rows, permission_ids))
+
+    @classmethod
+    def filter_object_ids_by_permission_sync(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_ids: list[str | int],
+        permission_id: str,
+    ) -> list[str]:
+        normalized_ids = [str(object_id) for object_id in object_ids]
+        if not normalized_ids:
+            return []
+        permission_map = cls.get_app_permission_map_sync(
+            login_user,
+            [{'id': object_id, 'flow_type': FlowType.WORKFLOW.value if object_type == 'workflow' else FlowType.ASSISTANT.value} for object_id in normalized_ids],
+            [permission_id],
+        )
+        return [
+            object_id
+            for object_id in normalized_ids
+            if permission_id in permission_map.get(object_id, set())
+        ]
+
+    @classmethod
+    async def has_any_permission_async(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str,
+        permission_ids: Iterable[str],
+    ) -> bool:
+        effective_permissions = await cls.get_effective_permission_ids_async(
+            login_user,
+            object_type,
+            object_id,
+        )
+        return bool(set(permission_ids) & effective_permissions)
