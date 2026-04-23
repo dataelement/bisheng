@@ -1537,6 +1537,7 @@
     "space_settings": "スペースの設定",
     "space_updated": "スペースが更新されました",
     "space_view_requires_approval": "このナレッジスペースのコンテンツを表示するには承認が必要です",
+    "space_view_requires_join": "このナレッジスペースの内容を表示するには参加が必要です",
     "start_download": "ダウンロード開始",
     "started_processing": "処理を開始しました",
     "status": "ステータス",

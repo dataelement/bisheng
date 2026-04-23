@@ -23,6 +23,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
+    initialSpace?: KnowledgeSpace | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     /** Notify parent to sync square card status */
@@ -31,6 +32,7 @@ interface KnowledgeSpacePreviewDrawerProps {
 
 export function KnowledgeSpacePreviewDrawer({
     spaceId,
+    initialSpace = null,
     open,
     onOpenChange,
     onSquareStatusChange,
@@ -50,6 +52,33 @@ export function KnowledgeSpacePreviewDrawer({
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
+
+    const syncPreviewStatus = (info: KnowledgeSpace) => {
+        const subscriptionStatus = String(info.subscriptionStatus ?? info.squareStatus ?? "").toLowerCase();
+        if (subscriptionStatus === "rejected") {
+            setStatus("rejected");
+            onSquareStatusChange?.(String(info.id), "rejected");
+            return;
+        }
+        if (info.isPending || subscriptionStatus === "pending") {
+            setStatus("pending");
+            onSquareStatusChange?.(String(info.id), "pending");
+            return;
+        }
+        if (
+            info.isFollowed ||
+            subscriptionStatus === "subscribed" ||
+            subscriptionStatus === "joined" ||
+            info.role === SpaceRole.CREATOR ||
+            info.role === SpaceRole.ADMIN
+        ) {
+            setStatus("joined");
+            onSquareStatusChange?.(String(info.id), "joined");
+            return;
+        }
+        setStatus("none");
+        onSquareStatusChange?.(String(info.id), "join");
+    };
 
     /**
      * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
@@ -87,28 +116,19 @@ export function KnowledgeSpacePreviewDrawer({
                     isPending: info.isPending,
                 });
                 setSpace(info);
-                const sub = String(info.subscriptionStatus ?? "").toLowerCase();
-                // /info may still set is_followed when subscription_status is rejected; prefer explicit status.
-                if (sub === "rejected") {
-                    setStatus("rejected");
-                    onSquareStatusChange?.(String(info.id), "rejected");
-                } else if (info.isPending) {
-                    setStatus("pending");
-                    onSquareStatusChange?.(String(info.id), "pending");
-                } else if (info.isFollowed) {
-                    setStatus("joined");
-                    onSquareStatusChange?.(String(info.id), "joined");
-                } else {
-                    setStatus("none");
-                    onSquareStatusChange?.(String(info.id), "join");
-                }
+                syncPreviewStatus(info);
             })
             .catch(() => {
                 console.warn("[KnowledgeSpacePreviewDrawer] load space info failed", { spaceId });
+                if (initialSpace) {
+                    setSpace(initialSpace);
+                    syncPreviewStatus(initialSpace);
+                    return;
+                }
                 showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
                 onOpenChange(false);
             });
-    }, [open, spaceId]);
+    }, [open, spaceId, initialSpace, localize, onOpenChange, onSquareStatusChange]);
 
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
@@ -188,15 +208,18 @@ export function KnowledgeSpacePreviewDrawer({
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
     const subscriptionRejected =
         String(space?.subscriptionStatus ?? "").toLowerCase() === "rejected" || status === "rejected";
-    // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
-    const canViewFiles =
+    const hasReadableGrant =
         !!space &&
         !subscriptionRejected &&
-        (space.visibility === VisibilityType.PUBLIC ||
-            (space.visibility === VisibilityType.APPROVAL &&
-                (String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
-                    space.isFollowed === true ||
-                    status === "joined")));
+        (
+            space.role === SpaceRole.CREATOR ||
+            space.role === SpaceRole.ADMIN ||
+            String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
+            space.isFollowed === true ||
+            status === "joined"
+        );
+    const canViewFiles =
+        hasReadableGrant;
 
     const handleClickAction = () => {
         if (!space) return;
@@ -431,7 +454,18 @@ export function KnowledgeSpacePreviewDrawer({
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
-                            ) : null}
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
+                                    <img
+                                        className="size-[140px] object-contain mb-4"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
+                                        alt="Locked"
+                                    />
+                                    <div className="text-[#1d2129] text-[14px]">
+                                        {localize("com_knowledge.space_view_requires_join")}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
