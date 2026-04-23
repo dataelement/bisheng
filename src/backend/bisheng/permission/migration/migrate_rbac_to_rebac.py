@@ -39,8 +39,8 @@ from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
 ACCESS_TYPE_MAPPING: dict[int, tuple[str, str]] = {
     # AccessType.value → (object_type, relation)
-    1:  ('knowledge_space', 'viewer'),    # KNOWLEDGE
-    3:  ('knowledge_space', 'editor'),    # KNOWLEDGE_WRITE
+    1:  ('knowledge_library', 'viewer'),  # KNOWLEDGE
+    3:  ('knowledge_library', 'editor'),  # KNOWLEDGE_WRITE
     5:  ('assistant', 'viewer'),           # ASSISTANT_READ
     6:  ('assistant', 'editor'),           # ASSISTANT_WRITE
     7:  ('tool', 'viewer'),                # GPTS_TOOL_READ
@@ -401,7 +401,8 @@ class RBACToReBACMigrator:
         from bisheng.core.context.tenant import bypass_tenant_filter
 
         owner_queries = [
-            ('SELECT id, user_id FROM knowledge', 'knowledge_space', False),
+            ('SELECT id, user_id FROM knowledge WHERE type != 3', 'knowledge_library', False),
+            ('SELECT id, user_id FROM knowledge WHERE type = 3', 'knowledge_space', False),
             ('SELECT id, user_id FROM t_gpts_tools WHERE is_delete = 0', 'tool', False),
             ('SELECT id, user_id FROM channel', 'channel', False),
             ('SELECT id, user_id FROM dashboard', 'dashboard', True),
@@ -510,7 +511,8 @@ class RBACToReBACMigrator:
                 resources: list[tuple[str, str]] = []
 
                 for query, obj_type in [
-                    ('SELECT id FROM knowledge LIMIT 100', 'knowledge_space'),
+                    ('SELECT id FROM knowledge WHERE type != 3 LIMIT 100', 'knowledge_library'),
+                    ('SELECT id FROM knowledge WHERE type = 3 LIMIT 100', 'knowledge_space'),
                     ("SELECT id FROM flow WHERE flow_type = 10 LIMIT 100", 'workflow'),
                     ("SELECT id FROM flow WHERE flow_type = 5 LIMIT 100", 'assistant'),
                     ('SELECT id FROM t_gpts_tools WHERE is_delete = 0 LIMIT 100', 'tool'),
@@ -530,7 +532,8 @@ class RBACToReBACMigrator:
 
                 owner_map: dict[tuple[str, str], int] = {}
                 for query, obj_type in [
-                    ('SELECT id, user_id FROM knowledge', 'knowledge_space'),
+                    ('SELECT id, user_id FROM knowledge WHERE type != 3', 'knowledge_library'),
+                    ('SELECT id, user_id FROM knowledge WHERE type = 3', 'knowledge_space'),
                     ("SELECT id, user_id FROM flow WHERE flow_type = 10", 'workflow'),
                     ("SELECT id, user_id FROM flow WHERE flow_type = 5", 'assistant'),
                     ('SELECT id, user_id FROM t_gpts_tools WHERE is_delete = 0', 'tool'),
@@ -580,6 +583,7 @@ class RBACToReBACMigrator:
                 else:
                     user_roles = user_role_map.get(uid, [])
                     read_types = {
+                        'knowledge_library': 1,
                         'knowledge_space': 1, 'assistant': 5, 'tool': 7,
                         'workflow': 9, 'dashboard': 11,
                     }
@@ -732,7 +736,7 @@ class RBACToReBACMigrator:
         path = file_level_path or ''
         segments = [s for s in path.split('/') if s]
         if not segments:
-            return ('knowledge_space', str(knowledge_id))
+            return ('knowledge_library', str(knowledge_id))
         last = segments[-1]
         if not last.isdigit():
             logger.warning(f'Invalid path segment "{last}" for file {file_id}, skipping')
