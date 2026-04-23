@@ -182,15 +182,19 @@ class KnowledgeService(KnowledgeUtils):
             page: int = 1,
             limit: int = 10,
     ) -> Tuple[List[KnowledgeRead], int]:
-        # F008: 列表可见性 = OpenFGA `can_read`（与 PRD「使用知识库」/关系模型 can_read 一致）。
-        # 与「当前用户创建」的知识库 ID 取并集：避免 list_objects 滞后、缓存或计算差异导致创建者看不到自己的库。
+        # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
+        # 的细粒度 permission ids 收口到真正具备 use_kb 的知识库。
         accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_library')
         if accessible_ids is not None:
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
                 login_user.user_id, knowledge_type,
             )
             merged = set(int(k) for k in accessible_ids) | set(creator_ids)
-            knowledge_id_extra = list(merged)
+            knowledge_id_extra = await cls.permission_service.filter_knowledge_ids_by_permission_async(
+                login_user,
+                list(merged),
+                'use_kb',
+            )
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,

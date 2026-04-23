@@ -136,7 +136,12 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
         'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.aget_knowledge_ids_created_by',
         new_callable=AsyncMock,
         return_value=[],
-    ), patch(
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'filter_knowledge_ids_by_permission_async',
+        new_callable=AsyncMock,
+        return_value=[1],
+    ) as mock_filter_ids, patch(
         'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.aget_user_knowledge',
         new_callable=AsyncMock,
         return_value=[],
@@ -158,6 +163,11 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
     assert result == []
     assert total == 0
     login_user.rebac_list_accessible.assert_awaited_once_with('can_read', 'knowledge_library')
+    mock_filter_ids.assert_awaited_once_with(
+        login_user,
+        [1],
+        'use_kb',
+    )
 
 
 @pytest.mark.asyncio

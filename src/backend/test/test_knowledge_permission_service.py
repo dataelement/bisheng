@@ -158,3 +158,56 @@ def test_ensure_access_sync_raises_when_rebac_denies():
                 knowledge_id=24,
                 access_type=AccessType.KNOWLEDGE_WRITE,
             )
+
+
+@pytest.mark.asyncio
+async def test_filter_knowledge_ids_by_permission_async_honors_custom_model_permissions():
+    service = KnowledgePermissionService()
+    login_user = SimpleNamespace(
+        user_id=7,
+        get_user_group_ids=AsyncMock(return_value=[]),
+    )
+    fake_fga = SimpleNamespace(
+        read_tuples=AsyncMock(return_value=[
+            {'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_library:12'},
+        ]),
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service._get_relation_models',
+        new_callable=AsyncMock,
+        return_value=[{
+            'id': 'custom_view_only',
+            'name': '只看不用',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_kb'],
+            'permissions_explicit': True,
+            'is_system': False,
+        }],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service._get_bindings',
+        new_callable=AsyncMock,
+        return_value=[{
+            'resource_type': 'knowledge_library',
+            'resource_id': '12',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'custom_view_only',
+        }],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService._get_fga',
+        return_value=fake_fga,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.DepartmentDao.aget_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        assert await service.filter_knowledge_ids_by_permission_async(login_user, [12], 'use_kb') == []
+        assert await service.filter_knowledge_ids_by_permission_async(login_user, [12], 'view_kb') == [12]
