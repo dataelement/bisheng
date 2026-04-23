@@ -1,7 +1,8 @@
 """HMAC-SHA256 request signature verification — F014 Gateway trust boundary.
 
-The Gateway is the only trusted upstream allowed to call the two SSO sync
-endpoints (``/internal/sso/login-sync`` and ``/departments/sync``). Both
+The Gateway is the only trusted upstream allowed to call the F014 SSO sync
+endpoints (``/internal/sso/login-sync``, ``/internal/sso/gateway-wecom-org-sync``,
+``/departments/sync``). These
 routes skip the ordinary JWT middleware and instead authenticate the caller
 with a shared secret + detached signature in the ``X-Signature`` header.
 

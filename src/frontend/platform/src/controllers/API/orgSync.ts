@@ -63,6 +63,16 @@ export async function getOrgSyncLogsApi(
   })
 }
 
+/** 网关 HMAC 推送产生的 org_sync_log（trigger_type=sso_realtime），分页 */
+export async function listGatewayOrgSyncLogsApi(params: {
+  page?: number
+  limit?: number
+}): Promise<OrgSyncLogPage> {
+  return await axios.get(`/api/v1/org-sync/gateway-logs`, {
+    params: { page: 1, limit: 20, ...params },
+  })
+}
+
 export async function getOrgSyncRemoteTreeApi(
   configId: number
 ): Promise<OrgSyncRemoteNode[]> {

@@ -15,7 +15,7 @@ import Thinking from "~/components/Artifacts/Thinking";
 import AgentThinkingHeader from "~/components/Chat/Messages/AgentThinkingHeader";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
-import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
@@ -39,6 +39,8 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
 }
 
 // --- Copy button with feedback ---
@@ -215,6 +217,8 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        onOpenCitationPanel,
+        activeCitationMessageId,
     }: AiMessageBubbleProps) => {
         const isUser = message.isCreatedByUser;
 
@@ -239,6 +243,8 @@ const AiMessageBubble = memo(
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                onOpenCitationPanel={onOpenCitationPanel}
+                activeCitationMessageId={activeCitationMessageId}
             />
         );
     }
@@ -370,6 +376,8 @@ function AssistantBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    onOpenCitationPanel,
+    activeCitationMessageId,
 }: {
     message: ChatMessage;
     isLatest?: boolean;
@@ -379,6 +387,8 @@ function AssistantBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
 }) {
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -510,6 +520,21 @@ function AssistantBubble({
                             content={regularContent}
                             webContent={webContent}
                             citations={message.citations}
+                            messageId={message.messageId}
+                            desktopMode="inline-panel"
+                            open={activeCitationMessageId === message.messageId}
+                            onOpenChange={(nextOpen) => {
+                                if (!nextOpen && activeCitationMessageId === message.messageId) {
+                                    onOpenCitationPanel?.({
+                                        messageId: message.messageId,
+                                        content: regularContent,
+                                        webContent,
+                                        citations: message.citations,
+                                        referenceItems: [],
+                                    });
+                                }
+                            }}
+                            onDesktopOpen={onOpenCitationPanel}
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} />

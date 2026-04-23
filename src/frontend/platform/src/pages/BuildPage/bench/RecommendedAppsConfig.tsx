@@ -279,7 +279,7 @@ export default function RecommendedAppsConfig({
                     <div
                         ref={listRef}
                         className="w-2/3 flex flex-col overflow-y-auto"
-                        style={{ maxHeight: "400px" }}
+                        style={{ height: "400px" }}
                         onScroll={handleScroll}
                     >
                         {appList.length > 0 ? (
@@ -349,11 +349,11 @@ export default function RecommendedAppsConfig({
                                 )}
                             </div>
                         ) : loading ? (
-                            <div className="flex justify-center items-center h-full py-8">
+                            <div className="flex-1 flex justify-center items-center">
                                 <span className="text-sm text-gray-400">加载中...</span>
                             </div>
                         ) : (
-                            <div className="text-center text-sm text-gray-500 py-8">
+                            <div className="flex-1 flex justify-center items-center text-sm text-gray-500">
                                 暂无应用
                             </div>
                         )}

@@ -7,6 +7,7 @@ import {
   buildCitationDocumentPreview,
   buildCitationReferenceItems,
   createCitationDetailMap,
+  getCitationDocumentFileType,
   isRagCitation,
   normalizeCitationType,
   type CitationPreview,
@@ -23,17 +24,58 @@ type CitationReferencesDrawerProps = {
   content: string;
   webContent?: any;
   citations?: ChatCitation[] | null;
+  referenceItems?: CitationReferenceItem[];
   buttonClassName?: string;
   actionButtons?: React.ReactNode;
+  messageId?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  desktopMode?: 'inline-panel' | 'overlay';
+  onDesktopOpen?: (payload: CitationReferencesDesktopPayload) => void;
+  panelOnly?: boolean;
+  panelClassName?: string;
+};
+
+export type CitationReferencesDesktopPayload = {
+  messageId?: string;
+  content: string;
+  webContent?: any;
+  citations?: ChatCitation[] | null;
+  referenceItems: CitationReferenceItem[];
 };
 
 function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
   return (
-    <div className={cn('text-[14px] font-medium leading-5', isWeb ? 'text-[#7C3AED]' : 'text-[#165DFF]')}>
+    <div
+      className={cn(
+        'inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px]',
+        isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-[#F5F8FF] text-[#024DE3]',
+      )}
+    >
       [{label}] - {isWeb ? '网页' : '文档'}
     </div>
   );
+}
+
+function splitDocumentTitle(title: string, detail: ChatCitation | null, preview: CitationPreview | null) {
+  const fileType = String(getCitationDocumentFileType(detail) || preview?.sourceMeta || '')
+    .toLowerCase()
+    .replace(/^\./, '');
+
+  if (!fileType) {
+    return { name: title, extension: '' };
+  }
+
+  const normalizedExtension = `.${fileType}`;
+  if (title.toLowerCase().endsWith(normalizedExtension)) {
+    return {
+      name: title.slice(0, title.length - normalizedExtension.length),
+      extension: normalizedExtension,
+    };
+  }
+
+  return { name: title, extension: normalizedExtension };
 }
 
 function CitationReferenceCard({
@@ -57,6 +99,7 @@ function CitationReferenceCard({
   const title = preview?.title || '暂无标题';
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const sourceMetaText = [preview?.sourceName, preview?.sourceMeta].filter(Boolean).join(' | ');
+  const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
   if (isH5) {
     return (
@@ -116,39 +159,44 @@ function CitationReferenceCard({
     );
   }
 
+  const titleContent = canOpenDocument ? (
+    <button
+      type="button"
+      onClick={() => onOpenDocumentPreview(detail!)}
+      className="flex min-w-0 items-center gap-1 text-left hover:text-[#165DFF]"
+      title={title}
+    >
+      <span className="truncate">{documentName}</span>
+      {documentExtension ? <span className="shrink-0">{documentExtension}</span> : null}
+    </button>
+  ) : preview?.link ? (
+    <a
+      href={preview.link}
+      target="_blank"
+      rel="noreferrer"
+      className="block min-w-0 truncate hover:text-[#165DFF]"
+      title={title}
+    >
+      {title}
+    </a>
+  ) : (
+    <span className="block min-w-0 truncate" title={title}>{title}</span>
+  );
+
   return (
-    <div className="rounded-[8px] bg-[#FAFAFA] px-4 py-3">
-      <div className="mb-3">
+    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
+      <div className="flex items-center">
         <SourceTypeBadge preview={preview} label={item.data.label} type={item.data.type} />
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 text-[15px] font-medium leading-6 text-[#1D2129]">
-        <CitationSourceIcon detail={detail} preview={preview} type={type} />
-        {canOpenDocument ? (
-          <button
-            type="button"
-            onClick={() => onOpenDocumentPreview(detail!)}
-            className="min-w-0 truncate text-left hover:text-[#165DFF] hover:underline"
-            title={title}
-          >
-            {title}
-          </button>
-        ) : preview?.link ? (
-          <a
-            href={preview.link}
-            target="_blank"
-            rel="noreferrer"
-            className="min-w-0 truncate hover:text-[#165DFF] hover:underline"
-            title={title}
-          >
-            {title}
-          </a>
-        ) : (
-          <span className="min-w-0 truncate" title={title}>{title}</span>
-        )}
+      <div className="flex min-w-0 items-center gap-1 text-[14px] font-normal leading-[22px] text-[#1D2129]">
+        {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+        <div className="min-w-0 flex-1">
+          {titleContent}
+        </div>
       </div>
 
-      {(isLoading || hasError) && <div className="mt-2 min-h-[22px] text-[14px] leading-[22px] text-[#4E5969]">
+      {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
         {isLoading ? (
           <span className="inline-flex items-center gap-2 text-[#86909C]">
             <Loader2 className="size-3.5 animate-spin" />
@@ -161,10 +209,21 @@ function CitationReferenceCard({
         )}
       </div>}
 
-      <div className="mt-3 flex min-w-0 items-center gap-2 text-[13px] leading-5 text-[#86909C]">
-        <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
-        <span className="min-w-0 truncate">{preview?.sourceName || (isWeb ? '网页' : '政策文件')}</span>
-        {preview?.sourceMeta && <span className="shrink-0">{preview.sourceMeta}</span>}
+      <div className="flex min-w-0 items-center gap-1 text-[12px] leading-5 text-[#86909C]">
+        {isWeb ? (
+          <>
+            <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ECECEC] bg-white">
+              <CitationSourceIcon detail={detail} preview={preview} type={type} />
+            </div>
+            <span className="truncate">{preview?.sourceName || '网页'}</span>
+            {preview?.sourceMeta ? <span className="shrink-0">{preview.sourceMeta}</span> : null}
+          </>
+        ) : (
+          <>
+            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
+            <span className="truncate">{preview?.sourceName || '政策文件'}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -174,11 +233,19 @@ export default function CitationReferencesDrawer({
   content,
   webContent,
   citations,
+  referenceItems,
   buttonClassName,
   actionButtons,
+  messageId,
+  open,
+  onOpenChange,
+  desktopMode = 'overlay',
+  onDesktopOpen,
+  panelOnly = false,
+  panelClassName,
 }: CitationReferencesDrawerProps) {
   const isH5 = usePrefersMobileLayout();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [detailMap, setDetailMap] = useState<Record<string, ChatCitation>>(() => createCitationDetailMap(citations));
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
   const [errorMap, setErrorMap] = useState<Record<string, boolean>>({});
@@ -188,8 +255,10 @@ export default function CitationReferencesDrawer({
   const batchRequestKeyRef = useRef<string>('');
 
   const references = useMemo(
-    () => buildCitationReferenceItems({ content, webContent, citations }),
-    [content, webContent, citations],
+    () => (referenceItems && referenceItems.length > 0
+      ? referenceItems
+      : buildCitationReferenceItems({ content, webContent, citations })),
+    [referenceItems, content, webContent, citations],
   );
 
   useEffect(() => {
@@ -290,7 +359,11 @@ export default function CitationReferencesDrawer({
   }, []);
 
   useEffect(() => {
-    if (!open) {
+    const shouldUseDesktopInlinePanel = !isH5
+      && desktopMode === 'inline-panel'
+      && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
+    const shouldLoadDetails = panelOnly ? true : shouldUseDesktopInlinePanel ? !!open : internalOpen;
+    if (!shouldLoadDetails) {
       return;
     }
 
@@ -303,13 +376,117 @@ export default function CitationReferencesDrawer({
     citationIds.forEach((citationId) => {
       void loadCitationDetail(citationId);
     });
-  }, [detailMap, loadCitationDetail, open, references]);
+  }, [detailMap, desktopMode, internalOpen, isH5, loadCitationDetail, open, panelOnly, references]);
+
+  const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
+  const isDesktopInlinePanel = !isH5
+    && desktopMode === 'inline-panel'
+    && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
+  const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
+  const setOpenState = (nextOpen: boolean) => {
+    if (isDesktopInlinePanel) {
+      onOpenChange?.(nextOpen);
+      return;
+    }
+
+    setInternalOpen(nextOpen);
+  };
+  const handleOpenButtonClick = () => {
+    if (isDesktopInlinePanel) {
+      if (isOpen && !panelOnly) {
+        onOpenChange?.(false);
+      } else {
+        onDesktopOpen?.({
+          messageId,
+          content,
+          webContent,
+          citations,
+          referenceItems: references,
+        });
+        onOpenChange?.(true);
+      }
+      return;
+    }
+
+    setOpenState(true);
+  };
+  const panelContent = (
+    <>
+      <div className={cn(
+        'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
+        isH5 ? 'h-14 px-4' : 'h-14 px-3',
+      )}>
+        <div className="flex items-center gap-2">
+          <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
+            {isH5 ? `参考来源 ${references.length}` : '参考资料'}
+          </h2>
+          {!isH5 && (
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
+              {references.length}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpenState(false)}
+          className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+          aria-label="关闭参考资料"
+        >
+          <X className="size-4" strokeWidth={1.5} />
+        </button>
+      </div>
+
+      <div className={cn(
+        'flex-1 overflow-y-auto',
+        isH5 ? 'px-4 py-1' : 'space-y-3 px-3 py-4',
+      )}>
+        {references.length > 0 ? (
+          references.map((item) => {
+            const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
+            return (
+              <CitationReferenceCard
+                key={item.key}
+                item={item}
+                detail={detail}
+                isLoading={!!loadingMap[item.data.citationId]}
+                hasError={!!errorMap[item.data.citationId]}
+                isH5={isH5}
+                onOpenDocumentPreview={(detail) => {
+                  setDocumentPreview({
+                    detail,
+                    locateChunk: false,
+                  });
+                }}
+              />
+            );
+          })
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-[#86909C]">
+            暂无参考资料
+          </div>
+        )}
+      </div>
+      <CitationDocumentPreviewDrawer
+        preview={documentPreview}
+        onClose={() => setDocumentPreview(null)}
+      />
+    </>
+  );
+
+  if (panelOnly) {
+    return (
+      <section
+        className={cn('flex h-full min-h-0 flex-col bg-white', !isH5 && 'w-full max-w-[360px]', panelClassName)}
+        aria-label="参考资料"
+      >
+        {panelContent}
+      </section>
+    );
+  }
 
   if (!references.length) {
     return null;
   }
-
-  const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
 
   return (
     <>
@@ -319,10 +496,11 @@ export default function CitationReferencesDrawer({
         {actionButtons && <div className="flex items-center gap-1">{actionButtons}</div>}
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          data-citation-references-trigger="true"
+          onClick={handleOpenButtonClick}
           className={cn(
             'flex h-6 w-[112px] items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors',
-            open ? 'bg-[#F2F3F5]' : 'bg-transparent hover:bg-[#F7F7F7]',
+            isOpen ? 'bg-[#F2F3F5]' : 'bg-transparent hover:bg-[#F7F7F7]',
           )}
         >
           <div className="flex h-5 w-11 shrink-0 items-center overflow-hidden">
@@ -335,12 +513,12 @@ export default function CitationReferencesDrawer({
         </button>
       </div>
 
-      {open && (
+      {!isDesktopInlinePanel && isOpen && (
         <>
           <div
             className={cn('fixed inset-0 z-40', isH5 ? 'bg-black/30' : 'bg-transparent')}
             aria-hidden="true"
-            onClick={() => setOpen(false)}
+            onClick={() => setOpenState(false)}
           />
           <aside
             className={cn(
@@ -351,55 +529,8 @@ export default function CitationReferencesDrawer({
             )}
             aria-label="参考资料"
           >
-            <div className={cn(
-              'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
-              isH5 ? 'h-14 px-4' : 'h-16 px-6',
-            )}>
-              <div className="flex items-center gap-3">
-                <h2 className="text-[16px] font-semibold leading-6 text-[#1D2129]">
-                  {isH5 ? `参考来源 ${references.length}` : '参考资料'}
-                </h2>
-                {!isH5 && <span className="text-[16px] leading-6 text-[#165DFF]">{references.length}</span>}
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="inline-flex size-8 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
-                aria-label="关闭参考资料"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <div className={cn(
-              'flex-1 overflow-y-auto',
-              isH5 ? 'px-4 py-1' : 'space-y-4 px-6 py-5',
-            )}>
-              {references.map((item) => {
-                const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
-                return (
-                  <CitationReferenceCard
-                    key={item.key}
-                    item={item}
-                    detail={detail}
-                    isLoading={!!loadingMap[item.data.citationId]}
-                    hasError={!!errorMap[item.data.citationId]}
-                    isH5={isH5}
-                    onOpenDocumentPreview={(detail) => {
-                      setDocumentPreview({
-                        detail,
-                        locateChunk: false,
-                      });
-                    }}
-                  />
-                );
-              })}
-            </div>
+            {panelContent}
           </aside>
-          <CitationDocumentPreviewDrawer
-            preview={documentPreview}
-            onClose={() => setDocumentPreview(null)}
-          />
         </>
       )}
     </>

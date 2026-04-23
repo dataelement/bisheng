@@ -15,6 +15,7 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
@@ -142,10 +143,26 @@ async def preview_file_chunk(*,
                     'partitions': partitions
                 }
             })
+        except BaseErrorCode as exc:
+            logger.exception(f'Preview file chunk error: {exc}')
+            await redis_client.aset(redis_key, {
+                "status": "error",
+                "code": exc.code,
+                "message": exc.message,
+                "data": {
+                    "exception": str(exc),
+                    **exc.kwargs,
+                }
+            })
         except Exception as exc:
             logger.exception(f'Preview file chunk error: {exc}')
             await redis_client.aset(redis_key, {
-                "status": "error"
+                "status": "error",
+                "code": KnowledgePreviewError.Code,
+                "message": str(exc) or KnowledgePreviewError.Msg,
+                "data": {
+                    "exception": str(exc),
+                }
             })
 
     background_tasks.add_task(exec_task)
@@ -161,8 +178,6 @@ async def get_preview_file_status(
     redis_client = await get_redis_client()
     file_status = await redis_client.aget(redis_key)
     if not file_status:
-        raise KnowledgePreviewError.http_exception()
-    if file_status.get('status') == 'error':
         raise KnowledgePreviewError.http_exception()
     if file_status.get('status') == 'completed':
         await redis_client.aexpire_key(redis_key, 10)

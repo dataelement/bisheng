@@ -2,6 +2,10 @@ import json
 from typing import Any
 
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.workflow.common.citation_keys import (
+    WORKFLOW_CITATION_REGISTRY_ITEMS_KEY,
+    WORKFLOW_SOURCE_DOCUMENTS_KEY,
+)
 from bisheng.workflow.callback.event import OutputMsgChooseData, OutputMsgData, OutputMsgInputData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
@@ -34,6 +38,7 @@ class OutputNode(BaseNode):
         self._parsed_files = []
 
         self._source_documents = []
+        self._citation_registry_items = []
 
         # Non-selective interaction, then the next node is wiredtarget. Selective interactions, which need to be judged based on user input
         self._next_node_id = [one.target for one in self.target_edges]
@@ -62,6 +67,7 @@ class OutputNode(BaseNode):
 
     def _run(self, unique_id: str):
         self._source_documents = []
+        self._citation_registry_items = []
         self.parse_output_msg()
         self.send_output_msg(unique_id)
         res = {
@@ -105,7 +111,8 @@ class OutputNode(BaseNode):
             'msg': self._parsed_output_msg,
             'files': self._parsed_files,
             'output_key': '',
-            'source_documents': self._source_documents
+            'source_documents': self._source_documents,
+            'citation_registry_items': self._citation_registry_items,
         }
         # where interaction is required, there isgroup_params
         if self._output_type == 'input':
@@ -128,9 +135,33 @@ class OutputNode(BaseNode):
             var_map = {}
             for one in variables:
                 node_id = one.split('.')[0]
-                # CiteqaDemonstrate traceability when using the Knowledge Base node
-                if node_id.startswith('qa_retriever'):
-                    self._source_documents = self.graph_state.get_variable(node_id, '$retrieved_result$')
+                self._merge_node_citation_state(node_id)
                 var_map[one] = self.get_other_node_variable(one)
             msg = msg_template.format(var_map)
         return msg
+
+    def _merge_node_citation_state(self, node_id: str) -> None:
+        source_documents = self.graph_state.get_variable(node_id, WORKFLOW_SOURCE_DOCUMENTS_KEY)
+        if source_documents is None and node_id.startswith('qa_retriever'):
+            source_documents = self.graph_state.get_variable(node_id, '$retrieved_result$')
+        if source_documents is not None:
+            if not isinstance(self._source_documents, list):
+                self._source_documents = [self._source_documents]
+            if isinstance(source_documents, list):
+                self._source_documents.extend(source_documents)
+            else:
+                self._source_documents.append(source_documents)
+
+        citation_registry_items = self.graph_state.get_variable(
+            node_id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY) or []
+        if citation_registry_items:
+            exists = {
+                (item.citationId, item.itemId)
+                for item in self._citation_registry_items
+            }
+            for item in citation_registry_items:
+                item_key = (item.citationId, item.itemId)
+                if item_key in exists:
+                    continue
+                exists.add(item_key)
+                self._citation_registry_items.append(item)

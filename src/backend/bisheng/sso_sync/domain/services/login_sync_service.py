@@ -10,7 +10,7 @@ derivation → leaf status check → JWT signing.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, List, Optional
 
 from loguru import logger
 
@@ -28,7 +28,12 @@ from bisheng.core.context.tenant import (
     set_current_tenant_id,
 )
 from bisheng.database.models.audit_log import AuditLogDao
-from bisheng.database.models.department import UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department_admin_grant import (
+    DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
+    DEPARTMENT_ADMIN_GRANT_SOURCE_SSO,
+    DepartmentAdminGrantDao,
+)
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
@@ -120,6 +125,11 @@ class LoginSyncService:
                         user.user_id,
                         [d.id for d in secondary_depts],
                     )
+
+                await cls._sync_department_admin_tuples(
+                    user.user_id,
+                    payload.department_admin_external_ids,
+                )
 
                 # --- leaf tenant derivation (may bump token_version) ---
                 leaf_tenant = await UserTenantSyncService.sync_user(
@@ -256,6 +266,101 @@ class LoginSyncService:
             await UserDepartmentDao.aadd_member(
                 user_id, dept_id, is_primary=1, source=cls.SOURCE,
             )
+
+    @classmethod
+    async def _sync_department_admin_tuples(
+        cls,
+        user_id: int,
+        admin_dept_external_ids: Optional[List[str]],
+    ) -> None:
+        """OpenFGA ``department#admin`` vs WeCom leader list + grant-source rows.
+
+        - Field **omitted** (``None``): no FGA / DB grant changes (backward compatible).
+        - Field **present** (including ``[]``): reconcile SSO departments the user
+          belongs to. Only removes FGA ``admin`` when ``department_admin_grant``
+          marks the grant as ``sso``; ``manual`` (management UI) is left intact.
+        """
+        from bisheng.department.domain.services.department_change_handler import (
+            DepartmentChangeHandler,
+        )
+
+        if admin_dept_external_ids is None:
+            return
+
+        want = {str(x).strip() for x in admin_dept_external_ids if x and str(x).strip()}
+
+        memberships = await UserDepartmentDao.aget_user_departments(user_id)
+        dept_ids = list({m.department_id for m in memberships})
+        depts = await DepartmentDao.aget_by_ids(dept_ids) if dept_ids else []
+        dept_by_id = {int(d.id): d for d in depts if d.id is not None}
+
+        reconcile_dept_ids: List[int] = []
+        for row in memberships:
+            dept = dept_by_id.get(int(row.department_id))
+            if dept is None or getattr(dept, 'source', '') != cls.SOURCE:
+                continue
+            ext_raw = getattr(dept, 'external_id', None)
+            if not ext_raw or not str(ext_raw).strip():
+                continue
+            reconcile_dept_ids.append(int(dept.id))
+
+        grants = await DepartmentAdminGrantDao.aget_by_user_and_departments(
+            user_id, reconcile_dept_ids,
+        )
+        grant_by_dept = {int(g.department_id): g for g in grants}
+
+        ops = []
+        upsert_sso_dept_ids: List[int] = []
+        delete_grant_dept_ids: List[int] = []
+
+        for row in memberships:
+            dept = dept_by_id.get(int(row.department_id))
+            if dept is None:
+                continue
+            if getattr(dept, 'source', '') != cls.SOURCE:
+                continue
+            ext_raw = getattr(dept, 'external_id', None)
+            if not ext_raw:
+                continue
+            ext_key = str(ext_raw).strip()
+            if not ext_key:
+                continue
+            did = int(dept.id)
+            marker = grant_by_dept.get(did)
+
+            if ext_key in want:
+                if getattr(dept, 'status', '') != 'active':
+                    continue
+                if (
+                    marker is not None
+                    and getattr(marker, 'grant_source', '')
+                    == DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL
+                ):
+                    continue
+                ops.extend(
+                    DepartmentChangeHandler.on_admin_set(did, [user_id])
+                )
+                upsert_sso_dept_ids.append(did)
+            else:
+                if (
+                    marker is not None
+                    and getattr(marker, 'grant_source', '')
+                    == DEPARTMENT_ADMIN_GRANT_SOURCE_SSO
+                ):
+                    ops.extend(
+                        DepartmentChangeHandler.on_admin_removed(did, [user_id])
+                    )
+                    delete_grant_dept_ids.append(did)
+
+        if ops:
+            await DepartmentChangeHandler.execute_async(ops)
+
+        for did in dict.fromkeys(upsert_sso_dept_ids):
+            await DepartmentAdminGrantDao.aupsert(
+                user_id, did, DEPARTMENT_ADMIN_GRANT_SOURCE_SSO,
+            )
+        for did in dict.fromkeys(delete_grant_dept_ids):
+            await DepartmentAdminGrantDao.adelete(user_id, did)
 
     @classmethod
     async def _ensure_secondaries(

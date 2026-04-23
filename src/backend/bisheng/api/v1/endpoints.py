@@ -69,6 +69,16 @@ def get_env():
     return resp_200(env)
 
 
+@router.get('/all')
+def get_all_langchain_types_legacy():
+    """兼容旧版平台：启动时请求 GET /api/v1/all（LangChain 节点类型注册表）。
+
+    v2.5+ 后端不再在单体中动态构建该字典；返回空对象以避免 SPA 404。
+    若画布/组件列表异常，请使用与当前后端版本一致的前端构建，或在此补全数据。
+    """
+    return resp_200({})
+
+
 @router.get('/config')
 def get_config(admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)

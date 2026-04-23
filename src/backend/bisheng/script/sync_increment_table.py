@@ -1,11 +1,12 @@
 from datetime import datetime
-
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.user.domain.services.user import UserService
 from bisheng.worker import sync_mid_user_interact_dtl
 from bisheng.worker.telemetry.mid_table import sync_mid_user_increment, sync_mid_knowledge_increment, \
     sync_mid_app_increment
+
+from loguru import logger
 
 
 def sync_user_increment_table_all():
@@ -18,6 +19,9 @@ def sync_user_increment_table_all():
         return
     start_date = first_user.create_time.isoformat()
     end_date = datetime.now().isoformat()
+
+    logger.info(f"查询到的第一条用户记录创建时间: {start_date} - {end_date}")
+
     sync_mid_user_increment(start_date, end_date)
 
 
@@ -31,6 +35,9 @@ def sync_knowledge_increment_table_all():
         return
     start_date = first_knowledge.create_time.isoformat()
     end_date = datetime.now().isoformat()
+
+    logger.info(f"查询到的第一条知识记录创建时间: {start_date} - {end_date}")
+
     sync_mid_knowledge_increment(start_date, end_date)
 
 

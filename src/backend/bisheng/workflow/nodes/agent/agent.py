@@ -504,7 +504,9 @@ class AgentNode(BaseNode):
                     'output': f'Error: {one["error"]}'
                 })
         if tool_invoke_info:
-            for one in tool_invoke_info.values():
+            tool_logs = list(tool_invoke_info.values())
+            tool_logs = self._dedupe_web_search_tool_logs(tool_logs)
+            for one in tool_logs:
                 # knowledge_retriever_tool belong into rag logic，not show in tool log
                 if one["name"] == "knowledge_retriever_tool":
                     continue
@@ -514,6 +516,37 @@ class AgentNode(BaseNode):
                     "type": "tool"
                 })
         return ret
+
+    @staticmethod
+    def _is_web_search_log(tool_log: dict) -> bool:
+        name = tool_log.get('name')
+        return name == 'web_search' or name == '联网搜索'
+
+    @staticmethod
+    def _has_citation_key(output: Any) -> bool:
+        return isinstance(output, str) and '"citation_key"' in output
+
+    @classmethod
+    def _dedupe_web_search_tool_logs(cls, tool_logs: list[dict]) -> list[dict]:
+        web_search_indexes = [
+            index for index, item in enumerate(tool_logs)
+            if cls._is_web_search_log(item)
+        ]
+        if len(web_search_indexes) <= 1:
+            return tool_logs
+
+        cited_indexes = [
+            index for index in web_search_indexes
+            if cls._has_citation_key(tool_logs[index].get('output'))
+        ]
+        if not cited_indexes:
+            return tool_logs
+
+        keep_index = cited_indexes[-1]
+        return [
+            item for index, item in enumerate(tool_logs)
+            if index == keep_index or index not in web_search_indexes
+        ]
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None,
                   tool_invoke_list: list = None) -> (str, str, list[CitationRegistryItemSchema]):

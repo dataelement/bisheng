@@ -1,8 +1,18 @@
+import json
 from typing import Any
 
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    annotate_web_results_with_citations,
+    cache_citation_registry_items_sync,
+    collect_web_citation_registry_items,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
+from bisheng.workflow.common.citation_keys import (
+    WORKFLOW_CITATION_REGISTRY_ITEMS_KEY,
+    WORKFLOW_SOURCE_DOCUMENTS_KEY,
+)
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
@@ -18,6 +28,29 @@ class ToolNode(BaseNode):
 
         self._tool = None
 
+    def _is_web_search_tool(self) -> bool:
+        return (
+            getattr(self._tool, 'name', None) == 'web_search'
+            or getattr(self._tool_info, 'tool_name', None) == 'web_search'
+        )
+
+    def _annotate_web_search_output(self, output: Any) -> Any:
+        if not isinstance(output, str):
+            return output
+        try:
+            results = json.loads(output)
+        except json.JSONDecodeError:
+            return output
+        if not isinstance(results, list):
+            return output
+
+        annotated_results = annotate_web_results_with_citations(results)
+        citation_items = collect_web_citation_registry_items(annotated_results)
+        cache_citation_registry_items_sync(citation_items)
+        self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, None)
+        self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+        return json.dumps(annotated_results, ensure_ascii=False)
+
     def _init_tool(self):
         if self._tool:
             return
@@ -29,6 +62,8 @@ class ToolNode(BaseNode):
         self._init_tool()
         tool_input = self.parse_tool_input()
         output = self._tool.invoke(input=tool_input)
+        if self._is_web_search_tool():
+            output = self._annotate_web_search_output(output)
         return {
             "output": output
         }

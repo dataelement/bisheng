@@ -130,14 +130,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       return;
     }
 
-    if (citationPanelOpen && citationPanelPayload?.messageId === payload.messageId) {
-      setCitationPanelOpen(false);
-      return;
-    }
-
     setCitationPanelPayload(payload);
     setCitationPanelOpen(true);
-  }, [isH5, citationPanelOpen, citationPanelPayload?.messageId]);
+  }, [isH5]);
 
   const handleCloseCitationPanel = useCallback(() => {
     setCitationPanelOpen(false);
@@ -291,10 +286,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           <img src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`} alt="" />
         </video>
 
-        <div 
-          ref={chatContainerRef} 
-          className={cn("relative z-10 h-full noscrollbar", !hasMessages && "overflow-y-auto")}
-        >
+        <div ref={chatContainerRef} className="relative z-10 h-full overflow-y-auto noscrollbar">
           {/* Layout: treat "loading an existing conversation" the same as
               "has messages" so the input stays pinned to the bottom during
               sidebar navigation (otherwise the centered welcome-page layout
@@ -307,88 +299,33 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 showCode ? 'hidden' : 'flex flex-col relative',
                 useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
               )}>
-                {/* Content area: Split into Chat Main and Citation Sidebar */}
+                {/* Content area */}
                 {isLoading && conversationId !== 'new' ? (
                   <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
                 ) : hasMessages ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
-                    {/* Left: Chat Main (Messages + Input) */}
-                    <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
-                      <div className="flex min-h-0 flex-1 overflow-hidden">
-                        <AiChatMessages
-                          messages={messages}
-                          conversationId={activeConvoId}
-                          title={chatTitle}
-                          isLoading={false}
-                          isStreaming={isStreaming}
-                          shareToken={shareToken}
-                          knowledgeChatLayout
-                          contentWidthClassName="max-w-[768px] mx-auto"
-                          onRegenerate={regenerate}
-                          onOpenCitationPanel={handleOpenCitationPanel}
-                          activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
-                          flatMode
-                        />
-                      </div>
-                      
-                      {/* Input area — moved inside the left column to be independent of sidebar */}
-                      {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
-                          {isLingsi ? (
-                            <LinsightChatInput
-                              disabled={!!shareToken}
-                              isStreaming={isStreaming}
-                              isLingsi
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              onNewChat={() => {
-                                setSelectedOrgKbs([]);
-                                setSearchType('');
-                                clearConversation();
-                                navigate('/c/new');
-                                document.getElementById('create-convo-btn')?.click();
-                              }}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              setShowCode={setShowCode}
-                            />
-                          ) : (
-                            <AiChatInput
-                              disabled={!bsConfig?.models?.length || !!shareToken}
-                              isStreaming={isStreaming}
-                              onScrollToBottom={() => { }}
-                              modelOptions={bsConfig?.models}
-                              modelValue={chatModel.id}
-                              onModelChange={(val) => {
-                                const model = bsConfig?.models?.find((m) => m.id === val);
-                                setChatModel({
-                                  id: Number(val),
-                                  name: model?.displayName || '',
-                                });
-                              }}
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              selectedOrgKbs={selectedOrgKbs}
-                              onSelectedOrgKbsChange={setSelectedOrgKbs}
-                              searchType={searchType}
-                              onSearchTypeChange={setSearchType}
-                            />
-                          )}
-                        </div>
-                      )}
+                    <div className="min-w-0 flex-1">
+                      <AiChatMessages
+                        messages={messages}
+                        conversationId={activeConvoId}
+                        title={chatTitle}
+                        isLoading={false}
+                        isStreaming={isStreaming}
+                        shareToken={shareToken}
+                        knowledgeChatLayout
+                        contentWidthClassName="max-w-[768px] mx-auto"
+                        onRegenerate={regenerate}
+                        onOpenCitationPanel={handleOpenCitationPanel}
+                        activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
+                        flatMode
+                      />
                     </div>
-
-                    {/* Right: Citation Sidebar (Independent) */}
                     {!isH5 && citationPanelOpen && citationPanelPayload && (
                       <div
                         ref={citationPanelRef}
-                        className="flex h-full w-[360px] shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300"
+                        className="flex h-full w-[420px] shrink-0 border-l border-[#E5E6EB] bg-white touch-mobile:hidden"
                       >
                         <CitationReferencesDrawer
                           panelOnly
@@ -410,68 +347,62 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     )}
                   </div>
                 ) : (
-                  /* Landing page branch */
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 overflow-hidden flex flex-col justify-center">
-                      <Landing
-                        lingsi={isLingsi}
-                        lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
-                        setLingsi={setIsLingsi}
-                        isNew={isNew}
-                      />
-                    </div>
-                    
-                    {/* Input area for landing page */}
-                    {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
-                        {isLingsi ? (
-                          <LinsightChatInput
-                            disabled={!!shareToken}
-                            isStreaming={isStreaming}
-                            isLingsi
-                            onSend={handleSend}
-                            onStop={stopGenerating}
-                            onNewChat={() => {
-                              setSelectedOrgKbs([]);
-                              setSearchType('');
-                              clearConversation();
-                              navigate('/c/new');
-                              document.getElementById('create-convo-btn')?.click();
-                            }}
-                            value={inputText}
-                            onChange={setInputText}
-                            bsConfig={bsConfig}
-                            setShowCode={setShowCode}
-                          />
-                        ) : (
-                          <AiChatInput
-                            disabled={!bsConfig?.models?.length || !!shareToken}
-                            isStreaming={isStreaming}
-                            onScrollToBottom={() => { }}
-                            modelOptions={bsConfig?.models}
-                            modelValue={chatModel.id}
-                            onModelChange={(val) => {
-                              const model = bsConfig?.models?.find((m) => m.id === val);
-                              setChatModel({
-                                id: Number(val),
-                                name: model?.displayName || '',
-                              });
-                            }}
-                            onSend={handleSend}
-                            onStop={stopGenerating}
-                            value={inputText}
-                            onChange={setInputText}
-                            bsConfig={bsConfig}
-                            selectedOrgKbs={selectedOrgKbs}
-                            onSelectedOrgKbsChange={setSelectedOrgKbs}
-                            searchType={searchType}
-                            onSearchTypeChange={setSearchType}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  /* Landing page — preserved for welcome + Lingsi mode switch */
+                  <Landing
+                    lingsi={isLingsi}
+                    lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
+                    setLingsi={setIsLingsi}
+                    isNew={isNew}
+                  />
                 )}
+
+                {/* Input area — using new AiChatInput */}
+                {!shareToken && <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0">
+                  {isLingsi ?
+                    <LinsightChatInput
+                      disabled={!!shareToken}
+                      isStreaming={isStreaming}
+                      isLingsi
+                      onSend={handleSend}
+                      onStop={stopGenerating}
+                      onNewChat={() => {
+                        setSelectedOrgKbs([]);
+                        setSearchType('');
+                        clearConversation();
+                        // Navigate to /c/new to show Landing
+                        navigate('/c/new');
+                        // Trigger sidebar to sync
+                        document.getElementById('create-convo-btn')?.click();
+                      }}
+                      value={inputText}
+                      onChange={setInputText}
+                      bsConfig={bsConfig}
+                      setShowCode={setShowCode}
+                    />
+                    : <AiChatInput
+                      disabled={!bsConfig?.models?.length || !!shareToken}
+                      isStreaming={isStreaming}
+                      onScrollToBottom={() => { }}
+                      modelOptions={bsConfig?.models}
+                      modelValue={chatModel.id}
+                      onModelChange={(val) => {
+                        const model = bsConfig?.models?.find((m) => m.id === val);
+                        setChatModel({
+                          id: Number(val),
+                          name: model?.displayName || '',
+                        });
+                      }}
+                      onSend={handleSend}
+                      onStop={stopGenerating}
+                      value={inputText}
+                      onChange={setInputText}
+                      bsConfig={bsConfig}
+                      selectedOrgKbs={selectedOrgKbs}
+                      onSelectedOrgKbsChange={setSelectedOrgKbs}
+                      searchType={searchType}
+                      onSearchTypeChange={setSearchType}
+                    />}
+                </div>}
               </div>
             );
           })()}

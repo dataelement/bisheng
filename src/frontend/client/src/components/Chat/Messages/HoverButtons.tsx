@@ -7,7 +7,7 @@ import {
   RegenerateIcon,
 } from "~/components/svg";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import type {
   TConversation,
   TMessage,
@@ -32,6 +32,8 @@ type THoverButtons = {
   latestMessage: TMessage | null;
   isLast: boolean;
   index: number;
+  onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+  activeCitationMessageId?: string | null;
 };
 
 export default function HoverButtons({
@@ -46,6 +48,8 @@ export default function HoverButtons({
   handleContinue,
   latestMessage,
   isLast,
+  onOpenCitationPanel,
+  activeCitationMessageId,
 }: THoverButtons) {
   const localize = useLocalize();
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
@@ -136,6 +140,10 @@ export default function HoverButtons({
           content={referenceContent}
           webContent={referenceWebContent}
           citations={(message as any).citations}
+          messageId={message.messageId}
+          desktopMode="inline-panel"
+          open={activeCitationMessageId === message.messageId}
+          onDesktopOpen={onOpenCitationPanel}
         />
       )}
       <div className="mr-2 pt-0.5">

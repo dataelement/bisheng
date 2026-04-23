@@ -40,6 +40,10 @@ from bisheng.database.models.department import (
     UserDepartment,
     UserDepartmentDao,
 )
+from bisheng.database.models.department_admin_grant import (
+    DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
+    DepartmentAdminGrantDao,
+)
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
     DepartmentLocalMemberCreate,
@@ -266,6 +270,10 @@ class DepartmentService:
         if data.admin_user_ids:
             ops = DepartmentChangeHandler.on_admin_set(dept.id, data.admin_user_ids)
             await DepartmentChangeHandler.execute_async(ops)
+            for uid in data.admin_user_ids:
+                await DepartmentAdminGrantDao.aupsert(
+                    int(uid), int(dept.id), DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
+                )
 
         return dept
 
@@ -743,6 +751,7 @@ class DepartmentService:
             + DepartmentChangeHandler.on_admin_removed(dept.id, [user_id])
         )
         await DepartmentChangeHandler.execute_async(ops)
+        await DepartmentAdminGrantDao.adelete(user_id, int(dept.id))
         from bisheng.knowledge.domain.services.department_knowledge_space_service import (
             DepartmentKnowledgeSpaceService,
         )
@@ -830,9 +839,16 @@ class DepartmentService:
         if to_add:
             ops = DepartmentChangeHandler.on_admin_set(dept.id, to_add)
             await DepartmentChangeHandler.execute_async(ops)
+            for uid in to_add:
+                await DepartmentAdminGrantDao.aupsert(
+                    int(uid), int(dept.id), DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
+                )
         if to_remove:
             ops = DepartmentChangeHandler.on_admin_removed(dept.id, to_remove)
             await DepartmentChangeHandler.execute_async(ops)
+            await DepartmentAdminGrantDao.adelete_for_department_users(
+                int(dept.id), [int(u) for u in to_remove],
+            )
 
         if to_add or to_remove:
             from bisheng.knowledge.domain.services.department_knowledge_space_service import (
@@ -1239,6 +1255,7 @@ class DepartmentService:
                 + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
             )
             await DepartmentChangeHandler.execute_async(ops_rm)
+            await DepartmentAdminGrantDao.adelete(user_id, int(old_dept_id_for_fga))
         if fga_add_new:
             ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
             await DepartmentChangeHandler.execute_async(ops_add)
