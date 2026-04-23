@@ -294,7 +294,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       script: |
         echo "=======同步 109 backend 源码======="
         cd /opt/server/bisheng-dev
-        git fetch origin feat/2.5.0
+        git fetch origin +refs/heads/feat/2.5.0:refs/remotes/origin/feat/2.5.0
+        echo "=======后端源码版本======="
+        git rev-parse --short origin/feat/2.5.0
         git checkout origin/feat/2.5.0 -- src/backend
         echo "=======重启 backend / worker======="
         cd /opt/server/bisheng-dev/docker
