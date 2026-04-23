@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import sys
 from types import ModuleType, SimpleNamespace
@@ -359,4 +360,56 @@ async def test_retry_files_uses_permission_service_write_async_bridge():
         login_user=login_user,
         owner_user_id=13,
         knowledge_id=51,
+    )
+
+
+def test_judge_qa_knowledge_write_uses_permission_service_write_sync_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7)
+    qa_knowledge = SimpleNamespace(id=61, user_id=14, type=KnowledgeTypeEnum.QA.value)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.query_by_id',
+        return_value=qa_knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_sync',
+    ) as mock_ensure_write:
+        result = KnowledgeService.judge_qa_knowledge_write(login_user, 61)
+
+    assert result is qa_knowledge
+    mock_ensure_write.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=14,
+        knowledge_id=61,
+    )
+
+
+def test_batch_download_files_uses_permission_service_read_sync_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(id=71, user_id=15, name='kb-download')
+    db_file = SimpleNamespace(id=101, knowledge_id=71, object_name='minio/object', file_name='doc.txt')
+    fake_minio = SimpleNamespace(get_share_link_sync=lambda object_name: f'url:{object_name}')
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_read_sync',
+    ) as mock_ensure_read, patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeFileDao.select_list',
+        return_value=[db_file],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.get_minio_storage_sync',
+        return_value=fake_minio,
+    ):
+        result = asyncio.run(KnowledgeService.batch_download_files(login_user, 71, [101]))
+
+    assert result == 'url:minio/object'
+    mock_ensure_read.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=15,
+        knowledge_id=71,
     )

@@ -1321,8 +1321,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_info = KnowledgeDao.query_by_id(file.knowledge_id)
         if not knowledge_info:
             raise NotFoundError(msg="knowledge not found")
-        if not login_user.access_check(knowledge_info.user_id, str(knowledge_info.id), AccessType.KNOWLEDGE):
-            raise UnAuthorizedError()
+        cls.permission_service.ensure_knowledge_read_sync(
+            login_user=login_user,
+            owner_user_id=knowledge_info.user_id,
+            knowledge_id=knowledge_info.id,
+        )
         return cls.get_file_share_url(file=file)
 
     @classmethod
@@ -1452,9 +1455,13 @@ class KnowledgeService(KnowledgeUtils):
         # Query the current knowledge base, whether there are write permissions
         if not db_knowledge:
             raise NotFoundError()
-        if not login_user.access_check(
-                db_knowledge.user_id, str(qa_knowledge_id), AccessType.KNOWLEDGE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=qa_knowledge_id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
@@ -1486,8 +1493,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
-        if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
-            raise UnAuthorizedError()
+        cls.permission_service.ensure_knowledge_read_sync(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
 
         if not file_ids:
             raise NotFoundError(msg="file_ids must not be empty")
