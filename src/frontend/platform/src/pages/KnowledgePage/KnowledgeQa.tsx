@@ -286,7 +286,7 @@ export default function KnowledgeQa(params) {
         (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
     );
     const resourceIds = datalist.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     const visibleLibs = datalist;
