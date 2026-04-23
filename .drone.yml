@@ -281,7 +281,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - docker build -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
-  - name: ssh deploy
+  - name: ssh deploy backend
     image: appleboy/drone-ssh
     pull: if-not-exists
     settings:
@@ -292,11 +292,54 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       port: 22
       command_timeout: 10m
       script:
-       - echo =======找到目录=======
-       - cd /opt/server/bisheng-dev/docker
-       - echo =======直接启动=======
-       - git pull
-       - sh deploy.sh restart
+       - echo =======同步 109 backend 源码=======
+       - cd /opt/server/bisheng-dev
+       - git fetch origin ${DRONE_BRANCH}
+       - git checkout origin/${DRONE_BRANCH} -- src/backend
+       - echo =======重启 backend / worker=======
+       - cd docker
+       - docker-compose restart backend backend_worker
+       - sleep 15
+       - echo =======执行数据库迁移=======
+       - docker exec bisheng-backend sh -lc "cd /app && (alembic upgrade heads || alembic upgrade head)"
+       - echo =======迁移后再次重启=======
+       - docker-compose restart backend backend_worker
+
+  - name: ssh deploy frontend 3003
+    image: appleboy/drone-ssh
+    pull: if-not-exists
+    environment:
+      NEXUS_USER:
+        from_secret: NEXUS_USER
+      NEXUS_PASSWORD:
+        from_secret: NEXUS_PASSWORD
+    settings:
+      host: 192.168.106.120
+      username: root
+      password:
+        from_secret: sshpwd
+      port: 22
+      command_timeout: 20m
+      envs:
+        - NEXUS_USER
+        - NEXUS_PASSWORD
+        - DRONE_BRANCH
+      script:
+       - echo =======准备 3003 前端发布=======
+       - IMAGE_TAG=$(echo ${DRONE_BRANCH} | sed 's/\//_/g')
+       - IMAGE_REF=192.168.106.8:6082/dataelement/bisheng-frontend:${IMAGE_TAG}
+       - docker login -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" http://192.168.106.8:6082 || true
+       - if ! docker pull "$IMAGE_REF"; then IMAGE_REF=cr.dataelem.com/dataelement/bisheng-frontend:${IMAGE_TAG}; docker pull "$IMAGE_REF"; fi
+       - TMP_C=drone_bisheng_frontend_${IMAGE_TAG}
+       - docker rm -f "$TMP_C" || true
+       - docker create --name "$TMP_C" "$IMAGE_REF"
+       - mkdir -p /data/webroot/bisheng-dev /data/webroot/client-dev
+       - rm -rf /data/webroot/bisheng-dev/* /data/webroot/client-dev/*
+       - docker cp "$TMP_C":/usr/share/nginx/html/platform/. /data/webroot/bisheng-dev/
+       - docker cp "$TMP_C":/usr/share/nginx/html/client/. /data/webroot/client-dev/
+       - docker rm -f "$TMP_C"
+       - curl -fsI http://127.0.0.1:3003/
+       - curl -fsI http://127.0.0.1:3003/workspace/c/new
 
   - name: notify-start # notify
     pull: if-not-exists
