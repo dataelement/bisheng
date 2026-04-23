@@ -235,6 +235,7 @@ class PermissionService:
         object_id: str,
         grants: List[AuthorizeGrantItem] = None,
         revokes: List[AuthorizeRevokeItem] = None,
+        enforce_fga_success: bool = False,
     ) -> None:
         """Grant or revoke permissions on a resource.
 
@@ -274,7 +275,11 @@ class PermissionService:
         if not operations:
             return
 
-        await cls.batch_write_tuples(operations)
+        await cls.batch_write_tuples(
+            operations,
+            raise_on_failure=enforce_fga_success,
+            stop_on_failure=enforce_fga_success,
+        )
 
         # Invalidate cache for directly affected users
         if affected_user_ids:
@@ -286,7 +291,13 @@ class PermissionService:
     _FGA_BATCH_SIZE = 100
 
     @classmethod
-    async def batch_write_tuples(cls, operations: List[TupleOperation], crash_safe: bool = False) -> None:
+    async def batch_write_tuples(
+        cls,
+        operations: List[TupleOperation],
+        crash_safe: bool = False,
+        raise_on_failure: bool = False,
+        stop_on_failure: bool = False,
+    ) -> None:
         """Batch write/delete tuples to OpenFGA.
 
         Chunks into batches of _FGA_BATCH_SIZE to respect OpenFGA's per-request limit.
@@ -306,6 +317,7 @@ class PermissionService:
 
         # Pre-record for crash safety — delete on success
         pre_recorded_ids: List[int] = []
+        saved_failure_ops = False
         if crash_safe:
             pre_recorded_ids = await cls._pre_record_failed_tuples(operations)
 
@@ -314,6 +326,8 @@ class PermissionService:
             if fga is None:
                 if not crash_safe:
                     await cls._save_failed_tuples(operations, 'FGAClient not available')
+                if raise_on_failure:
+                    raise FGAConnectionError('FGAClient not available')
                 return
 
             # Chunk the original operation list so writes+deletes together stay
@@ -343,14 +357,27 @@ class PermissionService:
                         len(chunk), e,
                     )
                     failed_ops.extend(
-                        await cls._write_operations_individually(fga, chunk),
+                        await cls._write_operations_individually(
+                            fga,
+                            chunk,
+                            stop_on_failure=stop_on_failure,
+                        ),
                     )
 
             if failed_ops:
+                logger.error(
+                    'OpenFGA tuple write left %d unresolved operations (raise_on_failure=%s, crash_safe=%s)',
+                    len(failed_ops), raise_on_failure, crash_safe,
+                )
                 if not crash_safe:
                     await cls._save_failed_tuples(
                         failed_ops,
                         'OpenFGA single-tuple fallback failed',
+                    )
+                    saved_failure_ops = True
+                if raise_on_failure:
+                    raise FGAWriteError(
+                        f'OpenFGA write did not complete successfully; {len(failed_ops)} tuple operations failed',
                     )
                 return
 
@@ -360,15 +387,18 @@ class PermissionService:
 
         except Exception as e:
             logger.error('Failed to batch write tuples: %s', e)
-            if not crash_safe:
+            if not crash_safe and not saved_failure_ops:
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
+            if raise_on_failure:
+                raise
 
     @classmethod
     async def _write_operations_individually(
         cls,
         fga,
         operations: List[TupleOperation],
+        stop_on_failure: bool = False,
     ) -> List[TupleOperation]:
         """Replay a failed batch one tuple at a time.
 
@@ -377,7 +407,7 @@ class PermissionService:
         callers, so we treat them as success and only return truly failed ops.
         """
         failed: List[TupleOperation] = []
-        for op in operations:
+        for index, op in enumerate(operations):
             payload = {
                 'user': op.user,
                 'relation': op.relation,
@@ -396,10 +426,28 @@ class PermissionService:
                     )
                     continue
                 failed.append(op)
+                if stop_on_failure:
+                    remaining = operations[index + 1:]
+                    if remaining:
+                        logger.warning(
+                            'Stopping tuple fallback after non-idempotent %s failure; skipping %d trailing operations',
+                            op.action, len(remaining),
+                        )
+                        failed.extend(remaining)
+                    break
             except FGAConnectionError:
                 raise
             except Exception:
                 failed.append(op)
+                if stop_on_failure:
+                    remaining = operations[index + 1:]
+                    if remaining:
+                        logger.warning(
+                            'Stopping tuple fallback after unexpected %s failure; skipping %d trailing operations',
+                            op.action, len(remaining),
+                        )
+                        failed.extend(remaining)
+                    break
         return failed
 
     @staticmethod

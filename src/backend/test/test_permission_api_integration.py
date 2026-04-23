@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from bisheng.core.openfga.exceptions import FGAWriteError
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.permission.api.router import router as permission_router
 
@@ -155,6 +156,41 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 19000
         mock_check.assert_awaited_once()
+
+    def test_authorize_api_returns_tuple_write_error_when_fga_write_fails(self):
+        app = _make_app(_AdminUser)
+
+        with patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+            side_effect=FGAWriteError('boom'),
+        ) as mock_authorize, patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/knowledge_library/12/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 2,
+                            'relation': 'owner',
+                            'model_id': 'owner',
+                        }],
+                        'revokes': [{
+                            'subject_type': 'user',
+                            'subject_id': 2,
+                            'relation': 'viewer',
+                        }],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 19004
+        mock_authorize.assert_awaited_once()
+        assert mock_authorize.await_args.kwargs['enforce_fga_success'] is True
+        mock_save_bindings.assert_not_awaited()
 
     def test_grantable_relation_models_returns_empty_for_read_only_caller(self):
         app = _make_app(_ViewerUser)

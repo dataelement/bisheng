@@ -5,6 +5,7 @@ GET  /api/v1/resources/{resource_type}/{resource_id}/permissions — List resour
 """
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -26,10 +27,12 @@ from bisheng.permission.domain.schemas.permission_schema import (
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
     PermissionInvalidResourceError,
+    PermissionTupleWriteError,
 )
 from bisheng.common.models.config import ConfigDao
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Privilege hierarchy: lower index = higher privilege
 _LEVEL_ORDER = [level.value for level in PermissionLevel]  # owner, can_manage, can_edit, can_read
@@ -352,12 +355,24 @@ async def authorize_resource(
     ]
 
     if tuple_grants or tuple_revokes:
-        await PermissionService.authorize(
-            object_type=resource_type,
-            object_id=resource_id,
-            grants=tuple_grants,
-            revokes=tuple_revokes,
+        logger.info(
+            'resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d',
+            login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes),
         )
+        try:
+            await PermissionService.authorize(
+                object_type=resource_type,
+                object_id=resource_id,
+                grants=tuple_grants,
+                revokes=tuple_revokes,
+                enforce_fga_success=True,
+            )
+        except Exception as e:
+            logger.error(
+                'resource_authorize failed actor=%s resource=%s:%s grants=%d revokes=%d error=%s',
+                login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes), e,
+            )
+            return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
 
     # Persist relation-model bindings for UI display and model deletion cascade.
     bindings = await _get_bindings()
@@ -397,6 +412,11 @@ async def authorize_resource(
             'model_id': grant.model_id,
         }
     await _save_bindings(list(bindings_map.values()))
+    logger.info(
+        'resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d',
+        login_user.user_id, resource_type, resource_id, len(request.grants or []), len(request.revokes or []),
+        len(bindings_map),
+    )
     return resp_200(None)
 
 
