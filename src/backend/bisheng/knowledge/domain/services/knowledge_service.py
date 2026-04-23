@@ -124,10 +124,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
         return knowledge
 
     @classmethod
@@ -135,10 +136,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError()
+        await cls.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
         return knowledge
 
     @staticmethod

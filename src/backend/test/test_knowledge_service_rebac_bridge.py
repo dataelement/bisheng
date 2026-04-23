@@ -161,3 +161,59 @@ def test_delete_knowledge_hook_deletes_knowledge_library_tuples():
         KnowledgeService.delete_knowledge_hook(MagicMock(), login_user, knowledge)
 
     mock_delete_tuples.assert_called_once_with('knowledge_library', '13')
+
+
+@pytest.mark.asyncio
+async def test_get_readable_knowledge_uses_permission_service_bridge():
+    KnowledgeService = _load_service_class()
+    knowledge = SimpleNamespace(id=21, user_id=8)
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_read_async',
+        new_callable=AsyncMock,
+    ) as mock_ensure_read:
+        result = await KnowledgeService._get_readable_knowledge(
+            login_user=login_user,
+            knowledge_id=21,
+        )
+
+    assert result is knowledge
+    mock_ensure_read.assert_awaited_once_with(
+        login_user=login_user,
+        owner_user_id=8,
+        knowledge_id=21,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_writable_knowledge_uses_permission_service_bridge():
+    KnowledgeService = _load_service_class()
+    knowledge = SimpleNamespace(id=22, user_id=9)
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_async',
+        new_callable=AsyncMock,
+    ) as mock_ensure_write:
+        result = await KnowledgeService._get_writable_knowledge(
+            login_user=login_user,
+            knowledge_id=22,
+        )
+
+    assert result is knowledge
+    mock_ensure_write.assert_awaited_once_with(
+        login_user=login_user,
+        owner_user_id=9,
+        knowledge_id=22,
+    )
