@@ -34,6 +34,33 @@ async def test_ensure_knowledge_read_async_uses_knowledge_library_rebac():
 
 
 @pytest.mark.asyncio
+async def test_check_access_async_uses_knowledge_library_rebac():
+    service = KnowledgePermissionService()
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService.check',
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_check:
+        allowed = await service.check_access_async(
+            login_user=login_user,
+            owner_user_id=99,
+            knowledge_id=16,
+            access_type=AccessType.KNOWLEDGE,
+        )
+
+    assert allowed is True
+    mock_check.assert_awaited_once_with(
+        user_id=7,
+        relation='can_read',
+        object_type='knowledge_library',
+        object_id='16',
+        login_user=login_user,
+    )
+
+
+@pytest.mark.asyncio
 async def test_ensure_knowledge_write_async_uses_knowledge_library_rebac():
     service = KnowledgePermissionService()
     login_user = SimpleNamespace(user_id=7)

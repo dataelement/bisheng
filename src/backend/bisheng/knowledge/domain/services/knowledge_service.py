@@ -227,8 +227,11 @@ class KnowledgeService(KnowledgeUtils):
             if login_user.user_id == one.user_id:
                 copiable = True
             else:
-                copiable = await login_user.async_access_check(
-                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                copiable = await cls.permission_service.check_access_async(
+                    login_user=login_user,
+                    owner_user_id=one.user_id,
+                    knowledge_id=one.id,
+                    access_type=AccessType.KNOWLEDGE_WRITE,
                 )
             return KnowledgeRead(
                 **one.model_dump(),
@@ -1040,9 +1043,13 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge_file:
             raise NotFoundError.http_exception()
         db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
-        if not login_user.access_check(
-                db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=db_knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         # <g id="Bold">Medical Treatment:</g>vectordb

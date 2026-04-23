@@ -14,6 +14,24 @@ _KNOWLEDGE_ACCESS_RELATION = {
 class KnowledgePermissionService:
     """Centralized permission checks for knowledge domain services."""
 
+    async def check_access_async(
+            self,
+            login_user: UserPayload,
+            owner_user_id: int,
+            knowledge_id: int,
+            access_type: AccessType,
+    ) -> bool:
+        relation = self._get_relation(access_type)
+        if relation is None:
+            return await login_user.async_access_check(owner_user_id, str(knowledge_id), access_type)
+        return await PermissionService.check(
+            user_id=login_user.user_id,
+            relation=relation,
+            object_type='knowledge_library',
+            object_id=str(knowledge_id),
+            login_user=login_user,
+        )
+
     @staticmethod
     def _get_relation(access_type: AccessType) -> str | None:
         return _KNOWLEDGE_ACCESS_RELATION.get(access_type)
@@ -43,17 +61,12 @@ class KnowledgePermissionService:
             knowledge_id: int,
             access_type: AccessType,
     ) -> None:
-        relation = self._get_relation(access_type)
-        if relation is None:
-            allowed = await login_user.async_access_check(owner_user_id, str(knowledge_id), access_type)
-        else:
-            allowed = await PermissionService.check(
-                user_id=login_user.user_id,
-                relation=relation,
-                object_type='knowledge_library',
-                object_id=str(knowledge_id),
-                login_user=login_user,
-            )
+        allowed = await self.check_access_async(
+            login_user=login_user,
+            owner_user_id=owner_user_id,
+            knowledge_id=knowledge_id,
+            access_type=access_type,
+        )
         if not allowed:
             raise UnAuthorizedError()
 

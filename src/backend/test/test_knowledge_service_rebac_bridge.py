@@ -89,6 +89,33 @@ def _install_service_stubs() -> None:
         schemas_module.KnowledgeFileReProcess = _DummySchema
         sys.modules['bisheng.api.v1.schemas'] = schemas_module
 
+    if 'bisheng.worker' not in sys.modules:
+        worker_module = ModuleType('bisheng.worker')
+        worker_module.__path__ = []
+        sys.modules['bisheng.worker'] = worker_module
+
+    if 'bisheng.worker.knowledge' not in sys.modules:
+        worker_knowledge_module = ModuleType('bisheng.worker.knowledge')
+        worker_knowledge_module.__path__ = []
+        sys.modules['bisheng.worker.knowledge'] = worker_knowledge_module
+
+    if 'bisheng.worker.knowledge.file_worker' not in sys.modules:
+        file_worker_module = ModuleType('bisheng.worker.knowledge.file_worker')
+
+        class _DummyFileWorkerTask:
+            @staticmethod
+            def delay(*args, **kwargs):
+                return None
+
+            @staticmethod
+            def apply_async(*args, **kwargs):
+                return None
+
+        file_worker_module.delete_knowledge_file_celery = _DummyFileWorkerTask()
+        file_worker_module.parse_knowledge_file_celery = _DummyFileWorkerTask()
+        sys.modules['bisheng.worker.knowledge.file_worker'] = file_worker_module
+        sys.modules['bisheng.worker.knowledge'].file_worker = file_worker_module
+
 
 def _load_service_class():
     _install_service_stubs()
@@ -131,6 +158,37 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
     assert result == []
     assert total == 0
     login_user.rebac_list_accessible.assert_awaited_once_with('can_read', 'knowledge_library')
+
+
+@pytest.mark.asyncio
+async def test_aconvert_knowledge_read_uses_permission_service_async_bridge_for_copiable():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(
+        id=81,
+        user_id=15,
+        model_dump=lambda: {'id': 81, 'name': 'kb', 'description': '', 'type': 0, 'user_id': 15},
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.UserDao.get_user_by_ids',
+        return_value=[SimpleNamespace(user_id=15, user_name='owner')],
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'check_access_async',
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_check_access:
+        result = await KnowledgeService.aconvert_knowledge_read(login_user, [knowledge])
+
+    assert len(result) == 1
+    assert result[0].copiable is True
+    mock_check_access.assert_awaited_once_with(
+        login_user=login_user,
+        owner_user_id=15,
+        knowledge_id=81,
+        access_type=AccessType.KNOWLEDGE_WRITE,
+    )
 
 
 def test_create_knowledge_hook_writes_knowledge_library_owner_tuple():
@@ -264,6 +322,39 @@ def test_update_knowledge_uses_permission_service_write_sync_bridge():
         login_user=login_user,
         owner_user_id=12,
         knowledge_id=41,
+    )
+
+
+def test_delete_knowledge_file_uses_permission_service_write_sync_bridge():
+    KnowledgeService = _load_service_class()
+    login_user = SimpleNamespace(user_id=7, user_name='tester')
+    db_file = SimpleNamespace(id=91, knowledge_id=51)
+    knowledge = SimpleNamespace(id=51, user_id=13)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeFileDao.select_list',
+        return_value=[db_file],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao.query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_sync',
+    ) as mock_ensure_write, patch(
+        'bisheng.knowledge.domain.services.knowledge_service.delete_knowledge_file_vectors',
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeFileDao.delete_batch',
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeAuditTelemetryService.telemetry_delete_knowledge_file',
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.KnowledgeService.delete_knowledge_file_hook',
+    ):
+        KnowledgeService.delete_knowledge_file(MagicMock(), login_user, [91])
+
+    mock_ensure_write.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=13,
+        knowledge_id=51,
     )
 
 
