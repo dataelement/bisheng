@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
@@ -23,6 +23,7 @@ import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
@@ -39,6 +40,7 @@ import {
   type CitationDisplayData,
   type CitationPreview,
 } from './citationUtils';
+import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
 import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
@@ -204,6 +206,8 @@ type TContentProps = {
   showCursor?: boolean;
   isLatestMessage: boolean;
   citations?: ChatCitation[] | null;
+  messageId?: string;
+  onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
 };
 
 function CitationPreviewCard({
@@ -212,6 +216,7 @@ function CitationPreviewCard({
   label,
   isLoading,
   error,
+  onCardClick,
   onOpenDocumentPreview,
 }: {
   preview: CitationPreview | null;
@@ -219,11 +224,12 @@ function CitationPreviewCard({
   label?: number;
   isLoading: boolean;
   error: boolean;
+  onCardClick?: () => void;
   onOpenDocumentPreview?: () => void;
 }) {
   if (isLoading) {
     return (
-      <div className="flex min-h-[120px] w-[420px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         <Loader2 className="mr-2 size-4 animate-spin" />
         加载溯源详情...
       </div>
@@ -232,60 +238,163 @@ function CitationPreviewCard({
 
   if (error || !preview) {
     return (
-      <div className="w-[420px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无溯源详情
       </div>
     );
   }
 
   const isWeb = preview.type === 'web';
+  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border border-[#ECECEC] bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
+  const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
+  const titleContainerClassName = 'border-b border-[#F2F3F5] bg-[#F7F7F7] px-4 py-3';
+  const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#024DE3]`;
+  const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]';
+  const formatSourceMeta = (value?: string) => {
+    if (!value) {
+      return '';
+    }
 
-  return (
-    <div className="w-[420px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
-      <div className="flex items-center gap-2 border-b border-[#F2F3F5] px-4 py-3">
-        <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
-        {preview.type !== 'web' && onOpenDocumentPreview ? (
-          <button
-            type="button"
-            onClick={onOpenDocumentPreview}
-            className="min-w-0 flex-1 truncate text-left text-[15px] font-medium leading-6 text-[#165DFF] hover:underline"
-            title={preview.title}
-          >
-            {preview.title}
-          </button>
-        ) : preview.link ? (
-          <a
-            href={preview.link}
-            target="_blank"
-            rel="noreferrer"
-            className="min-w-0 flex-1 truncate text-[15px] font-medium leading-6 text-[#165DFF] hover:underline"
-          >
-            {preview.title}
-          </a>
-        ) : (
-          <div className="min-w-0 flex-1 truncate text-[15px] font-medium leading-6 text-[#165DFF]">
-            {preview.title}
-          </div>
-        )}
-        {isWeb && <ExternalLink className="size-4 shrink-0 text-[#165DFF]" />}
+    const normalizedValue = value.trim();
+    const matched = normalizedValue.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/);
+    if (matched) {
+      return `${matched[1]} ${matched[2]}`;
+    }
+
+    return normalizedValue;
+  };
+  const splitRagTitle = (value?: string) => {
+    const normalizedValue = String(value || '').trim();
+    const matched = normalizedValue.match(/^(.*?)(\.[a-zA-Z0-9]+)$/);
+
+    if (!matched) {
+      return {
+        name: normalizedValue,
+        extension: '',
+      };
+    }
+
+    return {
+      name: matched[1],
+      extension: matched[2],
+    };
+  };
+  const renderWebHoverIcon = () => (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="hidden shrink-0 group-hover:block"
+      aria-hidden="true"
+    >
+      <g clipPath="url(#citation-web-hover-icon-clip)">
+        <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+        <path d="M5.33398 10.6667L11.0007 5" stroke="#1B61E6" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 5H11V11" stroke="#1B61E6" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+      <defs>
+        <clipPath id="citation-web-hover-icon-clip">
+          <rect width="16" height="16" fill="white" />
+        </clipPath>
+      </defs>
+    </svg>
+  );
+
+  const renderLabelTag = () => (
+    <div
+      className={`absolute bottom-0 right-0 z-[1] flex h-6 whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
+        ? 'min-w-[79px] bg-[#F7F3FF] text-[#8537F5]'
+        : 'min-w-[76px] bg-[#F5F8FF] text-[#024DE3]'
+        }`}
+    >
+      [{label}] - {isWeb ? '网页' : '文档'}
+    </div>
+  );
+  const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
+  const ragTitleParts = splitRagTitle(preview.title);
+
+  const renderWebTitle = () => {
+    const titleContent = (
+      <>
+        <span className="min-w-0 flex-1 truncate">{preview.title}</span>
+        {preview.link && renderWebHoverIcon()}
+      </>
+    );
+
+    return (
+      <div className={`flex items-center gap-2 ${preview.link ? interactiveTitleClassName : titleClassName}`}>
+        {titleContent}
       </div>
-      <div className="px-4 py-3">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-7 text-[#1D2129]">
+    );
+  };
+
+  const renderRagTitle = () => (
+    <div className="flex h-[38px] items-center gap-2 bg-[#F7F7F7] px-3 py-2">
+      <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <span
+          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} min-w-0 truncate`}
+          title={preview.title}
+        >
+          {ragTitleParts.name || preview.title}
+        </span>
+        {ragTitleParts.extension && (
+          <span className={`${onOpenDocumentPreview ? 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129] transition-colors duration-200 group-hover:text-[#024DE3]' : 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]'}`}>
+            {ragTitleParts.extension}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderWebPreview = () => (
+    <>
+      <div className={titleContainerClassName}>
+        {renderWebTitle()}
+      </div>
+      <div className="px-4 py-3 pb-0">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-6 text-[#1D2129]">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3 text-[13px] leading-5 text-[#86909C]">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+          <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
-            <span className="truncate">{preview.sourceName}</span>
-            {preview.sourceMeta && <span className="shrink-0">{preview.sourceMeta}</span>}
-          </div>
-          <div className={`shrink-0 rounded px-2 py-1 ${isWeb ? 'bg-[#F3EEFF] text-[#7C3AED]' : 'bg-[#EEF3FF] text-[#165DFF]'}`}>
-            [{label}] - {isWeb ? '网页' : '文档'}
+            <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
+            {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
           </div>
         </div>
       </div>
+    </>
+  );
+
+  const renderRagPreview = () => (
+    <>
+      {renderRagTitle()}
+      <div className="px-4 py-3 pb-0">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-6 text-[#1D2129]">
+          <div className="line-clamp-4 whitespace-pre-wrap break-words">
+            {preview.snippet || '暂无内容摘要'}
+          </div>
+        </div>
+        <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+          <div className="flex min-w-0 items-center gap-2 pb-0">
+            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
+            <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
+            {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className={cardClassName} onClick={onCardClick}>
+      {isWeb ? renderWebPreview() : renderRagPreview()}
+      {renderLabelTag()}
     </div>
   );
 }
@@ -426,7 +535,7 @@ const Citation = ({
           onClick={handleCitationClick}
           onMouseEnter={() => handleOpenChange(true)}
           onMouseLeave={scheduleClose}
-          className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
+          className={`ml-1 inline-flex min-h-5 min-w-5 cursor-pointer items-center justify-center rounded-xl px-1.5 py-0.5 text-[0.85em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
         >
           <span>{children}</span>
         </button>
@@ -446,6 +555,7 @@ const Citation = ({
             label={data.label}
             isLoading={isLoading}
             error={error}
+            onCardClick={() => void handleCitationClick()}
             onOpenDocumentPreview={() => void handleCitationClick()}
           />
         </Popover.Content>
@@ -454,8 +564,17 @@ const Citation = ({
   );
 };
 
-const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, citations }: TContentProps & { webContent: any }) => {
+const Markdown = memo(({
+  content = '',
+  showCursor,
+  isLatestMessage,
+  webContent,
+  citations,
+  messageId,
+  onOpenCitationPanel,
+}: TContentProps & { webContent: any }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
+  const isMobileLayout = useMediaQuery('(max-width: 576px)');
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
 
@@ -609,12 +728,30 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
   }, []);
 
   const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
+    const nextPreview = {
+      detail,
+      itemId,
+      locateChunk,
+    };
+
+    if (!isMobileLayout && onOpenCitationPanel) {
+      onOpenCitationPanel({
+        messageId,
+        content,
+        webContent,
+        citations,
+        referenceItems: [],
+        initialDocumentPreview: nextPreview,
+      });
+      return;
+    }
+
     setDocumentPreview({
       detail,
       itemId,
       locateChunk,
     });
-  }, []);
+  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
 
   // Cursor
   if (isInitializing) {

@@ -7,13 +7,13 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getDailyConfigApi, setDailyConfigApi } from "@/controllers/API";
+import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { t } from "i18next";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
-import { resolveConfigString } from "./configValue";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
 import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
@@ -160,7 +160,7 @@ export default function index() {
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
-                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide pb-10">
                         {/* <ToggleSection
                             title={t('chatConfig.workstationEntry')}
                             enabled={formData.menuShow}
@@ -384,7 +384,8 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
     const [formData, setFormData] = useState<ChatConfigForm>({
         // menuShow: true,
-        systemPrompt: '',
+        // Fresh-deployment default — overwritten by API value when present.
+        systemPrompt: t('chatConfig.systemPrompt2'),
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
@@ -424,52 +425,104 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
 
     useEffect(() => {
-        getDailyConfigApi().then((res) => {
+        // Preset-tool list is fetched alongside config so fresh deployments can
+        // seed the built-in "联网搜索" tool as default-checked. The preset list
+        // is authoritative (t_gpts_tools* tables), so tool_key is looked up at
+        // runtime rather than hardcoded.
+        Promise.all([
+            getDailyConfigApi(),
+            getToolsApi('default').catch(() => []),
+        ]).then(([res, toolsRes]) => {
             const cfg = (res && (res as any).data) || res;
-            if (cfg) {
-                setFormData((prev) => {
-                    const mergeObj = (a: any, b: any) =>
-                        b != null && typeof b === 'object' ? { ...a, ...b } : a;
+            const presetTools: any[] = Array.isArray(toolsRes) ? toolsRes : [];
 
+            const buildDefaultTools = (): ToolConfigType[] => {
+                for (const parent of presetTools) {
+                    const child = (parent.children || []).find(
+                        (c: any) => c.tool_key === 'web_search',
+                    );
+                    if (child) {
+                        return [{
+                            id: parent.id,
+                            name: parent.name,
+                            is_preset: parent.is_preset,
+                            description: parent.description,
+                            default_checked: true,
+                            children: [{
+                                id: child.id,
+                                name: child.name,
+                                tool_key: child.tool_key,
+                                desc: child.desc,
+                            }],
+                        }];
+                    }
+                }
+                return [];
+            };
+
+            setFormData((prev) => {
+                const mergeObj = (a: any, b: any) =>
+                    b != null && typeof b === 'object' ? { ...a, ...b } : a;
+
+                // Fresh deployment: no WORKSTATION config row yet. Seed both
+                // systemPrompt and web_search from defaults; leave other fields
+                // at their initial-state values.
+                if (!cfg) {
                     return {
                         ...prev,
-                        // 基本文案配置
-                        sidebarSlogan: cfg.sidebarSlogan ?? prev.sidebarSlogan,
-                        welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
-                        functionDescription: cfg.functionDescription ?? prev.functionDescription,
-                        inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
-                        applicationCenterWelcomeMessage:
-                            cfg.applicationCenterWelcomeMessage ?? prev.applicationCenterWelcomeMessage,
-                        applicationCenterDescription:
-                            cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
-                        // 模型与 token
-                        models:
-                            Array.isArray(cfg.models) && cfg.models.length > 0
-                                ? cfg.models
-                                : prev.models,
-                        maxTokens:
-                            typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
-                        // 系统提示词
-                        systemPrompt: resolveConfigString(cfg.systemPrompt, prev.systemPrompt),
-                        // 图标与其他嵌套配置合并
-                        sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
-                        assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
-                        knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
-                        fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
-                        tabDisplayName: (() => {
-                            // Treat empty string / whitespace as "API empty" and don't override defaults.
-                            const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
-                            if (typeof raw !== 'string') return prev.tabDisplayName;
-                            const trimmed = raw.trim();
-                            return trimmed ? trimmed : prev.tabDisplayName;
-                        })(),
-                        // v2.5 Agent-mode fields (parse_config auto-migrates legacy webSearch → tools).
-                        tools: Array.isArray(cfg.tools) ? cfg.tools : prev.tools,
-                        orgKbs: Array.isArray(cfg.orgKbs) ? cfg.orgKbs : prev.orgKbs,
-                        recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
+                        systemPrompt: t('chatConfig.systemPrompt2'),
+                        tools: buildDefaultTools(),
                     };
-                });
-            }
+                }
+
+                // Legacy upgrade path: missing `tools` field → seed web_search.
+                // Explicit [] (admin cleared) is preserved.
+                const toolsFromCfg: ToolConfigType[] = Array.isArray(cfg.tools)
+                    ? cfg.tools
+                    : cfg.tools === undefined
+                        ? buildDefaultTools()
+                        : prev.tools;
+
+                // Treat empty string as "not configured" so the default prompt
+                // fills in instead of an empty textarea.
+                const cfgSystemPrompt = typeof cfg.systemPrompt === 'string'
+                    && cfg.systemPrompt.trim()
+                    ? cfg.systemPrompt
+                    : t('chatConfig.systemPrompt2');
+
+                return {
+                    ...prev,
+                    sidebarSlogan: cfg.sidebarSlogan ?? prev.sidebarSlogan,
+                    welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
+                    functionDescription: cfg.functionDescription ?? prev.functionDescription,
+                    inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
+                    applicationCenterWelcomeMessage:
+                        cfg.applicationCenterWelcomeMessage ?? prev.applicationCenterWelcomeMessage,
+                    applicationCenterDescription:
+                        cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
+                    models:
+                        Array.isArray(cfg.models) && cfg.models.length > 0
+                            ? cfg.models
+                            : prev.models,
+                    maxTokens:
+                        typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
+                    systemPrompt: cfgSystemPrompt,
+                    sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
+                    assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
+                    knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
+                    fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
+                    tabDisplayName: (() => {
+                        // Treat empty string / whitespace as "API empty" and don't override defaults.
+                        const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
+                        if (typeof raw !== 'string') return prev.tabDisplayName;
+                        const trimmed = raw.trim();
+                        return trimmed ? trimmed : prev.tabDisplayName;
+                    })(),
+                    tools: toolsFromCfg,
+                    orgKbs: Array.isArray(cfg.orgKbs) ? cfg.orgKbs : prev.orgKbs,
+                    recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
+                };
+            });
         });
     }, [t]);
 

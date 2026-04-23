@@ -29,7 +29,7 @@
   pointer-events: auto;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .nav {
     width: calc(100% - 10px);
     transition: all 0.15s;
@@ -96,7 +96,7 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .input-panel-button {
     border: 0;
   }

@@ -7,7 +7,7 @@ import {
     PaginationItem,
     PaginationLink,
 } from "~/components/ui/Pagination";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 
 interface PaginationBarProps {
     currentPage: number;
@@ -19,7 +19,8 @@ interface PaginationBarProps {
 /** Reusable pagination footer for file lists */
 export function PaginationBar({ currentPage, pageSize, total, onPageChange }: PaginationBarProps) {
     const localize = useLocalize();
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const isH5 = usePrefersMobileLayout();
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
     const getPageNumbers = (): (number | "ellipsis")[] => {
         const pages: (number | "ellipsis")[] = [];
@@ -38,6 +39,53 @@ export function PaginationBar({ currentPage, pageSize, total, onPageChange }: Pa
         }
         return pages;
     };
+
+    if (isH5) {
+        return (
+            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 text-[12px] text-[#4e5969]">
+                <div className="w-full text-right">
+                    {localize("com_knowledge.total_prefix")}{" "}
+                    <span className="text-[#165dff]">{total}</span> {localize("com_knowledge.items_comma")}
+                    {localize("com_knowledge.per_page")} {pageSize} {localize("com_knowledge.items_suffix")}
+                </div>
+                <Pagination className="mx-0 w-auto">
+                    <PaginationContent>
+                        <PaginationItem>
+                            <PaginationLink
+                                href="#"
+                                size="icon"
+                                className={"h-6 w-6 " + (currentPage === 1 ? "pointer-events-none opacity-50" : "")}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    if (currentPage > 1) onPageChange(currentPage - 1);
+                                }}
+                            >
+                                <ChevronLeft className="size-4" />
+                            </PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                            <span className="px-2 text-[12px] text-[#4e5969]">
+                                {currentPage}/{totalPages}
+                            </span>
+                        </PaginationItem>
+                        <PaginationItem>
+                            <PaginationLink
+                                href="#"
+                                size="icon"
+                                className={"h-6 w-6 " + (currentPage === totalPages ? "pointer-events-none opacity-50" : "")}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    if (currentPage < totalPages) onPageChange(currentPage + 1);
+                                }}
+                            >
+                                <ChevronRight className="size-4" />
+                            </PaginationLink>
+                        </PaginationItem>
+                    </PaginationContent>
+                </Pagination>
+            </div>
+        );
+    }
 
     return (
         <div className="flex items-center gap-4 text-[14px] text-[#4e5969]">

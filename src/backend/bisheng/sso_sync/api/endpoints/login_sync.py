@@ -35,13 +35,13 @@ async def login_sync(
     secondary departments, derives the leaf tenant via F012 sync, and
     returns a freshly signed JWT.
     """
-    buffer = OrgSyncLogBuffer()
     result = await LoginSyncService.execute(
         payload, request_ip=get_request_ip(request),
     )
-    # Best-effort per-request audit row. Keeping log writes here (rather
-    # than inside the service) means service-level unit tests don't need
-    # to patch OrgSyncLogDao.
-    buffer.member_updated += 1
-    await flush_log(buffer, trigger_type='sso_realtime')
+    # Best-effort per-request audit row. ``skip_org_sync_log`` is used when
+    # Gateway calls ``gateway_wecom_org_sync`` which flushes a single row.
+    if not payload.skip_org_sync_log:
+        buffer = OrgSyncLogBuffer()
+        buffer.member_updated += 1
+        await flush_log(buffer, trigger_type='sso_realtime')
     return resp_200(result)

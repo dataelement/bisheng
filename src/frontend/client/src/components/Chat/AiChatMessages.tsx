@@ -5,8 +5,10 @@
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
+import type { CitationReferencesDesktopPayload } from "./Messages/Content/CitationReferencesDrawer";
 import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import type { ChatMessage } from "~/api/chatApi";
@@ -14,6 +16,8 @@ import { buildMessageTree } from "~/api/chatApi";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
+import { QueryKeys } from "~/types/chat";
+import type { ConversationData } from "~/types/chat/queries";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -37,6 +41,8 @@ interface AiChatMessagesProps {
     contentWidthClassName?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
 }
 
 /**
@@ -50,6 +56,8 @@ function MessageTreeNode({
     currentIndex,
     onRegenerate,
     knowledgeChatLayout,
+    onOpenCitationPanel,
+    activeCitationMessageId,
 }: {
     siblings: ChatMessage[];
     isStreaming?: boolean;
@@ -57,6 +65,8 @@ function MessageTreeNode({
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
     knowledgeChatLayout?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
 }) {
     // Local sibling index for this group of siblings
     const [siblingIdx, setSiblingIdx] = useState(0);
@@ -99,6 +109,8 @@ function MessageTreeNode({
                 siblingCount={siblings.length}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                onOpenCitationPanel={onOpenCitationPanel}
+                activeCitationMessageId={activeCitationMessageId}
             />
             {/* Recursively render children */}
             {children.length > 0 && (
@@ -109,6 +121,8 @@ function MessageTreeNode({
                     currentIndex={currentIndex + 1}
                     onRegenerate={onRegenerate}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    onOpenCitationPanel={onOpenCitationPanel}
+                    activeCitationMessageId={activeCitationMessageId}
                 />
             )}
         </>
@@ -131,10 +145,13 @@ export default function AiChatMessages({
     contentWidthClassName,
     onPresetClick,
     onRegenerate,
+    onOpenCitationPanel,
+    activeCitationMessageId,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
     const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
+    const queryClient = useQueryClient();
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -143,13 +160,20 @@ export default function AiChatMessages({
 
     // Build message tree from flat array (skipped in flat mode)
     const tree = useMemo(() => (flatMode ? [] : buildMessageTree(messages)), [messages, flatMode]);
+    const cachedConversationTitle = useMemo(() => {
+        if (!conversationId || conversationId === "new") return "";
+        const convoData = queryClient.getQueryData<ConversationData>([QueryKeys.allConversations]);
+        const hit = convoData?.pages
+            ?.flatMap((page) => page?.conversations || [])
+            ?.find((convo) => convo?.conversationId === conversationId);
+        return String(hit?.title || "").trim();
+    }, [queryClient, conversationId, messages.length]);
 
     const headerTitleText = useMemo(() => {
-        const raw = tree[0]?.flow_name || title;
+        const raw = tree[0]?.flow_name || title || cachedConversationTitle;
         if (raw != null && String(raw).trim() !== "") return String(raw).trim();
         return localize("com_ui_new_chat");
-    }, [tree, title, localize]);
-
+    }, [tree, title, cachedConversationTitle, localize]);
     useEffect(() => {
         if (hideHeaderTitle) {
             setChatMobileHeader(null);
@@ -269,29 +293,29 @@ export default function AiChatMessages({
 
     // --- Messages (tree rendering) ---
     return (
-        <div className="flex-1 overflow-hidden relative">
+        <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
             {!hideHeaderTitle && (
                 <HeaderTitle
                     readOnly={!!shareToken}
                     hideShare={hideShare}
-                    conversation={{ title: tree[0]?.flow_name || title, flowId: "", conversationId, flowType: 15 }}
+                    conversation={{ title: headerTitleText, flowId: "", conversationId, flowType: 15 }}
                 />
             )}
             <div
                 ref={scrollRef}
                 className={cn(
-                    "h-full overflow-y-auto scrollbar-on-hover",
+                    "min-h-0 flex-1 overflow-y-auto scrollbar-on-hover",
                     hideHeaderTitle
                         ? "pt-2"
                         : isNarrowViewport
-                          ? "pt-11"
-                          : "pt-14",
+                            ? "pt-11"
+                            : "pt-14",
                 )}
                 onScroll={handleScroll}
             >
                 <div
                     className={cn(
-                        "flex w-full flex-col py-2",
+                        "flex min-h-full w-full flex-col py-2",
                         contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
                     )}
                 >
@@ -312,6 +336,8 @@ export default function AiChatMessages({
                                             : undefined
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
+                                    onOpenCitationPanel={onOpenCitationPanel}
+                                    activeCitationMessageId={activeCitationMessageId}
                                 />
                             );
                         })
@@ -325,6 +351,8 @@ export default function AiChatMessages({
                                 currentIndex={0}
                                 onRegenerate={onRegenerate}
                                 knowledgeChatLayout={knowledgeChatLayout}
+                                onOpenCitationPanel={onOpenCitationPanel}
+                                activeCitationMessageId={activeCitationMessageId}
                             />
                         )
                     )}

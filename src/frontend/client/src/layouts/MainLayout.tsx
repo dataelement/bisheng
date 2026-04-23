@@ -145,7 +145,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full px-2' : 'w-[38vw] px-2') : 'w-16 px-2',
-        'h-screen flex flex-col justify-between py-2 shrink-0 bg-white',
+        'h-[100dvh] flex flex-col justify-between py-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
         // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
         isChatSection && isMobile && 'hidden',
@@ -254,6 +254,28 @@ export default function MainLayout() {
     }
   }, [isMobile, isAppSection, mobileSidebarOpen]);
 
+  // Mobile browser: lock page-level scrolling to viewport and keep
+  // scrolling inside layout containers only.
+  useEffect(() => {
+    if (!isMobile) return;
+    const prevHtmlOverflow = document.documentElement.style.overflowY;
+    const prevHtmlHeight = document.documentElement.style.height;
+    const prevBodyOverflow = document.body.style.overflowY;
+    const prevBodyHeight = document.body.style.height;
+
+    document.documentElement.style.overflowY = 'hidden';
+    document.documentElement.style.height = '100dvh';
+    document.body.style.overflowY = 'hidden';
+    document.body.style.height = '100dvh';
+
+    return () => {
+      document.documentElement.style.overflowY = prevHtmlOverflow;
+      document.documentElement.style.height = prevHtmlHeight;
+      document.body.style.overflowY = prevBodyOverflow;
+      document.body.style.height = prevBodyHeight;
+    };
+  }, [isMobile]);
+
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
   // but this serves as a definitive guard for all environments.
@@ -313,7 +335,7 @@ export default function MainLayout() {
   })();
 
   return (
-    <div className="relative flex bg-[#F9F9F9] overflow-hidden w-screen">
+    <div className="relative flex h-[100dvh] w-screen overflow-hidden bg-[#F9F9F9]">
       {shouldHideSidebarOnMobileAppsArea ? null : (
         <Sidebar
           mobileSidebarOpen={mobileSidebarOpen}
@@ -343,12 +365,12 @@ export default function MainLayout() {
           />
         </div>
       ) : null}
-      <main className="flex-1 h-screen relative p-2 pl-0 min-w-0">
+      <main className="relative h-[100dvh] min-w-0 flex-1 p-2">
         {shouldHideSidebarOnMobileAppsArea &&
-        isAppsArea &&
-        !isAppChatRoute &&
-        !isAppsExploreRoute &&
-        !mobileSidebarOpen ? (
+          isAppsArea &&
+          !isAppChatRoute &&
+          !isAppsExploreRoute &&
+          !mobileSidebarOpen ? (
           <button
             type="button"
             aria-label={localize('com_nav_open_sidebar')}
@@ -365,13 +387,13 @@ export default function MainLayout() {
         >
           <div
             className={cn(
-              'h-[calc(100vh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover rounded-xl bg-white shadow-xl',
+              'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover rounded-xl bg-white shadow-xl',
               shouldHideSidebarOnMobileAppsArea &&
-                isAppsArea &&
-                !isAppChatRoute &&
-                !isAppsExploreRoute &&
-                !mobileSidebarOpen &&
-                'pt-9',
+              isAppsArea &&
+              !isAppChatRoute &&
+              !isAppsExploreRoute &&
+              !mobileSidebarOpen &&
+              'pt-9',
             )}
           >
             {outlet}

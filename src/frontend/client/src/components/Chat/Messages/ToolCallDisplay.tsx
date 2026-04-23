@@ -157,10 +157,16 @@ function normaliseWebResults(items: any[]): any[] {
  * `<knowledge_base_id>` / `<knowledge_base_name>` (emitted by the backend
  * `_format_chunk`). The UI shows one chip per knowledge base in the order the
  * model first cited it — not one chip per chunk/file — per v2.5 spec §3.1.
+ *
+ * Backend also emits synthetic chunks for failed KBs carrying
+ * `<retrieval_error>...</retrieval_error>` so the UI can surface the failure
+ * inline with the successful chips instead of dropping them silently.
  */
-function normaliseKnowledgeResults(items: any[]): { id: string; name: string }[] {
-    const seen = new Set<string>();
-    const out: { id: string; name: string }[] = [];
+function normaliseKnowledgeResults(
+    items: any[],
+): { id: string; name: string; error?: string }[] {
+    const seen = new Map<string, { id: string; name: string; error?: string }>();
+    const order: string[] = [];
     for (const raw of items) {
         if (!raw) continue;
         const text =
@@ -169,8 +175,10 @@ function normaliseKnowledgeResults(items: any[]): { id: string; name: string }[]
                 : (raw.chunk || raw.text || raw.content || "").toString();
         const idMatch = /<knowledge_base_id>([^<]*)<\/knowledge_base_id>/.exec(text);
         const nameMatch = /<knowledge_base_name>([^<]*)<\/knowledge_base_name>/.exec(text);
+        const errMatch = /<retrieval_error>([\s\S]*?)<\/retrieval_error>/.exec(text);
         const id = (idMatch?.[1] || "").trim();
         const name = (nameMatch?.[1] || "").trim();
+        const error = errMatch ? errMatch[1].trim() : undefined;
         // Fall back to file_title / object fields when the chunk lacks KB tags
         // (e.g. legacy rows persisted before the backend started embedding them).
         const fallbackName = !name
@@ -191,11 +199,19 @@ function normaliseKnowledgeResults(items: any[]): { id: string; name: string }[]
             : name;
         const finalName = fallbackName || "知识库";
         const key = id || finalName;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ id, name: finalName });
+        const existing = seen.get(key);
+        if (existing) {
+            // A successful chunk takes precedence over a prior error entry;
+            // otherwise keep the first seen entry.
+            if (existing.error && !error) {
+                existing.error = undefined;
+            }
+            continue;
+        }
+        seen.set(key, { id, name: finalName, error });
+        order.push(key);
     }
-    return out;
+    return order.map((k) => seen.get(k)!).filter(Boolean);
 }
 
 // --- component -------------------------------------------------------------
@@ -257,19 +273,26 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
     // Web variant stays open by default after finish (spec §3.2.4); errors
-    // stay open to surface the message; everything else starts collapsed.
+    // stay open to surface the message; knowledge variant auto-expands when
+    // any KB failed so the error detail is visible without another click.
+    const hasKnowledgeErrors =
+        variant === "knowledge" && knowledgeChips.some((kb) => kb.error);
     const initialExpanded =
-        !!toolCall.error || (variant === "web" && !toolCall.inflight);
+        !!toolCall.error ||
+        hasKnowledgeErrors ||
+        (variant === "web" && !toolCall.inflight);
     const [expanded, setExpanded] = useState<boolean>(initialExpanded);
     useEffect(() => {
         if (toolCall.error) {
+            setExpanded(true);
+        } else if (hasKnowledgeErrors) {
             setExpanded(true);
         } else if (variant === "web" && !toolCall.inflight) {
             setExpanded(true);
         } else {
             setExpanded(false);
         }
-    }, [toolCall.inflight, toolCall.error, variant]);
+    }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors]);
 
     const leadingIcon = toolCall.inflight ? (
         <Loader2 className="mr-1.5 size-3.5 animate-spin text-text-secondary" />
@@ -333,10 +356,19 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                                 {knowledgeChips.map((kb, i) => (
                                     <span
                                         key={kb.id || `${kb.name}-${i}`}
-                                        className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
-                                        title={kb.name}
+                                        className={cn(
+                                            "inline-flex items-center justify-center gap-1.5 rounded-[4px] px-2 py-[2px] text-[13px]",
+                                            kb.error
+                                                ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
+                                                : "bg-[#F7F8FA] text-[#4E5969]",
+                                        )}
+                                        title={kb.error ? `${kb.name} 检索失败：${kb.error}` : kb.name}
                                     >
-                                        <BookOpen className="size-[14px] text-[#86909C]" />
+                                        {kb.error ? (
+                                            <AlertCircle className="size-[14px] text-red-500" />
+                                        ) : (
+                                            <BookOpen className="size-[14px] text-[#86909C]" />
+                                        )}
                                         <span className="truncate max-w-[14rem]">{kb.name}</span>
                                     </span>
                                 ))}

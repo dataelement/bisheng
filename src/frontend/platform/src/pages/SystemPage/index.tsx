@@ -23,7 +23,8 @@ export default function index() {
   const isDeptAdmin = !!user?.is_department_admin
   const showOrgTab = isSuperAdmin || isDeptAdmin
   const canAccessSystemConfig = isSuperAdmin || isDeptAdmin
-  const showOrgSyncTab = isSuperAdmin || isDeptAdmin
+  /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
+  const showOrgSyncTab = isSuperAdmin
   const showUserGroupTab =
     user?.role === "admin" || !!user?.can_manage_user_groups
   /** 仅非部门管理员、非超管展示旧版扁平用户表（依赖用户组维度） */

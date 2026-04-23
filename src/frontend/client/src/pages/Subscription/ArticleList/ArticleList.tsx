@@ -397,31 +397,31 @@ export function ArticleList({
                             onScroll={updateTabsScrollShadow}
                             className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
                         >
-                        <button
-                            type="button"
-                            onClick={() => handleSubChannelChange("all")}
-                            className={cn(
-                                "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
-                                !selectedSubChannelName
-                                    ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                    : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
-                            )}
-                        >{localize("com_subscription.all")}</button>
-                        {subChannels.map(sub => (
                             <button
                                 type="button"
-                                key={sub.id}
-                                onClick={() => handleSubChannelChange(sub.name)}
+                                onClick={() => handleSubChannelChange("all")}
                                 className={cn(
                                     "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
-                                    selectedSubChannelName === sub.name
+                                    !selectedSubChannelName
                                         ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
                                         : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
                                 )}
-                            >
-                                {sub.name}
-                            </button>
-                        ))}
+                            >{localize("com_subscription.all")}</button>
+                            {subChannels.map(sub => (
+                                <button
+                                    type="button"
+                                    key={sub.id}
+                                    onClick={() => handleSubChannelChange(sub.name)}
+                                    className={cn(
+                                        "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                        selectedSubChannelName === sub.name
+                                            ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                            : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                    )}
+                                >
+                                    {sub.name}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
@@ -462,7 +462,7 @@ export function ArticleList({
                                     "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                        : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                        : "border-[#E5E6EB] bg-white text-gray-800 hover:bg-gray-50 touch-mobile:border-[#E5E6EB] touch-mobile:bg-white touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
                         </div>

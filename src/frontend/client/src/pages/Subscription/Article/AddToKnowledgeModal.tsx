@@ -191,9 +191,9 @@ function TreeNode({
     const { showToast } = useToastContext();
 
     return (
-        <div className="min-w-0 max-w-full">
+        <div className="w-full min-w-0 max-w-full">
             <div
-                className={`group flex min-w-0 max-w-full items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
+                className={`group flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
                     ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
@@ -237,7 +237,9 @@ function TreeNode({
                         onCancel={onCancelEdit}
                     />
                 ) : (
-                    <span className="min-w-0 flex-1 truncate" title={node.name}>{node.name}</span>
+                    <span className="min-w-0 flex-1 overflow-hidden">
+                        <span className="block truncate" title={node.name}>{node.name}</span>
+                    </span>
                 )}
 
                 {/* Add folder button (hover) */}
@@ -255,7 +257,7 @@ function TreeNode({
 
             {/* Children */}
             {isExpanded && node.children && node.children.length > 0 && (
-                <div className="min-w-0 max-w-full">
+                <div className="w-full min-w-0 max-w-full">
                     {node.children.map(child => (
                         <TreeNode
                             key={child.id}
@@ -686,9 +688,9 @@ export function AddToKnowledgeModal({
                 <div
                     className={
                         useFlexTree
-                            ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover"
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover"
                             : cn(
-                                  "h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover",
+                                  "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover",
                                   mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
                               )
                     }
@@ -716,7 +718,7 @@ export function AddToKnowledgeModal({
                             <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
                         </div>
                     ) : (
-                        <div className="min-w-0 max-w-full py-1">
+                        <div className="w-full min-w-0 max-w-full py-1">
                             {displayTree.map(node => (
                                 <TreeNode
                                     key={node.id}
@@ -741,34 +743,43 @@ export function AddToKnowledgeModal({
             <div
                 className={
                     embedInChannelSheet
-                        ? "mt-auto flex shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] px-4 py-3 sm:px-5 sm:py-3.5"
+                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] bg-white px-4 py-3 sm:px-5 sm:py-3.5"
                         : isChannelSyncCenteredMobile
-                            ? "mt-auto flex shrink-0 flex-row justify-end gap-2 border-t border-[#ECECEC] px-6 py-3.5"
-                            : "mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 touch-mobile:mt-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3"
+                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end border-t border-[#ECECEC] bg-white px-6 py-3.5"
+                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end border-t border-[#ECECEC] bg-white px-5 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
                 }
             >
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={goBackToChannelForm}
+                <div
                     className={cn(
-                        "h-8 px-4 text-sm rounded-md font-normal",
-                        embedInChannelSheet && "flex-1",
-                        mode === "article" && isH5 && "touch-mobile:flex-1",
-                    )}
-                >{localize("com_subscription.cancel")}</Button>
-                <Button
-                    size="sm"
-                    onClick={() => void handleConfirm()}
-                    disabled={!selectedId || isConfirming}
-                    className={cn(
-                        "h-8 px-4 text-sm rounded-md font-normal",
-                        embedInChannelSheet && "flex-1",
-                        mode === "article" && isH5 && "touch-mobile:flex-1",
+                        "ml-auto min-w-0",
+                        embedInChannelSheet
+                            ? "flex w-full items-center gap-2"
+                            : "grid w-[176px] shrink-0 grid-cols-2 gap-2",
                     )}
                 >
-                    {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
-                </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={goBackToChannelForm}
+                        className={cn(
+                            "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
+                            embedInChannelSheet && "flex-1",
+                            mode === "article" && isH5 && "touch-mobile:flex-1",
+                        )}
+                    >{localize("com_subscription.cancel")}</Button>
+                    <Button
+                        size="sm"
+                        onClick={() => void handleConfirm()}
+                        disabled={!selectedId || isConfirming}
+                        className={cn(
+                            "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
+                            embedInChannelSheet && "flex-1",
+                            mode === "article" && isH5 && "touch-mobile:flex-1",
+                        )}
+                    >
+                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
+                    </Button>
+                </div>
             </div>
         </>
     );
@@ -813,7 +824,7 @@ export function AddToKnowledgeModal({
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
-                        className="w-[576px] max-w-[92vw] gap-0 overflow-hidden rounded-xl p-0"
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0"
                     >
                         {pickerBody}
                     </DialogContent>
@@ -823,7 +834,7 @@ export function AddToKnowledgeModal({
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
-                        className="w-[576px] max-w-[92vw] gap-0 overflow-hidden rounded-xl p-0 touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
                     >
                         {pickerBody}
                     </DialogContent>

@@ -13,7 +13,6 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
-import useMediaQuery from '~/hooks/useMediaQuery';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -27,8 +26,6 @@ import Presentation from './Presentation';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import AppAvator from '../Avator';
 
-const CITATION_BROWSER_SMALL_BREAKPOINT = 768;
-const CITATION_MOBILE_BREAKPOINT = 576;
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
@@ -39,9 +36,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [isLingsi, setIsLingsi] = useState(false);
   const [inputText, setInputText] = useState('');
   const isH5 = usePrefersMobileLayout();
-  const isCitationMobile = useMediaQuery(`(max-width: ${CITATION_MOBILE_BREAKPOINT}px)`);
-  const useInlineCitationPanel = useMediaQuery(`(min-width: ${CITATION_BROWSER_SMALL_BREAKPOINT + 1}px)`);
-  const useExpandedCitationPanel = useInlineCitationPanel;
   const [citationPanelPayload, setCitationPanelPayload] = useState<CitationReferencesDesktopPayload | null>(null);
   const [citationPanelOpen, setCitationPanelOpen] = useState(false);
   const citationPanelRef = useRef<HTMLDivElement>(null);
@@ -132,22 +126,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   }, [bsConfig, user?.id, setChatModel, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
 
   const handleOpenCitationPanel = useCallback((payload: CitationReferencesDesktopPayload) => {
-    if (isCitationMobile) {
-      return;
-    }
-
-    if (
-      citationPanelOpen
-      && citationPanelPayload?.messageId === payload.messageId
-      && !payload.initialDocumentPreview
-    ) {
-      setCitationPanelOpen(false);
+    if (isH5) {
       return;
     }
 
     setCitationPanelPayload(payload);
     setCitationPanelOpen(true);
-  }, [isCitationMobile, citationPanelOpen, citationPanelPayload?.messageId]);
+  }, [isH5]);
 
   const handleCloseCitationPanel = useCallback(() => {
     setCitationPanelOpen(false);
@@ -301,10 +286,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           <img src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`} alt="" />
         </video>
 
-        <div 
-          ref={chatContainerRef} 
-          className={cn("relative z-10 h-full noscrollbar", !hasMessages && "overflow-y-auto")}
-        >
+        <div ref={chatContainerRef} className="relative z-10 h-full overflow-y-auto noscrollbar">
           {/* Layout: treat "loading an existing conversation" the same as
               "has messages" so the input stays pinned to the bottom during
               sidebar navigation (otherwise the centered welcome-page layout
@@ -317,91 +299,33 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 showCode ? 'hidden' : 'flex flex-col relative',
                 useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
               )}>
-                {/* Content area: Split into Chat Main and Citation Sidebar */}
+                {/* Content area */}
                 {isLoading && conversationId !== 'new' ? (
                   <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
                 ) : hasMessages ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
-                    {/* Left: Chat Main (Messages + Input) */}
-                    <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
-                      <div className="flex min-h-0 flex-1 overflow-hidden">
-                        <AiChatMessages
-                          messages={messages}
-                          conversationId={activeConvoId}
-                          title={chatTitle}
-                          isLoading={false}
-                          isStreaming={isStreaming}
-                          shareToken={shareToken}
-                          knowledgeChatLayout
-                          contentWidthClassName="max-w-[768px] mx-auto"
-                          onRegenerate={regenerate}
-                          onOpenCitationPanel={handleOpenCitationPanel}
-                          activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
-                          flatMode
-                        />
-                      </div>
-                      
-                      {/* Input area — moved inside the left column to be independent of sidebar */}
-                      {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
-                          {isLingsi ? (
-                            <LinsightChatInput
-                              disabled={!!shareToken}
-                              isStreaming={isStreaming}
-                              isLingsi
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              onNewChat={() => {
-                                setSelectedOrgKbs([]);
-                                setSearchType('');
-                                clearConversation();
-                                navigate('/c/new');
-                                document.getElementById('create-convo-btn')?.click();
-                              }}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              setShowCode={setShowCode}
-                            />
-                          ) : (
-                            <AiChatInput
-                              disabled={!bsConfig?.models?.length || !!shareToken}
-                              isStreaming={isStreaming}
-                              onScrollToBottom={() => { }}
-                              modelOptions={bsConfig?.models}
-                              modelValue={chatModel.id}
-                              onModelChange={(val) => {
-                                const model = bsConfig?.models?.find((m) => m.id === val);
-                                setChatModel({
-                                  id: Number(val),
-                                  name: model?.displayName || '',
-                                });
-                              }}
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              selectedOrgKbs={selectedOrgKbs}
-                              onSelectedOrgKbsChange={setSelectedOrgKbs}
-                              searchType={searchType}
-                              onSearchTypeChange={setSearchType}
-                            />
-                          )}
-                        </div>
-                      )}
+                    <div className="min-w-0 flex-1">
+                      <AiChatMessages
+                        messages={messages}
+                        conversationId={activeConvoId}
+                        title={chatTitle}
+                        isLoading={false}
+                        isStreaming={isStreaming}
+                        shareToken={shareToken}
+                        knowledgeChatLayout
+                        contentWidthClassName="max-w-[768px] mx-auto"
+                        onRegenerate={regenerate}
+                        onOpenCitationPanel={handleOpenCitationPanel}
+                        activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
+                        flatMode
+                      />
                     </div>
-
-                    {/* Right: Citation Sidebar (Independent) */}
-                    {!isCitationMobile && useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
+                    {!isH5 && citationPanelOpen && citationPanelPayload && (
                       <div
                         ref={citationPanelRef}
-                        className={cn(
-                          'flex h-full shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300',
-                          useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
-                        )}
+                        className="flex h-full w-[420px] shrink-0 border-l border-[#E5E6EB] bg-white touch-mobile:hidden"
                       >
                         <CitationReferencesDrawer
                           panelOnly
@@ -418,104 +342,67 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           webContent={citationPanelPayload.webContent}
                           citations={citationPanelPayload.citations}
                           referenceItems={citationPanelPayload.referenceItems}
-                          initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
                         />
-                      </div>
-                    )}
-                    {!isCitationMobile && !useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
-                      <div className="pointer-events-none fixed inset-0 z-30 flex justify-end">
-                        <button
-                          type="button"
-                          aria-label="关闭参考资料浮层"
-                          className="absolute inset-0 pointer-events-auto bg-transparent"
-                          onClick={handleCloseCitationPanel}
-                        />
-                        <div className="pointer-events-auto flex h-full w-[min(520px,calc(100vw-24px))] flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300">
-                          <CitationReferencesDrawer
-                            panelOnly
-                            desktopMode="inline-panel"
-                            open={citationPanelOpen}
-                            onOpenChange={(nextOpen) => {
-                              if (!nextOpen) {
-                                handleCloseCitationPanel();
-                              }
-                            }}
-                            panelClassName="h-full w-full max-w-none bg-white"
-                            messageId={citationPanelPayload.messageId}
-                            content={citationPanelPayload.content}
-                            webContent={citationPanelPayload.webContent}
-                            citations={citationPanelPayload.citations}
-                            referenceItems={citationPanelPayload.referenceItems}
-                            initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
-                            desktopPreviewVariant="standard"
-                          />
-                        </div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  /* Landing page branch */
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 overflow-hidden flex flex-col justify-center">
-                      <Landing
-                        lingsi={isLingsi}
-                        lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
-                        setLingsi={setIsLingsi}
-                        isNew={isNew}
-                      />
-                    </div>
-                    
-                    {/* Input area for landing page */}
-                    {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
-                        {isLingsi ? (
-                          <LinsightChatInput
-                            disabled={!!shareToken}
-                            isStreaming={isStreaming}
-                            isLingsi
-                            onSend={handleSend}
-                            onStop={stopGenerating}
-                            onNewChat={() => {
-                              setSelectedOrgKbs([]);
-                              setSearchType('');
-                              clearConversation();
-                              navigate('/c/new');
-                              document.getElementById('create-convo-btn')?.click();
-                            }}
-                            value={inputText}
-                            onChange={setInputText}
-                            bsConfig={bsConfig}
-                            setShowCode={setShowCode}
-                          />
-                        ) : (
-                          <AiChatInput
-                            disabled={!bsConfig?.models?.length || !!shareToken}
-                            isStreaming={isStreaming}
-                            onScrollToBottom={() => { }}
-                            modelOptions={bsConfig?.models}
-                            modelValue={chatModel.id}
-                            onModelChange={(val) => {
-                              const model = bsConfig?.models?.find((m) => m.id === val);
-                              setChatModel({
-                                id: Number(val),
-                                name: model?.displayName || '',
-                              });
-                            }}
-                            onSend={handleSend}
-                            onStop={stopGenerating}
-                            value={inputText}
-                            onChange={setInputText}
-                            bsConfig={bsConfig}
-                            selectedOrgKbs={selectedOrgKbs}
-                            onSelectedOrgKbsChange={setSelectedOrgKbs}
-                            searchType={searchType}
-                            onSearchTypeChange={setSearchType}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  /* Landing page — preserved for welcome + Lingsi mode switch */
+                  <Landing
+                    lingsi={isLingsi}
+                    lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
+                    setLingsi={setIsLingsi}
+                    isNew={isNew}
+                  />
                 )}
+
+                {/* Input area — using new AiChatInput */}
+                {!shareToken && <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0">
+                  {isLingsi ?
+                    <LinsightChatInput
+                      disabled={!!shareToken}
+                      isStreaming={isStreaming}
+                      isLingsi
+                      onSend={handleSend}
+                      onStop={stopGenerating}
+                      onNewChat={() => {
+                        setSelectedOrgKbs([]);
+                        setSearchType('');
+                        clearConversation();
+                        // Navigate to /c/new to show Landing
+                        navigate('/c/new');
+                        // Trigger sidebar to sync
+                        document.getElementById('create-convo-btn')?.click();
+                      }}
+                      value={inputText}
+                      onChange={setInputText}
+                      bsConfig={bsConfig}
+                      setShowCode={setShowCode}
+                    />
+                    : <AiChatInput
+                      disabled={!bsConfig?.models?.length || !!shareToken}
+                      isStreaming={isStreaming}
+                      onScrollToBottom={() => { }}
+                      modelOptions={bsConfig?.models}
+                      modelValue={chatModel.id}
+                      onModelChange={(val) => {
+                        const model = bsConfig?.models?.find((m) => m.id === val);
+                        setChatModel({
+                          id: Number(val),
+                          name: model?.displayName || '',
+                        });
+                      }}
+                      onSend={handleSend}
+                      onStop={stopGenerating}
+                      value={inputText}
+                      onChange={setInputText}
+                      bsConfig={bsConfig}
+                      selectedOrgKbs={selectedOrgKbs}
+                      onSelectedOrgKbsChange={setSelectedOrgKbs}
+                      searchType={searchType}
+                      onSearchTypeChange={setSearchType}
+                    />}
+                </div>}
               </div>
             );
           })()}

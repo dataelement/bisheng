@@ -269,6 +269,13 @@ class DailyChatConf(BaseModel):
         description='Max LangGraph recursion_limit for the daily-chat ReAct agent loop. '
                     'Falls back to 50 on missing / non-int / <= 0 value.',
     )
+    history_max_tokens: int = Field(
+        default=8000,
+        description='Upper bound (in tokens) on the combined length of chat history '
+                    'injected into the LLM prompt. When the stored history exceeds '
+                    'this budget, oldest turns are dropped one at a time until the '
+                    'remainder fits. Falls back to 8000 on missing / non-int / <= 0.',
+    )
 
     @field_validator('agent_max_iterations', mode='before')
     @classmethod
@@ -278,6 +285,15 @@ class DailyChatConf(BaseModel):
         except (TypeError, ValueError):
             return 50
         return n if n > 0 else 50
+
+    @field_validator('history_max_tokens', mode='before')
+    @classmethod
+    def _coerce_history_max_tokens(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 8000
+        return n if n > 0 else 8000
 
 
 class CookieConf(BaseModel):

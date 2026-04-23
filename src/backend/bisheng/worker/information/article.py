@@ -1,8 +1,9 @@
+import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+
 from loguru import logger
 from sqlmodel import select, func
-import asyncio
 
 from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
@@ -47,7 +48,7 @@ def sync_information_article(information_id: str = None):
                 try:
                     logger.debug(f"Syncing information for {one.id} - {one.source_name}")
                     if one.update_time.strftime("%Y-%m-%d") == datetime.now().strftime(
-                            "%Y-%m-%d") and one.update_time != one.create_time:
+                        "%Y-%m-%d") and one.update_time != one.create_time:
                         logger.debug(
                             f"Skip information for {one.id} - {one.source_name}, because it has already been updated today.")
                         continue
@@ -67,7 +68,7 @@ def sync_information_article(information_id: str = None):
     if need_update_informations:
         # Update only channels that use this information source
         logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
-        _update_channels_by_source_id(information_id)
+        _update_channels_by_source_id(need_update_informations)
 
 
 def _update_channels_by_source_id(source_ids: List[str]):
@@ -140,7 +141,6 @@ def _sync_one_information_article(information: ChannelInfoSource, article_servic
         page += 1
     logger.debug(f"Finished syncing information for {information.id}. article nums: {current}")
     return all_new_ids
-
 
 
 # --------------------------------------------------------------------------- #

@@ -51,7 +51,9 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     }
 
     // Handle play/pause action
-    const handlePlayPause = async () => {
+    const handlePlayPause = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+        event?.preventDefault()
+        event?.stopPropagation()
         try {
             // If this is the current message
             if (isCurrentMessage) {
@@ -119,6 +121,5 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
         </button>
     )
 }
-
 
 

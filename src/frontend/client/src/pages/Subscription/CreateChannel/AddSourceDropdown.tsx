@@ -6,7 +6,7 @@ import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
 import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import useMediaQuery from "~/hooks/useMediaQuery";
 import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -93,6 +93,7 @@ export function AddSourceDropdown({
     resetToken
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
     const noHoverDevice = useMediaQuery("(hover: none)");
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
     const confirm = useConfirm();
@@ -279,7 +280,11 @@ export function AddSourceDropdown({
             {expanded && (
                 <div
                     ref={expandedPanelRef}
-                    className="absolute left-0 right-0 top-0 z-[220] flex h-[440px] min-w-[400px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                    className={cn(
+                        "absolute left-0 right-0 top-0 z-[220] flex flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]",
+                        "h-[440px] min-w-[400px]",
+                        isH5 && "h-[min(70dvh,560px)] min-w-0 max-w-full rounded-[8px]"
+                    )}
                 >
                     <div className="flex shrink-0 items-center gap-2 border-b border-[#E5E6EB] pb-0 mb-2">
                         <div className="relative flex-1 rounded-lg m-1">
@@ -487,10 +492,10 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3">
+                        <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
                             <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 touch-mobile:w-full">
                                 <Button
                                     variant="secondary"
                                     size="sm"
@@ -503,7 +508,7 @@ export function AddSourceDropdown({
                                         if (!confirmed) return;
                                         mgr.handleCancel();
                                     }}
-                                    className="border border-[#E5E6EB] bg-white h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-[#4E5969]"
+                                    className="border border-[#E5E6EB] bg-white h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-[#4E5969] touch-mobile:flex-1"
                                 >
                                     {localize("cancel")}
                                 </Button>
@@ -511,7 +516,7 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={mgr.handleConfirm}
                                     disabled={mgr.pendingSources.length === 0}
-                                    className="bg-[#165DFF] h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="bg-[#165DFF] h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
                                 >
                                     {localize("com_subscription.confirm_add")}
                                 </Button>

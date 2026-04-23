@@ -108,7 +108,11 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        if flow_type is None or not user.is_admin():
+        # Non-admin callers filter by app permissions in-memory after the DB query,
+        # so they must fetch the full candidate set first. skip_pagination=True
+        # also means the caller will paginate in-memory (e.g. chat.py), which
+        # would otherwise be double-paginated by the DB layer.
+        if flow_type is None or skip_pagination or not user.is_admin():
             query_page = 0
             query_page_size = 0
 

@@ -80,6 +80,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   const apiVersion = mode === 'guest' ? 'v2' : 'v1';
   const numericFlowType = FLOW_TYPE_MAP[flowType];
+  const isGuestMode = mode === 'guest';
 
   const contextValue: StandaloneChatContextValue = {
     mode,
@@ -160,8 +161,18 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           </div>
 
           {/* Chat panel */}
-          <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden p-2">
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-[#EBECF0] bg-white shadow-xl">
+          <div
+            className={cn(
+              'relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden',
+              !isGuestMode && 'p-2',
+            )}
+          >
+            <div
+              className={cn(
+                'min-h-0 min-w-0 flex-1 overflow-hidden',
+                !isGuestMode && 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
+              )}
+            >
               {activeChatId ? (
                 <AppChat
                   chatId={activeChatId}

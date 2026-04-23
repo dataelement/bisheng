@@ -61,6 +61,18 @@ class LoginSyncRequest(BaseModel):
         default=None,
         description='Moonlighting / secondary memberships (is_primary=0).',
     )
+    #: 企微「部门负责人」对应的部门 external_id（与 departments/sync 中 id 字符串一致）；
+    #: 同步后写入 OpenFGA ``department:{id}#admin@user:{uid}``。
+    #: 若本字段**出现在 JSON 中**（含空数组 ``[]``），则对当前用户在所有 SSO
+    #: 成员部门上与该列表对账：仅撤销 ``department_admin_grant.grant_source=sso``
+    #: 的部门管理员 FGA；管理端写入的 ``manual`` 不受影响。省略字段则不改 FGA/标记表。
+    department_admin_external_ids: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            'WeCom leader dept external_ids; when sent (including []), reconciles '
+            'FGA admin for SSO member departments, revoking only sso-tracked grants.'
+        ),
+    )
     user_attrs: UserAttrsDTO = Field(default_factory=UserAttrsDTO)
     root_tenant_id: int = Field(
         default=1,
@@ -73,6 +85,11 @@ class LoginSyncRequest(BaseModel):
     ts: int = Field(
         ...,
         description='Source system timestamp (seconds). Required by INV-T12.',
+    )
+    #: 为 True 时不单独写 ``org_sync_log``（由 Gateway 批量接口统一落一条）。
+    skip_org_sync_log: bool = Field(
+        default=False,
+        description='Internal: suppress per-call org_sync_log flush (batch endpoint).',
     )
 
 
@@ -111,9 +128,23 @@ class DepartmentsSyncRequest(BaseModel):
     )
 
 
+class GatewayWecomOrgSyncRequest(BaseModel):
+    """Gateway 单次企微推送：部门批量 + 多成员 login-sync，对应一条 ``org_sync_log``。"""
+
+    departments: DepartmentsSyncRequest
+    members: List[LoginSyncRequest] = Field(default_factory=list)
+
+
 class BatchResult(BaseModel):
     applied_upsert: int = 0
     applied_remove: int = 0
     skipped_ts_conflict: int = 0
     orphan_triggered: List[int] = Field(default_factory=list)
     errors: List[dict] = Field(default_factory=list)
+
+
+class GatewayWecomOrgSyncResult(BaseModel):
+    department_result: BatchResult
+    member_sync_ok: int = 0
+    member_sync_fail: int = 0
+    member_errors: List[dict] = Field(default_factory=list)

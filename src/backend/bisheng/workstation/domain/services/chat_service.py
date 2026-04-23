@@ -319,6 +319,66 @@ async def _get_agent_max_iterations() -> int:
         return DEFAULT_AGENT_MAX_ITERATIONS
 
 
+DEFAULT_HISTORY_MAX_TOKENS = 8000
+
+
+async def _get_history_max_tokens() -> int:
+    """Return the DB-configured token budget for chat history injected into
+    the LLM prompt.
+
+    Reads `daily_chat.history_max_tokens` from the DB config (via
+    ConfigService.aget_daily_chat_conf). Any failure path returns
+    DEFAULT_HISTORY_MAX_TOKENS. Schema validator normalises
+    missing/invalid/<=0 values upstream, so this is a defensive wrapper.
+    """
+    try:
+        from bisheng.common.services.config_service import settings as bisheng_settings
+        conf = await bisheng_settings.aget_daily_chat_conf()
+        n = int(conf.history_max_tokens)
+        return n if n > 0 else DEFAULT_HISTORY_MAX_TOKENS
+    except Exception as exc:
+        logger.warning(
+            f'Failed to read history_max_tokens, falling back to '
+            f'{DEFAULT_HISTORY_MAX_TOKENS}: {exc}'
+        )
+        return DEFAULT_HISTORY_MAX_TOKENS
+
+
+# Lazily-cached tiktoken encoder — `cl100k_base` is the tokenizer for
+# gpt-4 / gpt-5 family and is a reasonable universal estimator. It may
+# slightly over-count for Chinese (which leans conservative — preferable
+# when enforcing a budget) and slightly under-count for Claude (safe
+# direction too: we'd drop a tiny bit more than strictly necessary).
+_HISTORY_TOKENIZER = None
+
+
+def _count_tokens(text: str) -> int:
+    """Count tokens in `text` using tiktoken's cl100k_base encoding; fall
+    back to a simple char heuristic if tiktoken cannot be loaded (e.g.
+    offline install without the bundled BPE files). Used only for the
+    history budget guardrail — accuracy within ~15% is sufficient.
+    """
+    if not text:
+        return 0
+    global _HISTORY_TOKENIZER
+    if _HISTORY_TOKENIZER is None:
+        try:
+            import tiktoken  # already a transitive dep via assistant_base
+            _HISTORY_TOKENIZER = tiktoken.get_encoding('cl100k_base')
+        except Exception as exc:
+            logger.warning(
+                f'tiktoken unavailable, falling back to char/2 estimator: {exc}'
+            )
+            _HISTORY_TOKENIZER = False  # sentinel: never retry
+    if _HISTORY_TOKENIZER is False:
+        # Rough estimator: ~2 chars per token for Chinese-heavy text.
+        return max(1, len(text) // 2)
+    try:
+        return len(_HISTORY_TOKENIZER.encode(text))
+    except Exception:
+        return max(1, len(text) // 2)
+
+
 def _build_user_content(
         question: str,
         file_context: str = '',
@@ -681,8 +741,9 @@ async def _build_knowledge_search_tool(
         # right auth-check behaviour per KB source.
         space_bucket = [i for i in kb_ids_int if i in space_id_set]
         org_bucket = [i for i in kb_ids_int if i not in space_id_set]
+        failures: list[dict] = []
         try:
-            _formatted, finally_docs = await WorkStationService.queryChunksFromDB(
+            _formatted, finally_docs, failures = await WorkStationService.queryChunksFromDB(
                 question=query,
                 use_knowledge_param=UseKnowledgeBaseParam(
                     knowledge_space_ids=space_bucket,
@@ -721,8 +782,28 @@ async def _build_knowledge_search_tool(
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
         results = [_format_chunk(doc) for doc in docs]
+
+        # Surface per-KB failures as synthetic chunks carrying
+        # <retrieval_error>. The frontend detects these and renders the KB
+        # chip in an error state with the error message, so users see which
+        # KB failed and why instead of the tool silently dropping them.
+        for f in failures or []:
+            kb_name = f.get('name') or ''
+            if not kb_name:
+                # fall back to the name we resolved earlier
+                kb_name = kb_name_by_id.get(str(f.get('id', '')), '')
+            err_text = str(f.get('error') or '').replace('</retrieval_error>', '')
+            results.append(
+                '{'
+                f'<knowledge_base_id>{f.get("id", "")}</knowledge_base_id>\n'
+                f'<knowledge_base_name>{kb_name}</knowledge_base_name>\n'
+                f'<retrieval_error>{err_text}</retrieval_error>'
+                '}'
+            )
+
         logger.info(
             f'[search_kb] returning {len(results)} chunks'
+            f' (ok={len(results) - len(failures or [])} failed={len(failures or [])})'
             f' total_chars={sum(len(r) for r in results)}'
         )
         return json.dumps(results, ensure_ascii=False)
@@ -1169,7 +1250,17 @@ async def _agent_stream_chat_completion(
                 knowledge_bases_info=knowledge_bases_info,
             )
 
-            history = (await WorkStationService.get_chat_history(conversation_id, 8))[:-1]
+            # Row-count ceiling just limits DB work; the real trimming
+            # happens inside get_chat_history via the token cap
+            # (daily_chat.history_max_tokens in config.yaml).
+            history_max_tokens = await _get_history_max_tokens()
+            history = (
+                await WorkStationService.get_chat_history(
+                    conversation_id,
+                    size=10,
+                    max_tokens=history_max_tokens,
+                )
+            )[:-1]
 
             if image_bases64:
                 content_payload = [{'type': 'text', 'text': user_text}]
@@ -1207,6 +1298,55 @@ async def _agent_stream_chat_completion(
                 f' visual_count={len(image_bases64)}'
                 f' kb_count={len(knowledge_bases_info or [])}'
             )
+
+            # [debug] Dump the exact, UNTRUNCATED payload sent to the LLM to
+            # /tmp/bisheng_agent_dumps/<trace>.json so the full system prompt
+            # and message history can be inspected verbatim.
+            #
+            # Gated behind BISHENG_AGENT_DUMP env var — OFF by default so
+            # there's no I/O overhead in production. To enable for debugging:
+            #   export BISHENG_AGENT_DUMP=1   # then restart the backend
+            # Accepted truthy values: 1, true, yes, on (case-insensitive).
+            import os as _os
+            if _os.environ.get('BISHENG_AGENT_DUMP', '').lower() in ('1', 'true', 'yes', 'on'):
+                try:
+                    from bisheng.core.logger import trace_id_var
+                    trace_id = trace_id_var.get() or 'notrace'
+                except Exception:
+                    trace_id = 'notrace'
+
+                def _serialize_message(m):
+                    content = getattr(m, 'content', '')
+                    if isinstance(content, list):
+                        parts = []
+                        for p in content:
+                            if isinstance(p, dict) and p.get('type') == 'image_url':
+                                parts.append({'type': 'image_url', 'image_url': '<base64 omitted>'})
+                            else:
+                                parts.append(p)
+                        content_out = parts
+                    else:
+                        content_out = content
+                    return {'role': type(m).__name__, 'content': content_out}
+
+                dump_payload = {
+                    'trace_id': trace_id,
+                    'user_id': login_user.user_id,
+                    'conversation_id': conversation_id,
+                    'tool_count': len(langchain_tools),
+                    'tool_names': [t.name for t in langchain_tools],
+                    'kb_count': len(knowledge_bases_info or []),
+                    'system_prompt': sys_prompt,
+                    'messages': [_serialize_message(m) for m in llm_messages],
+                }
+                try:
+                    _os.makedirs('/tmp/bisheng_agent_dumps', exist_ok=True)
+                    dump_path = f'/tmp/bisheng_agent_dumps/{trace_id}.json'
+                    with open(dump_path, 'w', encoding='utf-8') as fp:
+                        json.dump(dump_payload, fp, ensure_ascii=False, indent=2, default=str)
+                    logger.info(f'[agent_chat][dump] wrote full payload -> {dump_path}')
+                except Exception as dump_exc:
+                    logger.warning(f'[agent_chat][dump] failed: {dump_exc}')
 
             # ---- Step 5: execute ----
             if langchain_tools:

@@ -178,7 +178,11 @@ export function ChannelSidebar({
                                 ) : null}
                             </div>
                         </div>
-                        <HubModuleNavTabs onLinkClick={() => onDrawerClose?.()} />
+                        <HubModuleNavTabs
+                            onLinkClick={(link) => {
+                                if (link.closeDrawerOnNavigate) onDrawerClose?.();
+                            }}
+                        />
                         <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-3">
                             <Button
                                 variant="secondary"

@@ -30,6 +30,8 @@ import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
 import BookOpen from "../ui/icon/BookOpen";
+import type { FileType } from "~/components/ui/icon/File/FileIcon";
+import { CitationFileTypeIcon } from "~/components/Chat/Messages/Content/CitationSourceIcon";
 
 /** 超出该字数则省略；省略后为「前 5 字 + …」共 6 个显示单位（与产品规则一致） */
 const KB_TAG_MAX_CHARS = 5;
@@ -52,6 +54,45 @@ const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
 
             <span className="min-w-0 flex-1 truncate text-left" title={kb.name}>
                 {label}
+            </span>
+            {onRemove && (
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    aria-label="Remove"
+                >
+                    ✕
+                </button>
+            )}
+        </div>
+    );
+};
+
+const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
+    const resolveFileType = (input: any): FileType => {
+        const nameCandidate =
+            input?.name ||
+            input?.file_name ||
+            input?.filename ||
+            input?.filepath ||
+            input?.file_path ||
+            "";
+        const baseName = String(nameCandidate).split("/").pop()?.split("?")[0] || "";
+        const ext = baseName.includes(".") ? baseName.split(".").pop()?.toLowerCase() : "";
+        const normalized = ext === "htm" ? "html" : ext === "et" ? "xlsx" : ext === "jpeg" ? "jpg" : ext;
+        const allowed: FileType[] = [
+            "pdf", "doc", "docx", "ppt", "pptx", "md", "html", "txt",
+            "jpg", "jpeg", "png", "bmp", "csv", "xls", "xlsx",
+        ];
+        return (allowed as string[]).includes(normalized || "") ? (normalized as FileType) : "txt";
+    };
+
+    return (
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+            <CitationFileTypeIcon fileType={resolveFileType(file)} className="mr-1 size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
+                {file.name}
             </span>
             {onRemove && (
                 <button
@@ -284,7 +325,8 @@ const AiChatInput = memo(
                         when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const accept = isLingsi ? (bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight) : "";
+                        const accept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+                        console.log('upload accept :>> ', accept);
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
@@ -292,6 +334,7 @@ const AiChatInput = memo(
                             accepts={accept}
                             disabled={filesDisabled}
                             hideTrigger={agentMode && !isLingsi}
+                            hideList
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onChange={(files: any) => {
@@ -308,9 +351,19 @@ const AiChatInput = memo(
                     })()}
 
                     {/* Selected knowledge base / space tags */}
-                    {selectedOrgKbs && selectedOrgKbs.length > 0 && !isLingsi && (
+                    {((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0)) && !isLingsi && (
                         <div className="m-3 max-h-[72px] overflow-y-auto scrollbar-on-hover">
                             <div className="flex flex-wrap gap-1">
+                                {(chatFiles || []).map((file) => (
+                                    <FileTag
+                                        key={file.file_id || file.filepath || file.name}
+                                        file={file}
+                                        onRemove={() => {
+                                            inputFilesRef.current?.removeByName?.(file.name);
+                                            setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
+                                        }}
+                                    />
+                                ))}
                                 {selectedOrgKbs.map((kb) => (
                                     <KbTag
                                         key={kb.id}

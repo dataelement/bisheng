@@ -81,6 +81,13 @@ daily_chat:
   # Agent function-calling 循环最大迭代次数（LangGraph recursion_limit）。
   # 默认 50；配置缺失 / 类型错误 / <= 0 时也使用 50。
   agent_max_iterations: 50
+  # 送入模型的历史消息合计 token 上限；超出会从最旧一条开始丢弃，直到总量不超过。
+  # 需要按目标模型的 context window 调整：
+  #   - 200k 长上下文模型（GPT-5.1 / Claude 4.x）：可放大到 20000~30000
+  #   - 32k context 模型（GPT-4 Turbo 等）：建议 6000~10000
+  #   - 8k context 小模型：建议 2000~4000
+  # 默认 8000；配置缺失 / 类型错误 / <= 0 时也使用 8000。
+  history_max_tokens: 8000
 
 # 灵思模块相关配置
 linsight:

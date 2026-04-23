@@ -39,6 +39,7 @@ import { validateCreateChannelForm } from "../channelUtils";
 import type { Channel, InformationSource } from "~/api/channels";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { useLocalize } from "~/hooks";
+import useMediaQuery from "~/hooks/useMediaQuery";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
 
 const MAX_CHANNEL_NAME = 10;
@@ -94,6 +95,7 @@ export function CreateChannelDrawer({
     const { showToast } = useToastContext();
     const localize = useLocalize();
     const form = useCreateChannelForm();
+    const isH5 = useMediaQuery("(max-width: 576px)");
     const isEditMode = mode === "edit" && !!editingChannel;
     const confirm = useConfirm();
     const [isComposingName, setIsComposingName] = useState(false);
@@ -240,29 +242,31 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    className="flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
+                    onScroll={handleBodyScroll}
+                    data-scrolling={isBodyScrolling ? "true" : "false"}
+                    className={cn(
+                        "scroll-on-scroll flex w-full max-w-[900px] flex-col overflow-y-auto overflow-x-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4",
+                        form.crawlDialogOpen && "overflow-hidden"
+                    )}
                 >
                     <div
                         ref={knowledgePickerHostRef}
-                        className={cn(
-                            "relative flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-on-hover",
-                            form.crawlDialogOpen && "overflow-hidden"
-                        )}
-                        onScroll={handleBodyScroll}
-                        data-scrolling={isBodyScrolling ? "true" : "false"}
+                        className="relative flex min-h-0 flex-1 flex-col"
                     >
-                    <button
-                        type="button"
-                        onClick={() => handleClose(false)}
-                        className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary fixed top-4 right-4 z-[60] rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
-                    >
-                        <XIcon className="size-4" />
-                        <span className="sr-only">Close</span>
-                    </button>
                     <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
-                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
-                            {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
-                        </SheetTitle>
+                        <div className="flex items-center justify-between gap-3">
+                            <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                                {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
+                            </SheetTitle>
+                            <button
+                                type="button"
+                                onClick={() => handleClose(false)}
+                                className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary shrink-0 rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
+                            >
+                                <XIcon className="size-4" />
+                                <span className="sr-only">Close</span>
+                            </button>
+                        </div>
                     </SheetHeader>
 
                     {form.showSuccess && !isEditMode ? (
@@ -302,6 +306,8 @@ export function CreateChannelDrawer({
                                     onExpandChange={form.setShowAddSourcePanel}
                                     resetToken={form.sourceSearchResetToken}
                                     onRequestCrawl={(url) => {
+                                        // 打开「确认爬取」前先收起信息源下拉，避免浮层遮挡弹窗
+                                        form.setShowAddSourcePanel(false);
                                         form.setCrawlUrl(url);
                                         form.setCrawlDialogOpen(true);
                                     }}
@@ -395,7 +401,7 @@ export function CreateChannelDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_channel_description")}
-                                        className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14"
+                                        className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14 shadow-none"
                                     />
                                 </div>
                             </div>
@@ -682,7 +688,7 @@ export function CreateChannelDrawer({
 
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
-                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-6 pb-5 pt-10 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                        <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
@@ -755,20 +761,39 @@ export function CreateChannelDrawer({
                         </div>
                     )}
                         {form.crawlDialogOpen && (
-                            <div className="absolute inset-0 z-[70] flex min-h-0 flex-col bg-white">
-                                <CrawlPreviewPanel
-                                    url={form.crawlUrl}
-                                    onBack={() => {
-                                        form.setShowAddSourcePanel(true);
-                                        form.setSourceSearchResetToken((t) => t + 1);
-                                        form.setCrawlDialogOpen(false);
-                                    }}
-                                    onAddSource={(source) => {
-                                        form.setSources((prev) => [...prev, source]);
-                                        form.setCrawlDialogOpen(false);
-                                        form.setShowAddSourcePanel(true);
-                                    }}
-                                />
+                            <div
+                                className={cn(
+                                    isH5 ? "absolute inset-0 z-[70] flex min-h-0 flex-col bg-white" : "fixed inset-0 z-[120] grid place-items-center bg-black/30 p-6",
+                                )}
+                                onClick={isH5 ? undefined : () => {
+                                    form.setShowAddSourcePanel(true);
+                                    form.setSourceSearchResetToken((t) => t + 1);
+                                    form.setCrawlDialogOpen(false);
+                                }}
+                            >
+                                <div
+                                    className={cn(
+                                        "min-h-0",
+                                        isH5
+                                            ? "flex h-full w-full flex-1 flex-col bg-white"
+                                            : "flex h-[min(760px,calc(100%-32px))] w-[min(720px,calc(100%-32px))] flex-col overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
+                                    )}
+                                    onClick={(event) => event.stopPropagation()}
+                                >
+                                    <CrawlPreviewPanel
+                                        url={form.crawlUrl}
+                                        onBack={() => {
+                                            form.setShowAddSourcePanel(true);
+                                            form.setSourceSearchResetToken((t) => t + 1);
+                                            form.setCrawlDialogOpen(false);
+                                        }}
+                                        onAddSource={(source) => {
+                                            form.setSources((prev) => [...prev, source]);
+                                            form.setCrawlDialogOpen(false);
+                                            form.setShowAddSourcePanel(true);
+                                        }}
+                                    />
+                                </div>
                             </div>
                         )}
                     </div>

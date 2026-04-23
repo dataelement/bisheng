@@ -64,10 +64,10 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
 
         }
     }, [initialFiles]);
-    return <div className={`relative mx-auto flex h-full w-full max-w-[1120px] flex-col pb-28 pt-6 ${hidden ? 'hidden' : ''}`}>
+    return <div className={`relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col pb-[calc(11rem+env(safe-area-inset-bottom))] pt-6 ${hidden ? 'hidden' : ''}`}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
-            progressClassName='max-h-[420px]'
+            progressClassName='pb-2'
             knowledgeId={kid}
             onSelectFile={(count) => {
                 setFileCount(count)

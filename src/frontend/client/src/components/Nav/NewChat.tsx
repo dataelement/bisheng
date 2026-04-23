@@ -83,7 +83,7 @@ export default function NewChat({
 
   const { conversation } = store.useCreateConversationAtom(index);
 
-  const clickHandler = (event: React.MouseEvent<HTMLAnchorElement>) => {
+  const clickHandler = (event: React.MouseEvent<HTMLElement>) => {
     if (event.button === 0 && !(event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       newConvo();
@@ -103,7 +103,7 @@ export default function NewChat({
     <div className="sticky left-0 right-0 top-0 z-50 bg-white">
       <div className="" style={{ transform: 'none' }}>
         {isSmallScreen ? (
-          <div className="shrink-0 border-b border-[#e5e6eb] py-2.5">
+          <div className="shrink-0 py-2.5">
             <div className="flex items-center justify-between">
               {bsConfig?.sidebarIcon?.image ? (
                 <img
@@ -125,32 +125,56 @@ export default function NewChat({
             </div>
           </div>
         ) : (
-          <div className="mb-4 flex items-center justify-between">
-            <p className="ml-2 text-[16px] font-medium text-[#212121]">{localize('com_nav_home')}</p>
+          <div className="py-5">
+            <div className="border-b border-[#e5e6eb] pb-4">
+              <div className="flex items-center text-[16px] font-medium">
+                <span className="leading-6 text-[#212121]">{localize('com_nav_home')}</span>
+              </div>
+              <div className="mt-4 flex w-full gap-1">
+                {/* 新建btn */}
+                <Button
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
+                  aria-label={localize('com_ui_new_chat')}
+                  onClick={() => {
+                    document.getElementById("create-convo-btn")?.click();
+                    // hack
+                    setTimeout(() => {
+                      document.getElementById("create-convo-btn")?.click();
+                    }, 300);
+                  }}
+                >
+                  <Plus className='size-[20px] text-[#212121]' />
+                  <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
+                </Button>
+              </div>
+            </div>
           </div>
         )}
         {/* 与 SideNavModuleTabs 一致：四等分格内居中，避免 justify-center + 负边距导致首页选中块视觉偏左 */}
         <div className="mb-2 hidden w-full min-w-0 shrink-0 touch-mobile:block">
           <HubModuleNavTabs equalWidth className="w-full min-w-0" />
         </div>
-        <div className='flex gap-1 w-full'>
-          {/* 新建btn */}
-          <Button
-            variant="outline"
-            className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
-            aria-label={localize('com_ui_new_chat')}
-            onClick={() => {
-              document.getElementById("create-convo-btn")?.click();
-              // hack
-              setTimeout(() => {
+        {isSmallScreen && (
+          <div className='flex gap-1 w-full'>
+            {/* 新建btn */}
+            <Button
+              variant="outline"
+              className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
+              aria-label={localize('com_ui_new_chat')}
+              onClick={() => {
                 document.getElementById("create-convo-btn")?.click();
-              }, 300);
-            }}
-          >
-            <Plus className='size-[20px] text-[#212121]' />
-            <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
-          </Button>
-        </div>
+                // hack
+                setTimeout(() => {
+                  document.getElementById("create-convo-btn")?.click();
+                }, 300);
+              }}
+            >
+              <Plus className='size-[20px] text-[#212121]' />
+              <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
+            </Button>
+          </div>
+        )}
       </div>
       <div id="create-convo-btn" className='opacity-0' onClick={clickHandler}></div>
       {subHeaders != null ? subHeaders : null}

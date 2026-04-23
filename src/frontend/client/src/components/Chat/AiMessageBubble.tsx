@@ -15,7 +15,7 @@ import Thinking from "~/components/Artifacts/Thinking";
 import AgentThinkingHeader from "~/components/Chat/Messages/AgentThinkingHeader";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
-import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
@@ -39,12 +39,16 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
 }
 
 // --- Copy button with feedback ---
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
-    const handleCopy = useCallback(() => {
+    const handleCopy = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
         copyText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -54,10 +58,11 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
             title="复制"
+            aria-label="复制"
         >
-            {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+            {copied ? <CheckIcon size={14} className="text-[#818181]" /> : <CopyIcon size={14} className="text-[#818181]" />}
         </button>
     );
 }
@@ -212,6 +217,8 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        onOpenCitationPanel,
+        activeCitationMessageId,
     }: AiMessageBubbleProps) => {
         const isUser = message.isCreatedByUser;
 
@@ -236,6 +243,8 @@ const AiMessageBubble = memo(
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                onOpenCitationPanel={onOpenCitationPanel}
+                activeCitationMessageId={activeCitationMessageId}
             />
         );
     }
@@ -367,6 +376,8 @@ function AssistantBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    onOpenCitationPanel,
+    activeCitationMessageId,
 }: {
     message: ChatMessage;
     isLatest?: boolean;
@@ -376,6 +387,8 @@ function AssistantBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
 }) {
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -489,13 +502,15 @@ function AssistantBubble({
                                 <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                             </div>
                         ) : (
-                        <Markdown
-                            content={regularContent}
-                            webContent={webContent}
-                            citations={message.citations}
-                            showCursor={showCursor}
-                            isLatestMessage={!!isLatest}
-                        />
+                            <Markdown
+                                content={regularContent}
+                                webContent={webContent}
+                                citations={message.citations}
+                                messageId={message.messageId}
+                                onOpenCitationPanel={onOpenCitationPanel}
+                                showCursor={showCursor}
+                                isLatestMessage={!!isLatest}
+                            />
                         )}
                     </div>
                 )}
@@ -507,6 +522,32 @@ function AssistantBubble({
                             content={regularContent}
                             webContent={webContent}
                             citations={message.citations}
+                            messageId={message.messageId}
+                            desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
+                            open={onOpenCitationPanel ? activeCitationMessageId === message.messageId : undefined}
+                            onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
+                                if (!nextOpen && activeCitationMessageId === message.messageId) {
+                                    onOpenCitationPanel({
+                                        messageId: message.messageId,
+                                        content: regularContent,
+                                        webContent,
+                                        citations: message.citations,
+                                        referenceItems: [],
+                                    });
+                                }
+                            }) : undefined}
+                            onDesktopOpen={onOpenCitationPanel}
+                            actionButtons={
+                                <>
+                                    <CopyButton text={regularContent} />
+
+                                    <TextToSpeechButton
+                                        className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                        messageId={message.messageId || ""}
+                                        text={regularContent}
+                                    />
+                                </>
+                            }
                         />
                         {/* Reference Sources */}
                         {message.source !== 0 && (
@@ -525,21 +566,6 @@ function AssistantBubble({
                                 />
                             </div>
                         )}
-                        <CopyButton text={regularContent} />
-                        {onRegenerate && (
-                            <button
-                                type="button"
-                                onClick={onRegenerate}
-                                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                title="regenerate"
-                            >
-                                <RefreshCwIcon size={16} />
-                            </button>
-                        )}
-                        <TextToSpeechButton
-                            messageId={message.messageId || ""}
-                            text={regularContent}
-                        />
                         {/* Sibling paging */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />

@@ -1,8 +1,8 @@
 {
   "title": "Org Sync",
-  "description": "Automatically sync departments and members from WeChat Work, Feishu and other systems.",
+  "description": "Gateway HMAC push only: one org_sync_log row per request. In the list, “~” under Members is the count of successful login-sync runs in the batch (including no-op profile updates). WeCom department heads require the gateway to fetch full user profiles; see “Batch summary” in Details.",
   "loading": "Loading...",
-  "emptyHint": "No sync sources configured yet. Click the button above to create one.",
+  "emptyHint": "No gateway sync rows yet. Rows appear after the gateway calls sync APIs and the server flushes a log.",
   "providers": {
     "wecom": "WeChat Work",
     "feishu": "Feishu",
@@ -24,11 +24,13 @@
     "scheduled": "Scheduled"
   },
   "columns": {
-    "configName": "Name",
-    "provider": "Provider",
-    "syncStatus": "Sync Status",
-    "lastSync": "Last Sync",
-    "lastResult": "Last Result",
+    "time": "End time",
+    "status": "Status",
+    "deptSummary": "Departments",
+    "memberSummary": "Members",
+    "hasErrors": "Has details",
+    "yes": "Yes",
+    "no": "No",
     "actions": "Actions"
   },
   "actions": {
@@ -38,6 +40,7 @@
     "test": "Test",
     "execute": "Run Now",
     "viewLogs": "Logs",
+    "viewDetail": "Details",
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close",
@@ -122,5 +125,25 @@
     "startTime": "Start",
     "endTime": "End",
     "empty": "No sync history yet"
+  },
+  "gatewayDetail": {
+    "title": "Gateway sync record",
+    "status": "Result",
+    "configId": "Config ID",
+    "startTime": "Start",
+    "endTime": "End",
+    "counterHint": "“~” = members with successful login-sync in this batch; “+” created / “🚫” disabled / “↻” reactivated are usually 0 for a single gateway push.",
+    "batchSummaryTitle": "Batch summary (gateway → bisheng)",
+    "batchSummaryLine": "Members OK {{ok}} / failed {{fail}}; members whose payload listed leader departments {{leaders}}; departments upsert {{deptUpsert}}, remove {{deptRemove}}.",
+    "errorsTitle": "Errors & warnings",
+    "colType": "Type",
+    "colExternalId": "External ID",
+    "colMessage": "Message"
+  },
+  "pagination": {
+    "total": "{{total}} total",
+    "pageOf": "Page {{page}} / {{maxPage}}",
+    "prev": "Previous",
+    "next": "Next"
   }
 }

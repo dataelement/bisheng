@@ -85,7 +85,7 @@ export interface OrgSyncRemoteNode {
   children: OrgSyncRemoteNode[]
 }
 
-// WeCom-specific auth_config shape (used by the WeComFieldSet).
+// WeCom-specific auth_config shape (used by org sync config APIs).
 export interface WeComAuthConfig {
   corpid: string
   corpsecret: string

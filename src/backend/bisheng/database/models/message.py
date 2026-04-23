@@ -53,7 +53,7 @@ class MessageBase(SQLModelSerializable):
     sender: Optional[str] = Field(index=False, default='', description='autogen Sender')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen Sender')
     intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='Process Log')
-    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
+    files: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT),
                                  description='Uploaded documents, etc.')
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
                                   description='Note. break_answer: Interrupted response inactionhistoryPass to Model')
@@ -222,13 +222,24 @@ class ChatMessageDao(MessageBase):
                                        chat_id: str,
                                        category_list: list = None,
                                        limit: int = 10) -> List[ChatMessage]:
+        """Return the MOST RECENT `limit` messages for a chat, in chronological
+        order (oldest → newest).
+
+        Previous implementation used ``ORDER BY create_time ASC LIMIT N`` which
+        always returned the OLDEST N rows, so long conversations saw only the
+        first few turns and dropped the freshest context — breaking history
+        passed to the LLM. We now select DESC LIMIT N and reverse in Python so
+        callers always get the latest window in time-ascending order.
+        """
         async with get_async_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
+            statement = statement.order_by(ChatMessage.create_time.desc()).limit(limit)
             result = await session.exec(statement)
-            return result.all()
+            rows = list(result.all())
+            rows.reverse()
+            return rows
 
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):

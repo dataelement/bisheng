@@ -17,7 +17,7 @@ export interface HubModuleLink {
   icon: ComponentType<{ className?: string }>;
   label: string;
   isActive: boolean;
-  /** When true, callers may close the drawer after navigation (e.g. home / apps from knowledge drawer). */
+  /** When true, callers may close the drawer after navigation. */
   closeDrawerOnNavigate?: boolean;
 }
 
@@ -52,7 +52,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
           icon: HomeIcon,
           label: localize('com_nav_home'),
           isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-          closeDrawerOnNavigate: true,
+          closeDrawerOnNavigate: false,
         },
         {
           section: 'apps',
@@ -61,7 +61,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
           label: localize('com_nav_app_center'),
           isActive:
             matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-          closeDrawerOnNavigate: true,
+          closeDrawerOnNavigate: false,
         },
         {
           section: 'channel',
@@ -69,6 +69,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
           icon: LinkIcon,
           label: localize('com_ui_channel'),
           isActive: pathname.startsWith('/channel'),
+          closeDrawerOnNavigate: true,
         },
         {
           section: 'knowledge',
@@ -76,6 +77,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
           icon: BookOpenIcon,
           label: localize('com_knowledge.knowledge_space'),
           isActive: pathname.startsWith('/knowledge'),
+          closeDrawerOnNavigate: true,
         },
       ].filter((link) => {
         if (link.section === 'channel') return showSubscriptionTab;
@@ -99,7 +101,7 @@ export function HubModuleNavTabs({ equalWidth = false, onLinkClick, className }:
   return (
     <div
       className={cn(
-        'flex shrink-0 gap-2 border-b border-[#e5e6eb] px-2 py-2',
+        'flex shrink-0 gap-2 border-b border-[#e5e6eb] px-2 py-2 touch-mobile:border-b-0',
         equalWidth && 'w-full min-w-0',
         equalWidth ? 'items-stretch' : 'items-center justify-center',
         className,

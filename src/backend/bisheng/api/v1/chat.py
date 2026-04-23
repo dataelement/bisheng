@@ -1,7 +1,6 @@
-import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from fastapi.params import Depends
 
 from bisheng.api.services.workflow import WorkFlowService
@@ -34,10 +33,9 @@ async def get_online_chat(*,
         - False (default): keyword matches name only.
         - True: keyword matches name OR description.
     """
-    data, total = await asyncio.to_thread(
-        WorkFlowService.get_all_flows,
-        user, keyword, FlowStatus.ONLINE.value, tag_id, flow_type, page, limit,
-        skip_pagination=True, search_description=bool(search_description))
+    data, total = await WorkFlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value, tag_id, flow_type, page,
+                                                      limit,
+                                                      skip_pagination=True, search_description=bool(search_description))
 
     if sort_by == 'update_time':
         data.sort(key=lambda app: -app['update_time'].timestamp() if app.get('update_time') else 0)

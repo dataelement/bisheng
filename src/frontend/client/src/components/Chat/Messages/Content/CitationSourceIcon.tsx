@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Globe2 } from 'lucide-react';
 import BookOpen from '~/components/ui/icon/BookOpen';
-import { FileIcon, type FileType } from '~/components/ui/icon/File/FileIcon';
+import type { FileType } from '~/components/ui/icon/File/FileIcon';
 import { cn } from '~/utils';
 import type { ChatCitation } from '~/api/chatApi';
 import {
@@ -167,6 +167,118 @@ function WebSourceIcon({
   );
 }
 
+export function CitationFileTypeIcon({
+  fileType = 'txt',
+  className,
+}: {
+  fileType?: FileType;
+  className?: string;
+}) {
+  const normalizedType = normalizeFileType(fileType);
+  const renderSvgContent = () => {
+    if (normalizedType === 'pdf' || normalizedType === 'ppt' || normalizedType === 'pptx') {
+      return (
+        <>
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M3.33268 1.33337H9.99935L13.3327 4.66671V14C13.3327 14.3682 13.0342 14.6667 12.666 14.6667H3.33268C2.96449 14.6667 2.66602 14.3682 2.66602 14V2.00004C2.66602 1.63185 2.96449 1.33337 3.33268 1.33337Z" stroke="#F53F3F" strokeWidth="1.33333" strokeLinejoin="round" />
+          <path fillRule="evenodd" clipRule="evenodd" d="M5.99902 6H9.99902V8.6639L6.00179 8.66667L5.99902 6Z" stroke="#F53F3F" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5.99902 6V11.3333" stroke="#F53F3F" strokeWidth="1.33333" strokeLinecap="round" />
+        </>
+      );
+    }
+
+    if (normalizedType === 'txt') {
+      return (
+        <>
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M3.33268 1.33337H9.99935L13.3327 4.66671V14C13.3327 14.3682 13.0342 14.6667 12.666 14.6667H3.33268C2.96449 14.6667 2.66602 14.3682 2.66602 14V2.00004C2.66602 1.63185 2.96449 1.33337 3.33268 1.33337Z" stroke="#374151" strokeWidth="1.33333" strokeLinejoin="round" />
+          <path d="M5.99902 6.00281H9.99902" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" />
+          <path d="M8.00098 6.00281V11.3334" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" />
+        </>
+      );
+    }
+
+    if (normalizedType === 'doc' || normalizedType === 'docx') {
+      return (
+        <>
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M3.33268 1.33337H9.99935L13.3327 4.66671V14C13.3327 14.3682 13.0342 14.6667 12.666 14.6667H3.33268C2.96449 14.6667 2.66602 14.3682 2.66602 14V2.00004C2.66602 1.63185 2.96449 1.33337 3.33268 1.33337Z" stroke="#024DE3" strokeWidth="1.33333" strokeLinejoin="round" />
+          <path d="M5.33594 6.66663L6.33594 11.3333L8.0026 7.99996L9.66927 11.3333L10.6693 6.66663" stroke="#024DE3" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      );
+    }
+
+    if (normalizedType === 'md') {
+      return (
+        <>
+          <path d="M3.33366 14.6667H12.667C13.0352 14.6667 13.3337 14.3682 13.3337 14V4.66671L10.3337 1.33337H3.33366C2.96547 1.33337 2.66699 1.63185 2.66699 2.00004V14C2.66699 14.3682 2.96547 14.6667 3.33366 14.6667Z" stroke="#FF7D00" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7.00098 11.6667L10.3343 8.33333L9.00098 7L5.66764 10.3333V11.6667H7.00098Z" stroke="#FF7D00" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      );
+    }
+
+    if (normalizedType === 'html') {
+      return (
+        <>
+          <path d="M3.33366 14.6667H12.667C13.0352 14.6667 13.3337 14.3682 13.3337 14V4.66671L10.3337 1.33337H3.33366C2.96547 1.33337 2.66699 1.63185 2.66699 2.00004V14C2.66699 14.3682 2.96547 14.6667 3.33366 14.6667Z" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      );
+    }
+
+    if (normalizedType === 'csv' || normalizedType === 'xls' || normalizedType === 'xlsx') {
+      return (
+        <>
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+          <path d="M3.33268 1.33337H9.99935L13.3327 4.66671V14C13.3327 14.3682 13.0342 14.6667 12.666 14.6667H3.33268C2.96449 14.6667 2.66602 14.3682 2.66602 14V2.00004C2.66602 1.63185 2.96449 1.33337 3.33268 1.33337Z" stroke="#007D1A" strokeWidth="1.33333" strokeLinejoin="round" />
+          <path d="M10.668 5.9729H5.33464V11.3062H10.668" stroke="#007D1A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M10.668 8.63965H5.33464" stroke="#007D1A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.00391 11.3097L8.00391 5.97632" stroke="#007D1A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M10.666 11.3097L10.666 5.97632" stroke="#007D1A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      );
+    }
+
+    if (normalizedType === 'png' || normalizedType === 'jpg' || normalizedType === 'jpeg' || normalizedType === 'bmp') {
+      return (
+        <>
+          <path d="M3.33366 14.6667H12.667C13.0352 14.6667 13.3337 14.3682 13.3337 14V4.66671L10.0003 1.33337H3.33366C2.96547 1.33337 2.66699 1.63185 2.66699 2.00004V14C2.66699 14.3682 2.96547 14.6667 3.33366 14.6667Z" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M10.0007 1.33337L13.334 4.66671" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M6 7.00004C6.73638 7.00004 7.33333 6.40309 7.33333 5.66671C7.33333 4.93033 6.73638 4.33337 6 4.33337C5.26362 4.33337 4.66667 4.93033 4.66667 5.66671C4.66667 6.40309 5.26362 7.00004 6 7.00004Z" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5 9.33333V12.3333H11V7L7.83011 10.5L5 9.33333Z" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      );
+    }
+
+    return (
+      <>
+        <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+        <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity="0.01" />
+        <path d="M3.33268 1.33337H9.99935L13.3327 4.66671V14C13.3327 14.3682 13.0342 14.6667 12.666 14.6667H3.33268C2.96449 14.6667 2.66602 14.3682 2.66602 14V2.00004C2.66602 1.63185 2.96449 1.33337 3.33268 1.33337Z" stroke="#374151" strokeWidth="1.33333" strokeLinejoin="round" />
+        <path d="M5.99902 6.00281H9.99902" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" />
+        <path d="M8.00098 6.00281V11.3334" stroke="#374151" strokeWidth="1.33333" strokeLinecap="round" />
+      </>
+    );
+  };
+
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn('size-4 shrink-0', className)}
+      aria-hidden="true"
+    >
+      {renderSvgContent()}
+    </svg>
+  );
+}
+
 export function CitationSourceIcon({
   detail,
   preview,
@@ -196,10 +308,7 @@ export function CitationSourceIcon({
       ) : ragIconVariant === 'knowledge' ? (
         <BookOpen className={cn('size-4 text-[#86909C]', iconClassName)} />
       ) : (
-        <FileIcon
-          type={icon.fileType || 'txt'}
-          className={cn('!size-4 !min-w-4 !rounded-[4px] !p-0.5 [&_svg]:!size-3', iconClassName)}
-        />
+        <CitationFileTypeIcon fileType={icon.fileType || 'txt'} className={iconClassName} />
       )}
     </span>
   );
@@ -221,10 +330,7 @@ export function CitationSourceIconStack({ icons }: { icons: CitationSourceIconDa
           {icon.type === 'web' ? (
             <WebSourceIcon icon={icon} iconClassName="size-full" />
           ) : (
-            <FileIcon
-              type={icon.fileType || 'txt'}
-              className="!size-5 !min-w-5 !rounded-[4px] !p-1 [&_svg]:!size-3"
-            />
+            <CitationFileTypeIcon fileType={icon.fileType || 'txt'} className="size-4" />
           )}
         </span>
       ))}
