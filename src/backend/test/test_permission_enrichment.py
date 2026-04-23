@@ -298,3 +298,27 @@ class TestGetResourcePermissionsIntegration:
                 object_type='workflow', object_id='42',
             )
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_knowledge_library_permissions_merge_legacy_knowledge_space_tuples(self, mock_fga):
+        """knowledge_library should still surface historical knowledge_space tuples."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        await mock_fga.write_tuples(writes=[
+            {'user': 'user:1', 'relation': 'owner', 'object': 'knowledge_space:42'},
+        ])
+
+        mock_user1 = AsyncMock()
+        mock_user1.user_id = 1
+        mock_user1.user_name = 'Admin'
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_legacy_alias_object_types', new_callable=AsyncMock, return_value=['knowledge_space']), \
+             patch.object(UserDao, 'aget_user_by_ids', new_callable=AsyncMock, return_value=[mock_user1]):
+            result = await PermissionService.get_resource_permissions(
+                object_type='knowledge_library', object_id='42',
+            )
+
+        assert len(result) == 1
+        assert result[0].relation == 'owner'
+        assert result[0].subject_name == 'Admin'

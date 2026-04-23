@@ -53,7 +53,7 @@ class MessageBase(SQLModelSerializable):
     sender: Optional[str] = Field(index=False, default='', description='autogen Sender')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen Sender')
     intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='Process Log')
-    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
+    files: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT),
                                  description='Uploaded documents, etc.')
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
                                   description='Note. break_answer: Interrupted response inactionhistoryPass to Model')

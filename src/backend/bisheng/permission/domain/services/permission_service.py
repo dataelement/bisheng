@@ -42,7 +42,7 @@ class PermissionService:
 
     #: 隐式「部门管理范围」仅适用于应用/助手/知识库（与创建者主属部门树相关）
     _IMPLICIT_SCOPE_RESOURCE_TYPES = frozenset({
-        'workflow', 'assistant', 'knowledge_space',
+        'workflow', 'assistant', 'knowledge_space', 'knowledge_library',
     })
 
     # ── Public API ──────────────────────────────────────────────
@@ -109,6 +109,16 @@ class PermissionService:
                 relation=relation,
                 object=f'{object_type}:{object_id}',
             )
+
+            if not allowed:
+                for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
+                    allowed = await fga.check(
+                        user=f'user:{user_id}',
+                        relation=relation,
+                        object=f'{legacy_type}:{object_id}',
+                    )
+                    if allowed:
+                        break
 
             # L4: Owner fallback — if FGA says no, check DB creator field
             if not allowed:
@@ -186,6 +196,19 @@ class PermissionService:
                 if len(parts) == 2:
                     ids.append(parts[1])
 
+            for legacy_type in await cls._legacy_alias_object_types(object_type):
+                legacy_objects = await fga.list_objects(
+                    user=f'user:{user_id}',
+                    relation=relation,
+                    type=legacy_type,
+                )
+                legacy_ids = []
+                for obj in legacy_objects:
+                    parts = obj.split(':', 1)
+                    if len(parts) == 2:
+                        legacy_ids.append(parts[1])
+                ids.extend(await cls._filter_legacy_alias_ids(object_type, legacy_ids))
+
             # 与 OpenFGA 并集：部门管理员对其管辖子树内成员创建的资源隐式具备可读/可管（不写 FGA）
             implicit = await cls._resource_ids_implicit_dept_admin_scope(user_id, object_type)
             if implicit:
@@ -212,6 +235,7 @@ class PermissionService:
         object_id: str,
         grants: List[AuthorizeGrantItem] = None,
         revokes: List[AuthorizeRevokeItem] = None,
+        enforce_fga_success: bool = False,
     ) -> None:
         """Grant or revoke permissions on a resource.
 
@@ -220,16 +244,19 @@ class PermissionService:
         """
         operations: List[TupleOperation] = []
         affected_user_ids: set[int] = set()
-        fga_object = f'{object_type}:{object_id}'
+        fga_objects = [f'{object_type}:{object_id}']
+        for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
+            fga_objects.append(f'{legacy_type}:{object_id}')
 
         for grant in (grants or []):
             fga_users = await cls._expand_subject(
                 grant.subject_type, grant.subject_id, grant.include_children,
             )
             for fga_user in fga_users:
-                operations.append(TupleOperation(
-                    action='write', user=fga_user, relation=grant.relation, object=fga_object,
-                ))
+                for fga_object in fga_objects:
+                    operations.append(TupleOperation(
+                        action='write', user=fga_user, relation=grant.relation, object=fga_object,
+                    ))
             if grant.subject_type == 'user':
                 affected_user_ids.add(grant.subject_id)
 
@@ -238,16 +265,21 @@ class PermissionService:
                 revoke.subject_type, revoke.subject_id, revoke.include_children,
             )
             for fga_user in fga_users:
-                operations.append(TupleOperation(
-                    action='delete', user=fga_user, relation=revoke.relation, object=fga_object,
-                ))
+                for fga_object in fga_objects:
+                    operations.append(TupleOperation(
+                        action='delete', user=fga_user, relation=revoke.relation, object=fga_object,
+                    ))
             if revoke.subject_type == 'user':
                 affected_user_ids.add(revoke.subject_id)
 
         if not operations:
             return
 
-        await cls.batch_write_tuples(operations)
+        await cls.batch_write_tuples(
+            operations,
+            raise_on_failure=enforce_fga_success,
+            stop_on_failure=enforce_fga_success,
+        )
 
         # Invalidate cache for directly affected users
         if affected_user_ids:
@@ -259,7 +291,13 @@ class PermissionService:
     _FGA_BATCH_SIZE = 100
 
     @classmethod
-    async def batch_write_tuples(cls, operations: List[TupleOperation], crash_safe: bool = False) -> None:
+    async def batch_write_tuples(
+        cls,
+        operations: List[TupleOperation],
+        crash_safe: bool = False,
+        raise_on_failure: bool = False,
+        stop_on_failure: bool = False,
+    ) -> None:
         """Batch write/delete tuples to OpenFGA.
 
         Chunks into batches of _FGA_BATCH_SIZE to respect OpenFGA's per-request limit.
@@ -279,6 +317,7 @@ class PermissionService:
 
         # Pre-record for crash safety — delete on success
         pre_recorded_ids: List[int] = []
+        saved_failure_ops = False
         if crash_safe:
             pre_recorded_ids = await cls._pre_record_failed_tuples(operations)
 
@@ -287,6 +326,8 @@ class PermissionService:
             if fga is None:
                 if not crash_safe:
                     await cls._save_failed_tuples(operations, 'FGAClient not available')
+                if raise_on_failure:
+                    raise FGAConnectionError('FGAClient not available')
                 return
 
             # Chunk the original operation list so writes+deletes together stay
@@ -316,14 +357,27 @@ class PermissionService:
                         len(chunk), e,
                     )
                     failed_ops.extend(
-                        await cls._write_operations_individually(fga, chunk),
+                        await cls._write_operations_individually(
+                            fga,
+                            chunk,
+                            stop_on_failure=stop_on_failure,
+                        ),
                     )
 
             if failed_ops:
+                logger.error(
+                    'OpenFGA tuple write left %d unresolved operations (raise_on_failure=%s, crash_safe=%s)',
+                    len(failed_ops), raise_on_failure, crash_safe,
+                )
                 if not crash_safe:
                     await cls._save_failed_tuples(
                         failed_ops,
                         'OpenFGA single-tuple fallback failed',
+                    )
+                    saved_failure_ops = True
+                if raise_on_failure:
+                    raise FGAWriteError(
+                        f'OpenFGA write did not complete successfully; {len(failed_ops)} tuple operations failed',
                     )
                 return
 
@@ -333,15 +387,18 @@ class PermissionService:
 
         except Exception as e:
             logger.error('Failed to batch write tuples: %s', e)
-            if not crash_safe:
+            if not crash_safe and not saved_failure_ops:
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
+            if raise_on_failure:
+                raise
 
     @classmethod
     async def _write_operations_individually(
         cls,
         fga,
         operations: List[TupleOperation],
+        stop_on_failure: bool = False,
     ) -> List[TupleOperation]:
         """Replay a failed batch one tuple at a time.
 
@@ -350,7 +407,7 @@ class PermissionService:
         callers, so we treat them as success and only return truly failed ops.
         """
         failed: List[TupleOperation] = []
-        for op in operations:
+        for index, op in enumerate(operations):
             payload = {
                 'user': op.user,
                 'relation': op.relation,
@@ -369,10 +426,28 @@ class PermissionService:
                     )
                     continue
                 failed.append(op)
+                if stop_on_failure:
+                    remaining = operations[index + 1:]
+                    if remaining:
+                        logger.warning(
+                            'Stopping tuple fallback after non-idempotent %s failure; skipping %d trailing operations',
+                            op.action, len(remaining),
+                        )
+                        failed.extend(remaining)
+                    break
             except FGAConnectionError:
                 raise
             except Exception:
                 failed.append(op)
+                if stop_on_failure:
+                    remaining = operations[index + 1:]
+                    if remaining:
+                        logger.warning(
+                            'Stopping tuple fallback after unexpected %s failure; skipping %d trailing operations',
+                            op.action, len(remaining),
+                        )
+                        failed.extend(remaining)
+                    break
         return failed
 
     @staticmethod
@@ -423,13 +498,17 @@ class PermissionService:
             if fga is None:
                 return []
 
-            tuples = await fga.read_tuples(
-                object=f'{object_type}:{object_id}',
-            )
+            tuples = await fga.read_tuples(object=f'{object_type}:{object_id}')
+            for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
+                tuples.extend(await fga.read_tuples(object=f'{legacy_type}:{object_id}'))
             if not tuples:
                 return []
 
-            return await cls._enrich_permission_tuples(tuples)
+            deduped = list({
+                (t.get('user', ''), t.get('relation', '')): t
+                for t in tuples
+            }.values())
+            return await cls._enrich_permission_tuples(deduped)
 
         except FGAConnectionError as e:
             logger.error('OpenFGA unreachable during read_tuples: %s', e)
@@ -593,6 +672,16 @@ class PermissionService:
                 if allowed:
                     return level.value
 
+            for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
+                legacy_checks = [
+                    {'user': f'user:{user_id}', 'relation': level.value, 'object': f'{legacy_type}:{object_id}'}
+                    for level in PermissionLevel
+                ]
+                legacy_results = await fga.batch_check(legacy_checks)
+                for level, allowed in zip(PermissionLevel, legacy_results):
+                    if allowed:
+                        return level.value
+
             creator_id = await cls._get_resource_creator(object_type, object_id)
             if creator_id is not None and creator_id == user_id:
                 return PermissionLevel.owner.value
@@ -678,9 +767,26 @@ class PermissionService:
 
         async with get_async_db_session() as session:
             if object_type == 'knowledge_space':
-                from bisheng.knowledge.domain.models.knowledge import Knowledge
+                from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 
-                stmt = select(Knowledge.id).where(col(Knowledge.user_id).in_(uids))
+                stmt = select(Knowledge.id).where(
+                    col(Knowledge.user_id).in_(uids),
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                )
+                result = await session.exec(stmt)
+                rows = result.all()
+                return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
+            if object_type == 'knowledge_library':
+                from bisheng.knowledge.domain.models.knowledge import Knowledge
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+                stmt = select(Knowledge.id).where(
+                    col(Knowledge.user_id).in_(uids),
+                    Knowledge.type.in_([
+                        KnowledgeTypeEnum.NORMAL.value,
+                        KnowledgeTypeEnum.QA.value,
+                    ]),
+                )
                 result = await session.exec(stmt)
                 rows = result.all()
                 return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
@@ -744,6 +850,49 @@ class PermissionService:
         return ids
 
     @classmethod
+    async def _legacy_alias_object_types(
+        cls,
+        object_type: str,
+        object_id: str | None = None,
+    ) -> List[str]:
+        if object_type != 'knowledge_library':
+            return []
+        if object_id is None:
+            return ['knowledge_space']
+        try:
+            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+            obj = await KnowledgeDao.aquery_by_id(int(object_id))
+            if obj and obj.type != KnowledgeTypeEnum.SPACE.value:
+                return ['knowledge_space']
+        except Exception as e:
+            logger.debug('Could not resolve legacy alias object type for %s:%s: %s', object_type, object_id, e)
+        return []
+
+    @classmethod
+    async def _filter_legacy_alias_ids(
+        cls,
+        object_type: str,
+        ids: List[str],
+    ) -> List[str]:
+        if object_type != 'knowledge_library' or not ids:
+            return ids
+        try:
+            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+            numeric_ids = [int(one) for one in ids if str(one).isdigit()]
+            if not numeric_ids:
+                return []
+            objects = await KnowledgeDao.aget_list_by_ids(numeric_ids)
+            return [
+                str(obj.id) for obj in objects
+                if obj.type != KnowledgeTypeEnum.SPACE.value
+            ]
+        except Exception as e:
+            logger.debug('Could not filter legacy alias ids for %s: %s', object_type, e)
+            return []
+
+    @classmethod
     async def _expand_subject(
         cls,
         subject_type: str,
@@ -798,8 +947,18 @@ class PermissionService:
 
             if object_type == 'knowledge_space':
                 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
                 ks = await KnowledgeDao.aquery_by_id(int(object_id))
-                return ks.user_id if ks else None
+                return ks.user_id if ks and ks.type == KnowledgeTypeEnum.SPACE.value else None
+
+            if object_type == 'knowledge_library':
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+                kb = await KnowledgeDao.aquery_by_id(int(object_id))
+                if kb and kb.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
+                    return kb.user_id
+                return None
 
             if object_type == 'knowledge_file':
                 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
@@ -897,7 +1056,8 @@ class PermissionService:
 
         F013 only enforces tenant gating for primary resource types that carry
         an owning tenant_id we can look up cheaply (workflow, assistant,
-        knowledge_space). Other types (folder, knowledge_file, channel, tool,
+        knowledge_space / knowledge_library). Other types (folder,
+        knowledge_file, channel, tool,
         dashboard, llm_*) inherit visibility via their parent or are not yet
         wired to multi-tenant; for those, returning None falls through to the
         existing FGA chain which still honors tenant#shared_to#member at the
@@ -914,8 +1074,17 @@ class PermissionService:
                 return obj.tenant_id if obj else None
             if object_type == 'knowledge_space':
                 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
                 obj = await KnowledgeDao.aquery_by_id(int(object_id))
-                return obj.tenant_id if obj else None
+                return obj.tenant_id if obj and obj.type == KnowledgeTypeEnum.SPACE.value else None
+            if object_type == 'knowledge_library':
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+                obj = await KnowledgeDao.aquery_by_id(int(object_id))
+                if obj and obj.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
+                    return obj.tenant_id
+                return None
         except Exception as e:  # noqa: BLE001 — defensive degradation
             logger.warning(
                 '_resolve_resource_tenant failed for %s:%s: %s',

@@ -17,6 +17,8 @@ interface Props {
   onCreated?: () => void;
 }
 
+const TREE_INDENT_PER_LEVEL = 22;
+
 function flattenDepartmentIds(nodes: DepartmentTreeNode[]): number[] {
   const ids: number[] = [];
   const walk = (list: DepartmentTreeNode[]) => {
@@ -27,6 +29,17 @@ function flattenDepartmentIds(nodes: DepartmentTreeNode[]): number[] {
   };
   walk(nodes);
   return ids;
+}
+
+function findDepartmentNodeById(nodes: DepartmentTreeNode[], targetId: number): DepartmentTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === targetId) return node;
+    if (node.children?.length) {
+      const hit = findDepartmentNodeById(node.children, targetId);
+      if (hit) return hit;
+    }
+  }
+  return null;
 }
 
 export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCreated }: Props) {
@@ -142,12 +155,21 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCr
     return (
       <div key={node.id}>
         <div
-          className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-[#F7F8FA]"
-          style={{ paddingLeft: `${depth * 18 + 8}px` }}
+          data-depth={depth}
+          className="group flex items-center rounded-md py-1.5 pr-2 hover:bg-[#F7F8FA]"
         >
+          <div
+            className="relative shrink-0 self-stretch"
+            style={{ width: `${depth * TREE_INDENT_PER_LEVEL + 8}px` }}
+            aria-hidden
+          >
+            {depth > 0 && (
+              <span className="pointer-events-none absolute bottom-1 right-0 top-1 w-px bg-[#E5E6EB]" />
+            )}
+          </div>
           <button
             type="button"
-            className="inline-flex size-4 items-center justify-center text-[#86909C]"
+            className="mr-2 inline-flex size-4 items-center justify-center text-[#86909C]"
             onClick={() => {
               if (!hasChildren) return;
               setExpanded((prev) => {
@@ -169,7 +191,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCr
             disabled={isConfigured}
             onCheckedChange={() => toggleDept(node.id)}
           />
-          <Building2 className="size-4 text-[#86909C]" />
+          <Building2 className="ml-2 size-4 shrink-0 text-[#86909C]" />
           <span className="min-w-0 flex-1 truncate text-sm text-[#1D2129]">{node.name}</span>
           {isConfigured && (
             <span className="rounded bg-[#E8F3FF] px-2 py-0.5 text-xs text-[#165DFF]">
@@ -231,15 +253,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCr
                 </div>
               ) : (
                 Array.from(selectedDeptIds).map((deptId) => {
-                  const findNode = (nodes: DepartmentTreeNode[]): DepartmentTreeNode | null => {
-                    for (const node of nodes) {
-                      if (node.id === deptId) return node;
-                      const hit = node.children?.length ? findNode(node.children) : null;
-                      if (hit) return hit;
-                    }
-                    return null;
-                  };
-                  const node = findNode(tree);
+                  const node = findDepartmentNodeById(tree, deptId);
                   return (
                     <div key={deptId} className="flex items-center justify-between rounded-md border border-[#E5E6EB] bg-white px-3 py-2">
                       <div className="min-w-0">

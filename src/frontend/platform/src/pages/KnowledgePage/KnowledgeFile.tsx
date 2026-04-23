@@ -340,7 +340,7 @@ export default function KnowledgeFile() {
 
     // Permission levels for badge display
     const resourceIds = datalist.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
@@ -727,7 +727,7 @@ export default function KnowledgeFile() {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
-                    resourceType="knowledge_space"
+                    resourceType="knowledge_library"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
                 />

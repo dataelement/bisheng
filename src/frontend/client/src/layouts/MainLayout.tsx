@@ -365,7 +365,7 @@ export default function MainLayout() {
           />
         </div>
       ) : null}
-      <main className="relative h-[100dvh] min-w-0 flex-1 p-2 pl-0">
+      <main className="relative h-[100dvh] min-w-0 flex-1 p-2">
         {shouldHideSidebarOnMobileAppsArea &&
           isAppsArea &&
           !isAppChatRoute &&

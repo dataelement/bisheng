@@ -76,6 +76,7 @@ export default function Knowledge() {
     const detailSpaceId = isDetailRoute ? spaceId : undefined;
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
+    const [squarePreviewSpace, setSquarePreviewSpace] = useState<KnowledgeSpace | null>(null);
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
     const previewQueryCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [knowledgeTabActivateEpoch, setKnowledgeTabActivateEpoch] = useState(0);
@@ -256,6 +257,7 @@ export default function Knowledge() {
             if (!sid) return;
             setShowKnowledgeSquare(true);
             setSquarePreviewSpaceId(String(sid));
+            setSquarePreviewSpace(null);
             setSquarePreviewDrawerOpen(true);
         };
         window.addEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
@@ -514,21 +516,40 @@ export default function Knowledge() {
                     searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
                     emptyText={localize("com_knowledge.no_matched_space")}
                     joinToastPrefix={localize("com_knowledge.applied_to_join_space")}
-                    onPreviewSpace={(id) => {
-                        setSquarePreviewSpaceId(id);
+                    onPreviewSpace={(space) => {
+                        setSquarePreviewSpaceId(space.id);
+                        setSquarePreviewSpace(space);
                         setSquarePreviewDrawerOpen(true);
                     }}
                     statusOverride={squareStatusOverride}
                 />
                 <KnowledgeSpacePreviewDrawer
                     spaceId={squarePreviewSpaceId}
+                    initialSpace={
+                        squarePreviewSpace
+                            ? {
+                                ...squarePreviewSpace,
+                                squareStatus:
+                                    squareStatusOverride[String(squarePreviewSpace.id)] ??
+                                    squarePreviewSpace.squareStatus,
+                            }
+                            : null
+                    }
                     open={squarePreviewDrawerOpen}
                     onOpenChange={(open) => {
                         setSquarePreviewDrawerOpen(open);
-                        if (!open) setSquarePreviewSpaceId(undefined);
+                        if (!open) {
+                            setSquarePreviewSpaceId(undefined);
+                            setSquarePreviewSpace(null);
+                        }
                     }}
                     onSquareStatusChange={(id, status) => {
-                        setSquareStatusOverride((prev) => ({ ...prev, [String(id)]: status }));
+                        setSquareStatusOverride((prev) => {
+                            if (prev[String(id)] === status) {
+                                return prev;
+                            }
+                            return { ...prev, [String(id)]: status };
+                        });
                     }}
                 />
             </div>

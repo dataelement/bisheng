@@ -124,10 +124,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
         return knowledge
 
     @classmethod
@@ -135,10 +136,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError()
+        await cls.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
         return knowledge
 
     @staticmethod
@@ -179,16 +181,21 @@ class KnowledgeService(KnowledgeUtils):
             sort_by: str = "update_time",
             page: int = 1,
             limit: int = 10,
+            permission_id: str = 'use_kb',
     ) -> Tuple[List[KnowledgeRead], int]:
-        # F008: 列表可见性 = OpenFGA `can_read`（与 PRD「使用知识库」/关系模型 can_read 一致）。
-        # 与「当前用户创建」的知识库 ID 取并集：避免 list_objects 滞后、缓存或计算差异导致创建者看不到自己的库。
-        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_space')
+        # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
+        # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
+        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_library')
         if accessible_ids is not None:
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
                 login_user.user_id, knowledge_type,
             )
             merged = set(int(k) for k in accessible_ids) | set(creator_ids)
-            knowledge_id_extra = list(merged)
+            knowledge_id_extra = await cls.permission_service.filter_knowledge_ids_by_permission_async(
+                login_user,
+                list(merged),
+                permission_id,
+            )
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
@@ -225,8 +232,11 @@ class KnowledgeService(KnowledgeUtils):
             if login_user.user_id == one.user_id:
                 copiable = True
             else:
-                copiable = await login_user.async_access_check(
-                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                copiable = await cls.permission_service.check_access_async(
+                    login_user=login_user,
+                    owner_user_id=one.user_id,
+                    knowledge_id=one.id,
+                    access_type=AccessType.KNOWLEDGE_WRITE,
                 )
             return KnowledgeRead(
                 **one.model_dump(),
@@ -249,8 +259,11 @@ class KnowledgeService(KnowledgeUtils):
             if login_user.user_id == one.user_id:
                 copiable = True
             else:
-                copiable = login_user.access_check(
-                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                copiable = cls.permission_service.check_access_sync(
+                    login_user=login_user,
+                    owner_user_id=one.user_id,
+                    knowledge_id=one.id,
+                    access_type=AccessType.KNOWLEDGE_WRITE,
                 )
             res.append(
                 KnowledgeRead(
@@ -270,9 +283,11 @@ class KnowledgeService(KnowledgeUtils):
         if not login_user.is_admin():
             filter_knowledge = []
             for one in db_knowledge:
-                # Determine if the user has permission
-                if login_user.access_check(
-                        one.user_id, str(one.id), AccessType.KNOWLEDGE
+                if cls.permission_service.check_access_sync(
+                        login_user=login_user,
+                        owner_user_id=one.user_id,
+                        knowledge_id=one.id,
+                        access_type=AccessType.KNOWLEDGE,
                 ):
                     filter_knowledge.append(one)
         if not filter_knowledge:
@@ -363,7 +378,7 @@ class KnowledgeService(KnowledgeUtils):
     ):
         # F008: Write owner tuple to OpenFGA (INV-2)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_space', str(knowledge.id))
+        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_library', str(knowledge.id))
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -378,10 +393,13 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
-        # judge access
-        if not login_user.access_check(
-                db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=db_knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         if knowledge.name and knowledge.name != db_knowledge.name:
@@ -412,9 +430,13 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge:
             raise NotFoundError.http_exception()
 
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge_id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         # Cleaned vectorData in
@@ -464,7 +486,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # F008: Clean up all FGA tuples for this resource (AC-03)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.delete_resource_tuples_sync('knowledge_space', str(knowledge.id))
+        OwnerService.delete_resource_tuples_sync('knowledge_library', str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
@@ -650,9 +672,13 @@ class KnowledgeService(KnowledgeUtils):
             cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
@@ -666,9 +692,13 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
         failed_files = []
         # Process each file
@@ -750,9 +780,13 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
@@ -783,10 +817,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
 
         req_data["knowledge_id"] = knowledge.id
 
@@ -956,9 +991,13 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_read_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         res = KnowledgeFileDao.get_file_by_filters(
@@ -991,8 +1030,11 @@ class KnowledgeService(KnowledgeUtils):
         return (
             finally_res,
             total,
-            login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
+            cls.permission_service.check_access_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+                access_type=AccessType.KNOWLEDGE_WRITE,
             ),
         )
 
@@ -1006,9 +1048,13 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge_file:
             raise NotFoundError.http_exception()
         db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
-        if not login_user.access_check(
-                db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=db_knowledge.id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         # <g id="Bold">Medical Treatment:</g>vectordb
@@ -1046,9 +1092,14 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge:
             raise NotFoundError.http_exception()
 
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), access_type
-        ):
+        try:
+            cls.permission_service.ensure_access_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+                access_type=access_type,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
         return db_knowledge
 
@@ -1282,8 +1333,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_info = KnowledgeDao.query_by_id(file.knowledge_id)
         if not knowledge_info:
             raise NotFoundError(msg="knowledge not found")
-        if not login_user.access_check(knowledge_info.user_id, str(knowledge_info.id), AccessType.KNOWLEDGE):
-            raise UnAuthorizedError()
+        cls.permission_service.ensure_knowledge_read_sync(
+            login_user=login_user,
+            owner_user_id=knowledge_info.user_id,
+            knowledge_id=knowledge_info.id,
+        )
         return cls.get_file_share_url(file=file)
 
     @classmethod
@@ -1413,9 +1467,13 @@ class KnowledgeService(KnowledgeUtils):
         # Query the current knowledge base, whether there are write permissions
         if not db_knowledge:
             raise NotFoundError()
-        if not login_user.access_check(
-                db_knowledge.user_id, str(qa_knowledge_id), AccessType.KNOWLEDGE
-        ):
+        try:
+            cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=qa_knowledge_id,
+            )
+        except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
@@ -1447,8 +1505,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
-        if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
-            raise UnAuthorizedError()
+        cls.permission_service.ensure_knowledge_read_sync(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
 
         if not file_ids:
             raise NotFoundError(msg="file_ids must not be empty")

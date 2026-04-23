@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Loader2, X } from 'lucide-react';
+import { ChevronRight, Download, Loader2, X } from 'lucide-react';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
-import { usePrefersMobileLayout } from '~/hooks';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import { cn } from '~/utils';
 import {
   buildCitationDocumentPreview,
   buildCitationReferenceItems,
   createCitationDetailMap,
   getCitationDocumentFileType,
+  getCitationDocumentName,
+  getCitationDocumentUrl,
   isRagCitation,
   normalizeCitationType,
+  toAbsolutePreviewUrl,
   type CitationPreview,
   type CitationReferenceItem,
 } from './citationUtils';
-import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
+import CitationDocumentPreviewDrawer, {
+  CitationDocumentPreviewContent,
+  type CitationDocumentPreviewState,
+} from './CitationDocumentPreviewDrawer';
 import {
   buildCitationSourceIconStackData,
   CitationSourceIcon,
@@ -34,6 +40,8 @@ type CitationReferencesDrawerProps = {
   onDesktopOpen?: (payload: CitationReferencesDesktopPayload) => void;
   panelOnly?: boolean;
   panelClassName?: string;
+  initialDocumentPreview?: CitationDocumentPreviewState | null;
+  desktopPreviewVariant?: 'auto' | 'standard' | 'expanded';
 };
 
 export type CitationReferencesDesktopPayload = {
@@ -42,7 +50,12 @@ export type CitationReferencesDesktopPayload = {
   webContent?: any;
   citations?: ChatCitation[] | null;
   referenceItems: CitationReferenceItem[];
+  initialDocumentPreview?: CitationDocumentPreviewState | null;
 };
+
+type CitationDesktopView = 'list' | 'document-preview';
+const CITATION_PANEL_EXPANDED_BREAKPOINT = 768;
+const CITATION_MOBILE_BREAKPOINT = 576;
 
 function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
@@ -84,14 +97,12 @@ function CitationReferenceCard({
   isLoading,
   hasError,
   onOpenDocumentPreview,
-  isH5 = false,
 }: {
   item: CitationReferenceItem;
   detail: ChatCitation | null;
   isLoading: boolean;
   hasError: boolean;
   onOpenDocumentPreview: (detail: ChatCitation) => void;
-  isH5?: boolean;
 }) {
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
@@ -100,64 +111,6 @@ function CitationReferenceCard({
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const sourceMetaText = [preview?.sourceName, preview?.sourceMeta].filter(Boolean).join(' | ');
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
-
-  if (isH5) {
-    return (
-      <div className="border-b border-[#F2F3F5] py-3">
-        <div className="mb-2 flex items-center justify-between gap-2 text-[13px] leading-5 text-[#86909C]">
-          <div className="flex min-w-0 items-center gap-2">
-            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
-            <span className="min-w-0 truncate">{sourceMetaText || (isWeb ? '网页来源' : '知识库')}</span>
-          </div>
-          <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#F2F3F5] text-[12px] leading-none text-[#86909C]">
-            {item.data.label}
-          </span>
-        </div>
-
-        <div className="min-w-0 text-[16px] font-semibold leading-6 text-[#1D2129]">
-          {canOpenDocument ? (
-            <button
-              type="button"
-              onClick={() => onOpenDocumentPreview(detail!)}
-              className="min-w-0 truncate text-left hover:text-[#165DFF] hover:underline"
-              title={title}
-            >
-              {title}
-            </button>
-          ) : preview?.link ? (
-            <a
-              href={preview.link}
-              target="_blank"
-              rel="noreferrer"
-              className="min-w-0 truncate hover:text-[#165DFF] hover:underline"
-              title={title}
-            >
-              {title}
-            </a>
-          ) : (
-            <span className="min-w-0 truncate" title={title}>{title}</span>
-          )}
-        </div>
-
-        <div className="mt-1 text-[13px] leading-5 text-[#86909C] line-clamp-2">
-          {preview?.snippet || '暂无内容摘要'}
-        </div>
-
-        {(isLoading || hasError) && (
-          <div className="mt-2 min-h-[22px] text-[13px] leading-[22px] text-[#4E5969]">
-            {isLoading ? (
-              <span className="inline-flex items-center gap-2 text-[#86909C]">
-                <Loader2 className="size-3.5 animate-spin" />
-                加载溯源详情...
-              </span>
-            ) : hasError ? (
-              <span className="text-[#86909C]">溯源详情加载失败</span>
-            ) : null}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   const titleContent = canOpenDocument ? (
     <button
@@ -243,13 +196,22 @@ export default function CitationReferencesDrawer({
   onDesktopOpen,
   panelOnly = false,
   panelClassName,
+  initialDocumentPreview,
+  desktopPreviewVariant = 'auto',
 }: CitationReferencesDrawerProps) {
-  const isH5 = usePrefersMobileLayout();
+  const isH5 = useMediaQuery(`(max-width: ${CITATION_MOBILE_BREAKPOINT}px)`);
+  const matchesExpandedDesktopPreview = useMediaQuery(`(min-width: ${CITATION_PANEL_EXPANDED_BREAKPOINT + 1}px)`);
+  const useExpandedDesktopPreview = desktopPreviewVariant === 'expanded'
+    ? true
+    : desktopPreviewVariant === 'standard'
+      ? false
+      : matchesExpandedDesktopPreview;
   const [internalOpen, setInternalOpen] = useState(false);
   const [detailMap, setDetailMap] = useState<Record<string, ChatCitation>>(() => createCitationDetailMap(citations));
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
   const [errorMap, setErrorMap] = useState<Record<string, boolean>>({});
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
+  const [desktopView, setDesktopView] = useState<CitationDesktopView>('list');
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
@@ -383,7 +345,35 @@ export default function CitationReferencesDrawer({
     && desktopMode === 'inline-panel'
     && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
+  const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
+
+  useEffect(() => {
+    if (!isOpen && !panelOnly) {
+      setDesktopView('list');
+      setDocumentPreview(null);
+    }
+  }, [isOpen, panelOnly]);
+
+  useEffect(() => {
+    if (!isDesktopInlinePanel || !isOpen) {
+      return;
+    }
+
+    if (initialDocumentPreview?.detail) {
+      setDocumentPreview(initialDocumentPreview);
+      setDesktopView('document-preview');
+      return;
+    }
+
+    setDesktopView('list');
+    setDocumentPreview(null);
+  }, [initialDocumentPreview, isDesktopInlinePanel, isOpen]);
+
   const setOpenState = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setDesktopView('list');
+      setDocumentPreview(null);
+    }
     if (isDesktopInlinePanel) {
       onOpenChange?.(nextOpen);
       return;
@@ -410,21 +400,80 @@ export default function CitationReferencesDrawer({
 
     setOpenState(true);
   };
-  const panelContent = (
+  const handleOpenDocumentPreview = (detail: ChatCitation) => {
+    const nextPreview = {
+      detail,
+      locateChunk: false,
+    };
+
+    if (isDesktopInlinePanel) {
+      setDocumentPreview(nextPreview);
+      setDesktopView('document-preview');
+      return;
+    }
+
+    setDocumentPreview(nextPreview);
+  };
+  const handleDownloadDocument = () => {
+    if (!documentPreview) {
+      return;
+    }
+
+    const fileName = getCitationDocumentName(documentPreview.detail);
+    const fileUrl = toAbsolutePreviewUrl(getCitationDocumentUrl(documentPreview.detail));
+    if (!fileUrl) {
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  const documentHeaderTitle = documentPreview
+    ? splitDocumentTitle(
+      getCitationDocumentName(documentPreview.detail),
+      documentPreview.detail,
+      null,
+    )
+    : { name: '文档预览', extension: '' };
+  const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-[360px]';
+  const desktopHeaderPadding = useExpandedDesktopPreview ? 'px-0 py-0' : 'px-3 py-4';
+  const desktopHeaderHeight = useExpandedDesktopPreview ? 'h-10' : 'h-[22px]';
+  const desktopHeaderGap = useExpandedDesktopPreview ? 'gap-3' : 'gap-4';
+  const desktopButtonSize = useExpandedDesktopPreview ? 'size-10 rounded-[10px]' : 'size-4 rounded-[4px]';
+  const desktopButtonIconSize = useExpandedDesktopPreview ? 'size-5' : 'size-4';
+  const desktopDownloadButtonClass = useExpandedDesktopPreview
+    ? 'text-[#024DE3] hover:bg-[#F2F7FF]'
+    : 'text-[#024DE3] hover:bg-[#F2F7FF]';
+  const desktopCloseButtonClass = useExpandedDesktopPreview
+    ? 'text-[#333333] hover:bg-[#F7F8FA]'
+    : 'text-[#A9AEB8] hover:bg-[#F7F8FA]';
+  const desktopContentOuterClass = useExpandedDesktopPreview
+    ? 'items-center justify-between gap-6 p-2'
+    : 'items-center gap-4';
+  const desktopBodyWrapperClass = useExpandedDesktopPreview
+    ? 'max-w-[464px] rounded-[12px] bg-[#F7F8FA]'
+    : 'max-w-[336px] bg-transparent';
+  const desktopBodyClass = useExpandedDesktopPreview
+    ? 'min-h-0 flex-1 bg-[#F7F8FA]'
+    : 'min-h-0 flex-1 bg-transparent';
+  const referenceListContent = (
     <>
       <div className={cn(
         'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
-        isH5 ? 'h-14 px-4' : 'h-14 px-3',
+        'h-14 px-3',
       )}>
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
-            {isH5 ? `参考来源 ${references.length}` : '参考资料'}
+            参考资料
           </h2>
-          {!isH5 && (
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
-              {references.length}
-            </span>
-          )}
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
+            {references.length}
+          </span>
         </div>
         <button
           type="button"
@@ -438,7 +487,7 @@ export default function CitationReferencesDrawer({
 
       <div className={cn(
         'flex-1 overflow-y-auto',
-        isH5 ? 'px-4 py-1' : 'space-y-3 px-3 py-4',
+        'space-y-3 px-3 py-4',
       )}>
         {references.length > 0 ? (
           references.map((item) => {
@@ -450,13 +499,7 @@ export default function CitationReferencesDrawer({
                 detail={detail}
                 isLoading={!!loadingMap[item.data.citationId]}
                 hasError={!!errorMap[item.data.citationId]}
-                isH5={isH5}
-                onOpenDocumentPreview={(detail) => {
-                  setDocumentPreview({
-                    detail,
-                    locateChunk: false,
-                  });
-                }}
+                onOpenDocumentPreview={handleOpenDocumentPreview}
               />
             );
           })
@@ -466,17 +509,70 @@ export default function CitationReferencesDrawer({
           </div>
         )}
       </div>
-      <CitationDocumentPreviewDrawer
-        preview={documentPreview}
-        onClose={() => setDocumentPreview(null)}
-      />
     </>
   );
+
+  const documentPreviewContent = (
+    <div className={cn('flex min-h-0 flex-1 flex-col bg-white', desktopContentOuterClass)}>
+      <div className={cn('flex w-full shrink-0 flex-col', useExpandedDesktopPreview ? 'max-w-[464px] gap-4' : 'max-w-[360px]')}>
+        <div className={cn('flex items-center', desktopHeaderHeight, desktopHeaderGap, desktopHeaderPadding)}>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex min-w-0 items-center">
+              <h2
+                className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]"
+                title={documentPreview ? getCitationDocumentName(documentPreview.detail) : ''}
+              >
+                {documentHeaderTitle.name}
+              </h2>
+              {documentHeaderTitle.extension ? (
+                <span className="shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]">
+                  {documentHeaderTitle.extension}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadDocument}
+            className={cn(
+              'inline-flex shrink-0 items-center justify-center transition-colors',
+              desktopButtonSize,
+              desktopDownloadButtonClass,
+            )}
+            aria-label="下载文档"
+          >
+            <Download className={useExpandedDesktopPreview ? 'size-4' : 'size-4'} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpenState(false)}
+            className={cn(
+              'inline-flex shrink-0 items-center justify-center transition-colors',
+              desktopButtonSize,
+              desktopCloseButtonClass,
+            )}
+            aria-label="关闭参考资料"
+          >
+            <X className={desktopButtonIconSize} strokeWidth={useExpandedDesktopPreview ? 1.75 : 1.5} />
+          </button>
+        </div>
+      </div>
+      <div className={cn('flex min-h-0 w-full flex-1 flex-col overflow-hidden', desktopBodyWrapperClass)}>
+        <CitationDocumentPreviewContent
+          preview={documentPreview}
+          compactMode
+          className={desktopBodyClass}
+        />
+      </div>
+    </div>
+  );
+
+  const panelContent = isDesktopPreviewInline ? documentPreviewContent : referenceListContent;
 
   if (panelOnly) {
     return (
       <section
-        className={cn('flex h-full min-h-0 flex-col bg-white', !isH5 && 'w-full max-w-[360px]', panelClassName)}
+        className={cn('flex h-full min-h-0 flex-col bg-white', !isH5 && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
         aria-label="参考资料"
       >
         {panelContent}
@@ -524,14 +620,20 @@ export default function CitationReferencesDrawer({
             className={cn(
               'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
               isH5
-                ? 'inset-x-0 bottom-0 max-h-[78vh] rounded-t-2xl border-t border-[#E5E6EB]'
-                : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB]',
+                ? 'inset-0'
+                : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
             )}
             aria-label="参考资料"
           >
             {panelContent}
           </aside>
         </>
+      )}
+      {!isDesktopInlinePanel && (
+        <CitationDocumentPreviewDrawer
+          preview={documentPreview}
+          onClose={() => setDocumentPreview(null)}
+        />
       )}
     </>
   );

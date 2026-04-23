@@ -105,9 +105,10 @@ const Nav = ({
     <>
       <div
         data-testid="nav"
-        className={
-          'nav active max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[240px] bg-white border-r border-[#ececec]'
-        }
+        className={cn(
+          'nav active max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[240px] bg-white border-r border-[#ececec]',
+          isSmallScreen && 'fixed left-0 top-0 z-[60] h-[100dvh]',
+        )}
         style={{
           width: navVisible ? navWidth : '0px',
           visibility: navVisible ? 'visible' : 'hidden',

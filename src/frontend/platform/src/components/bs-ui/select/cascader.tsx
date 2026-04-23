@@ -83,7 +83,7 @@ const Col = (props: {
         props.onHover(option, isLeaf)
     }
 
-    return <div className="w-36 border-l first:border-none max-h-80 overflow-y-auto flex flex-col">
+    return <div className="w-36 border-l first:border-none max-h-[min(20rem,var(--radix-select-content-available-height,20rem))] overflow-y-auto flex flex-col">
         <div className="flex-1 overflow-y-auto">
             {
                 options.map(option => (

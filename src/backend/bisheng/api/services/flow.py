@@ -25,6 +25,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.permission.domain.workflow_app_permission import user_may_share_app
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 
@@ -71,7 +72,12 @@ class FlowService(BaseService):
             return NotFoundError.return_resp()
 
         # Determine permissions
-        if not user.access_check(flow_info.user_id, flow_info.id, AccessType.WORKFLOW_WRITE):
+        if not ApplicationPermissionService.has_any_permission_sync(
+            user,
+            'workflow',
+            str(flow_info.id),
+            ['edit_app'],
+        ):
             return UnAuthorizedError.return_resp()
 
         if version_info.is_current == 1:
@@ -87,7 +93,12 @@ class FlowService(BaseService):
             raise NotFoundError.http_exception()
 
         # Determine permissions
-        if not await user.async_access_check(flow_info.user_id, flow_info.id, AccessType.WORKFLOW_WRITE):
+        if not await ApplicationPermissionService.has_any_permission_async(
+            user,
+            'workflow',
+            str(flow_info.id),
+            ['edit_app'],
+        ):
             raise UnAuthorizedError.http_exception()
         return flow_info
 
@@ -184,7 +195,12 @@ class FlowService(BaseService):
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             raise NotFoundError()
-        if not await login_user.async_access_check(flow_info.user_id, flow_info.id, AccessType.WORKFLOW):
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'workflow',
+            str(flow_info.id),
+            ['view_app', 'use_app'],
+        ):
             raise UnAuthorizedError()
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)

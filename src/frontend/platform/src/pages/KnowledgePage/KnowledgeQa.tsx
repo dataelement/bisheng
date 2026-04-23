@@ -7,6 +7,7 @@ import { canManageResource, usePermissionLevels } from "@/components/bs-comp/per
 import { RelationLevel } from "@/components/bs-comp/permission/types";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -289,7 +290,7 @@ export default function KnowledgeQa(params) {
         (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
     );
     const resourceIds = datalist.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     const visibleLibs = datalist;
@@ -421,16 +422,17 @@ export default function KnowledgeQa(params) {
                             >
                                 <TableCell className="font-medium max-w-[280px]">
                                     <div className="flex items-center gap-2">
-                                        <div className="flex items-center justify-center size-12 text-white rounded-[4px] w-[40px] h-[40px]">
-                                            <QaIcon className="text-primary size-10" />
-                                        </div>
-                                        <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
-                                                {el.name}
+                                            <div className="flex items-center justify-center size-12 text-white rounded-[4px] w-[40px] h-[40px]">
+                                                <QaIcon className="text-primary size-10" />
                                             </div>
-                                            <QuestionTooltip
-                                                content={el.description || ''}
-                                                error={false}
+                                            <div>
+                                                <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
+                                                    {el.name}
+                                                    <PermissionBadge level={permLevels[String(el.id)]} />
+                                                </div>
+                                                <QuestionTooltip
+                                                    content={el.description || ''}
+                                                    error={false}
                                                 className="w-full text-start"
                                             >
                                                 <div className="truncate max-w-[400px] text-[12px] text-[#5A5A5A] pt-1">
@@ -599,7 +601,7 @@ export default function KnowledgeQa(params) {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
-                    resourceType="knowledge_space"
+                    resourceType="knowledge_library"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
                 />

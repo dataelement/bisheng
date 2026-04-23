@@ -178,6 +178,7 @@ class OwnerService:
                     include_children=False,
                 ),
             ],
+            enforce_fga_success=True,
             revokes=[
                 AuthorizeRevokeItem(
                     subject_type='user',

@@ -38,7 +38,6 @@ export function PermissionDialog({
           <TabsList>
             <TabsTrigger value="list">{t('dialog.tabList')}</TabsTrigger>
             <TabsTrigger value="grant">{t('dialog.tabGrant')}</TabsTrigger>
-            <TabsTrigger value="share" disabled>{t('dialog.tabShare')}</TabsTrigger>
           </TabsList>
           <TabsContent value="list">
             <PermissionListTab
@@ -53,11 +52,6 @@ export function PermissionDialog({
               resourceId={resourceId}
               onSuccess={handleGrantSuccess}
             />
-          </TabsContent>
-          <TabsContent value="share">
-            <div className="py-8 text-center text-muted-foreground">
-              {t('comingSoon')}
-            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>

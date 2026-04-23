@@ -13,6 +13,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 
 from ..dependencies import LoginUserDep
 from ...domain.services.workstation_service import WorkStationService
@@ -40,7 +41,7 @@ async def get_recommended_apps(login_user=LoginUserDep):
         kwargs['status'] = FlowStatus.ONLINE.value
         kwargs['user_id'] = login_user.user_id
         kwargs['id_extra'] = login_user.get_user_access_resource_ids(
-            [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+            [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
         )
     data, _ = FlowDao.get_all_apps(**kwargs)
 
@@ -108,7 +109,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     if login_user.is_admin():
         apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
     else:
-        id_extra = login_user.get_merged_rebac_app_resource_ids(for_write=False)
+        id_extra = await login_user.aget_merged_rebac_app_resource_ids(for_write=False)
         apps, _ = await FlowDao.aget_all_apps(
             id_list=flow_ids,
             status=FlowStatus.ONLINE.value,
@@ -168,13 +169,18 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
         raise UsedAppNotOnlineError(flow_id=flow_id)
 
     if app_info.flow_type == FlowType.ASSISTANT.value:
-        access_type = AccessType.ASSISTANT_READ
+        object_type = 'assistant'
     elif app_info.flow_type == FlowType.WORKFLOW.value:
-        access_type = AccessType.WORKFLOW
+        object_type = 'workflow'
     else:
         raise UsedAppNotFoundError(flow_id=flow_id)
 
-    if not await login_user.async_access_check(app_info.user_id, flow_id, access_type):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        object_type,
+        str(flow_id),
+        ['use_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     _, is_new = UserLinkDao.add_user_link(

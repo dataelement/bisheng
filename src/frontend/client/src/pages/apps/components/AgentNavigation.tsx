@@ -118,7 +118,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
             {user?.role === 'admin' && (
                 <button
                     onClick={() => setIsLabelModalOpen(true)}
-                    className="flex items-center justify-center p-[6px] relative rounded-[6px] shrink-0 hover:bg-gray-100 transition-colors"
+                    className="flex items-center justify-cente mr-2 p-[6px] relative rounded-[6px] shrink-0 hover:bg-gray-100 transition-colors"
                 >
                     <BoltIcon size={16} className="text-[#666]" />
                 </button>

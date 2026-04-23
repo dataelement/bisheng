@@ -1,8 +1,8 @@
 """Static OpenFGA authorization model for BiSheng v2.5.1.
 
-Defines 15 types: user, system, tenant, department, user_group,
-knowledge_space, folder, knowledge_file, channel, workflow, assistant, tool, dashboard,
-llm_server, llm_model.
+Defines 16 types: user, system, tenant, department, user_group,
+knowledge_space, knowledge_library, folder, knowledge_file, channel, workflow,
+assistant, tool, dashboard, llm_server, llm_model.
 
 Permission pyramid: owner > manager(can_manage) > editor(can_edit) > viewer(can_read)
 can_delete: owner (top-level) or owner|can_manage from parent (hierarchical)
@@ -269,12 +269,13 @@ AUTHORIZATION_MODEL: dict = {
             },
         },
 
-        # === Resource types (10) ===
+        # === Resource types (11) ===
         _standard_resource_type('knowledge_space'),
+        _standard_resource_type('knowledge_library'),
         _standard_resource_type('folder', has_parent=True,
-                                parent_types=['knowledge_space', 'folder']),
+                                parent_types=['knowledge_space', 'knowledge_library', 'folder']),
         _standard_resource_type('knowledge_file', has_parent=True,
-                                parent_types=['folder', 'knowledge_space']),
+                                parent_types=['folder', 'knowledge_space', 'knowledge_library']),
         _standard_resource_type('channel'),
         _standard_resource_type('workflow'),
         _standard_resource_type('assistant'),

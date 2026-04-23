@@ -25,6 +25,7 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum
 from bisheng.database.models.user_link import UserLinkDao
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -42,7 +43,13 @@ class WorkFlowService(BaseService):
         return [one for one in data if one.get('flow_type') in cls.SUPPORTED_APP_TYPES]
 
     @classmethod
-    def add_extra_field(cls, user: UserPayload, data: list[dict], managed: bool = False) -> list[dict]:
+    def add_extra_field(
+        cls,
+        user: UserPayload,
+        data: list[dict],
+        managed: bool = False,
+        writeable_ids: Optional[set[str]] = None,
+    ) -> list[dict]:
         """ Add some extra fields for app list """
         data = cls.filter_supported_apps(data)
         # ApplicationsIDVertical
@@ -75,7 +82,12 @@ class WorkFlowService(BaseService):
                 access_type = AccessType.ASSISTANT_WRITE
 
             one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
-            one['write'] = True if managed else user.access_check(one['user_id'], one['id'], access_type)
+            if managed:
+                one['write'] = True
+            elif writeable_ids is not None:
+                one['write'] = str(one['id']) in writeable_ids
+            else:
+                one['write'] = user.access_check(one['user_id'], one['id'], access_type)
             one['version_list'] = flow_versions.get(one['id'], [])
             one['tags'] = resource_tag_dict.get(one['id'], [])
             one['logo'] = cls.get_logo_share_link(one['logo'])
@@ -129,10 +141,11 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        # skip_pagination=True means the caller will sort and paginate in-memory
-        # (e.g. chat.py), so we must return ALL rows from DB regardless of flow_type.
-        # Otherwise the caller would double-paginate and subsequent pages would be empty.
-        if flow_type is None or skip_pagination:
+        # Non-admin callers filter by app permissions in-memory after the DB query,
+        # so they must fetch the full candidate set first. skip_pagination=True
+        # also means the caller will paginate in-memory (e.g. chat.py), which
+        # would otherwise be double-paginated by the DB layer.
+        if flow_type is None or skip_pagination or not user.is_admin():
             query_page = 0
             query_page_size = 0
 
@@ -145,12 +158,29 @@ class WorkFlowService(BaseService):
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, user.user_id,
                                                      flow_id_extra, None, query_page, query_page_size, search_description=search_description)
         data = cls.filter_supported_apps(data)
-        if flow_type is None and not skip_pagination:
+        writeable_ids: Optional[set[str]] = None
+        if not user.is_admin() and data:
+            permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+                user,
+                data,
+                ['use_app', 'edit_app'],
+            )
+            required_permission = 'edit_app' if managed else 'use_app'
+            data = [
+                one for one in data
+                if required_permission in permission_map.get(str(one.get('id')), set())
+            ]
+            writeable_ids = {
+                str(app_id)
+                for app_id, permission_ids in permission_map.items()
+                if 'edit_app' in permission_ids
+            }
+        if not skip_pagination:
             total = len(data)
             start_index = (page - 1) * page_size
             end_index = start_index + page_size
             data = data[start_index:end_index]
-        data = cls.add_extra_field(user, data, managed)
+        data = cls.add_extra_field(user, data, managed, writeable_ids=writeable_ids)
         data = await cls.aenrich_apps_can_share(user, data, managed)
 
         return data, total
@@ -229,7 +259,13 @@ class WorkFlowService(BaseService):
         db_flow = await FlowDao.aget_flow_by_id(flow_id)
         if not db_flow:
             raise NotFoundError()
-        if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
+        required_permission = 'publish_app' if status == FlowStatus.ONLINE.value else 'unpublish_app'
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'workflow',
+            str(flow_id),
+            [required_permission],
+        ):
             raise UnAuthorizedError()
 
         version_info = await FlowVersionDao.aget_version_by_id(version_id)

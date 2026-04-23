@@ -24,7 +24,7 @@ interface KnowledgeSquareProps {
     searchPlaceholder?: string;
     emptyText?: string;
     joinToastPrefix?: string;
-    onPreviewSpace?: (spaceId: string) => void;
+    onPreviewSpace?: (space: KnowledgeSpace) => void;
     /** Optional status override from parent (e.g. preview drawer join) */
     statusOverride?: Record<string, SquareSpaceStatus>;
 }
@@ -291,7 +291,7 @@ export default function KnowledgeSquare({
                                             statusOverride?.[String(space.id)] ??
                                             ((space.squareStatus as SquareSpaceStatus) || "join")
                                         }
-                                        onPreview={() => onPreviewSpace?.(space.id)}
+                                        onPreview={() => onPreviewSpace?.(space)}
                                         onAction={() => handleJoin(space)}
                                     />
                                 ))}
@@ -307,4 +307,3 @@ export default function KnowledgeSquare({
         </div>
     );
 }
-

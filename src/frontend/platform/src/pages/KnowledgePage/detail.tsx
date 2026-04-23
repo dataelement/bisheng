@@ -28,7 +28,7 @@ export default function FilesPage() {
                 return;
             }
             const result = await captureAndAlertRequestErrorHoc(
-                checkPermission('knowledge_space', String(knowledgeId), 'can_read')
+                checkPermission('knowledge_library', String(knowledgeId), 'can_read', 'view_kb')
             );
             const allowed = !!result?.allowed;
             setPermissionChecked(true);

@@ -1,12 +1,13 @@
 
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
-import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import LegacyFileIcon from "~/components/ui/icon/File";
 import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
-import { cn, generateUUID, getFileExtension } from "~/utils";
+import { cn, generateUUID } from "~/utils";
 
 const checkFileType = (file, accepts) => {
     if (!accepts || accepts === '*') return true;
@@ -25,7 +26,7 @@ const checkFileType = (file, accepts) => {
 // @accepts '.png,.jpg'
 // `hideTrigger` hides the built-in attachment icon; caller invokes
 // `openPicker()` via the imperative ref (e.g. from the "+" menu).
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode, hideTrigger = false }, ref) => {
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode, hideTrigger = false, hideList = false }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -150,6 +151,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             if (disabled) return;
             handleFileChange(Array.from(fileList));
         },
+        removeByName: (fileName) => {
+            handleFileRemove(fileName);
+        },
         openPicker: () => {
             if (disabled) return;
             fileInputRef.current?.click();
@@ -176,46 +180,31 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         }
     };
 
-    const formatFileSize = (size) => {
-        let fileSize = typeof size === 'string' ? parseFloat(size) : size;
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let index = 0;
-
-        while (fileSize >= 1024 && index < units.length - 1) {
-            fileSize /= 1024;
-            index++;
-        }
-
-        return `${fileSize.toFixed(2)} ${units[index]}`;
-    };
-
     return (
         <div className="">
             {/* Displaying files */}
-            {!!files.length && <div className="flex flex-wrap gap-2 p-2 rounded-xl max-h-96 overflow-y-auto">
+            {!hideList && !!files.length && <div className="flex max-w-full flex-nowrap gap-1 overflow-x-auto overflow-y-hidden p-2">
                 {files.map((file, index) => (
-                    <div key={index} className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-2xl cursor-default">
-                        {/* Remove button */}
-                        <span
-                            onClick={() => handleFileRemove(file.name)}
-                            className="opacity-0 group-hover:opacity-100 absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full cursor-pointer transition-opacity"
-                        >
-                            <X size={14} />
+                    <div
+                        key={index}
+                        className="group inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+                    >
+                        {file.isUploading ? (
+                            <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
+                        ) : (
+                            <LegacyFileIcon className="mr-1 size-4 shrink-0 text-[#999]" type={getFileTypebyFileName(file.name)} />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
+                            {file.name}
                         </span>
-
-                        {/* File Icon */}
-                        <FileIcon loading={file.isUploading} type={getFileTypebyFileName(file.name)} />
-
-                        {/* File details */}
-                        <div className="flex-1">
-                            <div className="max-w-48 text-sm font-medium text-gray-700 truncate" title={file.name}>
-                                {file.name}
-                            </div>
-                            {file.isUploading ? file.progress === 100
-                                ? <div className="text-xs text-gray-500">{t('com_inputfiles_parsing')}</div>
-                                : <div className="text-xs text-gray-500">{t('com_inputfiles_uploading')} {file.progress}%</div>
-                                : <div className="text-xs text-gray-500">{getFileExtension(file.name)} {formatFileSize(file.size)}</div>}
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => handleFileRemove(file.name)}
+                            className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                            aria-label="Remove file"
+                        >
+                            <X size={12} />
+                        </button>
                     </div>
                 ))}
             </div>}

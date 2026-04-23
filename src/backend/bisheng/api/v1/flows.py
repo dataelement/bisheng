@@ -11,6 +11,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 
@@ -35,8 +36,12 @@ def delete_flow(*,
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise NotFoundError()
-    access_type = AccessType.WORKFLOW_WRITE
-    if not login_user.access_check(db_flow.user_id, flow_id, access_type):
+    if not ApplicationPermissionService.has_any_permission_sync(
+        login_user,
+        'workflow',
+        str(flow_id),
+        ['delete_app'],
+    ):
         return UnAuthorizedError.return_resp()
     FlowDao.delete_flow(db_flow)
     telemetry_service.log_event_sync(
