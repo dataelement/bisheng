@@ -299,3 +299,32 @@ def test_qa_delete_uses_judge_qa_knowledge_write():
         module.qa_delete(ids=[1], login_user=login_user)
 
     mock_judge.assert_called_once_with(login_user, 15)
+
+
+def test_switch_model_uses_permission_service_write_sync_bridge():
+    module = _load_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(id=16, user_id=12, model='2', name='old', description='old', state=0)
+    req_data = SimpleNamespace(knowledge_id=16, model_id=2, model_type='embedding', knowledge_name='new', description='desc')
+    model_info = SimpleNamespace(model_type='embedding')
+
+    with patch(
+        'bisheng.knowledge.api.endpoints.knowledge.LLMDao.get_model_by_id',
+        return_value=model_info,
+    ), patch(
+        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeDao.query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        module.KnowledgeService.permission_service,
+        'ensure_knowledge_write_sync',
+    ) as mock_ensure_write, patch(
+        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeDao.update_one',
+        return_value=knowledge,
+    ):
+        module.update_knowledge_model(login_user=login_user, req_data=req_data)
+
+    mock_ensure_write.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=12,
+        knowledge_id=16,
+    )

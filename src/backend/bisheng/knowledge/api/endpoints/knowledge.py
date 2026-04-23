@@ -870,9 +870,13 @@ def update_knowledge_model(*,
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
 
-    if not login_user.access_check(
-            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-    ):
+    try:
+        KnowledgeService.permission_service.ensure_knowledge_write_sync(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
+    except UnAuthorizedError:
         return UnAuthorizedError.return_resp()
 
     old_model_id = knowledge.model
