@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 # Mirrors ``RolesAndPermissions.tsx`` RELATION_LEVEL / MODEL_LEVEL for the 应用/工作流 module.
 _RELATION_ORDER = {'can_read': 1, 'can_edit': 2, 'can_manage': 3, 'can_delete': 4}
 _MODEL_ORDER = {'viewer': 1, 'editor': 2, 'manager': 3, 'owner': 4}
+_COMPUTED_TO_MODEL_RELATION = {
+    'can_read': 'viewer',
+    'can_edit': 'editor',
+    'can_manage': 'manager',
+    'can_delete': 'owner',
+}
 
 # (permission_id, minimum template relation) — same ids as platform TEMPLATE_SECTIONS.
 _APP_PERMISSION_DEFINITIONS: List[Tuple[str, str]] = [
@@ -45,7 +51,8 @@ SHARE_APP_PERMISSION_ID = 'share_app'
 
 def default_app_permission_ids_for_relation(relation: str) -> Set[str]:
     """Default permission ids for a built-in FGA relation (viewer/editor/manager/owner)."""
-    ml = _MODEL_ORDER.get(relation or '', 0)
+    normalized = _COMPUTED_TO_MODEL_RELATION.get(relation or '', relation or '')
+    ml = _MODEL_ORDER.get(normalized, 0)
     out: Set[str] = set()
     for pid, req in _APP_PERMISSION_DEFINITIONS:
         if ml >= _RELATION_ORDER.get(req, 99):

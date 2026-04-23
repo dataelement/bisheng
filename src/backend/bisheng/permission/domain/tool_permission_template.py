@@ -17,6 +17,12 @@ _MODEL_LEVEL: Dict[str, int] = {
     'manager': 3,
     'owner': 4,
 }
+_COMPUTED_TO_MODEL_RELATION: Dict[str, str] = {
+    'can_read': 'viewer',
+    'can_edit': 'editor',
+    'can_manage': 'manager',
+    'can_delete': 'owner',
+}
 
 TOOL_PERMISSION_TEMPLATE: dict = {
     'title': '工具模块',
@@ -55,7 +61,8 @@ def tool_template_permissions() -> List[dict]:
 
 
 def default_permission_ids_for_relation(relation: str) -> Set[str]:
-    relation_level = _MODEL_LEVEL.get(relation, 0)
+    normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
+    relation_level = _MODEL_LEVEL.get(normalized, 0)
     return {
         item['id']
         for item in tool_template_permissions()

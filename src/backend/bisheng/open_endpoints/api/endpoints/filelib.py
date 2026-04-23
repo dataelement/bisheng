@@ -153,16 +153,18 @@ def delete_file_batch_api(request: Request, file_ids: List[int]):
 
 
 @router.get('/file/list', status_code=200)
-def get_filelist(request: Request,
-                 knowledge_id: int,
-                 keyword: str = None,
-                 status: List[int] = Query(default=None),
-                 page_size: int = 10,
-                 page_num: int = 1):
+async def get_filelist(request: Request,
+                       knowledge_id: int,
+                       keyword: str = None,
+                       status: List[int] = Query(default=None),
+                       page_size: int = 10,
+                       page_num: int = 1):
     """ Get knowledge base file information. """
-    login_user = get_default_operator()
-    data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
-                                                             keyword, status, page_num, page_size)
+    login_user = await get_default_operator_async()
+    data, total, flag = await KnowledgeService.aget_knowledge_files(
+        request, login_user, knowledge_id,
+        keyword, status, page_num, page_size,
+    )
     return resp_200(data={'data': data, 'total': total, 'writeable': flag})
 
 

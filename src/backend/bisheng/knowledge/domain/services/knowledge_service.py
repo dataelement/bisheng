@@ -1039,6 +1039,84 @@ class KnowledgeService(KnowledgeUtils):
         )
 
     @classmethod
+    async def aget_knowledge_files(
+            cls,
+            request: Request,
+            login_user: UserPayload,
+            knowledge_id: int,
+            file_name: str = None,
+            status: List[int] = None,
+            page: int = 1,
+            page_size: int = 10,
+            file_ids: List[int] = None,
+    ) -> (List[KnowledgeFileResp], int, bool):
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        try:
+            await cls.permission_service.ensure_knowledge_read_async(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+
+        res = await KnowledgeFileDao.aget_file_by_filters(
+            knowledge_id,
+            file_name,
+            status,
+            page=page,
+            page_size=page_size,
+            file_ids=file_ids,
+        )
+        total = await KnowledgeFileDao.acount_file_by_filters(
+            knowledge_id,
+            file_name,
+            status,
+            file_ids=file_ids,
+        )
+
+        file_title_map = await asyncio.to_thread(
+            cls.get_knowledge_files_title,
+            db_knowledge,
+            res,
+        )
+        file_tags_map = await asyncio.to_thread(
+            TagDao.get_tags_by_resource,
+            ResourceTypeEnum.KNOWLEDGE_FILE,
+            [str(one.id) for one in res],
+        ) if res else {}
+
+        finally_res = []
+        timeout_files = []
+        for index, one in enumerate(res):
+            finally_res.append(KnowledgeFileResp(**one.model_dump()))
+            if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
+                    datetime.now() - one.update_time).total_seconds() > 86400:
+                timeout_files.append(one.id)
+                continue
+            finally_res[index].title = file_title_map.get(str(one.id), "")
+            finally_res[index].tags = file_tags_map.get(str(one.id), [])
+        if timeout_files:
+            await KnowledgeFileDao.aupdate_file_status(
+                timeout_files,
+                KnowledgeFileStatus.TIMEOUT,
+                KnowledgeFileFailedError(
+                    data={"exception": 'Parsing time exceeds 24 hours'}
+                ).to_json_str(),
+            )
+
+        writeable = await cls.permission_service.check_access_async(
+            login_user=login_user,
+            owner_user_id=db_knowledge.user_id,
+            knowledge_id=knowledge_id,
+            access_type=AccessType.KNOWLEDGE_WRITE,
+        )
+        return finally_res, total, writeable
+
+    @classmethod
     def delete_knowledge_file(
             cls, request: Request, login_user: UserPayload, file_ids: List[int]
     ):

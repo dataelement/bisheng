@@ -399,19 +399,21 @@ def get_personal_knowledge_info(
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
-def get_filelist(*,
-                 request: Request,
-                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                 file_name: str = None,
-                 file_ids: List[int] = None,
-                 knowledge_id: int = 0,
-                 page_size: int = 10,
-                 page_num: int = 1,
-                 status: List[int] = Query(default=None)):
+async def get_filelist(*,
+                       request: Request,
+                       login_user: UserPayload = Depends(UserPayload.get_login_user),
+                       file_name: str = None,
+                       file_ids: List[int] = None,
+                       knowledge_id: int = 0,
+                       page_size: int = 10,
+                       page_num: int = 1,
+                       status: List[int] = Query(default=None)):
     """ Get knowledge base file information. """
-    data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
-                                                             file_name, status, page_num,
-                                                             page_size, file_ids)
+    data, total, flag = await KnowledgeService.aget_knowledge_files(
+        request, login_user, knowledge_id,
+        file_name, status, page_num,
+        page_size, file_ids,
+    )
 
     return resp_200({
         'data': data,

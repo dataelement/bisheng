@@ -277,7 +277,7 @@ class WorkStationService(BaseService):
         return KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
 
     @classmethod
-    def queryKnowledgeList(
+    async def queryKnowledgeList(
             cls,
             request: Request,
             login_user: UserPayload,
@@ -291,7 +291,7 @@ class WorkStationService(BaseService):
         )
         if not knowledge:
             return [], 0
-        res, total, _ = KnowledgeService.get_knowledge_files(
+        res, total, _ = await KnowledgeService.aget_knowledge_files(
             request,
             login_user,
             knowledge[0].id,

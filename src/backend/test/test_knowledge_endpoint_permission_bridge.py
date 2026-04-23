@@ -72,25 +72,38 @@ def _install_endpoint_stubs() -> None:
         sys.modules['bisheng.api.v1.schema.knowledge'] = schema_knowledge_module
     if 'bisheng.api.v1.schemas' not in sys.modules:
         schemas_module = ModuleType('bisheng.api.v1.schemas')
-
-        class _DummySchema(BaseModel):
-            pass
-
-        schemas_module.FileChunk = _DummySchema
-        schemas_module.FileProcessBase = _DummySchema
-        schemas_module.KnowledgeFileOne = _DummySchema
-        schemas_module.KnowledgeFileProcess = _DummySchema
-        schemas_module.UpdatePreviewFileChunk = _DummySchema
-        schemas_module.ExcelRule = _DummySchema
-        schemas_module.UploadFileResponse = _DummySchema
-        schemas_module.UpdateKnowledgeReq = _DummySchema
-        schemas_module.KnowledgeFileReProcess = _DummySchema
         sys.modules['bisheng.api.v1.schemas'] = schemas_module
+    schemas_module = sys.modules['bisheng.api.v1.schemas']
+
+    class _DummySchema(BaseModel):
+        pass
+
+    schemas_module.FileChunk = _DummySchema
+    schemas_module.FileProcessBase = _DummySchema
+    schemas_module.KnowledgeFileOne = _DummySchema
+    schemas_module.KnowledgeFileProcess = _DummySchema
+    schemas_module.UpdatePreviewFileChunk = _DummySchema
+    schemas_module.ExcelRule = _DummySchema
+    schemas_module.UploadFileResponse = _DummySchema
+    schemas_module.UpdateKnowledgeReq = _DummySchema
+    schemas_module.KnowledgeFileReProcess = _DummySchema
 
     if 'bisheng.common.services' not in sys.modules:
         common_services_module = ModuleType('bisheng.common.services')
         common_services_module.telemetry_service = SimpleNamespace(log_event_sync=lambda *args, **kwargs: None)
         sys.modules['bisheng.common.services'] = common_services_module
+
+    if 'bisheng.database.models.tag' not in sys.modules:
+        tag_module = ModuleType('bisheng.database.models.tag')
+        sys.modules['bisheng.database.models.tag'] = tag_module
+    tag_module = sys.modules['bisheng.database.models.tag']
+    tag_module.TagDao = getattr(tag_module, 'TagDao', SimpleNamespace())
+    tag_module.TagBusinessTypeEnum = getattr(
+        tag_module,
+        'TagBusinessTypeEnum',
+        SimpleNamespace(KNOWLEDGE='knowledge', KNOWLEDGE_FILE='knowledge_file'),
+    )
+    tag_module.Tag = getattr(tag_module, 'Tag', SimpleNamespace)
 
     if 'bisheng.knowledge.api.dependencies' not in sys.modules:
         dependencies_module = ModuleType('bisheng.knowledge.api.dependencies')
@@ -254,6 +267,46 @@ async def test_get_QA_list_uses_permission_service_sync_bridge_for_writeable():
         knowledge_id=13,
         access_type=AccessType.KNOWLEDGE_WRITE,
     )
+
+
+@pytest.mark.asyncio
+async def test_get_filelist_uses_async_knowledge_files_service_bridge():
+    module = _load_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    request = MagicMock()
+
+    with patch.object(
+        module.KnowledgeService,
+        'aget_knowledge_files',
+        new_callable=AsyncMock,
+        return_value=([], 0, True),
+    ) as mock_aget_files, patch.object(
+        module.KnowledgeService,
+        'get_knowledge_files',
+        side_effect=AssertionError('sync file_list bridge should not be used'),
+    ):
+        result = await module.get_filelist(
+            request=request,
+            login_user=login_user,
+            file_name='',
+            file_ids=None,
+            knowledge_id=50,
+            page_size=100,
+            page_num=1,
+            status=[2],
+        )
+
+    mock_aget_files.assert_awaited_once_with(
+        request,
+        login_user,
+        50,
+        '',
+        [2],
+        1,
+        100,
+        None,
+    )
+    assert result.data['total'] == 0
 
 
 @pytest.mark.asyncio

@@ -100,8 +100,19 @@ def _install_service_stubs() -> None:
         'ExcelRule',
         'KnowledgeFileReProcess',
     ):
-        if not hasattr(schemas_module, attr):
-            setattr(schemas_module, attr, _DummySchema)
+        setattr(schemas_module, attr, _DummySchema)
+
+    if 'bisheng.database.models.tag' not in sys.modules:
+        tag_module = ModuleType('bisheng.database.models.tag')
+        sys.modules['bisheng.database.models.tag'] = tag_module
+    tag_module = sys.modules['bisheng.database.models.tag']
+    tag_module.TagDao = getattr(tag_module, 'TagDao', SimpleNamespace())
+    tag_module.TagBusinessTypeEnum = getattr(
+        tag_module,
+        'TagBusinessTypeEnum',
+        SimpleNamespace(KNOWLEDGE='knowledge', KNOWLEDGE_FILE='knowledge_file'),
+    )
+    tag_module.Tag = getattr(tag_module, 'Tag', SimpleNamespace)
 
     if 'bisheng.worker' not in sys.modules:
         worker_module = ModuleType('bisheng.worker')
@@ -687,3 +698,71 @@ def test_batch_download_files_uses_permission_service_read_sync_bridge():
         owner_user_id=15,
         knowledge_id=71,
     )
+
+
+@pytest.mark.asyncio
+async def test_aget_knowledge_files_uses_permission_service_read_async_bridge():
+    service_module = _load_service_module()
+    KnowledgeService = service_module.KnowledgeService
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(id=81, user_id=16, index_name='kb-index')
+
+    with patch.object(
+        service_module.KnowledgeDao,
+        'aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_read_async',
+        new_callable=AsyncMock,
+    ) as mock_ensure_read, patch.object(
+        service_module.KnowledgeFileDao,
+        'aget_file_by_filters',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        service_module.KnowledgeFileDao,
+        'acount_file_by_filters',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch.object(
+        service_module.TagDao,
+        'get_tags_by_resource',
+        return_value={},
+        create=True,
+    ), patch.object(
+        KnowledgeService,
+        'get_knowledge_files_title',
+        return_value={},
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'check_access_async',
+        new_callable=AsyncMock,
+        return_value=False,
+    ) as mock_check_write:
+        data, total, writeable = await KnowledgeService.aget_knowledge_files(
+            request=MagicMock(),
+            login_user=login_user,
+            knowledge_id=81,
+            file_name='',
+            status=[2],
+            page=1,
+            page_size=100,
+            file_ids=None,
+        )
+
+    mock_ensure_read.assert_awaited_once_with(
+        login_user=login_user,
+        owner_user_id=16,
+        knowledge_id=81,
+    )
+    mock_check_write.assert_awaited_once_with(
+        login_user=login_user,
+        owner_user_id=16,
+        knowledge_id=81,
+        access_type=AccessType.KNOWLEDGE_WRITE,
+    )
+    assert data == []
+    assert total == 0
+    assert writeable is False

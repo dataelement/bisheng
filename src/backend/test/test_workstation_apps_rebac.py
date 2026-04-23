@@ -64,12 +64,12 @@ def _install_apps_endpoint_stubs() -> None:
         workstation_error_module.UsedAppNotOnlineError = lambda *args, **kwargs: Exception('offline')
         sys.modules['bisheng.common.errcode.workstation'] = workstation_error_module
 
-        if 'bisheng.database.models.flow' not in sys.modules:
-            flow_module = ModuleType('bisheng.database.models.flow')
-            flow_module.FlowDao = SimpleNamespace(get_all_apps=lambda **kwargs: ([], 0), aget_all_apps=lambda **kwargs: ([], 0))
-            flow_module.FlowStatus = SimpleNamespace(ONLINE=SimpleNamespace(value=2))
-            flow_module.FlowType = SimpleNamespace(ASSISTANT=SimpleNamespace(value=5), WORKFLOW=SimpleNamespace(value=10))
-            sys.modules['bisheng.database.models.flow'] = flow_module
+    if 'bisheng.database.models.flow' not in sys.modules:
+        flow_module = ModuleType('bisheng.database.models.flow')
+        flow_module.FlowDao = SimpleNamespace(get_all_apps=lambda **kwargs: ([], 0), aget_all_apps=lambda **kwargs: ([], 0))
+        flow_module.FlowStatus = SimpleNamespace(ONLINE=SimpleNamespace(value=2))
+        flow_module.FlowType = SimpleNamespace(ASSISTANT=SimpleNamespace(value=5), WORKFLOW=SimpleNamespace(value=10))
+        sys.modules['bisheng.database.models.flow'] = flow_module
 
     for mod_name, attrs in {
         'bisheng.database.models.message': {'ChatMessageDao': SimpleNamespace()},
@@ -102,8 +102,7 @@ def _install_apps_endpoint_stubs() -> None:
 def _load_apps_endpoint_module():
     _install_apps_endpoint_stubs()
     module_name = 'bisheng.workstation.api.endpoints.apps'
-    if module_name in sys.modules:
-        return sys.modules[module_name]
+    sys.modules.pop(module_name, None)
     spec = importlib.util.spec_from_file_location(
         module_name,
         '/Users/zhou/Code/bisheng/src/backend/bisheng/workstation/api/endpoints/apps.py',
