@@ -292,10 +292,11 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       port: 22
       command_timeout: 10m
       script: |
+        BRANCH=feat/2.5.0
         echo "=======同步 109 backend 源码======="
         cd /opt/server/bisheng-dev
-        git fetch origin ${DRONE_BRANCH}
-        git checkout origin/${DRONE_BRANCH} -- src/backend
+        git fetch origin ${BRANCH}
+        git checkout origin/${BRANCH} -- src/backend
         echo "=======重启 backend / worker======="
         cd docker
         docker-compose restart backend backend_worker
@@ -323,10 +324,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       envs:
         - NEXUS_USER
         - NEXUS_PASSWORD
-        - DRONE_BRANCH
       script: |
+        IMAGE_TAG=feat_2.5.0
         echo "=======准备 3003 前端发布======="
-        IMAGE_TAG=$(printf '%s' "${DRONE_BRANCH}" | sed 's#/#_#g')
         IMAGE_REF=192.168.106.8:6082/dataelement/bisheng-frontend:${IMAGE_TAG}
         docker login -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" http://192.168.106.8:6082 || true
         if ! docker pull "$IMAGE_REF"; then
