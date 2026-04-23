@@ -375,7 +375,7 @@ export default function RolesAndPermissions() {
         <Roles />
       </TabsContent>
       <TabsContent value="rebac" className="mt-0">
-        <div className="pb-6 pt-2">
+        <div className="pb-6 pt-2" data-permission-surface="relation-model-editor">
           {user?.role !== "admin" ? (
             <p className="text-sm text-muted-foreground">{t("system.rebacAdminOnly")}</p>
           ) : types === null ? (
