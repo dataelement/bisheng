@@ -181,9 +181,10 @@ class KnowledgeService(KnowledgeUtils):
             sort_by: str = "update_time",
             page: int = 1,
             limit: int = 10,
+            permission_id: str = 'use_kb',
     ) -> Tuple[List[KnowledgeRead], int]:
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
-        # 的细粒度 permission ids 收口到真正具备 use_kb 的知识库。
+        # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
         accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_library')
         if accessible_ids is not None:
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
@@ -193,7 +194,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id_extra = await cls.permission_service.filter_knowledge_ids_by_permission_async(
                 login_user,
                 list(merged),
-                'use_kb',
+                permission_id,
             )
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,

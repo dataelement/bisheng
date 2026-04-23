@@ -324,6 +324,7 @@ async def copy_qa_knowledge(*,
 async def get_knowledge(*,
                         request: Request,
                         login_user: UserPayload = Depends(UserPayload.get_login_user),
+                        permission_id: Literal['view_kb', 'use_kb'] = Query(default='use_kb'),
                         name: str = None,
                         knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
                                                     alias='type'),
@@ -332,9 +333,16 @@ async def get_knowledge(*,
                         page_num: Optional[int] = 1):
     """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
-                                                      sort_by,
-                                                      page_num, page_size)
+    res, total = await KnowledgeService.get_knowledge(
+        request,
+        login_user,
+        knowledge_type,
+        name,
+        sort_by,
+        page_num,
+        page_size,
+        permission_id=permission_id,
+    )
     return resp_200(data={'data': res, 'total': total})
 
 

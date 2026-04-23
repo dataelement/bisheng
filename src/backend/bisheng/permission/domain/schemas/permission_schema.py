@@ -37,6 +37,7 @@ class PermissionCheckRequest(BaseModel):
     object_type: str
     object_id: str
     relation: str
+    permission_id: Optional[str] = None
 
 
 class PermissionCheckResponse(BaseModel):

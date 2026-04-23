@@ -9,40 +9,34 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import Knowl
 
 
 @pytest.mark.asyncio
-async def test_ensure_knowledge_read_async_uses_knowledge_library_rebac():
+async def test_ensure_knowledge_read_async_uses_view_permission_id():
     service = KnowledgePermissionService()
     login_user = SimpleNamespace(user_id=7)
 
     with patch(
-        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService.check',
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.check_permission_id_async',
         new_callable=AsyncMock,
         return_value=True,
-    ) as mock_check:
+    ) as mock_check_permission_id:
         await service.ensure_knowledge_read_async(
             login_user=login_user,
             owner_user_id=99,
             knowledge_id=12,
         )
 
-    mock_check.assert_awaited_once_with(
-        user_id=7,
-        relation='can_read',
-        object_type='knowledge_library',
-        object_id='12',
-        login_user=login_user,
-    )
+    mock_check_permission_id.assert_awaited_once_with(login_user, 12, 'view_kb')
 
 
 @pytest.mark.asyncio
-async def test_check_access_async_uses_knowledge_library_rebac():
+async def test_check_access_async_uses_view_permission_id():
     service = KnowledgePermissionService()
     login_user = SimpleNamespace(user_id=7)
 
     with patch(
-        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService.check',
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.check_permission_id_async',
         new_callable=AsyncMock,
         return_value=True,
-    ) as mock_check:
+    ) as mock_check_permission_id:
         allowed = await service.check_access_async(
             login_user=login_user,
             owner_user_id=99,
@@ -51,13 +45,7 @@ async def test_check_access_async_uses_knowledge_library_rebac():
         )
 
     assert allowed is True
-    mock_check.assert_awaited_once_with(
-        user_id=7,
-        relation='can_read',
-        object_type='knowledge_library',
-        object_id='16',
-        login_user=login_user,
-    )
+    mock_check_permission_id.assert_awaited_once_with(login_user, 16, 'view_kb')
 
 
 @pytest.mark.asyncio
@@ -94,7 +82,7 @@ async def test_ensure_access_async_raises_when_rebac_denies():
         pass
 
     with patch(
-        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService.check',
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.check_permission_id_async',
         new_callable=AsyncMock,
         return_value=False,
     ), patch(
@@ -110,7 +98,7 @@ async def test_ensure_access_async_raises_when_rebac_denies():
             )
 
 
-def test_check_access_sync_uses_knowledge_library_rebac():
+def test_check_access_sync_uses_view_permission_id():
     service = KnowledgePermissionService()
     login_user = SimpleNamespace(user_id=7)
 
@@ -130,7 +118,29 @@ def test_check_access_sync_uses_knowledge_library_rebac():
         )
 
     assert allowed is True
-    assert mock_run_async.call_args.args[0].cr_code.co_name == 'check'
+    assert mock_run_async.call_args.args[0].cr_code.co_name == 'check_permission_id_async'
+
+
+@pytest.mark.asyncio
+async def test_check_permission_id_async_reads_effective_permission_ids():
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.get_effective_permission_ids_async',
+        new_callable=AsyncMock,
+        return_value={'view_kb'},
+    ) as mock_get_effective_permission_ids:
+        allowed = await KnowledgePermissionService.check_permission_id_async(
+            login_user=login_user,
+            knowledge_id=31,
+            permission_id='view_kb',
+        )
+
+    assert allowed is True
+    mock_get_effective_permission_ids.assert_awaited_once_with(
+        login_user=login_user,
+        knowledge_id=31,
+    )
 
 
 def test_ensure_access_sync_raises_when_rebac_denies():

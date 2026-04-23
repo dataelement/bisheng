@@ -19,6 +19,10 @@ _KNOWLEDGE_ACCESS_RELATION = {
     AccessType.KNOWLEDGE_WRITE: 'can_edit',
 }
 
+_KNOWLEDGE_ACCESS_PERMISSION_ID = {
+    AccessType.KNOWLEDGE: 'view_kb',
+}
+
 _PERMISSION_LEVEL_TO_RELATION = {
     'owner': 'owner',
     'can_manage': 'manager',
@@ -29,6 +33,34 @@ _PERMISSION_LEVEL_TO_RELATION = {
 
 class KnowledgePermissionService:
     """Centralized permission checks for knowledge domain services."""
+
+    @classmethod
+    async def check_permission_id_async(
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        permission_id: str,
+    ) -> bool:
+        effective_permission_ids = await cls.get_effective_permission_ids_async(
+            login_user=login_user,
+            knowledge_id=knowledge_id,
+        )
+        return permission_id in effective_permission_ids
+
+    @classmethod
+    def check_permission_id_sync(
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        permission_id: str,
+    ) -> bool:
+        return _run_async_safe(
+            cls.check_permission_id_async(
+                login_user=login_user,
+                knowledge_id=knowledge_id,
+                permission_id=permission_id,
+            )
+        )
 
     @staticmethod
     def _permission_ids_for_relation(relation: str, model: dict | None = None) -> set[str]:
@@ -224,6 +256,10 @@ class KnowledgePermissionService:
             knowledge_id: int,
             access_type: AccessType,
     ) -> bool:
+        permission_id = _KNOWLEDGE_ACCESS_PERMISSION_ID.get(access_type)
+        if permission_id is not None:
+            return await self.check_permission_id_async(login_user, knowledge_id, permission_id)
+
         relation = self._get_relation(access_type)
         if relation is None:
             return await login_user.async_access_check(owner_user_id, str(knowledge_id), access_type)
@@ -246,6 +282,10 @@ class KnowledgePermissionService:
             knowledge_id: int,
             access_type: AccessType,
     ) -> bool:
+        permission_id = _KNOWLEDGE_ACCESS_PERMISSION_ID.get(access_type)
+        if permission_id is not None:
+            return self.check_permission_id_sync(login_user, knowledge_id, permission_id)
+
         relation = self._get_relation(access_type)
         if relation is None:
             return login_user.access_check(owner_user_id, str(knowledge_id), access_type)

@@ -99,11 +99,13 @@ export async function checkPermission(
   objectType: string,
   objectId: string,
   relation: string,
+  permissionId?: string,
 ): Promise<{ allowed: boolean }> {
   return await axios.post(`/api/v1/permissions/check`, {
     object_type: objectType,
     object_id: objectId,
     relation,
+    permission_id: permissionId,
   })
 }
 

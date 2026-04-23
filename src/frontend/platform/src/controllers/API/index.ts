@@ -236,6 +236,7 @@ export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', 
     try {
         const response: { data: any[], total: number } = await axios.get('/api/v1/knowledge', {
             params: {
+                permission_id: 'view_kb',
                 page_num: page,
                 page_size: pageSize,
                 name,
