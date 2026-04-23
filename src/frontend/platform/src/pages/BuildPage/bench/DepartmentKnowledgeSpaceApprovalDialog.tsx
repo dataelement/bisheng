@@ -76,8 +76,8 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, spa
         </DialogHeader>
         <div className="space-y-5 py-2">
           <div className="rounded-lg border border-[#ECECEC] bg-white px-4 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-1">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
                 <Label className="bisheng-label">
                   {t("bench.departmentKnowledgeSpaceApprovalEnabled", "开启部门知识空间上传审批")}
                 </Label>
@@ -85,17 +85,19 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, spa
                   {t("bench.departmentKnowledgeSpaceApprovalEnabledDesc", "开启后，部门知识空间上传文件会先进入审批流程，再正式入库。")}
                 </p>
               </div>
-              <Switch
-                checked={form.approval_enabled}
-                disabled={loading}
-                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, approval_enabled: checked }))}
-              />
+              <div className="shrink-0 pt-1">
+                <Switch
+                  checked={form.approval_enabled}
+                  disabled={loading}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, approval_enabled: checked }))}
+                />
+              </div>
             </div>
           </div>
 
           <div className="rounded-lg border border-[#ECECEC] bg-white px-4 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-1">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
                 <Label className="bisheng-label">
                   {t("bench.departmentKnowledgeSpaceSensitiveCheckEnabled", "开启内容安全检测")}
                 </Label>
@@ -103,11 +105,13 @@ export function DepartmentKnowledgeSpaceApprovalDialog({ open, onOpenChange, spa
                   {t("bench.departmentKnowledgeSpaceSensitiveCheckEnabledDesc", "开启后，上传文件会先做内容安全检测，通过后才会进入人工审批。")}
                 </p>
               </div>
-              <Switch
-                checked={form.sensitive_check_enabled}
-                disabled={loading}
-                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, sensitive_check_enabled: checked }))}
-              />
+              <div className="shrink-0 pt-1">
+                <Switch
+                  checked={form.sensitive_check_enabled}
+                  disabled={loading}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, sensitive_check_enabled: checked }))}
+                />
+              </div>
             </div>
           </div>
         </div>
