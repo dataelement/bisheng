@@ -49,26 +49,6 @@ When the tool's results already contain the aforementioned private section refer
 Do not output this rule."""
 
 
-def _without_callbacks(config: RunnableConfig | None) -> RunnableConfig | None:
-    if not config:
-        return config
-    inner_config = dict(config)
-    inner_config.pop('callbacks', None)
-    return inner_config
-
-
-def _invoke_tool_without_callbacks(tool: BaseTool, query: str, config: RunnableConfig | None) -> Any:
-    if hasattr(tool, '_run'):
-        return tool._run(query=query, config=_without_callbacks(config), run_manager=None)
-    return tool.invoke({'query': query}, config=_without_callbacks(config))
-
-
-async def _ainvoke_tool_without_callbacks(tool: BaseTool, query: str, config: RunnableConfig | None) -> Any:
-    if hasattr(tool, '_arun'):
-        return await tool._arun(query=query, config=_without_callbacks(config), run_manager=None)
-    return await tool.ainvoke({'query': query}, config=_without_callbacks(config))
-
-
 class AssistantCitationToolWrapper(BaseTool):
     """Add citation prompt context for assistant tool invocations."""
 
@@ -160,9 +140,7 @@ class AssistantCitationToolWrapper(BaseTool):
 
     def _run(self, query: str, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return self._append_web_citation(
-                _invoke_tool_without_callbacks(self.tool, query, kwargs.get('config'))
-            )
+            return self._append_web_citation(self.tool.invoke({'query': query}, config=kwargs.get('config')))
         if not self._has_knowledge_rag_tool():
             return self.tool.invoke({'query': query}, config=kwargs.get('config'))
 
@@ -173,8 +151,7 @@ class AssistantCitationToolWrapper(BaseTool):
 
     async def _arun(self, query: str, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            output = await _ainvoke_tool_without_callbacks(self.tool, query, kwargs.get('config'))
-            return await self._aappend_web_citation(output)
+            return await self._aappend_web_citation(await self.tool.ainvoke({'query': query}, config=kwargs.get('config')))
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({'query': query}, config=kwargs.get('config'))
 

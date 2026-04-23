@@ -46,26 +46,6 @@ WORKFLOW_AGENT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
 不要输出本规则内容。"""
 
 
-def _without_callbacks(config: RunnableConfig | None) -> RunnableConfig | None:
-    if not config:
-        return config
-    inner_config = dict(config)
-    inner_config.pop('callbacks', None)
-    return inner_config
-
-
-def _invoke_tool_without_callbacks(tool: BaseTool, query: str, config: RunnableConfig | None) -> Any:
-    if hasattr(tool, '_run'):
-        return tool._run(query=query, config=_without_callbacks(config), run_manager=None)
-    return tool.invoke({'query': query}, config=_without_callbacks(config))
-
-
-async def _ainvoke_tool_without_callbacks(tool: BaseTool, query: str, config: RunnableConfig | None) -> Any:
-    if hasattr(tool, '_arun'):
-        return await tool._arun(query=query, config=_without_callbacks(config), run_manager=None)
-    return await tool.ainvoke({'query': query}, config=_without_callbacks(config))
-
-
 class WorkflowCitationToolWrapper(BaseTool):
     """Add citation prompt context for workflow agent tool invocations."""
 
@@ -151,9 +131,7 @@ class WorkflowCitationToolWrapper(BaseTool):
 
     def _run(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return self._append_web_citation(
-                _invoke_tool_without_callbacks(self.tool, query, config)
-            )
+            return self._append_web_citation(self.tool.invoke({'query': query}, config=config))
         if not self._has_knowledge_rag_tool():
             return self.tool.invoke({'query': query}, config=config)
 
@@ -164,8 +142,7 @@ class WorkflowCitationToolWrapper(BaseTool):
 
     async def _arun(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            output = await _ainvoke_tool_without_callbacks(self.tool, query, config)
-            return await self._aappend_web_citation(output)
+            return await self._aappend_web_citation(await self.tool.ainvoke({'query': query}, config=config))
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({'query': query}, config=config)
 
@@ -527,7 +504,9 @@ class AgentNode(BaseNode):
                     'output': f'Error: {one["error"]}'
                 })
         if tool_invoke_info:
-            for one in tool_invoke_info.values():
+            tool_logs = list(tool_invoke_info.values())
+            tool_logs = self._dedupe_web_search_tool_logs(tool_logs)
+            for one in tool_logs:
                 # knowledge_retriever_tool belong into rag logic，not show in tool log
                 if one["name"] == "knowledge_retriever_tool":
                     continue
@@ -537,6 +516,37 @@ class AgentNode(BaseNode):
                     "type": "tool"
                 })
         return ret
+
+    @staticmethod
+    def _is_web_search_log(tool_log: dict) -> bool:
+        name = tool_log.get('name')
+        return name == 'web_search' or name == '联网搜索'
+
+    @staticmethod
+    def _has_citation_key(output: Any) -> bool:
+        return isinstance(output, str) and '"citation_key"' in output
+
+    @classmethod
+    def _dedupe_web_search_tool_logs(cls, tool_logs: list[dict]) -> list[dict]:
+        web_search_indexes = [
+            index for index, item in enumerate(tool_logs)
+            if cls._is_web_search_log(item)
+        ]
+        if len(web_search_indexes) <= 1:
+            return tool_logs
+
+        cited_indexes = [
+            index for index in web_search_indexes
+            if cls._has_citation_key(tool_logs[index].get('output'))
+        ]
+        if not cited_indexes:
+            return tool_logs
+
+        keep_index = cited_indexes[-1]
+        return [
+            item for index, item in enumerate(tool_logs)
+            if index == keep_index or index not in web_search_indexes
+        ]
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None,
                   tool_invoke_list: list = None) -> (str, str, list[CitationRegistryItemSchema]):
