@@ -54,6 +54,7 @@ class MetadataFieldType(str, Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
+    tenant_id: int = Field(default=1, index=True)
     name: str = Field(index=True, min_length=1, max_length=200,
                       description='Knowledge Base Name')
     type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,

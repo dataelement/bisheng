@@ -18,6 +18,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.database.models.assistant import Assistant
+from bisheng.database.models.flow import Flow, FlowType
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.core.openfga.exceptions import FGAConnectionError
 from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -292,3 +295,72 @@ async def test_resolver_dao_exception_returns_none():
                AsyncMock(side_effect=RuntimeError('db down'))):
         result = await PermissionService._resolve_resource_tenant('workflow', 'abc')
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_resolver_returns_tenant_id_for_tenant_gated_resources():
+    workflow = Flow(
+        id='wf-1',
+        name='wf',
+        user_id=1,
+        tenant_id=7,
+        flow_type=FlowType.WORKFLOW.value,
+        data={'nodes': [], 'edges': []},
+    )
+    assistant = Assistant(
+        id='asst-1',
+        name='asst',
+        user_id=1,
+        tenant_id=8,
+    )
+    knowledge = Knowledge(
+        id=9,
+        name='kb',
+        user_id=1,
+        tenant_id=9,
+        type=KnowledgeTypeEnum.NORMAL.value,
+    )
+
+    with patch('bisheng.database.models.flow.FlowDao.aget_flow_by_id', AsyncMock(return_value=workflow)), \
+            patch('bisheng.database.models.assistant.AssistantDao.aget_one_assistant',
+                  AsyncMock(return_value=assistant)), \
+            patch('bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id',
+                  AsyncMock(return_value=knowledge)):
+        assert await PermissionService._resolve_resource_tenant('workflow', 'wf-1') == 7
+        assert await PermissionService._resolve_resource_tenant('assistant', 'asst-1') == 8
+        assert await PermissionService._resolve_resource_tenant('knowledge_library', '9') == 9
+
+
+@pytest.mark.asyncio
+async def test_resource_tenant_map_reads_tenant_ids_from_models():
+    workflow = Flow(
+        id='wf-1',
+        name='wf',
+        user_id=1,
+        tenant_id=7,
+        flow_type=FlowType.WORKFLOW.value,
+        data={'nodes': [], 'edges': []},
+    )
+    assistant = Assistant(
+        id='asst-1',
+        name='asst',
+        user_id=1,
+        tenant_id=8,
+    )
+    knowledge = Knowledge(
+        id=9,
+        name='kb',
+        user_id=1,
+        tenant_id=9,
+        type=KnowledgeTypeEnum.NORMAL.value,
+    )
+
+    with patch('bisheng.database.models.flow.FlowDao.aget_flow_by_ids',
+               AsyncMock(return_value=[workflow])), \
+            patch('bisheng.database.models.assistant.AssistantDao.aget_assistants_by_ids',
+                  AsyncMock(return_value=[assistant])), \
+            patch('bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
+                  AsyncMock(return_value=[knowledge])):
+        assert await PermissionService._resource_tenant_map('workflow', ['wf-1']) == {'wf-1': 7}
+        assert await PermissionService._resource_tenant_map('assistant', ['asst-1']) == {'asst-1': 8}
+        assert await PermissionService._resource_tenant_map('knowledge_library', ['9']) == {'9': 9}
