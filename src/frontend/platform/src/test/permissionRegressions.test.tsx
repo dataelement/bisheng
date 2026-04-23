@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import RolesAndPermissions from "@/pages/SystemPage/components/RolesAndPermissions";
 import {
+  getApplicationPermissionTemplateApi,
   getKnowledgeLibraryPermissionTemplateApi,
   getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
@@ -71,6 +72,7 @@ vi.mock("@/components/bs-ui/tabs", () => ({
 vi.mock("@/controllers/API/permission", () => ({
   createRelationModelApi: vi.fn(),
   deleteRelationModelApi: vi.fn(),
+  getApplicationPermissionTemplateApi: vi.fn(),
   getKnowledgeLibraryPermissionTemplateApi: vi.fn(),
   getKnowledgeSpacePermissionTemplateApi: vi.fn(),
   getRebacSchemaApi: vi.fn(),
@@ -87,6 +89,7 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
   message: vi.fn(),
 }));
 
+const mockedGetApplicationPermissionTemplateApi = vi.mocked(getApplicationPermissionTemplateApi);
 const mockedGetKnowledgeLibraryPermissionTemplateApi = vi.mocked(getKnowledgeLibraryPermissionTemplateApi);
 const mockedGetRebacSchemaApi = vi.mocked(getRebacSchemaApi);
 const mockedGetRelationModelsApi = vi.mocked(getRelationModelsApi);
@@ -198,6 +201,17 @@ describe("Relation model regressions", () => {
           title: "",
           items: [
             { id: "view_kb", label: "查看知识库", relation: "can_read" },
+          ],
+        },
+      ],
+    } as any);
+    mockedGetApplicationPermissionTemplateApi.mockResolvedValue({
+      title: "应用/工作流模块",
+      columns: [
+        {
+          title: "",
+          items: [
+            { id: "use_app", label: "使用应用", relation: "can_read" },
           ],
         },
       ],
