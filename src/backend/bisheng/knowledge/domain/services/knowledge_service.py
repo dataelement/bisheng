@@ -182,6 +182,7 @@ class KnowledgeService(KnowledgeUtils):
             page: int = 1,
             limit: int = 10,
             permission_id: str = 'use_kb',
+            preferred_ids: Optional[List[int]] = None,
     ) -> Tuple[List[KnowledgeRead], int]:
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
         # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
@@ -204,13 +205,15 @@ class KnowledgeService(KnowledgeUtils):
                 sort_by,
                 page,
                 limit,
+                preferred_ids=preferred_ids,
             )
             total = await KnowledgeDao.acount_user_knowledge(
                 login_user.user_id, knowledge_id_extra, knowledge_type, name
             )
         else:
             res = await KnowledgeDao.aget_all_knowledge(
-                name, knowledge_type, sort_by, page=page, limit=limit
+                name, knowledge_type, sort_by, page=page, limit=limit,
+                preferred_ids=preferred_ids,
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
