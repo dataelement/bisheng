@@ -452,7 +452,7 @@ async def get_QA_list(*,
         'total':
             total_count,
         'writeable':
-            KnowledgeService.permission_service.check_access_sync(
+            await KnowledgeService.permission_service.check_access_async(
                 login_user=login_user,
                 owner_user_id=db_knowledge.user_id,
                 knowledge_id=qa_knowledge_id,
