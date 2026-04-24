@@ -46,6 +46,7 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
 export const ALLOWED_EXTENSIONS = [
     "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
+    "wps", "dps", "et",
 ] as const;
 
 /** MIME types accepted during drag validation */
@@ -60,6 +61,9 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
     "image/png", "image/jpeg", "image/bmp",
+    "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
+    "application/vnd.wps-presentation", "application/kswps", // dps
+    "application/vnd.ms-excel", "application/kset", // et
 ] as const;
 
 /** Accept attribute value for <input type="file"> */
@@ -90,6 +94,9 @@ export function getFileTypeFromName(name: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "wps": return FileType.WPS;
+        case "dps": return FileType.DPS;
+        case "et": return FileType.ET;
         default: return FileType.OTHER;
     }
 }

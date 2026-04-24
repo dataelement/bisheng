@@ -357,6 +357,32 @@ class UserGroupDao(UserGroupBase):
             return result.one()
 
     @classmethod
+    async def aget_group_member_counts(cls, group_ids: List[int]) -> Dict[int, int]:
+        """批量统计多个用户组的普通成员数，避免列表页逐条 count。"""
+        from bisheng.user.domain.models.user import User
+
+        if not group_ids:
+            return {}
+
+        async with get_async_db_session() as session:
+            stmt = (
+                select(UserGroup.group_id, func.count(UserGroup.id))
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(
+                    UserGroup.group_id.in_(group_ids),
+                    UserGroup.is_group_admin == 0,
+                    User.delete == 0,
+                )
+                .group_by(UserGroup.group_id)
+            )
+            rows = (await session.exec(stmt)).all()
+
+        counts: Dict[int, int] = {int(group_id): int(count) for group_id, count in rows}
+        for group_id in group_ids:
+            counts.setdefault(int(group_id), 0)
+        return counts
+
+    @classmethod
     async def aadd_members_batch(cls, group_id: int, user_ids: List[int]) -> None:
         """Batch add members (is_group_admin=0)."""
         async with get_async_db_session() as session:

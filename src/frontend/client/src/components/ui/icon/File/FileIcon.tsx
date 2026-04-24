@@ -14,7 +14,10 @@ export type FileType =
     | 'bmp'
     | 'csv'
     | 'xls'
-    | 'xlsx';
+    | 'xlsx'
+    | 'wps'
+    | 'dps'
+    | 'et';
 
 const fileTypeColors: Record<FileType, string> = {
     pdf: 'bg-[#FA423E]',
@@ -31,7 +34,10 @@ const fileTypeColors: Record<FileType, string> = {
     bmp: 'bg-primary',
     csv: 'bg-[#06B84C]',
     xls: 'bg-[#06B84C]',
-    xlsx: 'bg-[#06B84C]'
+    xlsx: 'bg-[#06B84C]',
+    wps: 'bg-[#0285FF]',
+    dps: 'bg-[#FF9800]',
+    et: 'bg-[#06B84C]',
 };
 
 // 文件扩展名到图标组件的映射
@@ -80,6 +86,15 @@ const iconComponents: Record<FileType, any> = {
         <Table2 />
     </div>,
     xlsx: <div className={`${baseClassName} ${fileTypeColors.xlsx}`}>
+        <Table2 />
+    </div>,
+    wps: <div className={`${baseClassName} ${fileTypeColors.wps}`}>
+        <BookType />
+    </div>,
+    dps: <div className={`${baseClassName} ${fileTypeColors.dps}`}>
+        <FileMinus />
+    </div>,
+    et: <div className={`${baseClassName} ${fileTypeColors.et}`}>
         <Table2 />
     </div>
 };

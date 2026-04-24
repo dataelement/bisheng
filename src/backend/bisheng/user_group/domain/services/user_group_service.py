@@ -249,10 +249,7 @@ class UserGroupService:
                 login_user.user_id, page, limit, keyword,
             )
 
-        items = []
-        for g in groups:
-            items.append(await cls._enrich_group(g))
-
+        items = await cls._enrich_groups(groups)
         return {'data': items, 'total': total}
 
     @classmethod
@@ -481,3 +478,46 @@ class UserGroupService:
             'update_time': group.update_time,
             'group_admins': group_admins,
         }
+
+    @classmethod
+    async def _enrich_groups(cls, groups: List[Group]) -> List[Dict[str, Any]]:
+        """列表页批量补充成员数和创建者名称，避免逐条查询。"""
+        if not groups:
+            return []
+
+        group_ids = [int(group.id) for group in groups if group.id is not None]
+        member_counts = await UserGroupDao.aget_group_member_counts(group_ids)
+
+        creator_ids = sorted({
+            int(group.create_user) for group in groups if group.create_user
+        })
+        creator_name_map: Dict[int, str] = {}
+        if creator_ids:
+            creators = await UserDao.aget_user_by_ids(creator_ids)
+            creator_name_map = {
+                int(user.user_id): user.user_name
+                for user in creators
+                if user.user_id is not None
+            }
+
+        items: List[Dict[str, Any]] = []
+        for group in groups:
+            creator_name = ''
+            if group.create_user:
+                creator_name = creator_name_map.get(int(group.create_user), str(group.create_user))
+            items.append({
+                'id': group.id,
+                'group_name': group.group_name,
+                'visibility': group.visibility,
+                'remark': group.remark,
+                'member_count': member_counts.get(int(group.id), 0) if group.id is not None else 0,
+                'create_user': group.create_user,
+                'create_user_name': creator_name or None,
+                'create_time': group.create_time,
+                'update_time': group.update_time,
+                'group_admins': (
+                    [{'user_id': group.create_user, 'user_name': creator_name}]
+                    if group.create_user else []
+                ),
+            })
+        return items

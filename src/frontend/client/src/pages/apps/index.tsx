@@ -5,7 +5,7 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
-import { useMediaQuery } from '~/hooks';
+import { useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 
 const RECENT_APPS_HINT = '最近使用过的应用都在这里～';
@@ -23,6 +23,7 @@ export default function AppCenter() {
     } = useAppCenter();
 
     const isH5Layout = useMediaQuery('(max-width: 576px)');
+    const isMobileLayout = usePrefersMobileLayout();
     const appGridRef = useRef<HTMLDivElement | null>(null);
     const [appGridCols, setAppGridCols] = useState(4);
 
@@ -39,6 +40,10 @@ export default function AppCenter() {
 
         const update = () => {
             const width = el.clientWidth;
+            if (isMobileLayout) {
+                setAppGridCols(width < 480 ? 1 : 2);
+                return;
+            }
             setAppGridCols(resolveCols(width));
         };
 
@@ -47,7 +52,7 @@ export default function AppCenter() {
         const observer = new ResizeObserver(update);
         observer.observe(el);
         return () => observer.disconnect();
-    }, []);
+    }, [isMobileLayout]);
 
     // Initial fetch
     useEffect(() => {

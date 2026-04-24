@@ -13,7 +13,7 @@ import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
 import { generateUUID } from "~/utils";
 
-export default function ChatView({ data, cid, v, readOnly }) {
+export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
     const { user } = useAuthContext();
     const help = useChatHelpers()
     useWebSocket(help)
@@ -40,10 +40,8 @@ export default function ChatView({ data, cid, v, readOnly }) {
             updatedAt: new Date().toISOString(),
             createdAt: new Date().toISOString(),
         }, ...prev]);
-        const from = new URLSearchParams(location.search).get('from');
-        const nextPath = from
-            ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
-            : `/app/${chatId}/${flowId}/${flowType}`;
+        const qs = location.search || '';
+        const nextPath = `/app/${chatId}/${flowId}/${flowType}${qs}`;
         navigate(nextPath);
     }, [flowId, flowType, location.search, navigate, setConversations]);
 
@@ -84,6 +82,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
                         title={data.name}
                         logo={Logo}
                         readOnly={readOnly}
+                        isGuestMode={isGuestMode}
                         disabledSearch={data.flow_type === 10}
                     />
                 </div>

@@ -543,7 +543,7 @@ export function KnowledgeSpaceContent({
                 className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept=".pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.csv,.doc,.png,.jpg,.jpeg,.bmp"
+                accept={ALLOWED_EXTENSIONS.map(ext => `.${ext}`).join(',')}
             />
             {/* Header */}
             <KnowledgeSpaceHeader
