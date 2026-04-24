@@ -169,6 +169,8 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
 export default function RolesAndPermissions() {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
+  /** 与系统其它处一致：platform `role === "admin"` 为超级管理员 */
+  const isSuperAdmin = user?.role === "admin"
   const [types, setTypes] = useState<RebacSchemaType[] | null>(null)
   const [applicationTemplate, setApplicationTemplate] = useState<PermissionTemplateSection | null>(null)
   const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
@@ -364,21 +366,18 @@ export default function RolesAndPermissions() {
 
   return (
     <>
+    {isSuperAdmin ? (
     <Tabs defaultValue="roles" className="w-full">
       <TabsList className="mb-2">
         <TabsTrigger value="roles">{t("system.roleManagement")}</TabsTrigger>
-        <TabsTrigger value="rebac" disabled={user?.role !== "admin"}>
-          {t("system.rebacSchemaTab")}
-        </TabsTrigger>
+        <TabsTrigger value="rebac">{t("system.rebacSchemaTab")}</TabsTrigger>
       </TabsList>
       <TabsContent value="roles" className="mt-0">
         <Roles />
       </TabsContent>
       <TabsContent value="rebac" className="mt-0">
         <div className="pb-6 pt-2" data-permission-surface="relation-model-editor">
-          {user?.role !== "admin" ? (
-            <p className="text-sm text-muted-foreground">{t("system.rebacAdminOnly")}</p>
-          ) : types === null ? (
+          {types === null ? (
             <p className="text-sm text-muted-foreground">…</p>
           ) : types.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("build.empty")}</p>
@@ -464,6 +463,11 @@ export default function RolesAndPermissions() {
         </div>
       </TabsContent>
     </Tabs>
+    ) : (
+    <div className="w-full">
+      <Roles />
+    </div>
+    )}
     <Dialog
       open={createOpen}
       onOpenChange={(open) => {

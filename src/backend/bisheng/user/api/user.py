@@ -79,6 +79,9 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
                 )
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()
+        guard = await UserService._reject_login_if_user_has_no_usable_access(user_exist)
+        if guard is not None:
+            return guard
         access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
 
         # Set the logged in user's currentcookie, .jwtValid for an additional hour
