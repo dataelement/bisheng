@@ -864,9 +864,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
-        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         if space.user_id == self.login_user.user_id:
             result.user_role = UserRoleEnum.CREATOR
+            self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
@@ -884,8 +884,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     login_user=self.login_user,
                 )
                 result.user_role = self._permission_level_to_space_user_role(level)
-                if result.user_role is not None:
-                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         result.follower_num = follower_num
         result.file_num = total_file_num
         await self._decorate_department_metadata([result])
