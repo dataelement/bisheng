@@ -22,14 +22,61 @@ interface DepartmentTreeProps {
   selectedDeptId: string | null
   onSelect: (node: DepartmentTreeNode) => void
   onCreateChild: (parentId: number) => void
+  /** 父组件请求将某部门行滚入可视区域（如全组织搜索定位）；requestId 递增可重复定位同一部门 */
+  scrollRequest?: { deptId: string; requestId: number } | null
+  onScrollRequestHandled?: () => void
 }
 
-export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }: DepartmentTreeProps) {
+function findPathToDept(
+  nodes: DepartmentTreeNode[],
+  deptId: string
+): DepartmentTreeNode[] | null {
+  for (const n of nodes) {
+    if (n.dept_id === deptId) return [n]
+    if (n.children?.length) {
+      const sub = findPathToDept(n.children, deptId)
+      if (sub) return [n, ...sub]
+    }
+  }
+  return null
+}
+
+export function DepartmentTree({
+  data,
+  selectedDeptId,
+  onSelect,
+  onCreateChild,
+  scrollRequest,
+  onScrollRequestHandled,
+}: DepartmentTreeProps) {
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState("")
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   /** 仅首次有数据时应用「默认只展开第一级」；后续 data 刷新（建部门、保存等）不重置，保留用户展开状态 */
   const defaultExpandAppliedRef = useRef(false)
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  useEffect(() => {
+    if (!scrollRequest || !data.length) return
+    const path = findPathToDept(data, scrollRequest.deptId)
+    if (!path) {
+      onScrollRequestHandled?.()
+      return
+    }
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      for (let i = 0; i < path.length - 1; i++) {
+        next.add(path[i].id)
+      }
+      return next
+    })
+    const t = window.setTimeout(() => {
+      const el = rowRefs.current.get(scrollRequest.deptId)
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      onScrollRequestHandled?.()
+    }, 80)
+    return () => window.clearTimeout(t)
+  }, [scrollRequest, data, onScrollRequestHandled])
 
   const collectDefaultExpandedIds = useCallback(
     (
@@ -109,6 +156,10 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
       return (
         <div key={node.id}>
           <div
+            ref={(el) => {
+              if (el) rowRefs.current.set(node.dept_id, el)
+              else rowRefs.current.delete(node.dept_id)
+            }}
             className={cn(
               "group flex cursor-pointer items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent",
               isSelected && "bg-accent font-medium",

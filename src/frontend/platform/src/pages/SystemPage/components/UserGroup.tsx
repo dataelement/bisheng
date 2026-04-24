@@ -89,21 +89,6 @@ export default function UserGroups() {
         })
     }, [])
 
-    if (userGroup !== null) return <EditUserGroup
-        key={(userGroup as UserGroupV2).id ?? 'new'}
-        data={userGroup}
-        onBeforeChange={checkSameName}
-        onChange={handleChange}
-    />
-
-    const displayCreator = (ug: UserGroupV2) => {
-        const name = ug.create_user_name?.trim()
-        if (name) return name
-        const fromList = ug.group_admins?.map((a) => a.user_name).filter(Boolean).join(", ")
-        if (fromList) return fromList
-        return ug.create_user != null ? String(ug.create_user) : "—"
-    }
-
     const groupTableCols = useMemo((): ResizableColumnDef[] => {
         const c: ResizableColumnDef[] = [
             { defaultWidth: 200, minWidth: 140 },
@@ -119,6 +104,21 @@ export default function UserGroups() {
     }, [appConfig.isPro])
     const ugRc = useResizableColumns(groupTableCols)
     const ugLast = groupTableCols.length - 1
+
+    if (userGroup !== null) return <EditUserGroup
+        key={(userGroup as UserGroupV2).id ?? 'new'}
+        data={userGroup}
+        onBeforeChange={checkSameName}
+        onChange={handleChange}
+    />
+
+    const displayCreator = (ug: UserGroupV2) => {
+        const name = ug.create_user_name?.trim()
+        if (name) return name
+        const fromList = ug.group_admins?.map((a) => a.user_name).filter(Boolean).join(", ")
+        if (fromList) return fromList
+        return ug.create_user != null ? String(ug.create_user) : "—"
+    }
 
     return <div className="relative">
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">

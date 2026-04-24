@@ -3,6 +3,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/bs-ui/table"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { getDepartmentTreeApi } from "@/controllers/API/department"
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
@@ -13,6 +14,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Building2, Loader2, RotateCcw, Trash2, User, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { buildDepartmentPathLabelMap } from "./departmentPathUtils"
 import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { PermissionEntry, RelationLevel, ResourceType } from "./types"
 
@@ -46,6 +48,15 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [models, setModels] = useState<RelationModelOption[]>([])
+  const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map())
+
+  useEffect(() => {
+    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
+      if (res && Array.isArray(res)) {
+        setDeptPathById(buildDepartmentPathLabelMap(res))
+      }
+    })
+  }, [refreshKey])
 
   const mergeGrantableWithEntries = useCallback(
     (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
@@ -245,18 +256,28 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
           {filteredEntries.map((entry, idx) => {
             const Icon = SUBJECT_ICONS[entry.subject_type] || User
             const isOwner = entry.relation === 'owner'
+            const subjectLabel =
+              entry.subject_type === 'department'
+                ? (deptPathById.get(entry.subject_id)
+                  ?? entry.subject_name
+                  ?? `${entry.subject_type}:${entry.subject_id}`)
+                : (entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`)
             return (
               <TableRow key={`${entry.subject_type}-${entry.subject_id}-${idx}`}>
                 <TableCell>
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </TableCell>
-                <TableCell className="text-sm">
-                  {entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`}
-                  {entry.include_children && (
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      ({t('includeChildren')})
+                <TableCell className="max-w-[min(28rem,55vw)] text-sm">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-1 gap-y-0.5">
+                    <span className="min-w-0 truncate" title={subjectLabel}>
+                      {subjectLabel}
                     </span>
-                  )}
+                    {entry.include_children && (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        ({t('includeChildren')})
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {isOwner ? (

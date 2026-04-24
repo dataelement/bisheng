@@ -3,7 +3,7 @@
 Part of F002-department-tree.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
@@ -40,6 +40,26 @@ async def get_tree(
     try:
         tree = await DepartmentService.aget_tree(login_user)
         return resp_200([node.model_dump() for node in tree])
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get('/search/global-members')
+async def global_members_search(
+    keyword: str = '',
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """全组织按用户名搜索成员（主属部门路径）；可见范围与 :meth:`DepartmentService.aget_tree` 一致。
+
+    使用 ``/search/...`` 前缀，避免与 ``GET /{dept_id}`` 单段路径冲突（否则 ``global-members`` 会被当成 dept_id）。
+    """
+    try:
+        data = await DepartmentService.aget_global_members_search(
+            keyword, page, limit, login_user,
+        )
+        return resp_200(data)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

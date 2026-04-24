@@ -77,6 +77,28 @@ export async function getDepartmentMembersApi(
   return await axios.get(`/api/v1/departments/${depSeg(deptId)}/members`, { params })
 }
 
+/** 全组织成员搜索（主属部门路径），可见范围与部门树一致 */
+export interface GlobalMemberSearchRow {
+  user_id: number
+  user_name: string
+  primary_department_dept_id: string
+  primary_department_path: string
+}
+
+export async function searchGlobalMembersApi(params: {
+  keyword: string
+  page?: number
+  limit?: number
+}): Promise<{ data: GlobalMemberSearchRow[]; total: number }> {
+  return await axios.get(`/api/v1/departments/search/global-members`, {
+    params: {
+      keyword: params.keyword,
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+    },
+  })
+}
+
 export async function addDepartmentMembersApi(
   deptId: string,
   data: { user_ids: number[]; is_primary: number }
