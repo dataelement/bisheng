@@ -40,10 +40,16 @@ export const CITATION_SEPARATOR = "\ue201";
 export const CITATION_END = "\ue202";
 
 export function normalizeCitationMarkers(content: string) {
-  return content
-    .replace(/\\u[eE]200/g, CITATION_START)
-    .replace(/\\u[eE]201/g, CITATION_SEPARATOR)
-    .replace(/\\u[eE]202/g, CITATION_END);
+  return content.replace(/(\\+)u([eE]20[012])/g, (match, slashes, code) => {
+    if (slashes.length % 2 !== 0) {
+      const prefix = slashes.slice(1);
+      const marker = code.toLowerCase();
+      if (marker === 'e200') return prefix + CITATION_START;
+      if (marker === 'e201') return prefix + CITATION_SEPARATOR;
+      if (marker === 'e202') return prefix + CITATION_END;
+    }
+    return match;
+  });
 }
 
 function padTimeUnit(value: number) {
