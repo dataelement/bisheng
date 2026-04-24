@@ -18,7 +18,10 @@ const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 // --- 组件：智能体卡片 (广场版 Horizontal) ---
 const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
     const localize = useLocalize();
-    const isMobileCard = usePrefersMobileLayout();
+    const isNarrowLayout = usePrefersMobileLayout();
+    const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
+    const showCompactActions = isNarrowLayout;
+    const compactActionsAlwaysVisible = !canHover;
     return (
         <div
             onClick={() => onClick(agent)}
@@ -44,12 +47,19 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                     <p className="font-['PingFang_SC'] font-medium leading-[20px] text-[#212121] text-[14px] truncate">
                         {agent.name}
                     </p>
-                    {isMobileCard && (
-                        <div className="flex shrink-0 items-center justify-end gap-[10px]">
+                    {showCompactActions && (
+                        <div
+                            className={cn(
+                                "flex shrink-0 items-center justify-end gap-[10px] transition-opacity",
+                                compactActionsAlwaysVisible
+                                    ? "opacity-100 pointer-events-auto"
+                                    : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                            )}
+                        >
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                                className="inline-flex items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-1 text-[#4E5969] hover:bg-[#F2F3F5]"
+                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] hover:bg-[#F2F3F5]"
                                 aria-label={localize('com_app_share_app')}
                             >
                                 <ShareOutlineIcon className="size-3.5" />
@@ -57,13 +67,13 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                                className="inline-flex items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-1 text-[#4E5969] hover:bg-[#F2F3F5]"
+                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] hover:bg-[#F2F3F5]"
                                 aria-label={localize('com_app_start_chat')}
                             >
                                 <img
                                     src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/message.svg`}
                                     alt=""
-                                    className="size-[18px] text-slate-600"
+                                    className="size-[14px] text-slate-600"
                                 />
                             </button>
                         </div>
@@ -71,12 +81,17 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 </div>
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
-                <p className="mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2 group-hover:hidden">
+                <p
+                    className={cn(
+                        "mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2",
+                        !showCompactActions && "group-hover:hidden"
+                    )}
+                >
                     {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
                 </p>
 
                 {/* 按纽区域：平时隐藏，hover时显示 */}
-                {!isMobileCard && (
+                {!showCompactActions && (
                     <div className="hidden group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
                         {agent.can_share === true ? (
                             <button

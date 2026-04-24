@@ -634,7 +634,7 @@ export function AddToKnowledgeModal({
     const pickerBody = (
         <>
             {embedInChannelSheet ? (
-                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-[#ECECEC] px-4 pb-4 pt-4 sm:px-6">
+                <div className="flex shrink-0 flex-row items-center gap-2 px-4 pb-4 pt-4 sm:px-6">
                     <button
                         type="button"
                         onClick={goBackToChannelForm}
@@ -648,7 +648,7 @@ export function AddToKnowledgeModal({
                     </h2>
                 </div>
             ) : (
-                <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] touch-mobile:px-4">
+                <DialogHeader className="px-6 pt-4 pb-4 touch-mobile:px-4">
                     <DialogTitle className="text-[16px] font-medium leading-7 text-[#212121]">
                         {titleLabel}
                     </DialogTitle>
@@ -743,10 +743,10 @@ export function AddToKnowledgeModal({
             <div
                 className={
                     embedInChannelSheet
-                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] bg-white px-4 py-3 sm:px-5 sm:py-3.5"
+                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 sm:px-5 sm:py-3.5"
                         : isChannelSyncCenteredMobile
-                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end border-t border-[#ECECEC] bg-white px-6 py-3.5"
-                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end border-t border-[#ECECEC] bg-white px-5 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
+                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-6 py-3.5"
+                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-5 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
                 }
             >
                 <div
@@ -759,7 +759,6 @@ export function AddToKnowledgeModal({
                 >
                     <Button
                         variant="outline"
-                        size="sm"
                         onClick={goBackToChannelForm}
                         className={cn(
                             "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
@@ -768,7 +767,6 @@ export function AddToKnowledgeModal({
                         )}
                     >{localize("com_subscription.cancel")}</Button>
                     <Button
-                        size="sm"
                         onClick={() => void handleConfirm()}
                         disabled={!selectedId || isConfirming}
                         className={cn(

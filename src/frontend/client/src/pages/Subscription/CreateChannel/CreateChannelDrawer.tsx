@@ -242,11 +242,8 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    onScroll={handleBodyScroll}
-                    data-scrolling={isBodyScrolling ? "true" : "false"}
                     className={cn(
-                        "scroll-on-scroll flex w-full max-w-[900px] flex-col overflow-y-auto overflow-x-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4",
-                        form.crawlDialogOpen && "overflow-hidden"
+                        "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                     )}
                 >
                     <div
@@ -269,30 +266,38 @@ export function CreateChannelDrawer({
                         </div>
                     </SheetHeader>
 
-                    {form.showSuccess && !isEditMode ? (
-                        <CreateChannelSuccessContent
-                            onViewChannel={() => {
-                                if (form.createdChannelId) {
-                                    onViewChannel?.(form.createdChannelId);
-                                }
-                                form.resetForm();
-                            }}
-                            onManageMembers={() => {
-                                if (form.createdChannelId) {
-                                    onManageMembers?.(form.createdChannelId);
-                                    onViewChannel?.(form.createdChannelId);
+                    <div
+                        onScroll={handleBodyScroll}
+                        data-scrolling={isBodyScrolling ? "true" : "false"}
+                        className={cn(
+                            "scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden",
+                            form.crawlDialogOpen && "overflow-hidden"
+                        )}
+                    >
+                        {form.showSuccess && !isEditMode ? (
+                            <CreateChannelSuccessContent
+                                onViewChannel={() => {
+                                    if (form.createdChannelId) {
+                                        onViewChannel?.(form.createdChannelId);
+                                    }
+                                    form.resetForm();
+                                }}
+                                onManageMembers={() => {
+                                    if (form.createdChannelId) {
+                                        onManageMembers?.(form.createdChannelId);
+                                        onViewChannel?.(form.createdChannelId);
 
-                                }
-                                form.resetForm();
-                                onOpenChange(false);
-                            }}
-                        />
-                    ) : (
-                        <div
-                            className={cn(
-                                "space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0"
-                            )}
-                        >
+                                    }
+                                    form.resetForm();
+                                    onOpenChange(false);
+                                }}
+                            />
+                        ) : (
+                            <div
+                                className={cn(
+                                    "space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0"
+                                )}
+                            >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
@@ -681,8 +686,9 @@ export function CreateChannelDrawer({
                                 }
                                 knowledgePickerHostRef={knowledgePickerHostRef}
                             />
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
 
 
 

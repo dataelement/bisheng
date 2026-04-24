@@ -118,23 +118,23 @@ export default function ChannelItem({
             <div
                 className={cn(
                     "relative flex flex-shrink-0 items-center justify-end",
-                    "touch-mobile:min-w-0 touch-mobile:gap-1.5 touch-mobile:pl-1",
-                    "touch-desktop:h-5 touch-desktop:w-8",
+                    "coarse-pointer:min-w-0 coarse-pointer:gap-1.5 coarse-pointer:pl-1",
+                    "fine-pointer:h-5 fine-pointer:w-8",
                 )}
             >
                 {channel.unreadCount > 0 && (
                     <span
                         className={cn(
                             "flex items-center justify-center rounded-md bg-[#335CFF33]/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
-                            "touch-mobile:relative touch-mobile:shrink-0 coarse-pointer:opacity-100",
-                            "touch-desktop:absolute touch-desktop:right-0",
+                            "coarse-pointer:relative coarse-pointer:shrink-0 coarse-pointer:opacity-100",
+                            "fine-pointer:absolute fine-pointer:right-0",
                             menuOpen
                                 ? "opacity-0"
                                 : "coarse-pointer:opacity-100 fine-pointer:group-hover:opacity-0",
                         )}
                         style={{
                             transitionProperty: "opacity, background-color",
-                            transitionDuration: "350ms",
+                            transitionDuration: "250ms",
                             transitionTimingFunction: "ease-in-out",
                         }}
                     >
@@ -150,7 +150,7 @@ export default function ChannelItem({
                                 "z-10 flex size-7 shrink-0 items-center justify-center rounded-md outline-none hover:bg-black/5",
                                 menuOpen && "opacity-100",
                                 !menuOpen &&
-                                    "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100",
+                                "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100",
                             )}
                             onClick={(e) => e.stopPropagation()}
                         >

@@ -123,7 +123,7 @@ export default function KnowledgeSpaceItem({
                         <button
                             className={`
                                 absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
-                                ${menuOpen ? "opacity-100 z-10" : "opacity-0 group-hover:opacity-100 z-10"}
+                                ${menuOpen ? "opacity-100 z-10" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100 z-10"}
                             `}
                             onClick={(e) => e.stopPropagation()}
                         >

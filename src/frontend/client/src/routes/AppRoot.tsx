@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
@@ -30,11 +30,22 @@ export default function AppRoot() {
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
 
+    useEffect(() => {
+        const prevBodyOverflow = document.body.style.overflow;
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevBodyOverflow;
+            document.documentElement.style.overflow = prevHtmlOverflow;
+        };
+    }, []);
+
     return (
-        <div>
+        <div className="h-[100dvh] w-full overflow-hidden">
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
-            <div className="flex bg-[#F9F9F9]" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
+            <div className="flex w-full overflow-hidden bg-[#F9F9F9]" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
                 <div className="relative z-0 flex h-full w-full overflow-hidden">
 
                     {/* Desktop/Tablet sidebar */}
@@ -52,7 +63,7 @@ export default function AppRoot() {
                     {/* Mobile overlay sidebar (covers content, does not push) */}
                     {isTabletOrMobile && sidebarVisible && (
                         <div className="absolute inset-0 z-[55] flex">
-                            <div className="h-full w-[240px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                            <div className="h-full w-[280px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                                 <SideNav />
                             </div>
                             <button

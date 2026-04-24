@@ -1,10 +1,12 @@
 import { ChevronLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { UserPopMenu } from '~/layouts/UserPopMenu';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
 import { SideNavModuleTabs } from '~/pages/appChat/components/SideNavModuleTabs';
 import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
@@ -66,19 +68,12 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
     );
 }
 
-/** 应用中心 / 探索广场进入时带 from=center|explore；分享链接等无此参数 — H5 侧栏不展示四大模块 Tab */
-function useShowMobileHubTabs() {
-    const { search } = useLocation();
-    const from = new URLSearchParams(search).get('from');
-    return from === 'center' || from === 'explore';
-}
-
 export function SideNav() {
     const navigate = useNavigate();
     const localize = useLocalize();
     const { fid: flowId, type: flowType } = useParams();
     const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
-    const showMobileHubTabs = useShowMobileHubTabs();
+    const { data: bsConfig } = useGetBsConfig();
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -102,6 +97,14 @@ export function SideNav() {
 
     return (
         <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden pl-3 pr-2 pt-3 pb-2 text-[#212121]">
+            {/* H5 brand icon */}
+            {bsConfig?.sidebarIcon?.image ? (
+                <img
+                    src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
+                    alt="logo"
+                    className="absolute left-3 top-3 z-20 hidden size-6 object-contain max-[768px]:block"
+                />
+            ) : null}
             {/* H5 overlay: close sidebar — PC uses NavToggle to collapse */}
             <button
                 type="button"
@@ -127,20 +130,13 @@ export function SideNav() {
                 </span>
             </div>
 
-            {/* Top module tabs — H5 仅应用中心/探索进入时展示；分享应用侧栏只保留会话历史等 */}
-            {showMobileHubTabs ? (
-                <div className="hidden touch-mobile:block pt-8">
-                    <SideNavModuleTabs />
-                </div>
-            ) : null}
+            {/* Top module tabs — 应用内对话侧栏固定展示 */}
+            <div className="hidden touch-mobile:block pt-8">
+                <SideNavModuleTabs />
+            </div>
 
-            {/* App card — PC 始终展示；H5 仅应用中心/探索进入时展示，分享入口只保留下方会话列表 */}
-            <div
-                className={cn(
-                    'shrink-0',
-                    !showMobileHubTabs && 'hidden touch-desktop:block',
-                )}
-            >
+            {/* App card — 应用内对话侧栏固定展示 */}
+            <div className="shrink-0">
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
                     style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
@@ -195,7 +191,7 @@ export function SideNav() {
             <div
                 className={cn(
                     'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0',
-                    !showMobileHubTabs && 'touch-mobile:pt-8',
+                    'touch-mobile:pt-3',
                 )}
             >
                 {groups.length === 0 ? (
@@ -245,6 +241,11 @@ export function SideNav() {
                         </div>
                     ))
                 )}
+            </div>
+
+            {/* Footer user panel */}
+            <div className="shrink-0 border-t border-[#F2F3F5] pt-2">
+                <UserPopMenu variant="drawer" />
             </div>
         </div>
     );
