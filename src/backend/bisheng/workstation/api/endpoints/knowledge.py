@@ -38,8 +38,8 @@ def knowledge_upload(
 
 
 @router.get('/queryKnowledge')
-def query_knowledge_list(request: Request, page: int, size: int, login_user=LoginUserDep):
-    res, total = WorkStationService.queryKnowledgeList(request, login_user, page, size)
+async def query_knowledge_list(request: Request, page: int, size: int, login_user=LoginUserDep):
+    res, total = await WorkStationService.queryKnowledgeList(request, login_user, page, size)
     return resp_200(data={'list': res, 'total': total})
 
 

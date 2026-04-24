@@ -3,15 +3,16 @@ from typing import Optional
 from fastapi import APIRouter, Body
 
 from bisheng.api.services.workflow import WorkFlowService
+from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
 from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponseModel, UsedAppPin, resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 
 from ..dependencies import LoginUserDep
 from ...domain.services.workstation_service import WorkStationService
@@ -21,7 +22,7 @@ router = APIRouter()
 
 
 @router.get('/app/recommended')
-def get_recommended_apps(login_user=LoginUserDep):
+async def get_recommended_apps(login_user=LoginUserDep):
     """Return admin-configured recommended apps.
 
     - Admins (config page): return every configured app so the selection can echo
@@ -38,8 +39,8 @@ def get_recommended_apps(login_user=LoginUserDep):
     if not login_user.is_admin():
         kwargs['status'] = FlowStatus.ONLINE.value
         kwargs['user_id'] = login_user.user_id
-        kwargs['id_extra'] = login_user.get_user_access_resource_ids(
-            [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+        kwargs['id_extra'] = await login_user.aget_merged_rebac_app_resource_ids(
+            for_write=False,
         )
     data, _ = FlowDao.get_all_apps(**kwargs)
 
@@ -48,17 +49,18 @@ def get_recommended_apps(login_user=LoginUserDep):
     data.sort(key=lambda x: app_order.get(x['id'], len(app_ids)))
 
     data = WorkFlowService.add_extra_field(login_user, data)
+    data = await WorkFlowService.aenrich_apps_can_share(login_user, data)
     return resp_200(data=data)
 
 
 @router.get('/app/frequently_used')
-def get_frequently_used_chat(
+async def get_frequently_used_chat(
     login_user=LoginUserDep,
     user_link_type: Optional[str] = 'app',
     page: Optional[int] = 1,
     limit: Optional[int] = 8,
 ):
-    data, _ = WorkFlowService.get_frequently_used_flows(login_user, user_link_type, page, limit)
+    data, _ = await WorkFlowService.get_frequently_used_flows(login_user, user_link_type, page, limit)
     return resp_200(data=data)
 
 
@@ -81,13 +83,13 @@ def delete_frequently_used_chat(
 
 
 @router.get('/app/uncategorized')
-def get_uncategorized_chat(
+async def get_uncategorized_chat(
     login_user=LoginUserDep,
     page: Optional[int] = 1,
     limit: Optional[int] = 8,
     keyword: Optional[str] = None,
 ):
-    data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit, keyword)
+    data, _ = await WorkFlowService.get_uncategorized_flows(login_user, page, limit, keyword)
     return resp_200(data=data)
 
 
@@ -106,7 +108,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     if login_user.is_admin():
         apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
     else:
-        id_extra = login_user.get_merged_rebac_app_resource_ids(for_write=False)
+        id_extra = await login_user.aget_merged_rebac_app_resource_ids(for_write=False)
         apps, _ = await FlowDao.aget_all_apps(
             id_list=flow_ids,
             status=FlowStatus.ONLINE.value,
@@ -133,6 +135,23 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
         app['tags'] = resource_tag_dict.get(app_id, [])
         result.append(app)
 
+    for app in result:
+        app['can_share'] = False
+    share_pairs = []
+    share_idx = []
+    for idx, app in enumerate(result):
+        ot = object_type_for_flow_type(int(app.get('flow_type') or 0))
+        if ot:
+            share_pairs.append((ot, str(app['id'])))
+            share_idx.append(idx)
+    if login_user.is_admin():
+        for app in result:
+            app['can_share'] = True
+    elif share_pairs:
+        flags = await batch_user_may_share_app(login_user, share_pairs)
+        for j, app_i in enumerate(share_idx):
+            result[app_i]['can_share'] = bool(flags[j])
+
     total = len(result)
     start_index = (page - 1) * limit
     end_index = start_index + limit
@@ -149,13 +168,18 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
         raise UsedAppNotOnlineError(flow_id=flow_id)
 
     if app_info.flow_type == FlowType.ASSISTANT.value:
-        access_type = AccessType.ASSISTANT_READ
+        object_type = 'assistant'
     elif app_info.flow_type == FlowType.WORKFLOW.value:
-        access_type = AccessType.WORKFLOW
+        object_type = 'workflow'
     else:
         raise UsedAppNotFoundError(flow_id=flow_id)
 
-    if not await login_user.async_access_check(app_info.user_id, flow_id, access_type):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        object_type,
+        str(flow_id),
+        ['use_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     _, is_new = UserLinkDao.add_user_link(

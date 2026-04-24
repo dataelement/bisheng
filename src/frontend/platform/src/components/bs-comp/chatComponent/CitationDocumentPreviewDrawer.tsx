@@ -27,6 +27,12 @@ type CitationDocumentPreviewDrawerProps = {
   onClose: () => void;
 };
 
+type CitationDocumentPreviewContentProps = {
+  preview: CitationDocumentPreviewState | null;
+  compactMode?: boolean;
+  className?: string;
+};
+
 function getExtFromUrl(url: string) {
   const path = url.split("?")[0].split("#")[0];
   return path.split(".").pop()?.toLowerCase() || "";
@@ -123,10 +129,11 @@ function renderPreviewContent({
   }
 }
 
-export default function CitationDocumentPreviewDrawer({
+export function CitationDocumentPreviewContent({
   preview,
-  onClose,
-}: CitationDocumentPreviewDrawerProps) {
+  compactMode = false,
+  className,
+}: CitationDocumentPreviewContentProps) {
   if (!preview || !isRagCitation(preview.detail)) {
     return null;
   }
@@ -139,6 +146,32 @@ export default function CitationDocumentPreviewDrawer({
   const shouldLocateChunk = locateChunk && fileType === "pdf";
   const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(detail, itemId) : [];
   const targetBBox = bboxes[0] ?? null;
+
+  return (
+    <div className={className || "min-h-0 flex-1"}>
+      {fileUrl ? (
+        <div className="h-full min-h-0 overflow-hidden">
+          {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox })}
+        </div>
+      ) : (
+        <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+          暂无可预览文件地址
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CitationDocumentPreviewDrawer({
+  preview,
+  onClose,
+}: CitationDocumentPreviewDrawerProps) {
+  if (!preview || !isRagCitation(preview.detail)) {
+    return null;
+  }
+
+  const { detail } = preview;
+  const fileName = getCitationDocumentName(detail);
 
   return (
     <>
@@ -169,15 +202,7 @@ export default function CitationDocumentPreviewDrawer({
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          {fileUrl ? (
-            <div className="h-full min-h-0 overflow-hidden">
-              {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox })}
-            </div>
-          ) : (
-            <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
-              暂无可预览文件地址
-            </div>
-          )}
+          <CitationDocumentPreviewContent preview={preview} />
         </div>
       </aside>
     </>

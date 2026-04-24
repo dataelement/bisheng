@@ -134,6 +134,32 @@ async def _check_permission(
     raise DepartmentPermissionDeniedError()
 
 
+async def _is_tenant_admin(login_user) -> bool:
+    """Check whether the current user has tenant-admin rights."""
+    tenant_id = getattr(login_user, 'tenant_id', None)
+    if tenant_id is None:
+        return False
+    try:
+        from bisheng.permission.domain.services.permission_service import (
+            PermissionService,
+        )
+        return await PermissionService.check(
+            user_id=login_user.user_id,
+            relation='admin',
+            object_type='tenant',
+            object_id=str(tenant_id),
+            login_user=login_user,
+        )
+    except Exception as e:
+        logger.warning(
+            'PermissionService.check failed for tenant admin, user=%s tenant=%s: %s',
+            getattr(login_user, 'user_id', None),
+            tenant_id,
+            e,
+        )
+        return False
+
+
 def _get_dept_id_prefix() -> str:
     from bisheng.common.services.config_service import settings
     prefix = settings.get_from_db('dept_id_prefix')
@@ -279,13 +305,17 @@ class DepartmentService:
 
     @classmethod
     async def aget_tree(cls, login_user) -> List[DepartmentTreeNode]:
-        # System admin sees full tree; dept admin sees subtree only
+        # System admin and tenant admin see full tree; dept admin sees subtree only.
         is_sys_admin = _is_admin(login_user)
+        is_tenant_admin = False
+        admin_depts = []
         if not is_sys_admin:
             admin_depts = await DepartmentDao.aget_user_admin_departments(
                 login_user.user_id,
             )
             if not admin_depts:
+                is_tenant_admin = await _is_tenant_admin(login_user)
+            if not admin_depts and not is_tenant_admin:
                 raise DepartmentPermissionDeniedError()
 
         async with get_async_db_session() as session:
@@ -307,7 +337,7 @@ class DepartmentService:
                     return []
 
             # Filter to dept admin's subtree if not system admin
-            if not is_sys_admin:
+            if not is_sys_admin and not is_tenant_admin:
                 admin_paths = {d.path for d in admin_depts}
                 depts = [
                     d for d in depts
@@ -1107,8 +1137,12 @@ class DepartmentService:
         person_id = (data.person_id or '').strip()
         if not person_id:
             raise DepartmentInvalidRolesError(msg='Person ID is required')
-        if await UserDao.aget_by_external_id(person_id):
+        if await UserDao.aget_login_candidates_by_account(person_id):
             raise DepartmentInvalidRolesError(msg='Person ID already exists')
+        if await UserDao.aexists_disabled_login_account(person_id):
+            raise DepartmentInvalidRolesError(
+                msg='Person ID already belongs to a deleted account. Please restore the original account.',
+            )
 
         pwd_hash = md5_hash(plain)
         user = User(

@@ -5,6 +5,7 @@
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
 import type { CitationReferencesDesktopPayload } from "./Messages/Content/CitationReferencesDrawer";
@@ -15,6 +16,8 @@ import { buildMessageTree } from "~/api/chatApi";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
+import { QueryKeys } from "~/types/chat";
+import type { ConversationData } from "~/types/chat/queries";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -148,6 +151,7 @@ export default function AiChatMessages({
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
     const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
+    const queryClient = useQueryClient();
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -156,13 +160,20 @@ export default function AiChatMessages({
 
     // Build message tree from flat array (skipped in flat mode)
     const tree = useMemo(() => (flatMode ? [] : buildMessageTree(messages)), [messages, flatMode]);
+    const cachedConversationTitle = useMemo(() => {
+        if (!conversationId || conversationId === "new") return "";
+        const convoData = queryClient.getQueryData<ConversationData>([QueryKeys.allConversations]);
+        const hit = convoData?.pages
+            ?.flatMap((page) => page?.conversations || [])
+            ?.find((convo) => convo?.conversationId === conversationId);
+        return String(hit?.title || "").trim();
+    }, [queryClient, conversationId, messages.length]);
 
     const headerTitleText = useMemo(() => {
-        const raw = tree[0]?.flow_name || title;
+        const raw = tree[0]?.flow_name || title || cachedConversationTitle;
         if (raw != null && String(raw).trim() !== "") return String(raw).trim();
         return localize("com_ui_new_chat");
-    }, [tree, title, localize]);
-
+    }, [tree, title, cachedConversationTitle, localize]);
     useEffect(() => {
         if (hideHeaderTitle) {
             setChatMobileHeader(null);
@@ -287,7 +298,7 @@ export default function AiChatMessages({
                 <HeaderTitle
                     readOnly={!!shareToken}
                     hideShare={hideShare}
-                    conversation={{ title: tree[0]?.flow_name || title, flowId: "", conversationId, flowType: 15 }}
+                    conversation={{ title: headerTitleText, flowId: "", conversationId, flowType: 15 }}
                 />
             )}
             <div
@@ -297,8 +308,8 @@ export default function AiChatMessages({
                     hideHeaderTitle
                         ? "pt-2"
                         : isNarrowViewport
-                          ? "pt-11"
-                          : "pt-14",
+                            ? "pt-11"
+                            : "pt-14",
                 )}
                 onScroll={handleScroll}
             >

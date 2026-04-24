@@ -23,6 +23,7 @@ class AssistantBase(SQLModelSerializable):
     id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True,
                               description='Uniqueness quantificationID')
     name: str = Field(default='', description='The assistant name.')
+    tenant_id: int = Field(default=1, index=True)
     logo: str = Field(default='', description='logoimage URL')
     desc: str = Field(default='', sa_column=Column(Text), description='Assistant description')
     system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')

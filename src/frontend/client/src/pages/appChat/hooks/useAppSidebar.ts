@@ -12,6 +12,7 @@ import {
   currentAppInfoState,
   sidebarVisibleState,
 } from '~/pages/appChat/store/appSidebarAtoms';
+import { currentChatState } from '~/pages/appChat/store/atoms';
 import { generateUUID } from '~/utils';
 import { useLocalize } from '~/hooks';
 
@@ -32,6 +33,7 @@ export function useAppSidebar() {
   showToastRef.current = showToast;
 
   const currentApp = useRecoilValue(currentAppInfoState);
+  const chatState = useRecoilValue(currentChatState);
   const setCurrentApp = useSetRecoilState(currentAppInfoState);
   const [conversations, setConversations] = useRecoilState(appConversationsState);
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
@@ -119,6 +121,11 @@ export function useAppSidebar() {
   /** Share the current app */
   const shareApp = useCallback(async () => {
     if (!flowId) return;
+    const fromChat =
+      chatState?.flow && String(chatState.flow.id) === String(flowId) ? chatState.flow.can_share : undefined;
+    const fromSidebar =
+      currentApp && String(currentApp.id) === String(flowId) ? currentApp.can_share : undefined;
+    if (fromChat !== true && fromSidebar !== true) return;
     const url = getAppShareUrl(flowId, flowType || '');
     try {
       await copyText(url);
@@ -126,7 +133,7 @@ export function useAppSidebar() {
     } catch {
       showToast?.({ message: '复制失败', severity: NotificationSeverity.ERROR });
     }
-  }, [flowId, flowType, showToast]);
+  }, [flowId, flowType, showToast, chatState?.flow, currentApp]);
 
   // Guard: auto-select runs only once per flowId (on initial mount).
   // This prevents re-triggering when the user creates a new chat or switches conversations.
@@ -149,10 +156,11 @@ export function useAppSidebar() {
         setCurrentApp({
           id: data.id ?? flowId,
           name: data.name ?? '',
-          description: data.description ?? '',
+          description: data.description ?? data.desc ?? '',
           logo: data.logo ?? '',
           flow_type: Number(data.flow_type ?? numericType),
           user_id: data.user_id ?? '',
+          can_share: data.can_share === true,
         } as AppItem);
       } catch {
         // silent — sidebar falls back to placeholder text

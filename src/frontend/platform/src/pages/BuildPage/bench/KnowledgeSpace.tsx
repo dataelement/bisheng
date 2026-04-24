@@ -39,6 +39,7 @@ export default function KnowledgeSpace() {
     const [departmentSpacesLoading, setDepartmentSpacesLoading] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate();
+    const showSensitiveCheckControl = false;
 
     const loadDepartmentSpaces = async () => {
         setDepartmentSpacesLoading(true);
@@ -288,6 +289,7 @@ export default function KnowledgeSpace() {
                 }}
                 space={approvalTarget}
                 onSaved={handleDepartmentSpaceSettingsSaved}
+                showSensitiveCheckControl={showSensitiveCheckControl}
             />
         </div>
     );

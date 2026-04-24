@@ -8,6 +8,16 @@ database_url:
 # 普通模式:
 redis_url: "redis://redis:6379/1"
 
+# 与 docker-compose 中 openfga 服务对应（容器内网络）
+openfga:
+  enabled: true
+  api_url: "http://openfga:8080"
+
+# 网关 HMAC 推送验签（与 bisheng-gateway 的 bisheng.gateway-hmac-secret 一致）
+sso_sync:
+  gateway_hmac_secret: "bisheng-local-hmac-20260422"
+  signature_header: "X-Signature"
+
 # 集群模式或者哨兵模式（只能选其一）:
 # redis_url: 
 #   mode: "cluster"
@@ -20,11 +30,6 @@ redis_url: "redis://redis:6379/1"
 #   sentinel_master: "mymaster"
 #   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
 #   db: 1
-openfga:
-  # openfga的broken地址
-  enabled: true
-  api_url: "http://openfga:8080"
-
 # celery的broken地址
 celery_redis_url: "redis://redis:6379/2"
 celery_task:

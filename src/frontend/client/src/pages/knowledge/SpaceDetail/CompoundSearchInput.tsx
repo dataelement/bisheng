@@ -220,7 +220,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
             {/* Dropdown Panel — space tags */}
             {isFocused && !isScopeMenuOpen && (
-                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
+                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3 touch-mobile:min-w-0 touch-mobile:w-full">
                     <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
                     <div className="flex flex-wrap gap-2">
                         {spaceTags.length === 0 && (

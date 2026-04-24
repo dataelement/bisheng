@@ -5,13 +5,17 @@ GET  /api/v1/resources/{resource_type}/{resource_id}/permissions — List resour
 """
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.permission.domain.application_permission_template import APPLICATION_PERMISSION_TEMPLATE
+from bisheng.permission.domain.knowledge_library_permission_template import KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE
 from bisheng.permission.domain.knowledge_space_permission_template import KNOWLEDGE_SPACE_PERMISSION_TEMPLATE
+from bisheng.permission.domain.tool_permission_template import TOOL_PERMISSION_TEMPLATE
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
@@ -23,10 +27,12 @@ from bisheng.permission.domain.schemas.permission_schema import (
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
     PermissionInvalidResourceError,
+    PermissionTupleWriteError,
 )
 from bisheng.common.models.config import ConfigDao
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Privilege hierarchy: lower index = higher privilege
 _LEVEL_ORDER = [level.value for level in PermissionLevel]  # owner, can_manage, can_edit, can_read
@@ -67,6 +73,12 @@ def _normalize_model_dict(m: dict) -> dict:
         out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
     if not _validate_tier_relation(out['grant_tier'], out.get('relation') or ''):
         out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
+    if 'permissions_explicit' not in out:
+        permissions = out.get('permissions') or []
+        if out.get('is_system'):
+            out['permissions_explicit'] = False
+        else:
+            out['permissions_explicit'] = bool(permissions)
     return out
 
 
@@ -74,19 +86,19 @@ def _default_relation_models() -> list[dict]:
     return [
         {
             'id': 'owner', 'name': '所有者', 'relation': 'owner',
-            'grant_tier': 'owner', 'permissions': [], 'is_system': True,
+            'grant_tier': 'owner', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
         {
             'id': 'manager', 'name': '可管理', 'relation': 'manager',
-            'grant_tier': 'manager', 'permissions': [], 'is_system': True,
+            'grant_tier': 'manager', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
         {
             'id': 'editor', 'name': '可编辑', 'relation': 'editor',
-            'grant_tier': 'usage', 'permissions': [], 'is_system': True,
+            'grant_tier': 'usage', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
         {
             'id': 'viewer', 'name': '可查看', 'relation': 'viewer',
-            'grant_tier': 'usage', 'permissions': [], 'is_system': True,
+            'grant_tier': 'usage', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
         },
     ]
 
@@ -124,9 +136,13 @@ async def _get_bindings() -> list[dict]:
     if not row or not (row.value or '').strip():
         return []
     try:
-        return json.loads(row.value or '[]')
+        bindings = json.loads(row.value or '[]')
     except Exception:
         return []
+    normalized = await _migrate_legacy_knowledge_library_bindings(bindings)
+    if normalized != bindings:
+        await _save_bindings(normalized)
+    return normalized
 
 
 async def _save_bindings(bindings: list[dict]) -> None:
@@ -134,6 +150,42 @@ async def _save_bindings(bindings: list[dict]) -> None:
         _RELATION_MODEL_BINDINGS_KEY,
         json.dumps(bindings, ensure_ascii=False),
     )
+
+
+async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> list[dict]:
+    legacy_ids = {
+        int(binding.get('resource_id'))
+        for binding in bindings
+        if binding.get('resource_type') == 'knowledge_space'
+        and str(binding.get('resource_id', '')).isdigit()
+    }
+    if not legacy_ids:
+        return bindings
+
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+    knowledge_rows = await KnowledgeDao.aget_list_by_ids(sorted(legacy_ids))
+    knowledge_type_map = {row.id: row.type for row in knowledge_rows}
+
+    normalized: list[dict] = []
+    for binding in bindings:
+        migrated = dict(binding)
+        resource_type = migrated.get('resource_type')
+        resource_id = migrated.get('resource_id')
+        if resource_type == 'knowledge_space' and str(resource_id).isdigit():
+            knowledge_type = knowledge_type_map.get(int(resource_id))
+            if knowledge_type is not None and knowledge_type != KnowledgeTypeEnum.SPACE.value:
+                migrated['resource_type'] = 'knowledge_library'
+                migrated['key'] = _binding_key_with_scope(
+                    'knowledge_library',
+                    str(resource_id),
+                    migrated.get('subject_type'),
+                    int(migrated.get('subject_id')),
+                    migrated.get('relation'),
+                    migrated.get('include_children'),
+                )
+        normalized.append(migrated)
+    return normalized
 
 
 def _normalize_binding_include_children(subject_type: str, include_children) -> bool | None:
@@ -303,12 +355,24 @@ async def authorize_resource(
     ]
 
     if tuple_grants or tuple_revokes:
-        await PermissionService.authorize(
-            object_type=resource_type,
-            object_id=resource_id,
-            grants=tuple_grants,
-            revokes=tuple_revokes,
+        logger.info(
+            'resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d',
+            login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes),
         )
+        try:
+            await PermissionService.authorize(
+                object_type=resource_type,
+                object_id=resource_id,
+                grants=tuple_grants,
+                revokes=tuple_revokes,
+                enforce_fga_success=True,
+            )
+        except Exception as e:
+            logger.error(
+                'resource_authorize failed actor=%s resource=%s:%s grants=%d revokes=%d error=%s',
+                login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes), e,
+            )
+            return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
 
     # Persist relation-model bindings for UI display and model deletion cascade.
     bindings = await _get_bindings()
@@ -348,6 +412,11 @@ async def authorize_resource(
             'model_id': grant.model_id,
         }
     await _save_bindings(list(bindings_map.values()))
+    logger.info(
+        'resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d',
+        login_user.user_id, resource_type, resource_id, len(request.grants or []), len(request.revokes or []),
+        len(bindings_map),
+    )
     return resp_200(None)
 
 
@@ -458,6 +527,7 @@ async def create_relation_model(
         'relation': request.relation,
         'grant_tier': _infer_grant_tier_from_relation(request.relation),
         'permissions': request.permissions or [],
+        'permissions_explicit': True,
         'is_system': False,
     })
     await _save_relation_models(models)
@@ -481,6 +551,7 @@ async def update_relation_model(
             m['name'] = request.name.strip()
         if request.permissions is not None:
             m['permissions'] = request.permissions
+            m['permissions_explicit'] = True
         updated = True
         break
     if not updated:
@@ -562,3 +633,33 @@ async def get_knowledge_space_permission_template(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     return resp_200(KNOWLEDGE_SPACE_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/application')
+async def get_application_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for application permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(APPLICATION_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/knowledge-library')
+async def get_knowledge_library_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for knowledge-library permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/tool')
+async def get_tool_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for tool permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(TOOL_PERMISSION_TEMPLATE)

@@ -1,0 +1,8 @@
+**/node_modules
+**/build
+**/dist
+**/.git
+**/.cache
+**/.turbo
+**/*.log
+.DS_Store

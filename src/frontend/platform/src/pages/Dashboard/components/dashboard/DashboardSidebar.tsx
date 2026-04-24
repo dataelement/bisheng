@@ -1,6 +1,5 @@
 "use client"
 
-import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge"
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
 import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
@@ -238,7 +237,6 @@ export function DashboardSidebar({
                                     onPermission={canManageResource(permLevels, dashboard.id)
                                         ? (d) => { setPermTarget({ id: String(d.id), name: d.title }); setPermDialogOpen(true); }
                                         : undefined}
-                                    permissionBadge={<PermissionBadge level={permLevels[String(dashboard.id)]} />}
                                 />
                             ))
                         )}

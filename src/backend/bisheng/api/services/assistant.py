@@ -27,7 +27,9 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.permission.domain.workflow_app_permission import user_may_share_app
 from bisheng.llm.domain.services import LLMService
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools
 from bisheng.user.domain.models.user import UserDao
@@ -44,7 +46,8 @@ class AssistantService(BaseService, AssistantUtils):
                       status: int | None = None,
                       tag_id: int | None = None,
                       page: int = 1,
-                      limit: int = 20) -> (List[AssistantSimpleInfo], int):
+                      limit: int = 20,
+                      permission_id: str = 'use_app') -> (List[AssistantSimpleInfo], int):
         """
         Get list of assistants
         """
@@ -58,11 +61,24 @@ class AssistantService(BaseService, AssistantUtils):
         data = []
         if user.is_admin():
             res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
+            editable_ids = None
         else:
             # F008: Use ReBAC to filter accessible assistants (AC-04)
             assistant_ids_extra = user.get_user_access_resource_ids([AccessType.ASSISTANT_READ])
+            assistant_ids_extra = ApplicationPermissionService.filter_object_ids_by_permission_sync(
+                user,
+                'assistant',
+                assistant_ids_extra,
+                permission_id,
+            )
             res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
                                                      assistant_ids)
+            editable_ids = set(ApplicationPermissionService.filter_object_ids_by_permission_sync(
+                user,
+                'assistant',
+                [one.id for one in res],
+                'edit_app',
+            ))
 
         assistant_ids = [one.id for one in res]
 
@@ -75,6 +91,8 @@ class AssistantService(BaseService, AssistantUtils):
             simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
                 simple_assistant.write = True
+            elif editable_ids is not None:
+                simple_assistant.write = str(one.id) in editable_ids
             simple_assistant.tags = flow_tags.get(one.id, [])
             data.append(simple_assistant)
         return data, total
@@ -97,7 +115,12 @@ class AssistantService(BaseService, AssistantUtils):
         if not assistant or assistant.is_delete:
             raise AssistantNotExistsError()
         # Check if you have permission to access the information
-        if not await login_user.async_access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'assistant',
+            str(assistant.id),
+            ['view_app', 'use_app'],
+        ):
             raise UnAuthorizedError()
 
         tool_list = []
@@ -117,10 +140,12 @@ class AssistantService(BaseService, AssistantUtils):
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
                                                                  knowledge_list)
         assistant.logo = await cls.get_logo_share_link_async(assistant.logo)
+        can_share = await user_may_share_app(login_user, 'assistant', assistant_id)
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=tool_list,
                              flow_list=flow_list,
-                             knowledge_list=knowledge_list)
+                             knowledge_list=knowledge_list,
+                             can_share=can_share)
 
     @classmethod
     async def get_one_assistant(cls, assistant_id: str) -> Optional[Assistant]:
@@ -181,10 +206,12 @@ class AssistantService(BaseService, AssistantUtils):
         if shared_children:
             assistant.is_shared = True
 
+        can_share = await user_may_share_app(login_user, 'assistant', str(assistant.id))
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=[],
                              flow_list=[],
-                             knowledge_list=[])
+                             knowledge_list=[],
+                             can_share=can_share)
 
     @classmethod
     def create_assistant_hook(cls, request: Request, assistant: Assistant, user_payload: UserPayload) -> bool:
@@ -210,7 +237,12 @@ class AssistantService(BaseService, AssistantUtils):
             raise AssistantNotExistsError()
 
         # Judgment Authorization
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
+        if not ApplicationPermissionService.has_any_permission_sync(
+            login_user,
+            'assistant',
+            str(assistant.id),
+            ['delete_app'],
+        ):
             raise UnAuthorizedError()
 
         AssistantDao.delete_assistant(assistant)
@@ -315,10 +347,12 @@ class AssistantService(BaseService, AssistantUtils):
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
         cls.update_assistant_hook(request, login_user, assistant)
+        can_share = await user_may_share_app(login_user, 'assistant', str(assistant.id))
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=tool_list,
                              flow_list=flow_list,
-                             knowledge_list=knowledge_list)
+                             knowledge_list=knowledge_list,
+                             can_share=can_share)
 
     @classmethod
     def update_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:
@@ -340,7 +374,13 @@ class AssistantService(BaseService, AssistantUtils):
         if not assistant:
             raise AssistantNotExistsError()
         # Determine permissions
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
+        required_permission = 'publish_app' if status == AssistantStatus.ONLINE.value else 'unpublish_app'
+        if not ApplicationPermissionService.has_any_permission_sync(
+            login_user,
+            'assistant',
+            str(assistant.id),
+            [required_permission],
+        ):
             raise UnAuthorizedError()
         # Equal status without modification
         if assistant.status == status:
@@ -406,7 +446,12 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
         # Determine permissions
-        if not user_payload.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
+        if not ApplicationPermissionService.has_any_permission_sync(
+            user_payload,
+            'assistant',
+            str(assistant.id),
+            ['edit_app'],
+        ):
             raise UnAuthorizedError()
 
         # Changes are not allowed when online

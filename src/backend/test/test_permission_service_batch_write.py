@@ -86,3 +86,38 @@ async def test_batch_write_tuples_records_only_unresolved_single_failures():
     failed_ops, error_msg = save_failed.await_args.args
     assert failed_ops == [_op('write', 'tool:2203')]
     assert error_msg == 'OpenFGA single-tuple fallback failed'
+
+
+@pytest.mark.asyncio
+async def test_batch_write_tuples_strict_stops_before_revokes_after_failed_grant():
+    async def side_effect(*, writes=None, deletes=None):
+        if writes and len(writes) == 2:
+            raise FGAWriteError('batch rejected')
+        if writes == [{
+            'user': 'user:400',
+            'relation': 'owner',
+            'object': 'tool:2202',
+        }]:
+            raise FGAWriteError('unexpected validation failure')
+
+    fake_fga = SimpleNamespace(write_tuples=AsyncMock(side_effect=side_effect))
+    ops = [_op('write', 'tool:2202'), _op('delete', 'tool:2203')]
+
+    with patch.object(PermissionService, '_get_fga', return_value=fake_fga), \
+            patch.object(PermissionService, '_save_failed_tuples', AsyncMock()) as save_failed:
+        with pytest.raises(FGAWriteError):
+            await PermissionService.batch_write_tuples(
+                ops,
+                raise_on_failure=True,
+                stop_on_failure=True,
+            )
+
+    save_failed.assert_awaited_once()
+    failed_ops, error_msg = save_failed.await_args.args
+    assert failed_ops == ops
+    assert error_msg == 'OpenFGA single-tuple fallback failed'
+    standalone_delete_calls = [
+        call.kwargs for call in fake_fga.write_tuples.await_args_list
+        if call.kwargs.get('deletes') and not call.kwargs.get('writes')
+    ]
+    assert standalone_delete_calls == []

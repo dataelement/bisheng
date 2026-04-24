@@ -24,6 +24,7 @@ from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, Fl
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -54,7 +55,12 @@ async def check_app_write_auth(
     if not flow_info:
         raise NotFoundError.http_exception()
     owner_id = flow_info.user_id
-    if await login_user.async_access_check(owner_id, flow_id, check_auth_type):
+    if await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'assistant' if flow_type == FlowType.ASSISTANT.value else 'workflow',
+        str(flow_id),
+        ['edit_app'],
+    ):
         return resp_200()
     return AppWriteAuthError.return_resp()
 
@@ -72,7 +78,12 @@ async def get_report_file(
     flow_info = await FlowDao.aget_flow_by_id(workflow_id)
     if not flow_info:
         raise NotFoundError.http_exception()
-    if not await login_user.async_access_check(flow_info.user_id, workflow_id, AccessType.WORKFLOW):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'workflow',
+        str(workflow_id),
+        ['view_app', 'use_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     if not version_key:
@@ -278,7 +289,12 @@ async def update_flow(*,
     if not db_flow:
         raise NotFoundError()
 
-    if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'workflow',
+        str(flow_id),
+        ['edit_app'],
+    ):
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
@@ -321,10 +337,12 @@ async def read_flows(*,
                      page_size: int = Query(default=10, description='Items per page'),
                      page_num: int = Query(default=1, description='Page'),
                      status: int = None,
-                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
+                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions'),
+                     permission_id: str = Query(default='use_app', description='Fine-grained permission id for non-managed app lists')):
     """Read all flows."""
     data, total = await WorkFlowService.get_all_flows(
         login_user, name, status, tag_id, flow_type, page_num, page_size, managed,
+        permission_id=permission_id,
     )
     return resp_200(data={
         'data': data,

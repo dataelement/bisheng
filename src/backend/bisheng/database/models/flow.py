@@ -50,6 +50,7 @@ class UserLinkType(Enum):
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
     user_id: Optional[int] = Field(default=None, index=True)
+    tenant_id: int = Field(default=1, index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(default=None, index=False)

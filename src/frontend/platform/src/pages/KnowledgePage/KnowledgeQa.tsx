@@ -2,12 +2,12 @@ import { QaIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { RelationLevel } from "@/components/bs-comp/permission/types";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
-import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { RelationLevel } from "@/components/bs-comp/permission/types";
-import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -287,10 +287,10 @@ export default function KnowledgeQa(params) {
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable(
         { cancelLoadingWhenReload: true },
-        (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
+        (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1, permissionId: 'view_kb' })
     );
     const resourceIds = datalist.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     const visibleLibs = datalist;
@@ -413,7 +413,7 @@ export default function KnowledgeQa(params) {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
-                                    if (!canEdit(el)) return;
+                                    if (!canReadRow(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/qalib/${el.id}`);

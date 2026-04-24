@@ -27,6 +27,8 @@ def mock_login_user_admin():
     user = MagicMock()
     user.user_id = 1
     user.is_admin.return_value = True
+    user.get_visible_tenants = AsyncMock(return_value=[1])
+    user.has_tenant_admin = AsyncMock(return_value=False)
     return user
 
 
@@ -36,6 +38,8 @@ def mock_login_user_normal():
     user = MagicMock()
     user.user_id = 2
     user.is_admin.return_value = False
+    user.get_visible_tenants = AsyncMock(return_value=[1])
+    user.has_tenant_admin = AsyncMock(return_value=False)
     return user
 
 
@@ -114,6 +118,28 @@ class TestPermissionServiceCheck:
         # Falls back to _sync_owner_fallback which should return False for missing flow
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_check_knowledge_library_accepts_legacy_knowledge_space_tuple(
+        self, mock_fga, mock_login_user_normal,
+    ):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        await mock_fga.write_tuples(
+            writes=[{'user': 'user:2', 'relation': 'viewer', 'object': 'knowledge_space:123'}],
+        )
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_legacy_alias_object_types', new_callable=AsyncMock, return_value=['knowledge_space']), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_check', new_callable=AsyncMock, return_value=None), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_check', new_callable=AsyncMock), \
+             patch.object(PermissionService, '_get_resource_creator', new_callable=AsyncMock, return_value=None):
+            result = await PermissionService.check(
+                user_id=2, relation='viewer', object_type='knowledge_library', object_id='123',
+                login_user=mock_login_user_normal,
+            )
+
+        assert result is True
+
 
 class TestPermissionServiceListAccessible:
 
@@ -138,7 +164,9 @@ class TestPermissionServiceListAccessible:
             {'user': 'user:2', 'relation': 'viewer', 'object': 'workflow:def'},
         ])
 
-        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_finalize_accessible_ids',
+                          new_callable=AsyncMock, side_effect=lambda ids, *_args, **_kwargs: ids):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects', new_callable=AsyncMock, return_value=None):
                 with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_list_objects', new_callable=AsyncMock):
                     result = await PermissionService.list_accessible_ids(
@@ -146,6 +174,53 @@ class TestPermissionServiceListAccessible:
                         login_user=mock_login_user_normal,
                     )
         assert sorted(result) == ['abc', 'def']
+
+    @pytest.mark.asyncio
+    async def test_knowledge_library_list_unions_legacy_ids(self, mock_fga, mock_login_user_normal):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        await mock_fga.write_tuples(writes=[
+            {'user': 'user:2', 'relation': 'viewer', 'object': 'knowledge_library:abc'},
+            {'user': 'user:2', 'relation': 'viewer', 'object': 'knowledge_space:def'},
+        ])
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_finalize_accessible_ids',
+                          new_callable=AsyncMock, side_effect=lambda ids, *_args, **_kwargs: ids), \
+             patch.object(PermissionService, '_legacy_alias_object_types', new_callable=AsyncMock, return_value=['knowledge_space']), \
+             patch.object(PermissionService, '_filter_legacy_alias_ids', new_callable=AsyncMock, return_value=['def']), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects', new_callable=AsyncMock, return_value=None), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_list_objects', new_callable=AsyncMock):
+            result = await PermissionService.list_accessible_ids(
+                user_id=2, relation='viewer', object_type='knowledge_library',
+                login_user=mock_login_user_normal,
+            )
+
+        assert sorted(result) == ['abc', 'def']
+
+    @pytest.mark.asyncio
+    async def test_fga_unavailable_still_returns_creator_owned_ids(self, mock_login_user_normal):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_get_fga', return_value=None), \
+             patch.object(PermissionService, '_resource_ids_by_creator_user_ids',
+                          new_callable=AsyncMock, return_value=['wf-owned']), \
+             patch.object(PermissionService, '_resource_ids_implicit_dept_admin_scope',
+                          new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
+                          new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_filter_ids_by_tenant_gate',
+                          new_callable=AsyncMock, return_value=['wf-owned']), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects',
+                   new_callable=AsyncMock, return_value=None), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_list_objects',
+                   new_callable=AsyncMock):
+            result = await PermissionService.list_accessible_ids(
+                user_id=2, relation='viewer', object_type='workflow',
+                login_user=mock_login_user_normal,
+            )
+
+        assert result == ['wf-owned']
 
 
 class TestPermissionServiceAuthorize:
@@ -189,6 +264,52 @@ class TestPermissionServiceAuthorize:
 
         mock_fga.assert_tuple_count(0)
 
+    @pytest.mark.asyncio
+    async def test_authorize_knowledge_library_dual_writes_legacy_knowledge_space(self, mock_fga):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_legacy_alias_object_types', new_callable=AsyncMock, return_value=['knowledge_space']), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user', new_callable=AsyncMock):
+            await PermissionService.authorize(
+                object_type='knowledge_library',
+                object_id='abc',
+                grants=[AuthorizeGrantItem(
+                    subject_type='user', subject_id=5, relation='viewer',
+                )],
+            )
+
+        mock_fga.assert_tuple_exists('user:5', 'viewer', 'knowledge_library:abc')
+        mock_fga.assert_tuple_exists('user:5', 'viewer', 'knowledge_space:abc')
+
+
+class TestPermissionServiceCreatorFallback:
+
+    @pytest.mark.asyncio
+    async def test_get_resource_creator_assistant_uses_assistant_dao(self):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch('bisheng.database.models.flow.FlowDao.aget_flow_by_id',
+                   new_callable=AsyncMock, return_value=None) as flow_lookup, \
+             patch('bisheng.database.models.assistant.AssistantDao.aget_one_assistant',
+                   new_callable=AsyncMock, return_value=MagicMock(user_id=12)) as assistant_lookup:
+            result = await PermissionService._get_resource_creator('assistant', 'asst-1')
+
+        assert result == 12
+        flow_lookup.assert_not_awaited()
+        assistant_lookup.assert_awaited_once_with('asst-1')
+
+    @pytest.mark.asyncio
+    async def test_get_resource_creator_tool_uses_tool_type_owner(self):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch('bisheng.tool.domain.models.gpts_tools.GptsToolsDao.aget_one_tool_type',
+                   new_callable=AsyncMock, return_value=MagicMock(user_id=34)) as tool_lookup:
+            result = await PermissionService._get_resource_creator('tool', '99')
+
+        assert result == 34
+        tool_lookup.assert_awaited_once_with(99)
+
 
 class TestPermissionServiceBatchWrite:
 
@@ -221,6 +342,31 @@ class TestPermissionServiceBatchWrite:
                 await PermissionService.batch_write_tuples(ops)
                 mock_save.assert_called_once()
                 assert len(mock_save.call_args[0][0]) == 1
+
+
+class TestPermissionServiceGetPermissionLevel:
+
+    @pytest.mark.asyncio
+    async def test_knowledge_library_permission_level_uses_legacy_knowledge_space_tuples(
+        self, mock_fga, mock_login_user_normal,
+    ):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        await mock_fga.write_tuples(
+            writes=[{'user': 'user:2', 'relation': 'can_edit', 'object': 'knowledge_space:42'}],
+        )
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_legacy_alias_object_types', new_callable=AsyncMock, return_value=['knowledge_space']), \
+             patch.object(PermissionService, '_get_resource_creator', new_callable=AsyncMock, return_value=None):
+            result = await PermissionService.get_permission_level(
+                user_id=2,
+                object_type='knowledge_library',
+                object_id='42',
+                login_user=mock_login_user_normal,
+            )
+
+        assert result == 'can_edit'
 
 
 class TestExpandSubject:

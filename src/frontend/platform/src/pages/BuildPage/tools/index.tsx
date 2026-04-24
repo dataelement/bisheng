@@ -1,6 +1,5 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Accordion } from "@/components/bs-ui/accordion";
@@ -188,7 +187,6 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                         onPermission={canManageResource(permLevels, el.id)
                                             ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
                                             : null}
-                                        permissionBadge={<PermissionBadge level={permLevels[String(el.id)]} />}
                                     ></ToolItem>
                                 ))
                             ) : (

@@ -308,6 +308,7 @@ class AssistantInfo(AssistantBase):
     tool_list: List[GptsToolsRead] = Field(default_factory=list, description='Tools for assistantsIDVertical')
     flow_list: List[FlowRead] = Field(default_factory=list, description='Skills for assistantsIDVertical')
     knowledge_list: List[KnowledgeRead] = Field(default_factory=list, description='The knowledge base uponIDVertical')
+    can_share: bool = Field(default=False, description='Current user may copy app share link (relation-model share_app)')
 
 
 class FlowVersionCreate(BaseModel):

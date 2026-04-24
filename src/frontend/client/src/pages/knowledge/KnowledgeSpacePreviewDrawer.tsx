@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -23,6 +23,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
+    initialSpace?: KnowledgeSpace | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     /** Notify parent to sync square card status */
@@ -31,6 +32,7 @@ interface KnowledgeSpacePreviewDrawerProps {
 
 export function KnowledgeSpacePreviewDrawer({
     spaceId,
+    initialSpace = null,
     open,
     onOpenChange,
     onSquareStatusChange,
@@ -47,9 +49,72 @@ export function KnowledgeSpacePreviewDrawer({
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
+    const [loadingSpace, setLoadingSpace] = useState(false);
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
+    const initialSpaceRef = useRef<KnowledgeSpace | null>(initialSpace);
+    const onOpenChangeRef = useRef(onOpenChange);
+    const onSquareStatusChangeRef = useRef(onSquareStatusChange);
+    const lastSyncedSquareStatusRef = useRef<string | null>(null);
+    const localizeRef = useRef(localize);
+    const showToastRef = useRef(showToast);
+
+    useEffect(() => {
+        initialSpaceRef.current = initialSpace;
+    }, [initialSpace]);
+
+    useEffect(() => {
+        onOpenChangeRef.current = onOpenChange;
+    }, [onOpenChange]);
+
+    useEffect(() => {
+        onSquareStatusChangeRef.current = onSquareStatusChange;
+    }, [onSquareStatusChange]);
+
+    useEffect(() => {
+        localizeRef.current = localize;
+    }, [localize]);
+
+    useEffect(() => {
+        showToastRef.current = showToast;
+    }, [showToast]);
+
+    const syncPreviewStatus = (info: KnowledgeSpace) => {
+        const emitSquareStatus = (nextStatus: "join" | "joined" | "pending" | "rejected") => {
+            const syncKey = `${String(info.id)}:${nextStatus}`;
+            if (lastSyncedSquareStatusRef.current === syncKey) {
+                return;
+            }
+            lastSyncedSquareStatusRef.current = syncKey;
+            onSquareStatusChangeRef.current?.(String(info.id), nextStatus);
+        };
+
+        const subscriptionStatus = String(info.subscriptionStatus ?? info.squareStatus ?? "").toLowerCase();
+        if (subscriptionStatus === "rejected") {
+            setStatus("rejected");
+            emitSquareStatus("rejected");
+            return;
+        }
+        if (info.isPending || subscriptionStatus === "pending") {
+            setStatus("pending");
+            emitSquareStatus("pending");
+            return;
+        }
+        if (
+            info.isFollowed ||
+            subscriptionStatus === "subscribed" ||
+            subscriptionStatus === "joined" ||
+            info.role === SpaceRole.CREATOR ||
+            info.role === SpaceRole.ADMIN
+        ) {
+            setStatus("joined");
+            emitSquareStatus("joined");
+            return;
+        }
+        setStatus("none");
+        emitSquareStatus("join");
+    };
 
     /**
      * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
@@ -67,7 +132,10 @@ export function KnowledgeSpacePreviewDrawer({
         if (!open || !spaceId) return;
         console.info("[KnowledgeSpacePreviewDrawer] open", { open, spaceId });
 
-        setSpace(null);
+        const fallbackSpace = initialSpaceRef.current;
+
+        setLoadingSpace(true);
+        setSpace(fallbackSpace ?? null);
         setStatus("none");
         setFilesPreview([]);
         setChildrenPage(1);
@@ -75,6 +143,11 @@ export function KnowledgeSpacePreviewDrawer({
         setParentStack([]);
         setParentNameStack([]);
         setLoadingChildrenMore(false);
+        lastSyncedSquareStatusRef.current = null;
+
+        if (fallbackSpace) {
+            syncPreviewStatus(fallbackSpace);
+        }
 
         // 1) Top detail: GET /api/v1/knowledge/space/{space_id}/info
         getSpaceInfoApi(spaceId)
@@ -87,26 +160,23 @@ export function KnowledgeSpacePreviewDrawer({
                     isPending: info.isPending,
                 });
                 setSpace(info);
-                const sub = String(info.subscriptionStatus ?? "").toLowerCase();
-                // /info may still set is_followed when subscription_status is rejected; prefer explicit status.
-                if (sub === "rejected") {
-                    setStatus("rejected");
-                    onSquareStatusChange?.(String(info.id), "rejected");
-                } else if (info.isPending) {
-                    setStatus("pending");
-                    onSquareStatusChange?.(String(info.id), "pending");
-                } else if (info.isFollowed) {
-                    setStatus("joined");
-                    onSquareStatusChange?.(String(info.id), "joined");
-                } else {
-                    setStatus("none");
-                    onSquareStatusChange?.(String(info.id), "join");
-                }
+                syncPreviewStatus(info);
             })
             .catch(() => {
                 console.warn("[KnowledgeSpacePreviewDrawer] load space info failed", { spaceId });
-                showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
-                onOpenChange(false);
+                if (fallbackSpace) {
+                    setSpace(fallbackSpace);
+                    syncPreviewStatus(fallbackSpace);
+                    return;
+                }
+                showToastRef.current({
+                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                onOpenChangeRef.current(false);
+            })
+            .finally(() => {
+                setLoadingSpace(false);
             });
     }, [open, spaceId]);
 
@@ -188,15 +258,18 @@ export function KnowledgeSpacePreviewDrawer({
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
     const subscriptionRejected =
         String(space?.subscriptionStatus ?? "").toLowerCase() === "rejected" || status === "rejected";
-    // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
-    const canViewFiles =
+    const hasReadableGrant =
         !!space &&
         !subscriptionRejected &&
-        (space.visibility === VisibilityType.PUBLIC ||
-            (space.visibility === VisibilityType.APPROVAL &&
-                (String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
-                    space.isFollowed === true ||
-                    status === "joined")));
+        (
+            space.role === SpaceRole.CREATOR ||
+            space.role === SpaceRole.ADMIN ||
+            String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
+            space.isFollowed === true ||
+            status === "joined"
+        );
+    const canViewFiles =
+        hasReadableGrant;
 
     const handleClickAction = () => {
         if (!space) return;
@@ -298,7 +371,7 @@ export function KnowledgeSpacePreviewDrawer({
                         <X className="size-4" />
                     </button>
                 )}
-                {space && (
+                {space ? (
                     <>
                         <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
                             <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold touch-mobile:pr-10">
@@ -431,9 +504,24 @@ export function KnowledgeSpacePreviewDrawer({
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
-                            ) : null}
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
+                                    <img
+                                        className="size-[140px] object-contain mb-4"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
+                                        alt="Locked"
+                                    />
+                                    <div className="text-[#1d2129] text-[14px]">
+                                        {localize("com_knowledge.space_view_requires_join")}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
+                ) : (
+                    <div className="flex flex-1 items-center justify-center px-6 py-4 text-sm text-[#86909c] touch-mobile:px-0">
+                        {loadingSpace ? localize("com_knowledge.loading") : localize("com_knowledge.space_invalid_or_deleted")}
+                    </div>
                 )}
             </SheetContent>
         </Sheet>

@@ -19,6 +19,8 @@ TENANT_CHECK_EXEMPT_PATHS = (
     '/api/v1/user/sso',
     '/api/v1/user/ldap',
     '/api/v1/user/public_key',
+    # 登录页拉验证码；若仍带失效 Bearer，不应走 token_version 否则永远 19103、前端拿不到 user_capthca
+    '/api/v1/user/get_captcha',
     '/api/v1/user/switch-tenant',
     '/api/v1/user/tenants',
     '/api/v1/env',
@@ -47,6 +49,22 @@ def _decode_jwt_subject(token: str) -> Optional[dict]:
         return AuthJwt().decode_jwt_token(token)
     except Exception:
         return None
+
+
+def _extract_http_access_token(request: Request) -> Optional[str]:
+    """Resolve JWT: HttpOnly cookie (e.g. server-rendered) or ``Authorization: Bearer`` (platform SPA).
+
+    Platform axios stores the token in ``localStorage`` and sends Bearer headers;
+    skipping Bearer caused ``token_version`` invalidation (account disable) to never
+    run for logged-in SPA sessions.
+    """
+    token = request.cookies.get('access_token_cookie')
+    if token:
+        return token
+    auth = (request.headers.get('Authorization') or '').strip()
+    if auth.lower().startswith('bearer '):
+        return (auth[7:].strip() or None)
+    return None
 
 
 def _extract_tenant_id_from_token(token: str) -> int:
@@ -210,6 +228,23 @@ async def _apply_token_version_and_visible(
             },
         )
 
+    if user_id:
+        try:
+            from bisheng.user.domain.models.user import UserDao
+
+            row = await UserDao.aget_user(int(user_id))
+            if row is not None and int(row.delete or 0) == 1:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        'status_code': 19104,
+                        'status_message': 'account disabled — please contact administrator',
+                        'data': None,
+                    },
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('account-status check failed user_id=%s: %s', user_id, exc)
+
     from bisheng.core.context.tenant import set_visible_tenant_ids
     try:
         tenant_id = int(subject.get('tenant_id', 0) or 0)
@@ -237,7 +272,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        token = request.cookies.get('access_token_cookie')
+        token = _extract_http_access_token(request)
         decoded_subject = _decode_jwt_subject(token) if token else None
         tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
 

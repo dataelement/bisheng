@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 # Valid OpenFGA resource types
 VALID_RESOURCE_TYPES = {
-    'knowledge_space', 'folder', 'knowledge_file',
+    'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file',
     'workflow', 'assistant', 'tool', 'channel', 'dashboard',
 }
 
@@ -37,6 +37,7 @@ class PermissionCheckRequest(BaseModel):
     object_type: str
     object_id: str
     relation: str
+    permission_id: Optional[str] = None
 
 
 class PermissionCheckResponse(BaseModel):
@@ -84,6 +85,7 @@ class RelationModelItem(BaseModel):
     name: str
     relation: str = Field(description='owner | manager | editor | viewer')
     permissions: List[str] = Field(default_factory=list)
+    permissions_explicit: bool = False
     is_system: bool = False
     # 授权级别：决定前台授权人需具备的资源权限档位（与 PRD 管理所有者/管理者/使用者对应）
     grant_tier: str = Field(

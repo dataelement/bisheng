@@ -153,8 +153,8 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                     </div>
                 </DialogHeader>
 
-                <div className="flex min-h-0 flex-1 flex-col min-[769px]:flex-row">
-                    <div className="flex min-h-0 min-w-0 flex-col max-[768px]:max-h-[min(42vh,360px)] max-[768px]:flex-none min-[769px]:flex-1">
+                <div className="flex min-h-0 flex-1 flex-col min-[769px]:flex-row max-[768px]:grid max-[768px]:grid-rows-2">
+                    <div className="flex min-h-0 min-w-0 flex-col min-[769px]:flex-1">
                         <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-[#1D2129]">
                             {localize('com_label_all_tags')}
                         </div>
@@ -188,7 +188,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                         </div>
                     </div>
 
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col max-[768px]:border-t max-[768px]:border-[#F2F3F5]">
                         <div className="shrink-0 px-4 pb-2 pt-3 text-sm font-medium text-[#1D2129] max-[768px]:pt-2">
                             <span>{localize('com_label_display_tags')}</span>
                             <span className="ml-2 font-normal text-[#86909C]">

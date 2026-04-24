@@ -22,7 +22,7 @@ export default function SelectCollection({ collectionId, onChange }:
 
     // 取800条 TODO 滚动分页 
     useEffect(() => {
-        readFileLibDatabase(1, 800).then(res => {
+        readFileLibDatabase({ page: 1, pageSize: 800, permissionId: 'use_kb' }).then(res => {
             setDataList(res.data)
             allData.current = res.data
         })

@@ -15,6 +15,7 @@ export interface FlowData {
   status: number;
   update_time: string; // ISO 8601 format date string
   user_id: null | string; // Assuming it can be null or string
+  can_share?: boolean;
 }
 
 //

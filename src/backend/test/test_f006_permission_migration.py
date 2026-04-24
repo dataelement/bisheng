@@ -235,10 +235,10 @@ class TestResolveParent:
     """Test _resolve_parent utility."""
 
     def test_empty_path_root(self):
-        assert RBACToReBACMigrator._resolve_parent(1, 10, '') == ('knowledge_space', '10')
+        assert RBACToReBACMigrator._resolve_parent(1, 10, '') == ('knowledge_library', '10')
 
     def test_none_path_root(self):
-        assert RBACToReBACMigrator._resolve_parent(1, 10, None) == ('knowledge_space', '10')
+        assert RBACToReBACMigrator._resolve_parent(1, 10, None) == ('knowledge_library', '10')
 
     def test_single_segment(self):
         assert RBACToReBACMigrator._resolve_parent(1, 10, '/42') == ('folder', '42')
@@ -412,13 +412,13 @@ class TestStep3RoleAccess:
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 10, 'role_id': 5}])
         await insert_rows(session, 'roleaccess', [
-            {'role_id': 5, 'third_id': 'res-1', 'type': 1},   # KNOWLEDGE → knowledge_space, viewer
+            {'role_id': 5, 'third_id': 'res-1', 'type': 1},   # KNOWLEDGE → knowledge_library, viewer
             {'role_id': 5, 'third_id': 'res-2', 'type': 6},   # ASSISTANT_WRITE → assistant, editor
             {'role_id': 5, 'third_id': 'res-3', 'type': 9},   # WORKFLOW → workflow, viewer
         ])
         count = await migrator_dry.step3_role_access()
         assert count == 3
-        assert migrator_dry._global_seen[('user:10', 'knowledge_space:res-1')] == 'viewer'
+        assert migrator_dry._global_seen[('user:10', 'knowledge_library:res-1')] == 'viewer'
         assert migrator_dry._global_seen[('user:10', 'assistant:res-2')] == 'editor'
         assert migrator_dry._global_seen[('user:10', 'workflow:res-3')] == 'viewer'
 
@@ -449,7 +449,7 @@ class TestStep3RoleAccess:
         ])
         count = await migrator_dry.step3_role_access()
         assert count == 1
-        assert migrator_dry._global_seen[('user:1', 'knowledge_space:kb-1')] == 'editor'
+        assert migrator_dry._global_seen[('user:1', 'knowledge_library:kb-1')] == 'editor'
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -549,24 +549,20 @@ class TestStep5ResourceOwners:
         assert ('user:4', 'workflow:f4') not in migrator_dry._global_seen
 
     @pytest.mark.asyncio
-    async def test_knowledge_all_types(self, migrator_dry, patch_db):
-        """All Knowledge types are migrated."""
+    async def test_knowledge_records_split_between_library_and_space(self, migrator_dry, patch_db):
+        """Non-space records migrate to knowledge_library; SPACE stays knowledge_space."""
         session = patch_db
         await insert_rows(session, 'knowledge', [
             {'user_id': 1, 'name': 'k1', 'type': 0},   # NORMAL
             {'user_id': 2, 'name': 'k2', 'type': 1},   # QA
-            {'user_id': 3, 'name': 'k3', 'type': 2},   # PRIVATE
+            {'user_id': 3, 'name': 'k3', 'type': 2},   # legacy non-space type
             {'user_id': 4, 'name': 'k4', 'type': 3},   # SPACE
         ])
         count = await migrator_dry.step5_resource_owners()
-        # All 4 knowledge records → owner tuples
-        for uid in range(1, 5):
-            found = any(
-                k[1].startswith('knowledge_space:') and v == 'owner'
-                for (k, v) in [(kk, vv) for kk, vv in migrator_dry._global_seen.items()]
-                if k[0] == f'user:{uid}'
-            )
-            assert found, f'user:{uid} knowledge owner tuple missing'
+        assert migrator_dry._global_seen[('user:1', 'knowledge_library:1')] == 'owner'
+        assert migrator_dry._global_seen[('user:2', 'knowledge_library:2')] == 'owner'
+        assert migrator_dry._global_seen[('user:3', 'knowledge_library:3')] == 'owner'
+        assert migrator_dry._global_seen[('user:4', 'knowledge_space:4')] == 'owner'
 
     @pytest.mark.asyncio
     async def test_tool_skip_deleted(self, migrator_dry, patch_db):
@@ -620,14 +616,14 @@ class TestStep6FolderHierarchy:
 
     @pytest.mark.asyncio
     async def test_folder_root(self, migrator_dry, patch_db):
-        """file_type=0 + empty path → (folder:id, parent, knowledge_space:kid)."""
+        """file_type=0 + empty path → (folder:id, parent, knowledge_library:kid)."""
         session = patch_db
         await insert_rows(session, 'knowledgefile', [
             {'knowledge_id': 10, 'file_name': 'dir1', 'file_type': 0, 'file_level_path': ''},
         ])
         count = await migrator_dry.step6_folder_hierarchy()
         assert count == 1
-        # The tuple should be: object=folder:1, relation=parent, user=knowledge_space:10
+        # The tuple should be: object=folder:1, relation=parent, user=knowledge_library:10
         seen = migrator_dry._global_seen
         folder_key = [k for k in seen if k[1].startswith('folder:')]
         assert len(folder_key) == 1
@@ -645,7 +641,7 @@ class TestStep6FolderHierarchy:
 
     @pytest.mark.asyncio
     async def test_file_root(self, migrator_dry, patch_db):
-        """file_type=1 + empty path → (knowledge_file:id, parent, knowledge_space:kid)."""
+        """file_type=1 + empty path → (knowledge_file:id, parent, knowledge_library:kid)."""
         session = patch_db
         await insert_rows(session, 'knowledgefile', [
             {'knowledge_id': 10, 'file_name': 'doc.pdf', 'file_type': 1, 'file_level_path': ''},

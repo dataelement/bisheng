@@ -1,7 +1,6 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
-import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { RelationLevel } from "@/components/bs-comp/permission/types";
@@ -34,6 +33,27 @@ import CreateApp from "./CreateApp";
 import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
+
+/** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
+export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
+    const [value, setValue] = useState(defaultValue)
+    const { t } = useTranslation()
+
+    return (
+        <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
+            <SelectTrigger className="max-w-36 min-w-[9rem]">
+                <SelectValue placeholder={t('build.allAppStatus')} />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectGroup>
+                    <SelectItem value="all">{t('build.allAppStatus')}</SelectItem>
+                    <SelectItem value="2">{t('build.online')}</SelectItem>
+                    <SelectItem value="1">{t('build.offline')}</SelectItem>
+                </SelectGroup>
+            </SelectContent>
+        </Select>
+    )
+}
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -80,15 +100,23 @@ export default function apps() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
-        getAppsApi(param)
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: false }, (param) =>
+        getAppsApi({ ...param, permissionId: 'view_app' })
     )
 
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
-    const resourceIds = dataSource.map((item: any) => String(item.id));
-    const { levels: permLevels, loading: permLoading } = usePermissionLevels('workflow', resourceIds);
+    const workflowResourceIds = dataSource
+        .filter((item: any) => item.flow_type !== AppNumType.ASSISTANT)
+        .map((item: any) => String(item.id));
+    const assistantResourceIds = dataSource
+        .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
+        .map((item: any) => String(item.id));
+    const { levels: workflowPermLevels, loading: workflowPermLoading } = usePermissionLevels('workflow', workflowResourceIds);
+    const { levels: assistantPermLevels, loading: assistantPermLoading } = usePermissionLevels('assistant', assistantResourceIds);
+    const permLevels = { ...workflowPermLevels, ...assistantPermLevels };
+    const permLoading = workflowPermLoading || assistantPermLoading;
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const canRead = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
     const canEdit = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
@@ -292,6 +320,11 @@ export default function apps() {
                     tempTypeRef.current = v
                     filterData({ type: v })
                 }} />
+                <SelectAppStatus
+                    onChange={(v) => {
+                        filterData({ status: v === 'all' ? undefined : Number(v) })
+                    }}
+                />
                 <SelectSearch
                     value={!selectLabel.value ? '' : selectLabel.value}
                     options={allOptions}
@@ -357,7 +390,6 @@ export default function apps() {
                                     onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
                                     onPermission={canManage(item.id) ? handleOpenPermission : undefined}
-                                    permissionBadge={<PermissionBadge level={permLevels[String(item.id)]} />}
                                     // PRD：「可编辑」含上线/下线；与 ReBAC can_edit 对齐（非仅 owner/manager）
                                     showSwitch={canEdit(item.id)}
                                     showCopy={canCreateApp && canRead(item.id)}

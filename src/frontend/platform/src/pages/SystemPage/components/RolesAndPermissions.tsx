@@ -22,11 +22,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
 import { userContext } from "@/contexts/userContext"
 import {
+  getApplicationPermissionTemplateApi,
   createRelationModelApi,
   deleteRelationModelApi,
+  getKnowledgeLibraryPermissionTemplateApi,
   getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
   getRelationModelsApi,
+  getToolPermissionTemplateApi,
   type PermissionTemplateSection,
   type RebacSchemaType,
   type RelationModel,
@@ -64,10 +67,10 @@ const RELATION_LEVEL_I18N_KEY: Record<ModelRelation, string> = {
 }
 
 const DEFAULT_RELATION_MODELS: RelationModel[] = [
-  { id: "owner", name: "所有者", relation: "owner", grant_tier: "owner", permissions: [], is_system: true },
-  { id: "manager", name: "可管理", relation: "manager", grant_tier: "manager", permissions: [], is_system: true },
-  { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], is_system: true },
-  { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], is_system: true },
+  { id: "owner", name: "所有者", relation: "owner", grant_tier: "owner", permissions: [], permissions_explicit: false, is_system: true },
+  { id: "manager", name: "可管理", relation: "manager", grant_tier: "manager", permissions: [], permissions_explicit: false, is_system: true },
+  { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
+  { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
 ]
 
 const TEMPLATE_SECTIONS: TemplateSection[] = [
@@ -167,7 +170,10 @@ export default function RolesAndPermissions() {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
   const [types, setTypes] = useState<RebacSchemaType[] | null>(null)
+  const [applicationTemplate, setApplicationTemplate] = useState<PermissionTemplateSection | null>(null)
   const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
+  const [knowledgeLibraryTemplate, setKnowledgeLibraryTemplate] = useState<PermissionTemplateSection | null>(null)
+  const [toolTemplate, setToolTemplate] = useState<PermissionTemplateSection | null>(null)
   const [relationModels, setRelationModels] = useState<RelationModel[]>([])
   const [modelId, setModelId] = useState<string>("owner")
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
@@ -202,11 +208,23 @@ export default function RolesAndPermissions() {
 
   useEffect(() => {
     if (user?.role !== "admin") {
+      setApplicationTemplate(null)
       setKnowledgeTemplate(null)
+      setKnowledgeLibraryTemplate(null)
+      setToolTemplate(null)
       return
     }
+    captureAndAlertRequestErrorHoc(getApplicationPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setApplicationTemplate(res)
+    })
     captureAndAlertRequestErrorHoc(getKnowledgeSpacePermissionTemplateApi(), () => true).then((res) => {
       if (res) setKnowledgeTemplate(res)
+    })
+    captureAndAlertRequestErrorHoc(getKnowledgeLibraryPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setKnowledgeLibraryTemplate(res)
+    })
+    captureAndAlertRequestErrorHoc(getToolPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setToolTemplate(res)
     })
   }, [user?.role])
 
@@ -215,8 +233,17 @@ export default function RolesAndPermissions() {
     if (knowledgeTemplate) {
       sections[0] = knowledgeTemplate as TemplateSection
     }
+    if (applicationTemplate) {
+      sections[1] = applicationTemplate as TemplateSection
+    }
+    if (knowledgeLibraryTemplate) {
+      sections[2] = knowledgeLibraryTemplate as TemplateSection
+    }
+    if (toolTemplate) {
+      sections.splice(3, 0, toolTemplate as TemplateSection)
+    }
     return sections
-  }, [knowledgeTemplate])
+  }, [applicationTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
     return templateSections.flatMap((section) =>
@@ -241,8 +268,9 @@ export default function RolesAndPermissions() {
 
   useEffect(() => {
     if (!currentModel) return
-    if (currentModel.permissions && currentModel.permissions.length > 0) {
-      setSelectedPermissionIds(currentModel.permissions)
+    const permissions = currentModel.permissions || []
+    if (currentModel.permissions_explicit !== false) {
+      setSelectedPermissionIds(permissions)
       return
     }
     const ids = templateSections.flatMap((section) =>
@@ -347,7 +375,7 @@ export default function RolesAndPermissions() {
         <Roles />
       </TabsContent>
       <TabsContent value="rebac" className="mt-0">
-        <div className="pb-6 pt-2">
+        <div className="pb-6 pt-2" data-permission-surface="relation-model-editor">
           {user?.role !== "admin" ? (
             <p className="text-sm text-muted-foreground">{t("system.rebacAdminOnly")}</p>
           ) : types === null ? (

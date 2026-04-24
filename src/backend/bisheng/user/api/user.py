@@ -238,6 +238,35 @@ async def _department_admin_scoped_user_ids(user_id: int) -> Optional[List[int]]
     return list({int(uid) for uid in rows})
 
 
+def _primary_department_id_map_for_user_ids(user_ids: List[int]) -> Dict[int, Optional[int]]:
+    """user_id -> ``department.id``（主部门），供前端组织树挂载。
+
+    ``user.dept_id`` 字段为历史/业务侧字符串，与 ``department.id`` 不一定一致；
+    选人组件应按 ``user_department`` 关系挂载到树节点。
+    """
+    ids = [int(x) for x in user_ids if x is not None]
+    if not ids:
+        return {}
+    with get_sync_db_session() as session:
+        rows = session.exec(
+            select(UserDepartment).where(col(UserDepartment.user_id).in_(ids))
+        ).all()
+    by_uid: Dict[int, List[UserDepartment]] = {}
+    for ud in rows or []:
+        uid = int(ud.user_id)
+        by_uid.setdefault(uid, []).append(ud)
+    out: Dict[int, Optional[int]] = {}
+    for uid in ids:
+        lst = by_uid.get(uid) or []
+        if not lst:
+            out[uid] = None
+            continue
+        prim = [x for x in lst if int(x.is_primary) == 1]
+        chosen = prim[0] if prim else lst[0]
+        out[uid] = int(chosen.department_id)
+    return out
+
+
 @router.get('/user/list', status_code=201)
 async def list_user(*,
                     name: Optional[str] = None,
@@ -301,11 +330,14 @@ async def list_user(*,
             user_ids = list(set(roles_user_ids))
 
     users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
+    uid_list = [int(one.user_id) for one in users if getattr(one, "user_id", None) is not None]
+    primary_dept_by_user = _primary_department_id_map_for_user_ids(uid_list)
     res = []
     role_dict = {}
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
+        one_data["department_id"] = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
         one_data["avatar"] = UserService.get_avatar_share_link_sync(one_data.get("avatar"))
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
@@ -714,11 +746,15 @@ async def get_captcha():
     redis_client = await get_redis_client()
     await redis_client.aset(key, chr_4, expiration=300)
 
-    # Add configuration, whether the verification code must be used
+    # 与 ``UserService.user_login`` 中 ``if await settings.aget_from_db('use_captcha'):`` 同源同判：
+    # 曾用同步 ``get_from_db`` 时，在部分环境/事件循环下与异步登录读取不一致，导致前端 ``user_capthca=false``
+    # 不渲染验证码，但登录仍走验证码校验并报「验证码错误」。
+    use_raw = await settings.aget_from_db('use_captcha')
+    user_captcha_required = True if use_raw else False
     return resp_200({
         'captcha_key': key,
         'captcha': capthca_b64,
-        'user_capthca': settings.get_from_db('use_captcha') or False
+        'user_capthca': user_captcha_required,
     })
 
 

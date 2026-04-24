@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from functools import cached_property
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Iterable
 
 import jwt
 from fastapi import Request, Response, Depends
@@ -33,19 +33,27 @@ _DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
 )
 
 # ── AccessType → ReBAC mapping (F008, AD-02) ────────────────
-# Maps old RBAC AccessType to (relation, object_type) for ReBAC delegation.
-# Unmapped AccessType values fall back to the legacy RoleAccessDao logic.
-_ACCESS_TYPE_TO_REBAC: Dict[int, Tuple[str, str]] = {
-    AccessType.KNOWLEDGE: ('can_read', 'knowledge_space'),
-    AccessType.KNOWLEDGE_WRITE: ('can_edit', 'knowledge_space'),
-    AccessType.WORKFLOW: ('can_read', 'workflow'),
-    AccessType.WORKFLOW_WRITE: ('can_edit', 'workflow'),
-    AccessType.ASSISTANT_READ: ('can_read', 'assistant'),
-    AccessType.ASSISTANT_WRITE: ('can_edit', 'assistant'),
-    AccessType.GPTS_TOOL_READ: ('can_read', 'tool'),
-    AccessType.GPTS_TOOL_WRITE: ('can_edit', 'tool'),
-    AccessType.DASHBOARD: ('can_read', 'dashboard'),
-    AccessType.DASHBOARD_WRITE: ('can_edit', 'dashboard'),
+# Maps old RBAC AccessType to one-or-more (relation, object_type) pairs for
+# ReBAC delegation. Knowledge libraries are migrating from the historical
+# knowledge_space object type to the dedicated knowledge_library type, so the
+# adapter must temporarily accept both.
+_ACCESS_TYPE_TO_REBAC: Dict[int, Tuple[Tuple[str, str], ...]] = {
+    AccessType.KNOWLEDGE: (
+        ('can_read', 'knowledge_library'),
+        ('can_read', 'knowledge_space'),
+    ),
+    AccessType.KNOWLEDGE_WRITE: (
+        ('can_edit', 'knowledge_library'),
+        ('can_edit', 'knowledge_space'),
+    ),
+    AccessType.WORKFLOW: (('can_read', 'workflow'),),
+    AccessType.WORKFLOW_WRITE: (('can_edit', 'workflow'),),
+    AccessType.ASSISTANT_READ: (('can_read', 'assistant'),),
+    AccessType.ASSISTANT_WRITE: (('can_edit', 'assistant'),),
+    AccessType.GPTS_TOOL_READ: (('can_read', 'tool'),),
+    AccessType.GPTS_TOOL_WRITE: (('can_edit', 'tool'),),
+    AccessType.DASHBOARD: (('can_read', 'dashboard'),),
+    AccessType.DASHBOARD_WRITE: (('can_edit', 'dashboard'),),
 }
 
 
@@ -195,11 +203,13 @@ class LoginUser(BaseModel):
         F008 adapter: delegates to ReBAC (rebac_check) for mapped AccessType values.
         Falls back to legacy RoleAccessDao for unmapped types (backward compat).
         """
-        rebac_mapping = _ACCESS_TYPE_TO_REBAC.get(access_type)
-        if rebac_mapping is not None:
-            relation, object_type = rebac_mapping
+        rebac_targets = self._rebac_targets_for_access_type(access_type)
+        if rebac_targets:
             from bisheng.permission.domain.services.owner_service import _run_async_safe
-            return _run_async_safe(self.rebac_check(relation, object_type, str(target_id)))
+            return any(
+                _run_async_safe(self.rebac_check(relation, object_type, str(target_id)))
+                for relation, object_type in rebac_targets
+            )
 
         # Legacy fallback for unmapped AccessType
         if self.user_id == owner_user_id:
@@ -211,10 +221,13 @@ class LoginUser(BaseModel):
     @async_wrapper_access_check
     async def async_access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
         """Async permission check — delegates to ReBAC for mapped types."""
-        rebac_mapping = _ACCESS_TYPE_TO_REBAC.get(access_type)
-        if rebac_mapping is not None:
-            relation, object_type = rebac_mapping
-            return await self.rebac_check(relation, object_type, str(target_id))
+        rebac_targets = self._rebac_targets_for_access_type(access_type)
+        if rebac_targets:
+            results = await asyncio.gather(*[
+                self.rebac_check(relation, object_type, str(target_id))
+                for relation, object_type in rebac_targets
+            ])
+            return any(results)
 
         # Legacy fallback for unmapped AccessType
         if self.user_id == owner_user_id:
@@ -300,16 +313,16 @@ class LoginUser(BaseModel):
         F008 adapter: delegates to ReBAC list_accessible for mapped AccessType.
         Falls back to legacy RoleAccessDao for unmapped types.
         """
-        # Find the first mapped AccessType to determine (relation, object_type)
-        for at in access_types:
-            rebac_mapping = _ACCESS_TYPE_TO_REBAC.get(at)
-            if rebac_mapping is not None:
-                relation, object_type = rebac_mapping
-                from bisheng.permission.domain.services.owner_service import _run_async_safe
-                ids = _run_async_safe(self.rebac_list_accessible(relation, object_type))
-                # None means admin (no filter) — return empty list since caller
-                # already handles admin via is_admin() check above this call
-                return ids if ids is not None else []
+        rebac_targets = self._rebac_targets_for_access_types(access_types)
+        if rebac_targets:
+            from bisheng.permission.domain.services.owner_service import _run_async_safe
+
+            merged: Dict[str, None] = {}
+            for relation, object_type in rebac_targets:
+                ids = _run_async_safe(self.rebac_list_accessible(relation, object_type)) or []
+                for rid in ids:
+                    merged[str(rid)] = None
+            return list(merged.keys())
 
         # Legacy fallback
         role_access = RoleAccessDao.get_role_access_batch(self.user_role, access_types)
@@ -317,12 +330,17 @@ class LoginUser(BaseModel):
 
     async def aget_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
         """Async version — delegates to ReBAC for mapped types."""
-        for at in access_types:
-            rebac_mapping = _ACCESS_TYPE_TO_REBAC.get(at)
-            if rebac_mapping is not None:
-                relation, object_type = rebac_mapping
-                ids = await self.rebac_list_accessible(relation, object_type)
-                return ids if ids is not None else []
+        rebac_targets = self._rebac_targets_for_access_types(access_types)
+        if rebac_targets:
+            merged: Dict[str, None] = {}
+            results = await asyncio.gather(*[
+                self.rebac_list_accessible(relation, object_type)
+                for relation, object_type in rebac_targets
+            ])
+            for ids in results:
+                for rid in ids or []:
+                    merged[str(rid)] = None
+            return list(merged.keys())
 
         # Legacy fallback
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
@@ -384,6 +402,20 @@ class LoginUser(BaseModel):
             object_type=object_type,
             login_user=self,
         )
+
+    @staticmethod
+    def _rebac_targets_for_access_type(access_type: AccessType) -> Tuple[Tuple[str, str], ...]:
+        return _ACCESS_TYPE_TO_REBAC.get(access_type, ())
+
+    @classmethod
+    def _rebac_targets_for_access_types(
+        cls, access_types: Iterable[AccessType],
+    ) -> List[Tuple[str, str]]:
+        merged: Dict[Tuple[str, str], None] = {}
+        for access_type in access_types:
+            for pair in cls._rebac_targets_for_access_type(access_type):
+                merged[pair] = None
+        return list(merged.keys())
 
     # some methods related to AuthJwt
     @classmethod

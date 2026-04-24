@@ -256,8 +256,13 @@ async def copy_knowledge(*,
 
     await UserPayload.assert_effective_web_menu_contains(
         login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
-    if not await login_user.async_access_check(
-            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
+    try:
+        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
+    except UnAuthorizedError:
         return UnAuthorizedError.return_resp()
 
     knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
@@ -291,8 +296,13 @@ async def copy_qa_knowledge(*,
 
     await UserPayload.assert_effective_web_menu_contains(
         login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
-    if not await login_user.async_access_check(
-            qa_knowledge.user_id, str(qa_knowledge.id), AccessType.KNOWLEDGE):
+    try:
+        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=qa_knowledge.user_id,
+            knowledge_id=qa_knowledge.id,
+        )
+    except UnAuthorizedError:
         return UnAuthorizedError.return_resp()
 
     if qa_knowledge.type != KnowledgeTypeEnum.QA.value:
@@ -314,6 +324,7 @@ async def copy_qa_knowledge(*,
 async def get_knowledge(*,
                         request: Request,
                         login_user: UserPayload = Depends(UserPayload.get_login_user),
+                        permission_id: Literal['view_kb', 'use_kb'] = Query(default='use_kb'),
                         name: str = None,
                         knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
                                                     alias='type'),
@@ -322,9 +333,16 @@ async def get_knowledge(*,
                         page_num: Optional[int] = 1):
     """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
-                                                      sort_by,
-                                                      page_num, page_size)
+    res, total = await KnowledgeService.get_knowledge(
+        request,
+        login_user,
+        knowledge_type,
+        name,
+        sort_by,
+        page_num,
+        page_size,
+        permission_id=permission_id,
+    )
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -381,19 +399,21 @@ def get_personal_knowledge_info(
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
-def get_filelist(*,
-                 request: Request,
-                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                 file_name: str = None,
-                 file_ids: List[int] = None,
-                 knowledge_id: int = 0,
-                 page_size: int = 10,
-                 page_num: int = 1,
-                 status: List[int] = Query(default=None)):
+async def get_filelist(*,
+                       request: Request,
+                       login_user: UserPayload = Depends(UserPayload.get_login_user),
+                       file_name: str = None,
+                       file_ids: List[int] = None,
+                       knowledge_id: int = 0,
+                       page_size: int = 10,
+                       page_num: int = 1,
+                       status: List[int] = Query(default=None)):
     """ Get knowledge base file information. """
-    data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
-                                                             file_name, status, page_num,
-                                                             page_size, file_ids)
+    data, total, flag = await KnowledgeService.aget_knowledge_files(
+        request, login_user, knowledge_id,
+        file_name, status, page_num,
+        page_size, file_ids,
+    )
 
     return resp_200({
         'data': data,
@@ -432,8 +452,12 @@ async def get_QA_list(*,
         'total':
             total_count,
         'writeable':
-            login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
-                                    AccessType.KNOWLEDGE_WRITE)
+            KnowledgeService.permission_service.check_access_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=qa_knowledge_id,
+                access_type=AccessType.KNOWLEDGE_WRITE,
+            )
     })
 
 
@@ -525,13 +549,7 @@ async def qa_add(*, QACreate: QAKnowledgeUpsert,
                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Add knowledge base information. """
     QACreate.user_id = login_user.user_id
-    db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
-    if db_knowledge.type != KnowledgeTypeEnum.QA.value:
-        raise NotFoundError()
-    if not login_user.access_check(
-            db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
-    ):
-        raise UnAuthorizedError.http_exception()
+    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, QACreate.knowledge_id)
 
     db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id, exclude_id=QACreate.id)
     # create repeat question or update
@@ -551,11 +569,7 @@ def qa_status_switch(*,
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     if qa_db.status == status:
         return resp_200()
-    db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
-    if not login_user.access_check(
-            db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
-    ):
-        raise UnAuthorizedError.http_exception()
+    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_db.knowledge_id)
 
     new_qa_db = knowledge_imp.qa_status_change(qa_db, status, db_knowledge)
     if not new_qa_db:
@@ -583,12 +597,7 @@ def qa_append(
 ):
     """ Add knowledge base information. """
     qa_list = QAKnoweldgeDao.select_list(ids)
-    knowledge = KnowledgeDao.query_by_id(qa_list[0].knowledge_id)
-    # check knowledge access
-    if not login_user.access_check(
-            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-    ):
-        raise UnAuthorizedError.http_exception()
+    knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
 
     for q in qa_list:
         if question in q.questions:
@@ -606,12 +615,7 @@ def qa_delete(*,
     """ Delete Knowledge File Information """
     qa_list = QAKnoweldgeDao.select_list(ids)
 
-    knowledge = KnowledgeDao.query_by_id(qa_list[0].knowledge_id)
-    if not login_user.access_check(knowledge.user_id, str(knowledge.id),
-                                   AccessType.KNOWLEDGE_WRITE):
-        raise UnAuthorizedError()
-    if knowledge.type != KnowledgeTypeEnum.QA.value:
-        raise KnowledgeNotQAError()
+    knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
@@ -891,9 +895,13 @@ def update_knowledge_model(*,
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
 
-    if not login_user.access_check(
-            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-    ):
+    try:
+        KnowledgeService.permission_service.ensure_knowledge_write_sync(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
+    except UnAuthorizedError:
         return UnAuthorizedError.return_resp()
 
     old_model_id = knowledge.model

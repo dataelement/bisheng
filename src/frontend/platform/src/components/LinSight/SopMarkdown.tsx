@@ -244,7 +244,7 @@ const useSopTools = (tools) => {
     const files = []
     const { data: orgTools } = useQuery({
         queryKey: ['OrgTools'],
-        queryFn: () => readFileLibDatabase({ page: 1, pageSize: 400, type: 0 }),
+        queryFn: () => readFileLibDatabase({ page: 1, pageSize: 400, type: 0, permissionId: 'use_kb' }),
         select(data) {
             return data?.data;
         },
@@ -565,4 +565,3 @@ function replaceBracesToMarkers(inputStr, nameToValueMap) {
         return `@${value}@`; // If not found, keep the original value
     });
 }
-

@@ -211,13 +211,13 @@ export function FilterConditionEditor({
     }
 
     return (
-        <div className="relative pl-10">
+        <div className="relative isolate pl-10">
             {/* 第一层：And/Or 在线的左侧，虚线不溢出 */}
             {groups.length >= 1 && (
                 <>
                     <button
                         type="button"
-                        className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center min-w-[2.5rem] text-[12px] text-[#165DFF] cursor-pointer hover:text-[#4080FF] transition-colors"
+                        className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-[1] flex items-center justify-center min-w-[2.5rem] text-[12px] text-[#165DFF] cursor-pointer hover:text-[#4080FF] transition-colors"
                         onClick={() =>
                             onTopRelationChange(topRelation === "and" ? "or" : "and")
                         }
@@ -247,7 +247,7 @@ export function FilterConditionEditor({
                             <>
                                 <button
                                     type="button"
-                                    className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center min-w-[2.5rem] text-[12px] text-[#165DFF] cursor-pointer hover:text-[#4080FF] transition-colors"
+                                    className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-[1] flex items-center justify-center min-w-[2.5rem] text-[12px] text-[#165DFF] cursor-pointer hover:text-[#4080FF] transition-colors"
                                     onClick={() =>
                                         setGroupRelation(
                                             groupIndex,

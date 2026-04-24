@@ -521,7 +521,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg px-4"
+            className="flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}

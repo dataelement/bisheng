@@ -13,7 +13,6 @@ import {
 import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { RelationLevel } from "@/components/bs-comp/permission/types";
@@ -336,12 +335,12 @@ export default function KnowledgeFile() {
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileLibDatabase({ ...param, name: param.keyword })
+        readFileLibDatabase({ ...param, name: param.keyword, permissionId: 'view_kb' })
     )
 
     // Permission levels for badge display
     const resourceIds = datalist.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
     const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
@@ -522,7 +521,7 @@ export default function KnowledgeFile() {
                                 key={el.id}
                                 className=""
                                 onClick={() => {
-                                    if (!canEdit(el)) return;
+                                    if (!canReadRow(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/${el.id}`);
@@ -537,9 +536,8 @@ export default function KnowledgeFile() {
                                             <BookIcon className="text-primary size-10" />
                                         </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
                                                 {el.name}
-                                                <PermissionBadge level={permLevels[String(el.id)]} />
                                             </div>
                                             <Tip
                                                 side="top"
@@ -729,7 +727,7 @@ export default function KnowledgeFile() {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
-                    resourceType="knowledge_space"
+                    resourceType="knowledge_library"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
                 />

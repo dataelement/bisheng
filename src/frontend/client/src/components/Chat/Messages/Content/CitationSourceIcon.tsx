@@ -167,7 +167,7 @@ function WebSourceIcon({
   );
 }
 
-function CitationFileTypeIcon({
+export function CitationFileTypeIcon({
   fileType = 'txt',
   className,
 }: {

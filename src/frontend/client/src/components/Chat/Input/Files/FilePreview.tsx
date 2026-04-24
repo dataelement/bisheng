@@ -1,5 +1,6 @@
 import type { ExtendedFile } from '~/common';
 import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
+import LegacyFileIcon from '~/components/ui/icon/File';
 import type { TFile } from '~/types/chat';
 import { useProgress } from '~/hooks';
 
@@ -30,7 +31,11 @@ const FilePreview = ({
     transition: 'stroke-dashoffset 0.5s linear',
   };
 
-  return (<FileIcon loading={progress < 1} type={getFileTypebyFileName(file.filename)} />
+  const fileTypeByName = getFileTypebyFileName(file.filename);
+
+  return (progress < 1
+    ? <FileIcon loading type={fileTypeByName} />
+    : <LegacyFileIcon className="size-10 shrink-0" type={fileTypeByName} />
     // <div className={cn('size-8 shrink-0 overflow-hidden rounded-lg', className)}>
     //   <FontIcon name={progress < 1 ? '' : file.filename} />
     //   <SourceIcon source={file?.source} />

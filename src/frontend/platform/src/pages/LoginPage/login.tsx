@@ -82,14 +82,32 @@ export const LoginPage = () => {
     }, []);
 
     const fetchCaptchaData = () => {
-        getCaptchaApi().then(setCaptchaData)
+        getCaptchaApi()
+            .then((raw: any) => {
+                const rawFlag = raw?.user_capthca ?? raw?.user_captcha;
+                const enabled =
+                    rawFlag === true ||
+                    rawFlag === 1 ||
+                    (typeof rawFlag === 'string'
+                        && ['true', '1', 'yes', 'on'].includes(String(rawFlag).trim().toLowerCase()));
+                setCaptchaData({
+                    captcha_key: raw?.captcha_key ?? '',
+                    captcha: raw?.captcha ?? '',
+                    user_capthca: enabled,
+                });
+            })
+            .catch(() => {
+                setCaptchaData({ captcha_key: '', captcha: '', user_capthca: false });
+            });
     };
 
     const [hasLdap, setHasLdap] = useState(false)
     const [ldapCheckboxLabel, setLdapCheckboxLabel] = useState('')
     const [isLdapLogin, setIsLdapLogin] = useState(true)
     const enableDualLogin = hasLdap && !!ldapCheckboxLabel
-    const shouldUseLdap = hasLdap && (!enableDualLogin || isLdapLogin)
+    // 仅当网关下发了「LDAP / 本地」切换文案时，才走 LDAP 口令登录；否则有 LDAP 配置也走 Bisheng
+    // 本地登录（含验证码），避免「界面不显示验证码却走 LDAP/空 captcha_key」导致后端报验证码错误。
+    const shouldUseLdap = hasLdap && !!ldapCheckboxLabel && isLdapLogin
     const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap)
 
     const handleLogin = async () => {

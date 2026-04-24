@@ -22,6 +22,12 @@ _MODEL_LEVEL: Dict[str, int] = {
     'manager': 3,
     'owner': 4,
 }
+_COMPUTED_TO_MODEL_RELATION: Dict[str, str] = {
+    'can_read': 'viewer',
+    'can_edit': 'editor',
+    'can_manage': 'manager',
+    'can_delete': 'owner',
+}
 
 KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
     'title': '知识空间模块',
@@ -83,7 +89,8 @@ def default_permission_ids_for_relation(relation: str) -> Set[str]:
     This is a compatibility helper for built-in relation models. Custom models
     should prefer their explicit permissions[] instead of these defaults.
     """
-    relation_level = _MODEL_LEVEL.get(relation, 0)
+    normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
+    relation_level = _MODEL_LEVEL.get(normalized, 0)
     return {
         item['id']
         for item in knowledge_space_template_permissions()

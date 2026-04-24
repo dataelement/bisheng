@@ -3,7 +3,7 @@ import * as http from 'node:http';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { compression } from 'vite-plugin-compression2';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -15,10 +15,9 @@ const app_env = {
   BISHENG_HOST: '/admin'
 }
 
-const minioTarget = 'http://192.168.106.116:9000';
 const minioPathRE = /^\/(?:workspace\/)?bisheng(?:\/|$)/;
 
-function minioFileProxyPlugin(): Plugin {
+function minioFileProxyPlugin(minioTarget: string): Plugin {
   return {
     name: 'bisheng:minio-file-proxy',
     apply: 'serve',
@@ -70,7 +69,12 @@ function minioFileProxyPlugin(): Plugin {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, path.join(__dirname, '..'));
+  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9100';
+  const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+
+  return {
   base: app_env.BASE_URL || '/',
   define: {
     __APP_ENV__: JSON.stringify(app_env)
@@ -80,13 +84,8 @@ export default defineConfig(({ command }) => ({
     port: 4001,
     strictPort: false,
     proxy: {
-      // '^/api/': {
-      //   target: 'http://192.168.106.116:7861',
-      //   // target: 'http://localhost:3080',
-      //   changeOrigin: true,
-      // },
       '^(/workspace)?/bisheng': {
-        target: 'http://192.168.106.116:9000',
+        target: minioTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -94,7 +93,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://localhost:7860',
+        target: apiTarget,
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -108,7 +107,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.116:9000',
+        target: minioTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -121,7 +120,7 @@ export default defineConfig(({ command }) => ({
   envDir: '../',
   envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
   plugins: [
-    minioFileProxyPlugin(),
+    minioFileProxyPlugin(minioTarget),
     react(),
     nodePolyfills(),
     VitePWA({
@@ -379,7 +378,8 @@ export default defineConfig(({ command }) => ({
       $fonts: path.resolve(__dirname, 'public/fonts'),
     },
   },
-}));
+};
+});
 
 interface SourcemapExclude {
   excludeNodeModules?: boolean;

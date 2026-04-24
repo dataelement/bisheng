@@ -134,6 +134,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         result.is_followed = subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
         result.is_pending = subscription_status == SpaceSubscriptionStatusEnum.PENDING
 
+    @staticmethod
+    def _permission_level_to_space_user_role(
+        permission_level: Optional[str],
+    ) -> Optional[UserRoleEnum]:
+        if permission_level in ('owner', 'can_manage'):
+            # The UI only knows creator/admin/member. A direct owner grant must
+            # preserve manage semantics without masquerading as the creator.
+            return UserRoleEnum.ADMIN
+        if permission_level in ('can_edit', 'can_read'):
+            return UserRoleEnum.MEMBER
+        return None
+
     async def _decorate_department_metadata(
         self,
         spaces: List[KnowledgeSpaceInfoResp],
@@ -157,6 +169,76 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.approval_enabled = binding.approval_enabled
             space.sensitive_check_enabled = binding.sensitive_check_enabled
         return spaces
+
+    async def _format_accessible_spaces(
+        self,
+        space_ids: List[int],
+        order_by: str,
+        *,
+        memberships: Optional[List[SpaceChannelMember]] = None,
+        exclude_created: bool = False,
+    ) -> List[KnowledgeRead]:
+        if not space_ids:
+            return []
+
+        membership_map = {
+            int(member.business_id): member for member in (memberships or [])
+        }
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        if exclude_created:
+            spaces = [space for space in spaces if space.user_id != self.login_user.user_id]
+        if not spaces:
+            return []
+
+        permission_space_ids = [
+            space.id
+            for space in spaces
+            if space.user_id != self.login_user.user_id and space.id not in membership_map
+        ]
+        permission_levels = {}
+        if permission_space_ids:
+            levels = await asyncio.gather(*[
+                PermissionService.get_permission_level(
+                    user_id=self.login_user.user_id,
+                    object_type='knowledge_space',
+                    object_id=str(space_id),
+                    login_user=self.login_user,
+                )
+                for space_id in permission_space_ids
+            ])
+            permission_levels = {
+                space_id: level for space_id, level in zip(permission_space_ids, levels)
+            }
+
+        pinned_spaces = []
+        normal_spaces = []
+        for space in spaces:
+            member_conf = membership_map.get(space.id)
+            result = KnowledgeSpaceInfoResp(
+                **space.model_dump(),
+                is_pinned=bool(member_conf and member_conf.is_pinned),
+            )
+
+            if space.user_id == self.login_user.user_id:
+                result.user_role = UserRoleEnum.CREATOR
+                self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+            elif member_conf:
+                result.user_role = member_conf.user_role
+                self._apply_subscription_flags(result, self._resolve_subscription_status(member_conf))
+            else:
+                result.user_role = self._permission_level_to_space_user_role(
+                    permission_levels.get(space.id),
+                )
+                if result.user_role is None:
+                    continue
+                self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+
+            if result.is_pinned:
+                pinned_spaces.append(result)
+            else:
+                normal_spaces.append(result)
+
+        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -609,15 +691,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if effective_permissions:
             return effective_permissions
 
-        space_resource = next((item for item in reversed(lineage) if item[0] == 'knowledge_space'), None)
-        if space_resource:
-            space = await KnowledgeDao.aquery_by_id(space_resource[1])
-            if space and space.auth_type == AuthTypeEnum.PUBLIC:
-                # Public space visibility is a product-level compatibility rule:
-                # without explicit bindings, public resources still expose the
-                # viewer defaults for read-only operations.
-                return default_permission_ids_for_relation('viewer')
-
         # Final legacy fallback: if the tuple has no model binding metadata, we
         # derive the built-in defaults from the highest OpenFGA relation level.
         level = await PermissionService.get_permission_level(
@@ -689,8 +762,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        if space.auth_type == AuthTypeEnum.PUBLIC:
-            return space
         allowed = await PermissionService.check(
             user_id=self.login_user.user_id,
             relation='can_read',
@@ -794,14 +865,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             result.user_name = self.login_user.user_name
         self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
-        if space.user_id != self.login_user.user_id:
-            member_info = await SpaceChannelMemberDao.async_find_member(space_id=space.id,
-                                                                        user_id=self.login_user.user_id)
-            self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
-            if member_info and member_info.is_active:
-                result.user_role = member_info.user_role
-        else:
+        if space.user_id == self.login_user.user_id:
             result.user_role = UserRoleEnum.CREATOR
+        else:
+            member_info = await SpaceChannelMemberDao.async_find_member(
+                space_id=space.id,
+                user_id=self.login_user.user_id,
+            )
+            if member_info:
+                self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                if member_info.is_active:
+                    result.user_role = member_info.user_role
+            if result.user_role is None:
+                level = await PermissionService.get_permission_level(
+                    user_id=self.login_user.user_id,
+                    object_type='knowledge_space',
+                    object_id=str(space_id),
+                    login_user=self.login_user,
+                )
+                result.user_role = self._permission_level_to_space_user_role(level)
+                if result.user_role is not None:
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         result.follower_num = follower_num
         result.file_num = total_file_num
         await self._decorate_department_metadata([result])
@@ -957,7 +1041,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self, order_by: str = 'name'
     ) -> List[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
-        return await self._format_member_spaces(members, order_by)
+        accessible_ids = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation='can_manage',
+            object_type='knowledge_space',
+            login_user=self.login_user,
+        )
+        space_ids = {
+            int(member.business_id) for member in members
+        }
+        if accessible_ids is not None:
+            space_ids |= {int(space_id) for space_id in accessible_ids if str(space_id).isdigit()}
+        return await self._format_accessible_spaces(
+            list(space_ids),
+            order_by,
+            memberships=members,
+        )
 
     async def get_my_followed_spaces(
         self, order_by: str = 'update_time'
@@ -969,7 +1068,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         # Fetch members ordered by is_pinned DESC so we know which are pinned
         members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
-        return await self._format_member_spaces(members, order_by)
+        accessible_ids = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation='can_read',
+            object_type='knowledge_space',
+            login_user=self.login_user,
+        )
+        space_ids = {
+            int(member.business_id) for member in members
+        }
+        if accessible_ids is not None:
+            space_ids |= {int(space_id) for space_id in accessible_ids if str(space_id).isdigit()}
+        return await self._format_accessible_spaces(
+            list(space_ids),
+            order_by,
+            memberships=members,
+            exclude_created=True,
+        )
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)

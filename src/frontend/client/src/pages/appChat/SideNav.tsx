@@ -98,6 +98,7 @@ export function SideNav() {
     // e.g. right after deleting the last conversation, chatState is cleared but the
     // sidebar card should still show the app's name / logo / description.
     const flowData = chatState?.flow ?? currentApp;
+    const showShareApp = flowData?.can_share === true;
 
     return (
         <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
@@ -170,17 +171,19 @@ export function SideNav() {
                     </div>
 
                     <div className="flex items-center justify-center gap-[4px]">
-                        <button
-                            onClick={shareApp}
-                            type="button"
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors touch-mobile:px-2"
-                        >
-                            {localize('com_app_share_app')}
-                        </button>
+                        {showShareApp ? (
+                            <button
+                                onClick={shareApp}
+                                type="button"
+                                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors touch-mobile:px-2"
+                            >
+                                {localize('com_app_share_app')}
+                            </button>
+                        ) : null}
                         <button
                             onClick={createNewChat}
                             type="button"
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[576px]:px-2"
+                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
                         >
                             {localize('com_knowledge_start_new_chat')}
                         </button>

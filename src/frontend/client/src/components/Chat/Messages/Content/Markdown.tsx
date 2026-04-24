@@ -23,6 +23,7 @@ import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
@@ -39,6 +40,7 @@ import {
   type CitationDisplayData,
   type CitationPreview,
 } from './citationUtils';
+import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
 import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
@@ -204,6 +206,8 @@ type TContentProps = {
   showCursor?: boolean;
   isLatestMessage: boolean;
   citations?: ChatCitation[] | null;
+  messageId?: string;
+  onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
 };
 
 function CitationPreviewCard({
@@ -331,7 +335,7 @@ function CitationPreviewCard({
       <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <span
-          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} flex-1`}
+          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} min-w-0 truncate`}
           title={preview.title}
         >
           {ragTitleParts.name || preview.title}
@@ -531,7 +535,7 @@ const Citation = ({
           onClick={handleCitationClick}
           onMouseEnter={() => handleOpenChange(true)}
           onMouseLeave={scheduleClose}
-          className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
+          className={`ml-1 inline-flex min-h-5 min-w-5 cursor-pointer items-center justify-center rounded-xl px-1.5 py-0.5 text-[0.85em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
         >
           <span>{children}</span>
         </button>
@@ -560,8 +564,17 @@ const Citation = ({
   );
 };
 
-const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, citations }: TContentProps & { webContent: any }) => {
+const Markdown = memo(({
+  content = '',
+  showCursor,
+  isLatestMessage,
+  webContent,
+  citations,
+  messageId,
+  onOpenCitationPanel,
+}: TContentProps & { webContent: any }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
+  const isMobileLayout = useMediaQuery('(max-width: 576px)');
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
 
@@ -715,12 +728,30 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
   }, []);
 
   const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
+    const nextPreview = {
+      detail,
+      itemId,
+      locateChunk,
+    };
+
+    if (!isMobileLayout && onOpenCitationPanel) {
+      onOpenCitationPanel({
+        messageId,
+        content,
+        webContent,
+        citations,
+        referenceItems: [],
+        initialDocumentPreview: nextPreview,
+      });
+      return;
+    }
+
     setDocumentPreview({
       detail,
       itemId,
       locateChunk,
     });
-  }, []);
+  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
 
   // Cursor
   if (isInitializing) {

@@ -10,6 +10,7 @@ Four-level permission check for role management:
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 from typing import List, Optional
 
@@ -67,6 +68,7 @@ class RoleService:
             tenant_id=login_user.tenant_id,
             role_type=role_type,
             role_name=req.role_name,
+            department_id=req.department_id,
         )
         if existing:
             raise RoleNameDuplicateError()
@@ -108,6 +110,7 @@ class RoleService:
             tenant_id=login_user.tenant_id,
             role_type=role_type,
             role_name=req.role_name,
+            department_id=req.department_id,
         )
         if existing:
             raise RoleNameDuplicateError()
@@ -351,10 +354,12 @@ class RoleService:
 
         # Check duplicate name if changing name (AC-09)
         if req.role_name and req.role_name != role.role_name:
+            target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
                 role_name=req.role_name,
+                department_id=target_department_id,
             )
             if existing and existing.id != role_id:
                 raise RoleNameDuplicateError()
@@ -397,10 +402,12 @@ class RoleService:
             QuotaService.validate_quota_config(req.quota_config)
 
         if req.role_name and req.role_name != role.role_name:
+            target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
                 role_name=req.role_name,
+                department_id=target_department_id,
             )
             if existing and existing.id != role_id:
                 raise RoleNameDuplicateError()
@@ -424,6 +431,8 @@ class RoleService:
                 db_role.remark = req.remark
             if 'department_id' in req.model_fields_set:
                 db_role.department_id = req.department_id
+            # Touch the role row so menu-only edits also refresh update_time.
+            db_role.update_time = datetime.now()
 
             session.add(db_role)
             await cls._replace_menu_access_in_session(session, role_id, menu_ids)
@@ -480,11 +489,17 @@ class RoleService:
         await cls._ensure_role_mutation_access(role, login_user)
 
         normalized = cls._normalize_menu_ids(menu_ids)
-        await RoleAccessDao.update_role_access_all(
-            role_id=role_id,
-            access_type=AccessType.WEB_MENU,
-            access_ids=normalized,
-        )
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Role).where(Role.id == role_id))
+            db_role = result.first()
+            if not db_role:
+                raise RoleNotFoundError()
+            # Touch the role row so pure menu edits bump update_time in the list.
+            db_role.update_time = datetime.now()
+            session.add(db_role)
+            await cls._replace_menu_access_in_session(session, role_id, normalized)
+            await session.commit()
+            await session.refresh(db_role)
 
     @classmethod
     async def get_menu(

@@ -51,23 +51,14 @@ export function AgentCard({
 
         {isMobileCard ? (
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTogglePin(agent);
-              }}
-              className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5]"
-              aria-label={
-                isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
-              }
-            >
-              {isPinned ? (
+            {isPinned ? (
+              <span
+                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C]"
+                aria-label={localize('com_app_unpin_tooltip')}
+              >
                 <ChannelPinIcon className="size-[16px] shrink-0" />
-              ) : (
-                <ChannelPinGrayIcon className="size-[16px] shrink-0" />
-              )}
-            </button>
+              </span>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -83,11 +74,21 @@ export function AgentCard({
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    onShare(agent);
+                    onTogglePin(agent);
                   }}
                 >
-                  {localize('com_app_share_app')}
+                  {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
                 </DropdownMenuItem>
+                {agent.can_share === true ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShare(agent);
+                    }}
+                  >
+                    {localize('com_app_share_app')}
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -163,16 +164,18 @@ export function AgentCard({
         </div>
       ) : (
         <div className="hidden h-[28px] w-full min-w-0 items-stretch justify-center gap-1 group-hover/card:flex coarse-pointer:flex">
-          <Button
-            onClick={(e) => {
-              e.stopPropagation();
-              onShare(agent);
-            }}
-            variant="outline"
-            className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
-          >
-            {localize('com_app_share_app')}
-          </Button>
+          {agent.can_share === true ? (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare(agent);
+              }}
+              variant="outline"
+              className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
+            >
+              {localize('com_app_share_app')}
+            </Button>
+          ) : null}
           <Button
             onClick={(e) => {
               e.stopPropagation();

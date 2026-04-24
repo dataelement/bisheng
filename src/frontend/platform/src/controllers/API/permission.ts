@@ -28,6 +28,7 @@ export type RelationModel = {
   /** 后端未返回时按 relation 推断 */
   grant_tier?: GrantTier
   permissions: string[]
+  permissions_explicit?: boolean
   is_system: boolean
 }
 
@@ -61,6 +62,18 @@ export async function getKnowledgeSpacePermissionTemplateApi(): Promise<Permissi
   return await axios.get(`/api/v1/permissions/permission-templates/knowledge-space`)
 }
 
+export async function getApplicationPermissionTemplateApi(): Promise<PermissionTemplateSection> {
+  return await axios.get(`/api/v1/permissions/permission-templates/application`)
+}
+
+export async function getKnowledgeLibraryPermissionTemplateApi(): Promise<PermissionTemplateSection> {
+  return await axios.get(`/api/v1/permissions/permission-templates/knowledge-library`)
+}
+
+export async function getToolPermissionTemplateApi(): Promise<PermissionTemplateSection> {
+  return await axios.get(`/api/v1/permissions/permission-templates/tool`)
+}
+
 export async function getResourcePermissions(
   resourceType: string,
   resourceId: string,
@@ -86,11 +99,13 @@ export async function checkPermission(
   objectType: string,
   objectId: string,
   relation: string,
+  permissionId?: string,
 ): Promise<{ allowed: boolean }> {
   return await axios.post(`/api/v1/permissions/check`, {
     object_type: objectType,
     object_id: objectId,
     relation,
+    permission_id: permissionId,
   })
 }
 

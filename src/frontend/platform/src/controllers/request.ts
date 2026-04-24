@@ -102,17 +102,25 @@ customAxios.interceptors.response.use(function (response) {
 }, function (error) {
     console.error('application error :>> ', error);
     if (error.response?.status === 401) {
-        // cookie expires
+        // 必须在 remove 之前读取：从未持有 ws_token/UUR_INFO 时 401（如登录页拉 /user/info）不应整页跳转，否则会死循环。
+        const hadSession =
+            !!localStorage.getItem('ws_token')
+            || !!localStorage.getItem('UUR_INFO');
+        // cookie / Bearer 失效（含 token_version 失效、账号禁用）
+        localStorage.removeItem('ws_token');
         console.error('登录过期 :>> ');
         const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
         if (thirdPartyLoginUrl) {
+            localStorage.removeItem('UUR_INFO');
             window.location.href = thirdPartyLoginUrl;
             return Promise.reject('登录过期');
         }
-        const UUR_INFO = 'UUR_INFO'
-        const infoStr = localStorage.getItem(UUR_INFO)
-        localStorage.removeItem(UUR_INFO)
-        infoStr && location.reload()
+        localStorage.removeItem('UUR_INFO');
+        // 仅「曾有过登录态」时再回根路径，避免深路径 URL 上叠登录页且状态错乱。
+        if (hadSession) {
+            const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+            window.location.href = `${base}/`;
+        }
         return Promise.reject('登录过期,请重新登录');
     }
     if (error.code === "ERR_CANCELED") return Promise.reject(error);

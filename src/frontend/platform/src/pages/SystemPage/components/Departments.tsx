@@ -10,10 +10,15 @@ import { DepartmentSettings } from "@/pages/DepartmentPage/components/Department
 import { DepartmentTrafficControl } from "@/pages/DepartmentPage/components/DepartmentTrafficControl"
 import { CreateDepartmentDialog } from "@/pages/DepartmentPage/components/CreateDepartmentDialog"
 import { locationContext } from "@/contexts/locationContext"
+import { userContext } from "@/contexts/userContext"
 
 export default function Departments() {
   const { t } = useTranslation()
   const { appConfig } = useContext(locationContext)
+  const { user } = useContext(userContext)
+  /** 与系统页「组织同步」一致：仅平台超级管理员（role=admin） */
+  const isSuperAdmin = user?.role === "admin"
+  const showTrafficControlTab = isSuperAdmin && appConfig.isPro
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
@@ -153,7 +158,7 @@ export default function Departments() {
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>
                 <TabsTrigger value="settings">{t("bs:department.settings")}</TabsTrigger>
-                {appConfig.isPro && (
+                {showTrafficControlTab && (
                   <TabsTrigger value="traffic-control">{t("bs:department.trafficControl")}</TabsTrigger>
                 )}
               </TabsList>
@@ -169,7 +174,7 @@ export default function Departments() {
             <TabsContent value="settings">
               <DepartmentSettings dept={selectedDept} tree={tree} onChanged={handleTreeChange} />
             </TabsContent>
-            {appConfig.isPro && (
+            {showTrafficControlTab && (
               <TabsContent value="traffic-control">
                 <DepartmentTrafficControl dept={selectedDept} />
               </TabsContent>

@@ -34,6 +34,21 @@ async def check_permission(
     if request.relation not in VALID_RELATIONS:
         return PermissionInvalidRelationError.return_resp()
 
+    if request.permission_id and request.object_type == 'knowledge_library':
+        from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+
+        try:
+            knowledge_id = int(request.object_id)
+        except (TypeError, ValueError):
+            return resp_200({'allowed': False})
+
+        allowed = await KnowledgePermissionService.check_permission_id_async(
+            login_user=login_user,
+            knowledge_id=knowledge_id,
+            permission_id=request.permission_id,
+        )
+        return resp_200({'allowed': allowed})
+
     from bisheng.permission.domain.services.permission_service import PermissionService
     allowed = await PermissionService.check(
         user_id=login_user.user_id,

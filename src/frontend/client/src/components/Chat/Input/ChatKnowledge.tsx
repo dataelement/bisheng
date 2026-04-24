@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
   Input
 } from "~/components/ui";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
@@ -477,14 +478,28 @@ export const ChatKnowledge = ({
 
   return (
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
-      <DropdownMenuTrigger ref={triggerRef} disabled={disabled}>
-        <div className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-black/5 transition-colors outline-none",
-          disabled && "opacity-50 cursor-not-allowed"
-        )}>
-          <Plus size={18} strokeWidth={1.5} />
-        </div>
-      </DropdownMenuTrigger>
+      <TooltipProvider delayDuration={50}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild disabled={disabled}>
+              <button
+                ref={triggerRef}
+                type="button"
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-black/5 transition-colors outline-none",
+                  disabled && "opacity-50 cursor-not-allowed"
+                )}
+                aria-label={localize('com_knowledge_add_file')}
+              >
+                <Plus size={18} strokeWidth={1.5} />
+              </button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            {localize('com_knowledge_add_file')}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <DropdownMenuContent
         ref={menuContentRef}
@@ -515,7 +530,7 @@ export const ChatKnowledge = ({
             }}
             className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <PaperclipIcon className="size-[18px] text-slate-600" />
+            <PaperclipIcon className="size-[18px] text-slate-600" strokeWidth={1.25} />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
@@ -553,7 +568,7 @@ export const ChatKnowledge = ({
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="relative shrink-0">
-                    <BooksIcon className="size-[18px] opacity-70" />
+                    <BooksIcon className="size-[18px] text-slate-600" strokeWidth={1.25} />
                     {selectedOrgKbs.length > 0 && (
                       <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                     )}
@@ -715,7 +730,7 @@ export const ChatKnowledge = ({
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      <BooksIcon className="size-[18px] opacity-70" />
+                      <BooksIcon className="size-[18px] text-slate-600" strokeWidth={1.25} />
                       {selectedOrgKbs.length > 0 && (
                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                       )}
