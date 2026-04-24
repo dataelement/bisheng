@@ -226,6 +226,45 @@ async def _get_dept_and_check_permission(session, dept_id: str, login_user) -> D
     return dept
 
 
+async def _ensure_department_can_archive(session, dept: Department) -> None:
+    """Validate archive preconditions before mutating department state."""
+    children = (await session.exec(
+        select(Department).where(
+            Department.parent_id == dept.id,
+            Department.status == 'active',
+        )
+    )).first()
+    if children:
+        raise DepartmentHasChildrenError()
+
+    count_result = await session.exec(
+        select(func.count(UserDepartment.id)).where(
+            UserDepartment.department_id == dept.id,
+        )
+    )
+    if count_result.one() > 0:
+        raise DepartmentHasMembersError()
+
+
+async def _ensure_department_can_purge(session, dept: Department) -> None:
+    """Validate permanent-delete preconditions before deleting related rows."""
+    child = (await session.exec(
+        select(Department.id).where(
+            Department.parent_id == dept.id,
+        )
+    )).first()
+    if child is not None:
+        raise DepartmentHasChildrenError()
+
+    count_result = await session.exec(
+        select(func.count(UserDepartment.id)).where(
+            UserDepartment.department_id == dept.id,
+        )
+    )
+    if count_result.one() > 0:
+        raise DepartmentHasMembersError()
+
+
 class DepartmentService:
 
     @classmethod
@@ -459,24 +498,7 @@ class DepartmentService:
             if dept.dept_id == 'BS@guest':
                 raise DepartmentPermissionDeniedError(msg='Guest department cannot be deleted')
 
-            # Check for children
-            children = (await session.exec(
-                select(Department).where(
-                    Department.parent_id == dept.id,
-                    Department.status == 'active',
-                )
-            )).first()
-            if children:
-                raise DepartmentHasChildrenError()
-
-            # Check for members
-            count_result = await session.exec(
-                select(func.count(UserDepartment.id)).where(
-                    UserDepartment.department_id == dept.id,
-                )
-            )
-            if count_result.one() > 0:
-                raise DepartmentHasMembersError()
+            await _ensure_department_can_archive(session, dept)
 
             parent_id = dept.parent_id
             dept.status = 'archived'
@@ -510,31 +532,11 @@ class DepartmentService:
             if dept.status != 'archived':
                 raise DepartmentNotArchivedError()
 
-            # Block if any child departments still reference this one
-            child = (await session.exec(
-                select(Department.id).where(
-                    Department.parent_id == dept.id,
-                )
-            )).first()
-            if child is not None:
-                raise DepartmentHasChildrenError()
+            await _ensure_department_can_purge(session, dept)
 
             dept_internal_id = dept.id
 
-            # Collect member user_ids for OpenFGA cleanup
-            member_rows = (await session.exec(
-                select(UserDepartment.user_id).where(
-                    UserDepartment.department_id == dept_internal_id,
-                )
-            )).all()
-            member_user_ids = list(member_rows)
-
-            # Delete UserDepartment records
-            await session.exec(
-                delete(UserDepartment).where(
-                    UserDepartment.department_id == dept_internal_id,
-                )
-            )
+            member_user_ids: list[int] = []
 
             # Delete department-scoped roles and their user_role bindings
             from bisheng.database.models.role import Role
@@ -707,6 +709,8 @@ class DepartmentService:
         default_role_ids_snapshot: List[int] = []
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
             raw_defaults = dept.default_role_ids or []
             default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
@@ -761,6 +765,8 @@ class DepartmentService:
     ) -> None:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
 
             # Check member exists
             ud = (await session.exec(
@@ -1177,6 +1183,7 @@ class DepartmentService:
         """
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.role import Role
+        from bisheng.core.context.tenant import bypass_tenant_filter
 
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -1191,24 +1198,29 @@ class DepartmentService:
                 Role.department_id.is_(None),
                 Role.department_id.in_(scope_chain_ids),
             )
-            stmt = select(Role).where(
-                Role.id > AdminRole,
-                or_(
-                    and_(Role.role_type == 'global', dept_scope),
-                    and_(
-                        Role.role_type == 'tenant',
-                        Role.tenant_id == login_user.tenant_id,
-                        dept_scope,
+            # Global built-in roles live outside child tenant scopes. The role
+            # list API already bypasses the tenant filter and then explicitly
+            # scopes tenant roles; keep this catalog aligned with it while
+            # leaving department lookup/permission checks under normal scoping.
+            with bypass_tenant_filter():
+                stmt = select(Role).where(
+                    Role.id > AdminRole,
+                    or_(
+                        and_(Role.role_type == 'global', dept_scope),
+                        and_(
+                            Role.role_type == 'tenant',
+                            Role.tenant_id == login_user.tenant_id,
+                            dept_scope,
+                        ),
+                        # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
+                        and_(
+                            or_(Role.role_type.is_(None), Role.role_type == ''),
+                            Role.tenant_id == login_user.tenant_id,
+                            dept_scope,
+                        ),
                     ),
-                    # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
-                    and_(
-                        or_(Role.role_type.is_(None), Role.role_type == ''),
-                        Role.tenant_id == login_user.tenant_id,
-                        dept_scope,
-                    ),
-                ),
-            ).order_by(Role.role_name.asc())
-            roles = (await session.exec(stmt)).all()
+                ).order_by(Role.role_name.asc())
+                roles = (await session.exec(stmt)).all()
 
         return [
             {
@@ -1233,6 +1245,8 @@ class DepartmentService:
         default_role_ids_snapshot: List[int] = []
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
             raw_defaults = dept.default_role_ids or []
             default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
@@ -1451,6 +1465,8 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if ctx_dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
             mem = (
                 await session.exec(
                     select(UserDepartment).where(
@@ -1532,6 +1548,8 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if ctx_dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
             mem = (
                 await session.exec(
                     select(UserDepartment).where(
@@ -1637,6 +1655,8 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if ctx_dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
             mem = (
                 await session.exec(
                     select(UserDepartment).where(

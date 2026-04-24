@@ -158,7 +158,9 @@ export default function KnowledgeSquare({
             space.visibility === VisibilityType.PUBLIC ? "joined" : "pending";
 
         // Only join when currently "join"
-        const currentStatus = (space.squareStatus as SquareSpaceStatus) || "join";
+        const currentStatus =
+            statusOverride?.[String(space.id)] ??
+            ((space.squareStatus as SquareSpaceStatus) || "join");
         if (currentStatus !== "join") return;
         if (joiningId) return;
 

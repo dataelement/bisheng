@@ -51,6 +51,7 @@ import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog"
 interface MemberTableProps {
   deptId: string
   deptName: string
+  isArchived?: boolean
   onChanged: () => void
   /** 父级在部门设置等变更后递增，用于在不切换部门时强制重新拉取成员（如部门管理员 FGA 更新后刷新「角色」列） */
   membersRefreshSignal?: number
@@ -67,6 +68,7 @@ interface MemberTableProps {
 export function MemberTable({
   deptId,
   deptName,
+  isArchived = false,
   onChanged,
   membersRefreshSignal = 0,
   highlightUserId = null,
@@ -196,6 +198,7 @@ export function MemberTable({
 
   const handleToggleEnabled = useCallback(
     (m: DepartmentMember, enabled: boolean) => {
+      if (isArchived) return
       setMembers((list) =>
         list.map((x) =>
           x.user_id === m.user_id ? { ...x, enabled } : x
@@ -212,7 +215,7 @@ export function MemberTable({
         }
       })
     },
-    [loadMembers, onChanged, t]
+    [isArchived, loadMembers, onChanged, t]
   )
 
   const handleAdded = useCallback(() => {
@@ -222,8 +225,9 @@ export function MemberTable({
   }, [loadMembers, onChanged])
 
   const handleEditUser = useCallback((m: DepartmentMember) => {
+    if (isArchived) return
     setEditMember(m)
-  }, [])
+  }, [isArchived])
 
   const handleEditClose = useCallback(() => {
     setEditMember(null)
@@ -302,7 +306,14 @@ export function MemberTable({
         )}
         <div className="flex-1" />
         {memberScope === "dept" && (
-          <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Button
+            size="sm"
+            disabled={isArchived}
+            className="disabled:cursor-not-allowed"
+            onClick={() => {
+              if (!isArchived) setAddOpen(true)
+            }}
+          >
             {t("bs:department.createLocalUser")}
           </Button>
         )}
@@ -512,7 +523,7 @@ export function MemberTable({
                 <TableCell {...mrc.getTdProps(5)}>
                   <Switch
                     checked={m.enabled}
-                    disabled={isSyncedSource(m.source)}
+                    disabled={isArchived || isSyncedSource(m.source)}
                     onCheckedChange={(checked) =>
                       handleToggleEnabled(m, Boolean(checked))
                     }
@@ -533,7 +544,7 @@ export function MemberTable({
                             variant="link"
                             size="sm"
                             className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60"
-                            disabled={user.user_id === m.user_id || !m.enabled}
+                            disabled={isArchived || user.user_id === m.user_id || !m.enabled}
                             onClick={() => handleEditUser(m)}
                           >
                             {t("edit")}
@@ -543,9 +554,10 @@ export function MemberTable({
                           <Button
                             variant="link"
                             size="sm"
-                            className="px-1"
+                            className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60"
+                            disabled={isArchived}
                             onClick={() =>
-                              userPwdModalRef.current?.open(m.user_id)
+                              !isArchived && userPwdModalRef.current?.open(m.user_id)
                             }
                           >
                             {t("system.resetPwd")}
@@ -575,7 +587,7 @@ export function MemberTable({
       </div>
       )}
 
-      {addOpen && (
+      {addOpen && !isArchived && (
         <CreateLocalMemberDialog
           deptId={deptId}
           deptName={deptName}

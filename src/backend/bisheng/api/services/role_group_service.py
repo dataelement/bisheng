@@ -12,7 +12,7 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.user import UserGroupNotDeleteError, AdminUserUpdateForbiddenError
+from bisheng.common.errcode.user import AdminUserUpdateForbiddenError
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
@@ -107,10 +107,6 @@ class RoleGroupService():
         if not group_info:
             return resp_200()
 
-        # Determine if there are still users in the group
-        user_group_list = UserGroupDao.get_group_user(group_id)
-        if user_group_list:
-            return UserGroupNotDeleteError.return_resp()
         GroupDao.delete_group(group_id)
         self.delete_group_hook(request, login_user, group_info)
         return resp_200()

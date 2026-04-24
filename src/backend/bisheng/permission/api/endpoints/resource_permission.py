@@ -20,6 +20,7 @@ from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
     PermissionLevel,
+    ResourcePermissionItem,
     RelationModelCreateRequest,
     RelationModelItem,
     RelationModelUpdateRequest,
@@ -255,6 +256,72 @@ def _binding_from_map(
     return None
 
 
+async def _apply_binding_metadata_to_permissions(
+    permissions: list[ResourcePermissionItem],
+    bindings: list[dict],
+    model_map: dict,
+) -> list[ResourcePermissionItem]:
+    """Overlay persisted UI binding metadata onto raw FGA tuple rows.
+
+    Department grants with include_children=True are written as one tuple per
+    subtree department. The permission list should show the original parent
+    grant, not a flat list of generated child department tuples.
+    """
+    if not bindings:
+        return permissions
+
+    item_map = {
+        (p.subject_type, int(p.subject_id), p.relation): p
+        for p in permissions
+    }
+    bound_keys = {
+        (b.get('subject_type'), int(b.get('subject_id')), b.get('relation'))
+        for b in bindings
+        if b.get('subject_id') is not None
+    }
+    generated_department_keys: set[tuple] = set()
+
+    for binding in bindings:
+        subject_type = binding.get('subject_type')
+        subject_id = int(binding.get('subject_id'))
+        relation = binding.get('relation')
+        key = (subject_type, subject_id, relation)
+        item = item_map.get(key)
+        if item is None:
+            item = ResourcePermissionItem(
+                subject_type=subject_type,
+                subject_id=subject_id,
+                subject_name=None,
+                relation=relation,
+            )
+            item_map[key] = item
+
+        item.include_children = binding.get('include_children')
+        item.model_id = binding.get('model_id')
+        item.model_name = model_map.get(item.model_id, {}).get('name')
+
+        if subject_type == 'department' and binding.get('include_children'):
+            try:
+                from bisheng.database.models.department import DepartmentDao
+
+                dept = await DepartmentDao.aget_by_id(subject_id)
+                subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path) if dept else [subject_id]
+            except Exception as e:
+                logger.warning('Failed to collapse department permission subtree: %s', e)
+                subtree_ids = [subject_id]
+
+            for dept_id in subtree_ids:
+                child_key = ('department', int(dept_id), relation)
+                if child_key != key and child_key not in bound_keys:
+                    generated_department_keys.add(child_key)
+
+    return [
+        item
+        for key, item in item_map.items()
+        if key not in generated_department_keys
+    ]
+
+
 def _tuple_signature(item) -> tuple:
     return (
         getattr(item, 'subject_type', None),
@@ -454,6 +521,7 @@ async def get_resource_permissions(
         b.get('key'): b for b in await _get_bindings()
         if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
     }
+    bindings = list(binding_map.values())
     for p in permissions:
         matched = _binding_from_map(
             binding_map,
@@ -467,6 +535,8 @@ async def get_resource_permissions(
         if matched:
             p.model_id = matched.get('model_id')
             p.model_name = model_map.get(p.model_id, {}).get('name')
+            p.include_children = matched.get('include_children')
+    permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
     return resp_200(permissions)
 
 

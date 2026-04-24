@@ -104,9 +104,7 @@ export function KnowledgeSpacePreviewDrawer({
         if (
             info.isFollowed ||
             subscriptionStatus === "subscribed" ||
-            subscriptionStatus === "joined" ||
-            info.role === SpaceRole.CREATOR ||
-            info.role === SpaceRole.ADMIN
+            subscriptionStatus === "joined"
         ) {
             setStatus("joined");
             emitSquareStatus("joined");
@@ -334,7 +332,7 @@ export function KnowledgeSpacePreviewDrawer({
 
     const getButtonConfig = () => {
         if (status === "joined") return { label: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: subscribing };
-        if (status === "pending") return { label: localize("com_knowledge.withdraw_application"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "pending") return { label: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
         if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };

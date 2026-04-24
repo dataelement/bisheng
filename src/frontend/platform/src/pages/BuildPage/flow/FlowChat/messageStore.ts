@@ -97,6 +97,17 @@ const handleHistoryMsg = (data: any[]): WorkflowMessage[] => {
 
 let currentChatId = ''
 
+const mergeStreamText = (current: unknown, incoming: unknown) => {
+    const currentText = typeof current === 'string' ? current : String(current || '')
+    const incomingText = typeof incoming === 'string' ? incoming : String(incoming || '')
+
+    if (!incomingText) return currentText
+    if (!currentText) return incomingText
+
+    // 兼容后端发送完整快照和增量片段两种流式协议
+    return incomingText.startsWith(currentText) ? incomingText : currentText + incomingText
+}
+
 export const useMessageStore = create<State & Actions>((set, get) => ({
     chatId: '',
     messages: [],
@@ -148,8 +159,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const newCurrentMessage = {
             ...currentMsg,
             message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
-            message: data.type === 'end' ? data.message.msg : currentMsg.message + data.message.msg,
-            reasoning_log: data.type === 'end' ? currentMsg.reasoning_log : currentMsg.reasoning_log + (reasoning_content || ''),
+            message: data.type === 'end' ? data.message.msg : mergeStreamText(currentMsg.message, data.message.msg),
+            reasoning_log: data.type === 'end' ? currentMsg.reasoning_log : mergeStreamText(currentMsg.reasoning_log, reasoning_content),
             create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
             citations: normalizeCitationItems(data) || currentMsg.citations || null,
@@ -270,7 +281,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const newCurrentMessage = {
             ...currentMessage,
             ...data,
-            message: currentMessage.message + data.message,
+            message: mergeStreamText(currentMessage.message, data.message),
             end: ['end', 'over'].includes(data.type),
             citations: normalizeCitationItems(data) || currentMessage.citations || null,
             create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')

@@ -47,6 +47,11 @@ class UserNameTooLongError(BaseErrorCode):
     Msg: str = 'Username length cannot exceed30characters'
 
 
+class UserNoRoleForLoginError(BaseErrorCode):
+    Code: int = 10609
+    Msg: str = 'No assignable role; please contact your administrator'
+
+
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = 'There are still users in the user group and cannot be deleted'

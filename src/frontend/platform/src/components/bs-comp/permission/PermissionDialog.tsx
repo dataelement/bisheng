@@ -1,5 +1,5 @@
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/bs-ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
 import { useCallback, useState } from "react"
@@ -33,6 +33,9 @@ export function PermissionDialog({
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>{t('dialog.title')} - {resourceName}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {t('dialog.tabList')} / {t('dialog.tabGrant')}
+          </DialogDescription>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>

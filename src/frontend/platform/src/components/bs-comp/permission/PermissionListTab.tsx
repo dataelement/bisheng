@@ -49,6 +49,7 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   const [error, setError] = useState(false)
   const [models, setModels] = useState<RelationModelOption[]>([])
   const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map())
+  const [userSelectedTab, setUserSelectedTab] = useState(false)
 
   useEffect(() => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
@@ -103,7 +104,16 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   /** 换资源时回到「用户」Tab；不在用户操作切换时强行改 tab（空 tab 也要能停留并展示空态） */
   useEffect(() => {
     setListTab('user')
+    setUserSelectedTab(false)
   }, [resourceId])
+
+  useEffect(() => {
+    if (userSelectedTab || entries.length === 0 || filteredEntries.length > 0) return
+    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((st) =>
+      entries.some((entry) => entry.subject_type === st),
+    )
+    if (firstNonEmptyTab) setListTab(firstNonEmptyTab)
+  }, [entries, filteredEntries.length, userSelectedTab])
 
   useEffect(() => {
     captureAndAlertRequestErrorHoc(
@@ -231,7 +241,10 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
                 ? 'bg-background shadow text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
-            onClick={() => setListTab(st)}
+            onClick={() => {
+              setUserSelectedTab(true)
+              setListTab(st)
+            }}
           >
             {t(`subject.${st === 'user_group' ? 'userGroup' : st}`)}
           </button>

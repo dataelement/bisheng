@@ -32,7 +32,7 @@ export default function KnowledgeSquareCard({
             case "joined":
                 return { text: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: isActing };
             case "pending":
-                return { text: localize("com_knowledge.withdraw_application"), variant: "secondary" as const, disabled: isActing };
+                return { text: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
             case "rejected":
                 return { text: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: isActing };
             default: {

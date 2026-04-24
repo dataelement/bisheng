@@ -236,3 +236,82 @@ class TestRelationModelBindings:
         assert result[0]['resource_type'] == 'knowledge_space'
         assert result[0]['key'] == 'knowledge_space:22:user:7:viewer:-'
         mock_save_bindings.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_department_include_children_binding_collapses_generated_child_rows(self):
+        from bisheng.permission.api.endpoints.resource_permission import (
+            _apply_binding_metadata_to_permissions,
+        )
+        from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
+
+        permissions = [
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=3,
+                subject_name='研发部',
+                relation='viewer',
+                include_children=False,
+            ),
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=4,
+                subject_name='研发一组',
+                relation='viewer',
+                include_children=False,
+            ),
+            ResourcePermissionItem(
+                subject_type='user_group',
+                subject_id=8,
+                subject_name='产品组',
+                relation='editor',
+            ),
+        ]
+        bindings = [
+            {
+                'key': 'assistant:9:department:3:viewer:1',
+                'resource_type': 'assistant',
+                'resource_id': '9',
+                'subject_type': 'department',
+                'subject_id': 3,
+                'relation': 'viewer',
+                'include_children': True,
+                'model_id': 'viewer',
+            },
+            {
+                'key': 'assistant:9:user_group:8:editor:-',
+                'resource_type': 'assistant',
+                'resource_id': '9',
+                'subject_type': 'user_group',
+                'subject_id': 8,
+                'relation': 'editor',
+                'include_children': None,
+                'model_id': 'editor',
+            },
+        ]
+
+        with patch(
+            'bisheng.database.models.department.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=3, path='1.3'),
+        ), patch(
+            'bisheng.database.models.department.DepartmentDao.aget_subtree_ids',
+            new_callable=AsyncMock,
+            return_value=[3, 4],
+        ):
+            result = await _apply_binding_metadata_to_permissions(
+                permissions,
+                bindings,
+                {
+                    'viewer': {'name': '可查看'},
+                    'editor': {'name': '可编辑'},
+                },
+            )
+
+        assert [(item.subject_type, item.subject_id) for item in result] == [
+            ('department', 3),
+            ('user_group', 8),
+        ]
+        assert result[0].include_children is True
+        assert result[0].model_id == 'viewer'
+        assert result[0].model_name == '可查看'
+        assert result[1].model_id == 'editor'

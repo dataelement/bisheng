@@ -66,6 +66,16 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
     return models.find((m) => m.id === selectedModelId)?.relation || 'viewer'
   }, [models, selectedModelId])
 
+  useEffect(() => {
+    setSelected((prev) =>
+      prev.map((item) =>
+        item.type === 'department'
+          ? { ...item, include_children: includeChildren }
+          : item,
+      ),
+    )
+  }, [includeChildren])
+
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type)
     setSelected([])
@@ -143,6 +153,11 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
               className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-muted rounded-md"
             >
               {s.name}
+              {s.type === 'department' && s.include_children && (
+                <span className="text-muted-foreground">
+                  ({t('includeChildren')})
+                </span>
+              )}
               <button
                 className="hover:text-destructive"
                 onClick={() => removeSelected(s.id)}

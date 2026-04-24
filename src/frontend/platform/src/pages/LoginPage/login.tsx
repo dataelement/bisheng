@@ -132,13 +132,10 @@ export const LoginPage = () => {
                 ? ldapLoginApi(personId, encryptPwd)
                 : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
-                // Multi-tenant: check if tenant selection is required
+                // v2.5.1: leaf tenant is derived from the user's primary department.
+                // Ignore any stale "requires_tenant_selection" response fields.
                 if (res.requires_tenant_selection) {
-                    sessionStorage.setItem('pending_tenants', JSON.stringify(res.tenants))
-                    if (window.self !== window.top) localStorage.setItem('ws_token', res.access_token)
-                    localStorage.setItem('isLogin', '1')
-                    location.href = `${__APP_ENV__.BASE_URL}/tenant-select`
-                    return
+                    sessionStorage.removeItem('pending_tenants')
                 }
 
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)

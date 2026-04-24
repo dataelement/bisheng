@@ -54,7 +54,7 @@ export function PermissionGrantTab({
   useEffect(() => {
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        const options: RelationModelOption[] = (res || []).map((m) => ({
+        const options: RelationModelOption[] = (Array.isArray(res) ? res : []).map((m) => ({
           id: m.id,
           name: m.is_system
             ? localize(`com_permission.level_${m.relation}`)

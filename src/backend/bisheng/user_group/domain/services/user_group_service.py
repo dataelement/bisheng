@@ -6,7 +6,6 @@ import logging
 from typing import Any, Dict, List, Optional, Set
 
 from bisheng.common.errcode.user_group import (
-    UserGroupHasMembersError,
     UserGroupMemberNotFoundError,
     UserGroupNameDuplicateError,
     UserGroupNoSeparateAdminsError,
@@ -27,6 +26,44 @@ logger = logging.getLogger(__name__)
 
 # AdminRole constant (id=1), matches F002 pattern
 AdminRole = 1
+
+
+def _sync_user_group_delete_side_effects(group_id: int) -> None:
+    """与 RoleGroupService.delete_group_hook 对齐：资源授权迁移、组资源/组角色清理、网关 Redis 通知。"""
+    import json
+
+    from bisheng.core.cache.redis_manager import get_redis_client_sync
+    from bisheng.database.models.group import GroupDao
+    from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+    from bisheng.database.models.role import RoleDao
+    from bisheng.database.models.user_group import UserGroupDao
+
+    all_resource = GroupResourceDao.get_group_all_resource(group_id)
+    fallback_gid = None
+    for g in GroupDao.get_all_group():
+        if g.id != group_id:
+            fallback_gid = g.id
+            break
+    need_move_resource = []
+    for one in all_resource:
+        resource_groups = GroupResourceDao.get_resource_group(
+            ResourceTypeEnum(one.type), one.third_id,
+        )
+        if len(resource_groups) > 1:
+            continue
+        if fallback_gid is not None:
+            one.group_id = str(fallback_gid)
+            need_move_resource.append(one)
+    if need_move_resource:
+        GroupResourceDao.update_group_resource(need_move_resource)
+    GroupResourceDao.delete_group_resource_by_group_id(group_id)
+    RoleDao.delete_role_by_group_id(group_id)
+    UserGroupDao.delete_group_all_admin(group_id)
+
+    delete_message = json.dumps({'id': group_id})
+    redis_client = get_redis_client_sync()
+    redis_client.rpush('delete_group', delete_message, expiration=86400)
+    redis_client.publish('delete_group', delete_message)
 
 
 def _is_admin(login_user) -> bool:
@@ -94,7 +131,7 @@ async def _ensure_create_group(login_user) -> None:
 
 
 async def _ensure_delete_group(login_user, group: Group) -> None:
-    """超管可删任意空组；创建者可删自己创建的空组。"""
+    """超管可删任意组；创建者可删自己创建的组（可有成员，删除后成员关系与组权限一并清理）。"""
     if _is_admin(login_user):
         return
     if group.create_user == login_user.user_id:
@@ -264,9 +301,10 @@ class UserGroupService:
 
         await _ensure_delete_group(login_user, group)
 
-        member_count = await UserGroupDao.aget_group_member_count(group_id)
-        if member_count > 0:
-            raise UserGroupHasMembersError()
+        from bisheng.permission.domain.services.owner_service import OwnerService
+
+        await OwnerService.delete_resource_tuples('user_group', str(group_id))
+        _sync_user_group_delete_side_effects(group_id)
 
         await GroupDao.adelete(group_id)
 

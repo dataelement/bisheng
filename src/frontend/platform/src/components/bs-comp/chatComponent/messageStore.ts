@@ -91,6 +91,18 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
 
 let currentChatId = ''
 const runLogsTypes = ['tool', 'flow', 'knowledge']
+
+const mergeStreamText = (current: unknown, incoming: unknown) => {
+    const currentText = typeof current === 'string' ? current : String(current || '')
+    const incomingText = typeof incoming === 'string' ? incoming : String(incoming || '')
+
+    if (!incomingText) return currentText
+    if (!currentText) return incomingText
+
+    // 兼容后端发送完整快照和增量片段两种流式协议
+    return incomingText.startsWith(currentText) ? incomingText : currentText + incomingText
+}
+
 export const useMessageStore = create<State & Actions>((set, get) => ({
     running: false,
     chatId: '',
@@ -218,10 +230,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         if (isRunLog) {
             message = JSON.parse(wsdata.message)
         } else if (typeof wsdata.message !== 'string' && wsdata.message && 'reasoning_content' in wsdata.message) {
-            message = currentMessage.message + (wsdata.message.content || '')
-            reasoning_log += (wsdata.message.reasoning_content || '')
+            message = mergeStreamText(currentMessage.message, wsdata.message.content)
+            reasoning_log = mergeStreamText(reasoning_log, wsdata.message.reasoning_content)
         } else {
-            message = currentMessage.message + (wsdata.message || '')
+            message = mergeStreamText(currentMessage.message, wsdata.message)
         }
 
         // 敏感词特殊处理

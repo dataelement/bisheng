@@ -1,6 +1,6 @@
 from base64 import b64decode
 from datetime import datetime
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 from urllib.parse import unquote, urlsplit
 
 import rsa
@@ -15,8 +15,9 @@ from bisheng.common.errcode.user import (
     UserPasswordMaxTryError,
     UserPasswordExpireError,
     UserNameTooLongError,
+    UserNoRoleForLoginError,
 )
-from bisheng.common.schemas.api import resp_200
+from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -25,7 +26,10 @@ from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.constants import DefaultRole
+from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import md5_hash, get_request_ip, generate_uuid
 from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
@@ -282,6 +286,21 @@ class UserService:
         await UserTenantDao.aadd_user_to_tenant(user_id=user_id, tenant_id=tenant_id, is_default=1)
 
     @classmethod
+    async def _reject_login_if_user_has_no_usable_access(
+        cls, db_user: User,
+    ) -> Optional[UnifiedResponseModel]:
+        """无角色且非部门/用户组管理员时拒绝登录，避免进入管理端后仅 403 且无出口。"""
+        roles = await UserRoleDao.aget_user_roles(db_user.user_id)
+        if roles:
+            return None
+        if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
+            return None
+        group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
+        if group_admins:
+            return None
+        return UserNoRoleForLoginError.return_resp()
+
+    @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
         from bisheng.api.services.audit_log import AuditLogService
 
@@ -317,6 +336,10 @@ class UserService:
             return UserValidateError.return_resp()
 
         await cls.clear_error_password_key(db_user.user_id)
+
+        no_role_resp = await cls._reject_login_if_user_has_no_usable_access(db_user)
+        if no_role_resp is not None:
+            return no_role_resp
 
         # Multi-tenant login flow
         tenant_id = None

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="18.043">
+  <testsuite name="KnowledgeSpacePreviewDrawer" errors="0" failures="0" skipped="0" timestamp="2026-04-24T06:03:47" time="1.203" tests="1">
+    <testcase classname="KnowledgeSpacePreviewDrawer keeps fallback detail visible for unjoined square spaces when info fetch is denied" name="KnowledgeSpacePreviewDrawer keeps fallback detail visible for unjoined square spaces when info fetch is denied" time="0.115">
+    </testcase>
+  </testsuite>
+</testsuites>
