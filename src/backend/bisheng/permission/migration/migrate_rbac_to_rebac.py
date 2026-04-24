@@ -147,6 +147,7 @@ class RBACToReBACMigrator:
         self._global_seen: dict[tuple[str, str], str] = {}
         self._stats = MigrationStats()
         self._fga = None
+        self._failed_tuple_count = 0
 
     # ── Orchestration ─────────────────────────────────────────────
 
@@ -194,6 +195,11 @@ class RBACToReBACMigrator:
 
         self._compute_summary()
         self._print_summary()
+        if not self.dry_run and self._failed_tuple_count:
+            raise RuntimeError(
+                f'F006 migration left {self._failed_tuple_count} unresolved tuple writes; '
+                'retry pending failed_tuples before marking migration complete',
+            )
         return self._stats
 
     def _update_step_stat(self, step_num: int, count: int):
@@ -771,6 +777,7 @@ class RBACToReBACMigrator:
                     written += 1  # Idempotent — tuple already present
                 else:
                     logger.warning(f'Failed tuple: {t} — {e}')
+                    self._failed_tuple_count += 1
                     await self._save_failed_tuple(t, str(e))
             except FGAConnectionError:
                 raise

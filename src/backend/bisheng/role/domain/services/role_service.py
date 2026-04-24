@@ -466,6 +466,9 @@ class RoleService:
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
 
+        from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+        await LegacyRBACSyncService.sync_role_deleted(role_id)
+
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
         await RoleDao.adelete_role(role_id)
         return role
@@ -610,6 +613,13 @@ class RoleService:
             return False
         if role.role_type == 'global' and not login_user.is_admin():
             return False
+        if permission_level == 'tenant_admin':
+            role_tenant_id = getattr(role, 'tenant_id', None)
+            login_tenant_id = getattr(login_user, 'tenant_id', None)
+            if role_tenant_id is not None and login_tenant_id is not None:
+                if int(role_tenant_id) != int(login_tenant_id):
+                    return False
+            return role.role_type == 'tenant'
         if permission_level == 'dept_admin' and role.department_id is not None:
             if dept_subtree_ids is None or role.department_id not in dept_subtree_ids:
                 return False

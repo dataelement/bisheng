@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 AdminRole = 1
 
 
-def _sync_user_group_delete_side_effects(group_id: int) -> None:
+def _sync_user_group_delete_side_effects(group_id: int) -> list[tuple[int, int, str]]:
     """与 RoleGroupService.delete_group_hook 对齐：资源授权迁移、组资源/组角色清理、网关 Redis 通知。"""
     import json
 
@@ -45,6 +45,7 @@ def _sync_user_group_delete_side_effects(group_id: int) -> None:
             fallback_gid = g.id
             break
     need_move_resource = []
+    moved_resources = []
     for one in all_resource:
         resource_groups = GroupResourceDao.get_resource_group(
             ResourceTypeEnum(one.type), one.third_id,
@@ -52,6 +53,7 @@ def _sync_user_group_delete_side_effects(group_id: int) -> None:
         if len(resource_groups) > 1:
             continue
         if fallback_gid is not None:
+            moved_resources.append((int(fallback_gid), int(one.type), str(one.third_id)))
             one.group_id = str(fallback_gid)
             need_move_resource.append(one)
     if need_move_resource:
@@ -64,6 +66,7 @@ def _sync_user_group_delete_side_effects(group_id: int) -> None:
     redis_client = get_redis_client_sync()
     redis_client.rpush('delete_group', delete_message, expiration=86400)
     redis_client.publish('delete_group', delete_message)
+    return moved_resources
 
 
 def _is_admin(login_user) -> bool:
@@ -302,9 +305,23 @@ class UserGroupService:
         await _ensure_delete_group(login_user, group)
 
         from bisheng.permission.domain.services.owner_service import OwnerService
+        from bisheng.permission.domain.services.legacy_rbac_sync_service import (
+            LegacyRBACSyncService,
+        )
+        from bisheng.database.models.role import RoleDao
 
         await OwnerService.delete_resource_tuples('user_group', str(group_id))
-        _sync_user_group_delete_side_effects(group_id)
+        await LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id)
+        for role in RoleDao.get_role_by_groups([group_id], '', 0, 0):
+            await LegacyRBACSyncService.sync_role_deleted(role.id)
+        moved_resources = _sync_user_group_delete_side_effects(group_id)
+        for fallback_gid, resource_type, third_id in moved_resources:
+            await LegacyRBACSyncService.sync_group_resource_move(
+                group_id,
+                fallback_gid,
+                resource_type,
+                third_id,
+            )
 
         await GroupDao.adelete(group_id)
 

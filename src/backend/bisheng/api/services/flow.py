@@ -22,6 +22,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
+from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.workflow_app_permission import user_may_share_app
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -333,6 +334,9 @@ class FlowService(BaseService):
 
         # Delete Skills Associated Under User Group
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id, ResourceTypeEnum.WORK_FLOW)
+
+        # F008: Clean up all ReBAC tuples for the deleted workflow.
+        OwnerService.delete_resource_tuples_sync('workflow', str(flow_info.id))
 
         # Update session information
         MessageSessionDao.update_session_info_by_flow(flow_info.name, flow_info.description, flow_info.logo,
