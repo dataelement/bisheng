@@ -173,7 +173,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     { key: 'knowledge', path: '/filelib' },
                     { key: 'model', path: '/model/management' },
                     { key: 'evaluation', path: '/evaluation' },
-                    { key: 'label', path: '/label' }, // 兜底选项放在最后
+                    { key: 'mark_task', path: '/label' }, // 与角色菜单 third_id 一致
                 ];
                 const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
                 if (target) {
@@ -183,15 +183,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 }
             } else {
                 // 403
-                const MENU_KEY_MAP = {
+                const MENU_KEY_MAP: Record<string, string> = {
                     '/dashboard': 'board',
                     '/build/apps': 'build',
                     '/filelib': 'knowledge',
                     '/model/management': 'model',
                     '/evaluation': 'evaluation',
+                    '/label': 'mark_task',
                 }
-                const menuName = MENU_KEY_MAP[pathName]
-                if (menuName && res.role !== 'admin' && !web_menu.includes(menuName)) {
+                const normalizedPath = pathName.replace(/\/+$/, '') || '/'
+                let menuName = MENU_KEY_MAP[normalizedPath]
+                if (!menuName && normalizedPath.startsWith('/label')) {
+                    menuName = 'mark_task'
+                }
+                if (
+                    menuName
+                    && res.role !== 'admin'
+                    && !web_menu.includes(menuName)
+                    && !res.menu_approval_mode
+                ) {
                     history.pushState(null, '', BASE_URL + '/403');
                 }
             }

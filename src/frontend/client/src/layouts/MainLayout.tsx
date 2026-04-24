@@ -95,44 +95,51 @@ function Sidebar({
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
     ? ((user as any)?.plugins as string[])
     : null;
-  const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
-  const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
+  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
+  const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
+  const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
+  const showSubscriptionTab = showWorkbenchItem('subscription');
+  const showKnowledgeSpaceTab = showWorkbenchItem('knowledge_space');
+  const showHomeTab = showWorkbenchItem('home');
+  const showAppsTab = showWorkbenchItem('apps');
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo(() => [
     {
       section: 'home',
-      to: lastSectionPaths.home || '/c/new',
+      to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
       icon: <HomeIcon />,
       label: localize('com_nav_home'),
       isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
     },
     {
       section: 'apps',
-      to: appsSectionLinkTarget(),
+      to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
       icon: <GlobeIcon />,
       label: localize('com_nav_app_center'),
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
     },
     {
       section: 'channel',
-      to: lastSectionPaths.channel || '/channel',
+      to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
       icon: <LinkIcon />,
       label: localize('com_ui_channel'),
       isActive: pathname.startsWith('/channel'),
     },
     {
       section: 'knowledge',
-      to: lastSectionPaths.knowledge || '/knowledge',
+      to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
       icon: <BookOpenIcon />,
       label: localize('com_knowledge.knowledge_space'),
       isActive: pathname.startsWith('/knowledge'),
     },
   ].filter((l) => {
+    if (l.section === 'home') return showHomeTab;
+    if (l.section === 'apps') return showAppsTab;
     if (l.section === 'channel') return showSubscriptionTab;
     if (l.section === 'knowledge') return showKnowledgeSpaceTab;
     return true;
-  }), [pathname, showSubscriptionTab, showKnowledgeSpaceTab]);
+  }), [pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;

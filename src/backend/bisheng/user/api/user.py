@@ -151,6 +151,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         db_user,
         is_department_admin=is_department_admin,
     )
+    menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
     can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
 
     # Tenant-tree admin flags for the frontend. Any failure here degrades
@@ -190,6 +191,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         db_user,
         role=str(role),
         web_menu=web_menu,
+        menu_approval_mode=menu_approval_mode,
         admin_groups=admin_group,
         can_manage_user_groups=can_manage_user_groups,
         is_department_admin=is_department_admin,

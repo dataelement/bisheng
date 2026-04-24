@@ -91,6 +91,8 @@ class UserRead(UserBase):
     role: Optional[str] = None  # admin；非超管时由服务端序列化（见 /user/info）
     access_token: Optional[str] = None
     web_menu: Optional[List[str]] = None
+    # True if any assigned role sets quota_config.menu_approval_mode (需审批模式)
+    menu_approval_mode: Optional[bool] = None
     admin_groups: Optional[List[int]] = None  # Managed User GroupsIDVertical
     # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
     can_manage_user_groups: Optional[bool] = None
