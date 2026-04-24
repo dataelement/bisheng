@@ -239,9 +239,9 @@ export function FilterConditionEditor({
                 </>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-2">
                 {groups.map((group, groupIndex) => (
-                    <div key={group.id} className="relative pl-10 pb-6">
+                    <div key={group.id} className="relative pl-10 pb-1">
                         {/* 第二层：And/OR 在线的左侧，虚线包住当前组；底部小括号指向本层新增条件的加号 */}
                         {group.conditions.length > 1 && (
                             <>

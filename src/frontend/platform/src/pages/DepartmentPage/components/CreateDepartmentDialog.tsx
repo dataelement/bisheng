@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { toast } from "@/components/bs-ui/toast/use-toast"
+import { TreeDepartmentSelect } from "@/components/bs-comp/department"
 import DepartmentUsersSelect, {
   DepartmentUserOption,
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
@@ -36,17 +37,6 @@ export function CreateDepartmentDialog({
   const [parentId, setParentId] = useState<number | null>(defaultParentId)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
   const [loading, setLoading] = useState(false)
-
-  // Flatten tree for parent selector (exclude archived departments)
-  const flatList: { id: number; name: string; depth: number }[] = []
-  const flatten = (nodes: DepartmentTreeNode[], depth: number) => {
-    for (const n of nodes) {
-      if (n.status === "archived") continue
-      flatList.push({ id: n.id, name: n.name, depth })
-      if (n.children) flatten(n.children, depth + 1)
-    }
-  }
-  flatten(tree, 0)
 
   const handleSubmit = useCallback(() => {
     if (!name || name.length < 2 || name.length > 50) {
@@ -97,20 +87,16 @@ export function CreateDepartmentDialog({
           {/* Parent department */}
           <div className="space-y-2">
             <Label>{t("bs:department.parentDept")} *</Label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={parentId ?? ""}
-              onChange={(e) => setParentId(Number(e.target.value))}
-            >
-              <option value="" disabled>
-                {t("bs:department.selectParent")}
-              </option>
-              {flatList.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {"　".repeat(item.depth)}{item.name}
-                </option>
-              ))}
-            </select>
+            <TreeDepartmentSelect
+              nodes={tree}
+              value={parentId}
+              onChange={(id) => setParentId(id)}
+              modal={false}
+              placeholder={t("bs:department.selectParent")}
+              searchPlaceholder={t("bs:department.search")}
+              showMemberCount
+              className="max-w-xl"
+            />
           </div>
 
           {/* Department name */}

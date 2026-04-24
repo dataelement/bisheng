@@ -365,7 +365,7 @@
   "com_invite_submit_failed": "提交失败",
   "com_invite_submitting": "提交中...",
   "com_invite_title": "$t(linsight) 邀请码",
-  "com_knowledge_add_file": "添加文件",
+  "com_knowledge_add_file": "添加文件 / 选择知识库",
   "com_knowledge_items_count": "{{count}}个项目",
   "com_knowledge_folder_parse_ratio": "{{success}}/{{total}}",
   "com_knowledge_start_new_chat": "开启新对话",

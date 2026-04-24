@@ -128,7 +128,7 @@ export default function Roles() {
       { defaultWidth: 180, minWidth: 120 },
       { defaultWidth: 280, minWidth: 200 },
       { defaultWidth: 100, minWidth: 80 },
-      { defaultWidth: 140, minWidth: 100 },
+      { defaultWidth: 160, minWidth: 120 },
       { defaultWidth: 170, minWidth: 140 },
       { defaultWidth: 170, minWidth: 140 },
       { defaultWidth: 168, minWidth: 120 },
@@ -523,11 +523,21 @@ export default function Roles() {
                     {scopeLabel(el)}
                   </TableCell>
                   <TableCell {...rc.getTdProps(2)}>{el.user_count ?? "-"}</TableCell>
-                  <TableCell {...rc.getTdProps(3)} className="text-sm text-muted-foreground">
+                  <TableCell
+                    {...rc.getTdProps(3)}
+                    className={cname(
+                      "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground"
+                    )}
+                    title={creatorLabel(el)}
+                  >
                     {creatorLabel(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(4)}>{fmtTime(el.create_time)}</TableCell>
-                  <TableCell {...rc.getTdProps(5)}>{fmtTime(el.update_time)}</TableCell>
+                  <TableCell {...rc.getTdProps(4)} className="whitespace-nowrap tabular-nums">
+                    {fmtTime(el.create_time)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(5)} className="whitespace-nowrap tabular-nums">
+                    {fmtTime(el.update_time)}
+                  </TableCell>
                   <TableCell {...rc.getTdProps(6)} className="text-right">
                     {el.is_readonly ? (
                       <span className="text-sm text-muted-foreground">&mdash;</span>

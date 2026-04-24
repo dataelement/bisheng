@@ -1,5 +1,5 @@
 import { Loader2, LayoutGrid } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
@@ -18,12 +18,36 @@ export default function AppCenter() {
         setSearchQuery,
         fetchApps,
         togglePin,
-        isPinned,
         continueChat,
         shareApp,
     } = useAppCenter();
 
     const isH5Layout = useMediaQuery('(max-width: 576px)');
+    const appGridRef = useRef<HTMLDivElement | null>(null);
+    const [appGridCols, setAppGridCols] = useState(4);
+
+    useEffect(() => {
+        const el = appGridRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+
+        const resolveCols = (width: number) => {
+            if (width < 480) return 1;
+            if (width < 600) return 2;
+            if (width < 768) return 3;
+            return 4;
+        };
+
+        const update = () => {
+            const width = el.clientWidth;
+            setAppGridCols(resolveCols(width));
+        };
+
+        update();
+
+        const observer = new ResizeObserver(update);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
 
     // Initial fetch
     useEffect(() => {
@@ -98,10 +122,14 @@ export default function AppCenter() {
                     </div>
                 ) : apps.length === 0 ? (
                     <div className="w-full flex items-center justify-center py-10">
-                        <AppEmptyState query={searchQuery} />
+                        <AppEmptyState />
                     </div>
                 ) : (
-                    <div className="grid w-full relative gap-x-3 gap-y-3.5 grid-cols-1 [@media(min-width:768px)]:grid-cols-2 [@media(min-width:1024px)]:grid-cols-4">
+                    <div
+                        ref={appGridRef}
+                        className="grid w-full relative gap-x-3 gap-y-3.5"
+                        style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
+                    >
                         {apps.map((agent) => (
                             <AgentCard
                                 key={agent.id}

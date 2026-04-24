@@ -17,6 +17,11 @@ export default function DepartmentPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
+  const [memberHighlightUserId, setMemberHighlightUserId] = useState<number | null>(null)
+  const [treeScrollRequest, setTreeScrollRequest] = useState<{
+    deptId: string
+    requestId: number
+  } | null>(null)
 
   const loadTree = useCallback(() => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
@@ -70,6 +75,34 @@ export default function DepartmentPage() {
     loadTree()
   }, [loadTree])
 
+  const handleLocateMemberFromGlobal = useCallback(
+    ({
+      primaryDeptDeptId,
+      userId,
+    }: {
+      primaryDeptDeptId: string
+      userId: number
+    }) => {
+      setSelectedDeptId(primaryDeptDeptId)
+      const node = findNode(tree, primaryDeptDeptId)
+      if (node) setSelectedDept(node)
+      setMemberHighlightUserId(userId)
+      setTreeScrollRequest((prev) => ({
+        deptId: primaryDeptDeptId,
+        requestId: (prev?.requestId ?? 0) + 1,
+      }))
+    },
+    [tree, findNode]
+  )
+
+  const handleTreeScrollHandled = useCallback(() => {
+    setTreeScrollRequest(null)
+  }, [])
+
+  const handleMemberHighlightConsumed = useCallback(() => {
+    setMemberHighlightUserId(null)
+  }, [])
+
   // After tree reload, update selectedDept reference
   useEffect(() => {
     if (selectedDeptId && tree.length > 0) {
@@ -88,6 +121,8 @@ export default function DepartmentPage() {
           selectedDeptId={selectedDeptId}
           onSelect={handleSelect}
           onCreateChild={handleCreateClick}
+          scrollRequest={treeScrollRequest}
+          onScrollRequestHandled={handleTreeScrollHandled}
         />
         <button
           className="mt-4 w-full rounded-md border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-primary hover:text-primary"
@@ -122,6 +157,9 @@ export default function DepartmentPage() {
                 deptName={selectedDept.name}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
+                highlightUserId={memberHighlightUserId}
+                onHighlightConsumed={handleMemberHighlightConsumed}
+                onRequestLocateMember={handleLocateMemberFromGlobal}
               />
             </TabsContent>
             <TabsContent value="settings">
