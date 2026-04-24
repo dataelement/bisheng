@@ -155,6 +155,7 @@ export default function DepartmentPage() {
               <MemberTable
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
+                isArchived={selectedDept.status === "archived"}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
                 highlightUserId={memberHighlightUserId}

@@ -79,6 +79,7 @@ class TestApurgeDepartment:
             mock_exec_result = MagicMock()
             mock_exec_result.all.return_value = []
             mock_exec_result.first.return_value = None
+            mock_exec_result.one.return_value = 0
             mock_session.exec = AsyncMock(return_value=mock_exec_result)
             mock_session_ctx.return_value = mock_session
 
@@ -121,3 +122,36 @@ class TestApurgeDepartment:
             from bisheng.department.domain.services.department_service import DepartmentService
             with pytest.raises(DepartmentHasChildrenError):
                 await DepartmentService.apurge_department('BS@test', mock_admin_user)
+
+    @pytest.mark.asyncio
+    async def test_purge_blocks_if_members_exist(self, mock_admin_user):
+        """Purge validates member references before deleting department rows."""
+        from bisheng.common.errcode.department import DepartmentHasMembersError
+
+        archived_dept = _make_dept(status='archived')
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+        ) as mock_session_ctx, \
+             patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock, return_value=archived_dept,
+        ), \
+             patch(
+            'bisheng.department.domain.services.department_service.select',
+        ):
+            mock_session = AsyncMock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=False)
+            no_child = MagicMock()
+            no_child.first.return_value = None
+            member_count = MagicMock()
+            member_count.one.return_value = 1
+            mock_session.exec = AsyncMock(side_effect=[no_child, member_count])
+            mock_session_ctx.return_value = mock_session
+
+            from bisheng.department.domain.services.department_service import DepartmentService
+            with pytest.raises(DepartmentHasMembersError):
+                await DepartmentService.apurge_department('BS@test', mock_admin_user)
+
+            mock_session.delete.assert_not_called()
