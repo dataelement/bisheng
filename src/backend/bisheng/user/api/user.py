@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 import random
 from base64 import b64encode
 from datetime import datetime
@@ -765,6 +766,22 @@ def _has_resource_permission_user_binding(
     )
 
 
+async def _get_resource_permission_bindings() -> list[dict]:
+    from bisheng.common.models.config import ConfigDao
+
+    row = await ConfigDao.aget_config_by_key('permission_relation_model_bindings_v1')
+    if not row or not (row.value or '').strip():
+        return []
+    try:
+        bindings = json.loads(row.value or '[]')
+    except Exception:
+        logger.warning('Failed to parse resource permission bindings config')
+        return []
+    if not isinstance(bindings, list):
+        return []
+    return [binding for binding in bindings if isinstance(binding, dict)]
+
+
 async def _sync_role_access_fga(
     role_id: int,
     access_type: int,
@@ -789,13 +806,12 @@ async def _sync_role_access_fga(
     from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
     from bisheng.permission.domain.services.permission_service import PermissionService
     from bisheng.permission.domain.services.permission_cache import PermissionCache
-    from bisheng.permission.api.endpoints.resource_permission import _get_bindings
 
     fga_object_types = [obj_type]
     if obj_type == 'knowledge_library':
         fga_object_types.append('knowledge_space')
 
-    bindings = await _get_bindings() if removed else []
+    bindings = await _get_resource_permission_bindings() if removed else []
     operations: list[TupleOperation] = []
     for uid in user_ids:
         for rid in removed:
@@ -814,7 +830,7 @@ async def _sync_role_access_fga(
                 ))
 
     if operations:
-        await PermissionService.batch_write_tuples(operations)
+        await PermissionService.batch_write_tuples(operations, crash_safe=True)
         for uid in user_ids:
             await PermissionCache.invalidate_user(uid)
 

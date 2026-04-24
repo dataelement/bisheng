@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import time
 from dataclasses import dataclass
 
@@ -160,11 +161,24 @@ async def _build_actual_set(user_ids: set[int]) -> set[tuple[str, str, str, str]
 
 async def _resource_permission_user_binding_set() -> set[tuple[str, str, str, str]]:
     """Return FGA tuple signatures backed by resource permission user bindings."""
-    from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+    from bisheng.common.models.config import ConfigDao
 
     all_types = _all_role_access_object_types()
     bound: set[tuple[str, str, str, str]] = set()
-    for binding in await _get_bindings():
+    row = await ConfigDao.aget_config_by_key('permission_relation_model_bindings_v1')
+    if not row or not (row.value or '').strip():
+        return bound
+    try:
+        bindings = json.loads(row.value or '[]')
+    except Exception:
+        logger.warning('Failed to parse resource permission bindings config')
+        return bound
+    if not isinstance(bindings, list):
+        return bound
+
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
         resource_type = binding.get('resource_type')
         if resource_type not in all_types:
             continue
