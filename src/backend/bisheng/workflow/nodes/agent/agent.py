@@ -138,7 +138,11 @@ class WorkflowCitationToolWrapper(BaseTool):
         retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query}, config=config)
         llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
-        return qa_chain.invoke(llm_inputs, config=config)
+        LLMNodeCallbackHandler.push_global_stream_suppression()
+        try:
+            return qa_chain.invoke(llm_inputs, config=config)
+        finally:
+            LLMNodeCallbackHandler.pop_global_stream_suppression()
 
     async def _arun(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
@@ -149,7 +153,11 @@ class WorkflowCitationToolWrapper(BaseTool):
         retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query}, config=config)
         llm_inputs = await self._abuild_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
-        return await qa_chain.ainvoke(llm_inputs, config=config)
+        LLMNodeCallbackHandler.push_global_stream_suppression()
+        try:
+            return await qa_chain.ainvoke(llm_inputs, config=config)
+        finally:
+            LLMNodeCallbackHandler.pop_global_stream_suppression()
 
 
 class SqlAgentParams(BaseModel):
