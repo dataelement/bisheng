@@ -179,7 +179,7 @@ export default function App() {
       user.is_department_admin && !wm.includes('create_app')
         ? [...wm, 'create_app']
         : wm
-    return getPrivateRouter(perms)
+    return getPrivateRouter(perms, { menuApprovalMode: Boolean(user.menu_approval_mode) })
   }, [user])
 
   // url error toast

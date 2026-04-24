@@ -16,6 +16,7 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
 from bisheng.database.constants import AdminRole
+from bisheng.database.models.role import RoleDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
@@ -31,6 +32,38 @@ _DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
     {e.value for e in WebMenuResource}
     | {'log', 'system_config', 'sys'}
 )
+
+# 角色管理 UI：一级「工作台 / 管理后台」关闭时，二级项仍存库但不应对用户生效（与 Roles.tsx 一致）
+_WORKBENCH_ENTRY_KEYS = frozenset({'workstation', 'frontend'})
+_ADMIN_ENTRY_KEYS = frozenset({'admin', 'backend'})
+_ROLE_UI_WORKBENCH_CHILDREN = frozenset({
+    'home', 'apps', 'subscription', 'knowledge_space',
+})
+_ROLE_UI_ADMIN_CHILDREN = frozenset({
+    'board', 'model', 'log', 'knowledge', 'create_knowledge',
+    'build', 'create_app', 'evaluation', 'mark_task',
+})
+
+# 登录校验：任一侧有「可生效」菜单即允许（含仅一级 workstation/admin，供需审批模式）
+_WEB_MENU_WORKBENCH_ALL = frozenset({
+    WebMenuResource.WORKSTATION.value,
+    WebMenuResource.FRONTEND.value,
+    WebMenuResource.HOME.value,
+    WebMenuResource.APPS.value,
+    WebMenuResource.SUBSCRIPTION.value,
+    WebMenuResource.KNOWLEDGE_SPACE.value,
+})
+_WEB_MENU_ADMIN_ALL = frozenset(e.value for e in WebMenuResource) - _WEB_MENU_WORKBENCH_ALL
+
+
+def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
+    """Drop second-level menu keys when their parent entry is absent."""
+    s = set(web_menu)
+    if not (s & _WORKBENCH_ENTRY_KEYS):
+        s -= _ROLE_UI_WORKBENCH_CHILDREN
+    if not (s & _ADMIN_ENTRY_KEYS):
+        s -= _ROLE_UI_ADMIN_CHILDREN
+    return list(s)
 
 # ── AccessType → ReBAC mapping (F008, AD-02) ────────────────
 # Maps old RBAC AccessType to one-or-more (relation, object_type) pairs for
@@ -561,10 +594,37 @@ class LoginUser(BaseModel):
                 web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_FULL))
             else:
                 web_menu = [m for m in web_menu if m not in ('system_config', 'sys')]
+            web_menu = _effective_web_menu_strip_orphans(web_menu)
         else:
             # AC-14: admin returns all WebMenuResource values (including deprecated for compat)
             web_menu = [one.value for one in WebMenuResource]
         return role, web_menu
+
+    @classmethod
+    async def user_has_workbench_or_admin_effective_menu(cls, user: User) -> bool:
+        """True if effective web_menu grants workbench or admin-console area (incl. parent-only keys)."""
+        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+        if any(ur.role_id == AdminRole for ur in db_user_role):
+            return True
+        is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
+        _, web_menu = await cls.get_roles_web_menu(user, is_department_admin=is_department_admin)
+        wm = set(web_menu)
+        return bool((wm & _WEB_MENU_WORKBENCH_ALL) or (wm & _WEB_MENU_ADMIN_ALL))
+
+    @classmethod
+    async def compute_menu_approval_mode(cls, user: User) -> bool:
+        """True when any assigned (non-super-admin) role sets ``quota_config.menu_approval_mode``."""
+        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+        role_ids = [ur.role_id for ur in db_user_role if ur.role_id != AdminRole]
+        if not role_ids:
+            return False
+        roles = await RoleDao.aget_role_by_ids(role_ids)
+        for r in roles or []:
+            qc = r.quota_config or {}
+            v = qc.get('menu_approval_mode')
+            if v is True or v == 1 or str(v).lower() in ('true', '1'):
+                return True
+        return False
 
     @classmethod
     async def assert_effective_web_menu_contains(cls, user_id: int, menu_key: str) -> None:

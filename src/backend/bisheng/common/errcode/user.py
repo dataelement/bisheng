@@ -52,6 +52,11 @@ class UserNoRoleForLoginError(BaseErrorCode):
     Msg: str = 'No assignable role; please contact your administrator'
 
 
+class UserNoWebMenuForLoginError(BaseErrorCode):
+    Code: int = 10611
+    Msg: str = '您缺少菜单权限，请联系管理员'
+
+
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = 'There are still users in the user group and cannot be deleted'
