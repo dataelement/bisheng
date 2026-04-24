@@ -66,6 +66,7 @@ interface KnowledgeSpaceHeaderProps {
     onGoKnowledgeSquare?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
+    enableCardMode?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -94,7 +95,8 @@ export function KnowledgeSpaceHeader({
     onBatchDelete,
     onGoKnowledgeSquare,
     onToggleAiAssistant,
-    isAiAssistantOpen
+    isAiAssistantOpen,
+    enableCardMode = true,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -150,18 +152,20 @@ export function KnowledgeSpaceHeader({
                 >
                     <List className="size-4 shrink-0" />
                 </button>
-                <button
-                    type="button"
-                    onClick={() => setViewMode("card")}
-                    className={cn(
-                        "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
-                        viewMode === "card"
-                            ? "bg-[#E6EDFC] text-[#165DFF]"
-                            : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                    )}
-                >
-                    <LayoutGrid className="size-4 shrink-0" />
-                </button>
+                {enableCardMode && (
+                    <button
+                        type="button"
+                        onClick={() => setViewMode("card")}
+                        className={cn(
+                            "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
+                            viewMode === "card"
+                                ? "bg-[#E6EDFC] text-[#165DFF]"
+                                : "text-[#4e5969] hover:bg-[#f2f3f5]"
+                        )}
+                    >
+                        <LayoutGrid className="size-4 shrink-0" />
+                    </button>
+                )}
             </div>
 
             {space.role !== SpaceRole.MEMBER && (
@@ -234,7 +238,7 @@ export function KnowledgeSpaceHeader({
                 </DropdownMenu>
             )}
 
-            {viewMode === "card" && (
+            {enableCardMode && viewMode === "card" && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button

@@ -38,6 +38,9 @@ export enum FileType {
     HTML = "html",
     TXT = "txt",
     MD = "md",
+    WPS = "wps",
+    DPS = "dps",
+    ET = "et",
     OTHER = "other"
 }
 
@@ -357,6 +360,12 @@ function deriveFileType(raw: any): FileType {
             return FileType.TXT;
         case "md":
             return FileType.MD;
+        case "wps":
+            return FileType.WPS;
+        case "dps":
+            return FileType.DPS;
+        case "et":
+            return FileType.ET;
         default:
             return FileType.OTHER;
     }
@@ -467,6 +476,9 @@ function deriveFileTypeFromName(fileName: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "wps": return FileType.WPS;
+        case "dps": return FileType.DPS;
+        case "et": return FileType.ET;
         default: return FileType.OTHER;
     }
 }

@@ -112,6 +112,18 @@ class GroupChangeHandler:
             return
         from bisheng.permission.domain.services.permission_service import PermissionService
         await PermissionService.batch_write_tuples(operations, crash_safe=True)
+        affected_user_ids = set()
+        for op in operations:
+            if not op.user.startswith('user:'):
+                continue
+            try:
+                affected_user_ids.add(int(op.user.split(':', 1)[1]))
+            except Exception:
+                continue
+        if affected_user_ids:
+            from bisheng.permission.domain.services.permission_cache import PermissionCache
+            for uid in affected_user_ids:
+                await PermissionCache.invalidate_user(uid)
 
     @staticmethod
     def execute(operations: List[TupleOperation]) -> None:

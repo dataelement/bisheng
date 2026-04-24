@@ -146,6 +146,7 @@ function TreeNode({
       <div
         className="flex cursor-pointer items-center gap-1 px-2 py-1.5 hover:bg-gray-50"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        onClick={() => onToggle(node)}
       >
         {hasChildren ? (
           <button
@@ -157,7 +158,11 @@ function TreeNode({
         ) : (
           <span className="w-5" />
         )}
-        <Checkbox checked={selectedIds.has(node.id)} onCheckedChange={() => onToggle(node)} />
+        <Checkbox
+          checked={selectedIds.has(node.id)}
+          onClick={(e) => e.stopPropagation()}
+          onCheckedChange={() => onToggle(node)}
+        />
         <Building2 className="h-4 w-4 text-gray-400" />
         <span className="truncate text-sm">{node.name}</span>
         {node.member_count != null && (

@@ -18,6 +18,8 @@ import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/
 import type { InformationSource } from "~/api/channels";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
+import { extractApiStatusCode } from "../errorUtils";
+import { crawlErrorMessageKey } from "./crawlErrorUtils";
 
 export interface CrawlPreviewPanelProps {
     url: string;
@@ -26,7 +28,7 @@ export interface CrawlPreviewPanelProps {
     onAddSource: (source: InformationSource) => void;
 }
 
-type CrawlStatus = "loading" | "success" | "error" | "singlePageWarning";
+type CrawlStatus = "loading" | "success" | "error";
 
 /** 创建频道抽屉内下钻：爬取内容确认（不再叠加独立 Dialog） */
 export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPanelProps) {
@@ -53,24 +55,17 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                 const res = await crawlTempSourceApi({ url });
                 const root: any = res as any;
 
-                const code = root?.status_code ?? root?.code;
-                if (code && code !== 200) {
+                const codeRaw = root?.status_code ?? root?.code;
+                if (codeRaw && codeRaw !== 200) {
                     if (requestIdRef.current !== currentId) return;
-                    // 13005：检测为单篇文章或非列表页
-                    if (code === 13005) {
-                        setStatus("singlePageWarning");
-                        setErrorCode(code);
-                        return;
-                    }
-                    // 13004：权限问题，无法爬取
-                    if (code === 13004) {
-                        setStatus("error");
-                        setErrorCode(code);
-                        return;
-                    }
-                    // 13003 及其它：解析失败
+                    const code = Number(codeRaw);
                     setStatus("error");
-                    setErrorCode(code);
+                    // 19005/13005：单篇或非列表页；19004/13004：权限；19003/13003：解析失败；其它非 200 同 19003
+                    if ([19006, 19005, 19004, 19003].includes(code)) {
+                        setErrorCode(code);
+                    } else {
+                        setErrorCode(19003);
+                    }
                     return;
                 }
 
@@ -85,7 +80,8 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
 
                 if (likelySinglePage) {
                     if (requestIdRef.current !== currentId) return;
-                    setStatus("singlePageWarning");
+                    setStatus("error");
+                    setErrorCode(19005);
                     return;
                 }
 
@@ -113,9 +109,11 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                     articles
                 });
                 setStatus("success");
-            } catch {
+            } catch (error) {
                 if (requestIdRef.current !== currentId) return;
                 setStatus("error");
+                const code = extractApiStatusCode(error);
+                setErrorCode(code === 19006 ? 19006 : 19003);
             }
         })();
     }, [url]);
@@ -142,11 +140,16 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
 
     const handleAddSource = () => {
         (async () => {
+            let shouldClose = false;
             try {
                 setAdding(true);
                 let created: InformationSource | null = null;
                 try {
                     const res = await addWebsiteSourceApi({ url });
+                    const code = extractApiStatusCode(res);
+                    if (code && code !== 200) {
+                        return;
+                    }
                     const raw: any = (res as any)?.data ?? res ?? {};
                     created = {
                         id: String(raw.id ?? raw.source_id ?? `web-${Date.now()}`),
@@ -155,7 +158,11 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                         url: raw.url ?? url,
                         avatar: raw.icon ?? raw.avatar ?? previewData?.icon
                     };
-                } catch {
+                } catch (error) {
+                    const code = extractApiStatusCode(error);
+                    if (code != null) {
+                        return;
+                    }
                     // 如果后端报错，就退回到本地添加，避免用户操作“失效”
                     if (previewData) {
                         created = {
@@ -168,11 +175,15 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                 }
                 if (created) {
                     onAddSource(created);
+                    shouldClose = true;
                 } else {
                     onBack();
                 }
             } finally {
                 setAdding(false);
+                if (shouldClose) {
+                    onOpenChange(false);
+                }
             }
         })();
     };
@@ -310,11 +321,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                             <div className="flex flex-1 flex-col items-center justify-center text-center">
                                 <ChannelBookIcon className="mb-5 w-[100px] h-[100px]" />
                                 <p className="text-[14px] leading-6 text-[#4E5969]">
-                                    {status === "singlePageWarning"
-                                        ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
-                                        : errorCode === 13004
-                                            ? localize("com_subscription.crawl_failed_due_to_permissions")
-                                            : localize("com_subscription.parse_failed_retry_or_submit")}
+                                     {localize(crawlErrorMessageKey(errorCode))}
                                 </p>
                             </div>
                         </div>

@@ -16,7 +16,7 @@ export const enum FLOW_TYPES {
     SKILL = 1,
 }
 
-export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '' }) {
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '', isGuestMode = false }) {
     const { conversationId: _cid, fid: _fid, type: _type } = useParams();
     const cid = _cid || chatId;
     const fid = _fid || flowId;
@@ -181,7 +181,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} />
+    return <ChatView data={chatState.flow} cid={cid} v={effectiveApiVersion} readOnly={readOnly} isGuestMode={isGuestMode} />
 };
 
 /**

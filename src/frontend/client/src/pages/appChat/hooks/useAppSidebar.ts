@@ -94,20 +94,16 @@ export function useAppSidebar() {
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     }, ...prev]);
-    const from = new URLSearchParams(location.search).get('from');
-    const nextPath = from
-      ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
-      : `/app/${chatId}/${flowId}/${flowType}`;
+    const qs = location.search || '';
+    const nextPath = `/app/${chatId}/${flowId}/${flowType}${qs}`;
     navigate(nextPath);
   }, [flowId, flowType, location.search, navigate, setConversations]);
 
   /** Switch to a specific conversation */
   const switchConversation = useCallback(
     (conv: AppConversation) => {
-      const from = new URLSearchParams(location.search).get('from');
-      const nextPath = from
-        ? `/app/${conv.id}/${conv.flowId}/${conv.flowType}?from=${from}`
-        : `/app/${conv.id}/${conv.flowId}/${conv.flowType}`;
+      const qs = location.search || '';
+      const nextPath = `/app/${conv.id}/${conv.flowId}/${conv.flowType}${qs}`;
       navigate(nextPath);
     },
     [location.search, navigate],

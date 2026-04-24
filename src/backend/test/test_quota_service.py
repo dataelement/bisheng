@@ -306,6 +306,22 @@ class TestValidateQuotaConfig:
         from bisheng.role.domain.services.quota_service import QuotaService
         QuotaService.validate_quota_config({'knowledge_space': 30, 'workflow': -1, 'channel': 0})
 
+    def test_menu_approval_mode_bool_or_int(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+        QuotaService.validate_quota_config({'channel': 10, 'menu_approval_mode': True})
+        QuotaService.validate_quota_config({'channel': 10, 'menu_approval_mode': False})
+        QuotaService.validate_quota_config({'menu_approval_mode': 0})
+        QuotaService.validate_quota_config({'menu_approval_mode': 1})
+
+    def test_menu_approval_mode_invalid_value(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+        from bisheng.common.errcode.role import QuotaConfigInvalidError
+
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'menu_approval_mode': 2})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'menu_approval_mode': 'true'})
+
     def test_invalid_non_integer(self):
         from bisheng.role.domain.services.quota_service import QuotaService
         from bisheng.common.errcode.role import QuotaConfigInvalidError

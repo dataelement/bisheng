@@ -174,7 +174,7 @@ export function KnowledgeSpaceSidebar({
                 }}
             >
                 {mobileDrawerMode ? (
-                    <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-2.5">
+                    <div className="shrink-0 px-3 py-2.5">
                         <div className="flex items-center justify-between">
                             {bsConfig?.sidebarIcon?.image ? (
                                 <img
@@ -206,9 +206,9 @@ export function KnowledgeSpaceSidebar({
                     />
                 ) : null}
                 {/* Top actions */}
-                <div className={collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 py-3" : "px-3 py-5"}>
+                <div className={collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 py-5"}>
                     {mobileDrawerMode ? (
-                        <div className="border-b border-[#e5e6eb] pb-3">
+                        <div>
                             <Button
                                 variant="secondary"
                                 onClick={onCreateSpace}

@@ -108,7 +108,7 @@ export function PermissionGrantTab({
       relation,
       model_id: selectedModelId,
       ...(s.type === "department"
-        ? { include_children: Boolean(s.include_children) }
+        ? { include_children: includeChildren }
         : {}),
     }));
 

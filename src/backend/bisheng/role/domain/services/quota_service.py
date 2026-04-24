@@ -42,7 +42,12 @@ DEFAULT_ROLE_QUOTA: dict[str, int] = {
 # are not role-level limits, but still need to pass validate_quota_config.
 _TENANT_ONLY_QUOTA_KEYS = {'storage_gb', 'user_count', 'model_tokens_monthly'}
 
-VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS
+# Stored in role.quota_config JSON but not numeric quotas (menu UX flags).
+_ROLE_QUOTA_METADATA_KEYS = {'menu_approval_mode'}
+
+VALID_QUOTA_KEYS = (
+    set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS | _ROLE_QUOTA_METADATA_KEYS
+)
 
 # Resource counting SQL templates — keyed by {col}=:{param} placeholder.
 # Shared between tenant-level and user-level counts.
@@ -475,6 +480,14 @@ class QuotaService:
             if key not in VALID_QUOTA_KEYS:
                 raise QuotaConfigInvalidError(
                     msg=f'quota_config contains unknown key: {key}',
+                )
+            if key == 'menu_approval_mode':
+                if isinstance(value, bool):
+                    continue
+                if isinstance(value, int) and value in (0, 1):
+                    continue
+                raise QuotaConfigInvalidError(
+                    msg=f'quota_config[{key}] must be boolean or 0/1, got {value!r}',
                 )
             if isinstance(value, bool) or not isinstance(value, int):
                 raise QuotaConfigInvalidError(

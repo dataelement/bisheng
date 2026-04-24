@@ -125,7 +125,7 @@ export function getSearchEnabled(): Promise<boolean> {
 
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
-    const { user_id, user_name, create_time, update_time, role, web_menu, avatar } = res.data;
+    const { user_id, user_name, create_time, update_time, role, web_menu, avatar, menu_approval_mode } = res.data;
     const canWorkspace =
       web_menu.includes('frontend') ||
       web_menu.includes('workstation');
@@ -157,6 +157,7 @@ export function getUser(): Promise<t.TUser> {
       "provider": "local",
       "role": role,
       "plugins": web_menu,
+      "menu_approval_mode": Boolean(menu_approval_mode),
       "termsAccepted": false,
       "backupCodes": [],
       "refreshToken": [],

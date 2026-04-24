@@ -244,7 +244,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4 sm:max-w-[576px]"
+                className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4 sm:max-w-[1000px]"
                 hideClose
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >

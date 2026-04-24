@@ -164,7 +164,15 @@ async def _check_is_global_super(user_id: int) -> bool:
             )
     except Exception as exc:  # noqa: BLE001
         logger.debug('FGA super-admin check failed for user %d: %s', user_id, exc)
-        return False
+
+    if not is_super:
+        try:
+            from bisheng.database.constants import AdminRole
+            from bisheng.user.domain.models.user_role import UserRoleDao
+            roles = await UserRoleDao.aget_user_roles(user_id)
+            is_super = any(int(role.role_id) == AdminRole for role in roles)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('legacy AdminRole fallback failed for user %d: %s', user_id, exc)
 
     try:
         if redis is not None:

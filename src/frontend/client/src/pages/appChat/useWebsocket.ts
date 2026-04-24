@@ -341,7 +341,7 @@ export const useWebSocket = (helpers) => {
                     // 文件拼接入消息
                     if (submitData.files?.length) {
                         const [_filePath, fileNames] = submitData.files.reduce((acc, cur) => {
-                            acc[0].push(cur.path)
+                            acc[0].push(cur.filepath ?? cur.file_path ?? cur.path)
                             acc[1].push(cur.name)
                             return acc
                         }, [[], []])

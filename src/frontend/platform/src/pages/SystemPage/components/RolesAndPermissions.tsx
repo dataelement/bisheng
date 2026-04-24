@@ -367,26 +367,26 @@ export default function RolesAndPermissions() {
   return (
     <>
     {isSuperAdmin ? (
-    <Tabs defaultValue="roles" className="w-full">
-      <TabsList className="mb-2">
+    <Tabs defaultValue="roles" className="flex h-full min-h-0 w-full flex-col">
+      <TabsList className="mb-2 shrink-0 self-start">
         <TabsTrigger value="roles">{t("system.roleManagement")}</TabsTrigger>
         <TabsTrigger value="rebac">{t("system.rebacSchemaTab")}</TabsTrigger>
       </TabsList>
-      <TabsContent value="roles" className="mt-0">
+      <TabsContent value="roles" className="mt-0 min-h-0 flex-1 overflow-hidden">
         <Roles />
       </TabsContent>
-      <TabsContent value="rebac" className="mt-0">
-        <div className="pb-6 pt-2" data-permission-surface="relation-model-editor">
+      <TabsContent value="rebac" className="mt-0 min-h-0 flex-1 overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col pb-2 pt-2" data-permission-surface="relation-model-editor">
           {types === null ? (
             <p className="text-sm text-muted-foreground">…</p>
           ) : types.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("build.empty")}</p>
           ) : (
-            <div className="space-y-4">
-              <Button size="sm" className="h-8 px-3" onClick={() => setCreateOpen(true)}>
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
+              <Button size="sm" className="h-8 self-start px-3" onClick={() => setCreateOpen(true)}>
                 {t("system.relationModelCreateButton")}
               </Button>
-              <div className="space-y-2">
+              <div className="shrink-0 space-y-2">
                 <p className="text-sm">{t("system.relationModelSelectTemplate")}</p>
                 <Select value={modelId} onValueChange={setModelId}>
                   <SelectTrigger className="w-[280px]">
@@ -404,39 +404,41 @@ export default function RolesAndPermissions() {
                 </Select>
               </div>
 
-              {templateSections.map((section) => (
-                <div key={section.title} className="rounded-md border p-3">
-                  <p className="mb-2 text-base font-medium">{section.title}</p>
-                  <div className={`grid gap-4 ${section.columns.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
-                    {section.columns.map((col, idx) => (
-                      <div key={`${section.title}-${idx}`} className="space-y-2">
-                        {col.title ? <p className="text-sm font-medium text-muted-foreground">{col.title}</p> : null}
-                        {col.items.map((item) => {
-                          const backendDefined = backendRelations.has(item.relation)
-                          return (
-                            <label key={item.id} className="flex items-start gap-2 text-sm">
-                              <Checkbox
-                                checked={selectedPermissionIds.includes(item.id)}
-                                onCheckedChange={(checked) => togglePermission(item.id, Boolean(checked))}
-                              />
-                              <span className="leading-5">
-                                {item.label}
-                                {!backendDefined ? (
-                                  <span className="ml-1 text-xs text-orange-500">
-                                    {t("system.relationModelBackendUndefined")}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ))}
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                {templateSections.map((section) => (
+                  <div key={section.title} className="rounded-md border p-3">
+                    <p className="mb-2 text-base font-medium">{section.title}</p>
+                    <div className={`grid gap-4 ${section.columns.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+                      {section.columns.map((col, idx) => (
+                        <div key={`${section.title}-${idx}`} className="space-y-2">
+                          {col.title ? <p className="text-sm font-medium text-muted-foreground">{col.title}</p> : null}
+                          {col.items.map((item) => {
+                            const backendDefined = backendRelations.has(item.relation)
+                            return (
+                              <label key={item.id} className="flex items-start gap-2 text-sm">
+                                <Checkbox
+                                  checked={selectedPermissionIds.includes(item.id)}
+                                  onCheckedChange={(checked) => togglePermission(item.id, Boolean(checked))}
+                                />
+                                <span className="leading-5">
+                                  {item.label}
+                                  {!backendDefined ? (
+                                    <span className="ml-1 text-xs text-orange-500">
+                                      {t("system.relationModelBackendUndefined")}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   size="sm"
                   onClick={handleUpdateModel}
@@ -464,7 +466,7 @@ export default function RolesAndPermissions() {
       </TabsContent>
     </Tabs>
     ) : (
-    <div className="w-full">
+    <div className="h-full w-full min-h-0">
       <Roles />
     </div>
     )}

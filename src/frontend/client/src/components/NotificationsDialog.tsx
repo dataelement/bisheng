@@ -925,7 +925,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 onOpenAutoFocus={(e) => {
-                    if (isTouchMobile) {
+                    // 避免小视口（含 PC 小窗）打开即激活搜索框
+                    if (isNarrowMobileLayout || isTouchMobile) {
                         e.preventDefault();
                     }
                 }}
@@ -943,119 +944,117 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         className="flex min-h-0 flex-1 flex-col"
                     >
                         <div className="flex min-h-0 flex-1 flex-col">
-                            <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-12" : "px-6")}>
+                            <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-4" : "px-6")}>
                                 {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
                                 <div className={cn("flex flex-col", isNarrowMobileLayout ? "gap-3" : "gap-4")}>
                                     <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[20px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
                                         {localize("com_notifications_title")}
                                     </h2>
                                     <div className={cn("flex gap-4", isNarrowMobileLayout ? "flex-col" : "flex-row items-center justify-between")}>
-                                    <TabsList className={cn("h-auto bg-transparent p-0", isNarrowMobileLayout ? "w-full justify-start gap-6" : "inline-flex w-auto justify-center gap-2")}>
-                                        <TabsTrigger
-                                            value="all"
-                                            className={cn(
-                                                "relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121]",
-                                                !isNarrowMobileLayout && "h-8 data-[state=inactive]:text-[#4E5969]",
-                                            )}
-                                        >
-                                            {localize("com_notifications_tab_all")}
-                                            {unreadCounts.all > 0 && (
-                                                <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
-                                                    {formatBadge(unreadCounts.all)}
-                                                </span>
-                                            )}
-                                        </TabsTrigger>
-                                        <TabsTrigger
-                                            value="request"
-                                            className={cn(
-                                                "relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121]",
-                                                !isNarrowMobileLayout && "h-8 data-[state=inactive]:text-[#4E5969]",
-                                            )}
-                                        >
-                                            {localize("com_notifications_tab_request")}
-                                            {unreadCounts.request > 0 && (
-                                                <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
-                                                    {formatBadge(unreadCounts.request)}
-                                                </span>
-                                            )}
-                                        </TabsTrigger>
-                                    </TabsList>
+                                        <TabsList className={cn("inline-flex h-auto w-auto justify-start bg-transparent p-0 gap-2")}>
+                                            <TabsTrigger
+                                                value="all"
+                                                className={cn(
+                                                    "relative h-8 shrink-0 min-h-0 min-w-fit appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]",
+                                                )}
+                                            >
+                                                {localize("com_notifications_tab_all")}
+                                                {unreadCounts.all > 0 && (
+                                                    <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
+                                                        {formatBadge(unreadCounts.all)}
+                                                    </span>
+                                                )}
+                                            </TabsTrigger>
+                                            <TabsTrigger
+                                                value="request"
+                                                className={cn(
+                                                    "relative h-8 shrink-0 min-h-0 min-w-fit appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]",
+                                                )}
+                                            >
+                                                {localize("com_notifications_tab_request")}
+                                                {unreadCounts.request > 0 && (
+                                                    <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
+                                                        {formatBadge(unreadCounts.request)}
+                                                    </span>
+                                                )}
+                                            </TabsTrigger>
+                                        </TabsList>
 
-                                    {!isNarrowMobileLayout && (
-                                    <div className="flex items-center gap-3">
-                                        <ExpandableSearchField
-                                            value={searchQuery}
-                                            onChange={setSearchQuery}
-                                            placeholder={localize("com_notifications_search_placeholder")}
-                                            titleWhenCollapsed={localize("com_notifications_search")}
-                                        />
+                                        {!isNarrowMobileLayout && (
+                                            <div className="flex items-center gap-3">
+                                                <ExpandableSearchField
+                                                    value={searchQuery}
+                                                    onChange={setSearchQuery}
+                                                    placeholder={localize("com_notifications_search_placeholder")}
+                                                    titleWhenCollapsed={localize("com_notifications_search")}
+                                                />
 
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setOnlyUnread((v) => !v)}
+                                                    className={
+                                                        onlyUnread
+                                                            ? "h-8 rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] px-3 py-0 text-[14px] font-normal leading-none text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
+                                                            : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                    }
+                                                >
+                                                    {localize("com_notifications_unread_only")}
+                                                </Button>
+
+                                                <Button
+                                                    onClick={() => {
+                                                        setOnlyUnread(false);
+                                                        handleMarkAllAsRead();
+                                                    }}
+                                                    variant="outline"
+                                                    className="h-8 rounded-[6px] border-transparent bg-[#F8F8F8] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                                >
+                                                    {localize("com_notifications_mark_all_read")}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* H5：与稿一致 — 搜索与「仅看未读」「已读全部」同一行，gap 12px */}
+                                {isNarrowMobileLayout && (
+                                    <div className="flex min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#EBECF0] bg-white px-3 py-[5px]">
+                                            <Search className="size-4 shrink-0 text-[#8B8FA8]" aria-hidden />
+                                            <input
+                                                type="search"
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                placeholder={localize("com_notifications_search_placeholder")}
+                                                className="min-w-0 flex-1 bg-transparent text-[14px] leading-normal text-[#212121] outline-none placeholder:text-[#979797]"
+                                                enterKeyHint="search"
+                                            />
+                                        </div>
                                         <Button
                                             type="button"
                                             variant="outline"
                                             onClick={() => setOnlyUnread((v) => !v)}
                                             className={
                                                 onlyUnread
-                                                    ? "h-8 rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] px-3 py-0 text-[14px] font-normal leading-none text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
-                                                    : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                    ? "h-8 shrink-0 rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] px-4 py-[5px] text-[14px] font-normal text-[#335CFF] [backdrop-filter:blur(8px)]"
+                                                    : "h-8 shrink-0 rounded-[6px] border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                             }
                                         >
                                             {localize("com_notifications_unread_only")}
                                         </Button>
-
                                         <Button
+                                            type="button"
                                             onClick={() => {
                                                 setOnlyUnread(false);
                                                 handleMarkAllAsRead();
                                             }}
                                             variant="outline"
-                                            className="h-8 rounded-[6px] border-transparent bg-[#F8F8F8] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                            className="h-8 shrink-0 rounded-[6px] border-transparent bg-[#F8F8F8] px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                         >
                                             {localize("com_notifications_mark_all_read")}
                                         </Button>
                                     </div>
-                                    )}
-                                    </div>
-                                </div>
-
-                                {/* H5：与稿一致 — 搜索与「仅看未读」「已读全部」同一行，gap 12px */}
-                                {isNarrowMobileLayout && (
-                                <div className="flex min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#EBECF0] bg-white px-3 py-[5px]">
-                                        <Search className="size-4 shrink-0 text-[#8B8FA8]" aria-hidden />
-                                        <input
-                                            type="search"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder={localize("com_notifications_search_placeholder")}
-                                            className="min-w-0 flex-1 bg-transparent text-[14px] leading-normal text-[#212121] outline-none placeholder:text-[#979797]"
-                                            enterKeyHint="search"
-                                        />
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setOnlyUnread((v) => !v)}
-                                        className={
-                                            onlyUnread
-                                                ? "h-8 shrink-0 rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] px-4 py-[5px] text-[14px] font-normal text-[#335CFF] [backdrop-filter:blur(8px)]"
-                                                : "h-8 shrink-0 rounded-[6px] border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
-                                        }
-                                    >
-                                        {localize("com_notifications_unread_only")}
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        onClick={() => {
-                                            setOnlyUnread(false);
-                                            handleMarkAllAsRead();
-                                        }}
-                                        variant="outline"
-                                        className="h-8 shrink-0 rounded-[6px] border-transparent bg-[#F8F8F8] px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
-                                    >
-                                        {localize("com_notifications_mark_all_read")}
-                                    </Button>
-                                </div>
                                 )}
                             </div>
 

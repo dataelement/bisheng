@@ -56,6 +56,7 @@ from bisheng.department.domain.schemas.department_schema import (
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 
 logger = logging.getLogger(__name__)
 
@@ -758,6 +759,11 @@ class DepartmentService:
                     need_add = [r for r in to_apply if r not in existing]
                     if need_add:
                         UserRoleDao.add_user_roles(uid, need_add)
+                        await LegacyRBACSyncService.sync_user_role_change(
+                            uid,
+                            existing,
+                            existing | set(need_add),
+                        )
 
     @classmethod
     async def aremove_member(
@@ -1285,6 +1291,10 @@ class DepartmentService:
         user = UserDao.add_user_with_groups_and_roles(
             user, [], final_role_ids,
         )
+        await LegacyRBACSyncService.sync_user_auth_created(
+            user.user_id,
+            final_role_ids,
+        )
 
         async with get_async_db_session() as session:
             dept = await _get_dept_or_raise(session, dept_id)
@@ -1786,3 +1796,9 @@ class DepartmentService:
             UserRoleDao.add_user_roles(user_id, need_add)
         if need_del:
             UserRoleDao.delete_user_roles(user_id, need_del)
+        if need_add or need_del:
+            await LegacyRBACSyncService.sync_user_role_change(
+                user_id,
+                role_ids_user,
+                new_roles,
+            )

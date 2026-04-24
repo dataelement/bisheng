@@ -26,6 +26,32 @@ import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
+import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
+import { useAuthContext } from '@/hooks';
+import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
+
+function HomeEntryRedirect() {
+  const { user } = useAuthContext();
+  const plugins = (user as { plugins?: string[] } | null)?.plugins;
+  const approval = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
+  if (!Array.isArray(plugins)) {
+    return <Navigate to="/c/new" replace />;
+  }
+  const has = (id: string) => plugins.includes(id);
+  if (has('home') || approval) {
+    return <Navigate to="/c/new" replace />;
+  }
+  if (has('apps')) {
+    return <Navigate to={appsSectionLinkTarget()} replace />;
+  }
+  if (has('subscription')) {
+    return <Navigate to="/channel" replace />;
+  }
+  if (has('knowledge_space')) {
+    return <Navigate to="/knowledge" replace />;
+  }
+  return <Navigate to="/menu-unavailable" replace />;
+}
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -67,7 +93,7 @@ export const router = createBrowserRouter([
             path: '',
             element: <Root />,
             children: [
-              { index: true, element: <Navigate to="/c/new" replace /> },
+              { index: true, element: <HomeEntryRedirect /> },
               { path: 'c/:conversationId?', element: <ChatRoute /> },
               { path: 'linsight/:conversationId?', element: <Sop /> },
               { path: 'linsight/case/:sopId', element: <Sop /> },
@@ -94,6 +120,7 @@ export const router = createBrowserRouter([
           { path: 'knowledge/space/:spaceId', element: <Knowledge /> },
           { path: 'knowledge/space/:spaceId/folder/:folderId', element: <Knowledge /> },
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
+          { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
         ],
       },
       // Standalone chat — auth (login required, inside AuthLayout)

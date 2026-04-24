@@ -302,6 +302,7 @@ const AiChatInput = memo(
             [handleSend, isStreaming]
         );
 
+        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0)) && !isLingsi;
         return (
             <div className="px-4 sm:px-0 pb-4 touch-mobile:px-0 touch-mobile:pb-3 shrink-0 relative">
                 {/* Drag-drop overlay */}
@@ -351,8 +352,8 @@ const AiChatInput = memo(
                     })()}
 
                     {/* Selected knowledge base / space tags */}
-                    {((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0)) && !isLingsi && (
-                        <div className="m-3 max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                    {hasSelectionTags && (
+                        <div className="mx-3 mt-3 mb-2 max-h-[72px] overflow-y-auto scrollbar-on-hover">
                             <div className="flex flex-wrap gap-1">
                                 {(chatFiles || []).map((file) => (
                                     <FileTag
@@ -396,9 +397,10 @@ const AiChatInput = memo(
                         rows={2}
                         style={{ height: 84, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
-                            "p-3 pb-0 m-0 w-full resize-none bg-transparent text-sm",
+                            "m-0 w-full resize-none bg-transparent text-sm pb-0 pl-4 pr-6",
+                            hasSelectionTags ? "pt-0" : "pt-3",
                             "placeholder-black/50 dark:placeholder-white/50",
-                            "max-h-[240px] pl-4 pr-6 scrollbar-gutter-stable",
+                            "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-20',
                             removeFocusRings,
                             "transition-[max-height] duration-200",
@@ -465,7 +467,7 @@ const AiChatInput = memo(
                         </div>
 
                         {/* Toolbar: model select + knowledge base + tools */}
-                        <div className="absolute bottom-0 left-3 flex gap-2 items-center">
+                        <div className="input-bottom-left absolute bottom-0 left-3 flex gap-2 items-center">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}

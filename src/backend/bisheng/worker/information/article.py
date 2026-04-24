@@ -47,20 +47,22 @@ def sync_information_article(information_id: str = None):
             for one in information_list:
                 try:
                     logger.debug(f"Syncing information for {one.id} - {one.source_name}")
-                    if one.update_time.strftime("%Y-%m-%d") == datetime.now().strftime(
-                        "%Y-%m-%d") and one.update_time != one.create_time:
+                    if (one.update_time.strftime("%Y-%m-%d") == datetime.now().strftime("%Y-%m-%d")
+                    ) and (one.update_time.strftime("%Y-%m-%d %H:%M") != one.create_time.strftime("%Y-%m-%d %H:%M")):
                         logger.debug(
                             f"Skip information for {one.id} - {one.source_name}, because it has already been updated today.")
                         continue
                     need_update_informations.append(one.id)
+
                     new_ids = _sync_one_information_article(one, article_service)
                     if new_ids:
                         indexed_by_source.setdefault(str(one.id), []).extend(new_ids)
-                except Exception as e:
-                    logger.exception(f"Failed to sync information article for source {one.id}: {e}")
-                finally:
                     one.update_time = datetime.now()
                     channel_info_repository.update_sync(one)
+                except Exception as e:
+                    logger.exception(f"Failed to sync information article for source {one.id}: {e}")
+
+
             page += 1
     logger.debug("Finished syncing information articles")
 

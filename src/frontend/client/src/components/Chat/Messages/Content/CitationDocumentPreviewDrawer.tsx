@@ -1,7 +1,9 @@
 import { Download, FileText, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
+import store from '~/store';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import { cn } from '~/utils';
 import {
@@ -10,6 +12,7 @@ import {
   getCitationDocumentUrl,
   getCitationItemBBoxes,
   isRagCitation,
+  resolveCitationDocumentUrl,
   toAbsolutePreviewUrl,
   type CitationPdfBBox,
 } from './citationUtils';
@@ -63,11 +66,36 @@ export function CitationDocumentPreviewContent({
   const { detail, itemId, locateChunk } = preview;
   const fileName = getCitationDocumentName(detail);
   const rawFileUrl = getCitationDocumentUrl(detail);
-  const fileType = resolveFileType(detail, rawFileUrl);
-  const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
+  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(rawFileUrl);
+  const [isResolvingFileUrl, setIsResolvingFileUrl] = useState(false);
+  const fileType = resolveFileType(detail, resolvedRawFileUrl || rawFileUrl);
+  const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || rawFileUrl);
   const shouldLocateChunk = locateChunk && fileType === 'pdf';
   const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(detail, itemId) : [];
   const targetBBox = bboxes[0] ?? null;
+
+  useEffect(() => {
+    let active = true;
+    setResolvedRawFileUrl(rawFileUrl);
+
+    if (rawFileUrl) {
+      setIsResolvingFileUrl(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setIsResolvingFileUrl(true);
+    void resolveCitationDocumentUrl(detail).then((nextUrl) => {
+      if (!active) return;
+      setResolvedRawFileUrl(nextUrl || '');
+      setIsResolvingFileUrl(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [detail, rawFileUrl]);
 
   return (
     <div className={cn('min-h-0 flex-1', className)}>
@@ -80,6 +108,10 @@ export function CitationDocumentPreviewContent({
           targetBBox={targetBBox}
           compactMode={compactMode}
         />
+      ) : isResolvingFileUrl ? (
+        <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+          正在加载文件预览...
+        </div>
       ) : (
         <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
           暂无可预览文件地址
@@ -97,6 +129,11 @@ export default function CitationDocumentPreviewDrawer({
   const isNarrowLayout = usePrefersMobileLayout();
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
+  const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
+  const detail = preview?.detail ?? null;
+  const fileName = getCitationDocumentName(detail);
+  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(() => getCitationDocumentUrl(detail));
+  const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl);
   const canRenderPreview = !!preview && isRagCitation(preview.detail);
 
   useEffect(() => {
@@ -113,18 +150,51 @@ export default function CitationDocumentPreviewDrawer({
     };
   }, [canRenderPreview, isNarrowLayout]);
 
+  useEffect(() => {
+    if (!canRenderPreview || !isNarrowLayout) return;
+    setChatMobileNavHidden(true);
+    return () => {
+      setChatMobileNavHidden(false);
+    };
+  }, [canRenderPreview, isNarrowLayout, setChatMobileNavHidden]);
+
+  useEffect(() => {
+    let active = true;
+    const nextRawFileUrl = getCitationDocumentUrl(detail);
+    setResolvedRawFileUrl(nextRawFileUrl);
+
+    if (nextRawFileUrl) {
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!detail || !isRagCitation(detail)) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void resolveCitationDocumentUrl(detail).then((nextUrl) => {
+      if (!active) return;
+      setResolvedRawFileUrl(nextUrl || '');
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [detail]);
+
   if (!canRenderPreview) {
     return null;
   }
 
-  const { detail } = preview;
-  const fileName = getCitationDocumentName(detail);
-  const rawFileUrl = getCitationDocumentUrl(detail);
-  const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
-  const handleDownload = () => {
-    if (!fileUrl) return;
+  const handleDownload = async () => {
+    const nextFileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || await resolveCitationDocumentUrl(detail));
+    setResolvedRawFileUrl((current) => current || nextFileUrl);
+    if (!nextFileUrl) return;
     const link = document.createElement('a');
-    link.href = fileUrl;
+    link.href = nextFileUrl;
     link.download = fileName;
     link.target = '_blank';
     document.body.appendChild(link);
@@ -133,72 +203,62 @@ export default function CitationDocumentPreviewDrawer({
   };
 
   return (
-    <>
+    <aside
+      className={cn(
+        'fixed z-[89] flex flex-col bg-white',
+        isFullBleedMobile && 'inset-0 overflow-hidden overscroll-contain touch-pan-y',
+        !isFullBleedMobile &&
+        'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+      )}
+      aria-label="文档预览"
+    >
       <div
-        className={`fixed inset-0 z-[88] ${isNarrowLayout ? 'bg-black/20' : 'bg-black/10'}`}
-        aria-hidden="true"
-        onClick={onClose}
-      />
-      <aside
         className={cn(
-          'z-[89] flex flex-col bg-white',
-          isFullBleedMobile && 'fixed inset-0 overflow-hidden overscroll-contain touch-pan-y',
-          !isFullBleedMobile &&
-            'fixed inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+          'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
+          isFullBleedMobile && 'h-14 px-3 pt-[env(safe-area-inset-top,0px)]',
+          !isFullBleedMobile && 'h-14 px-3',
         )}
-        aria-label="文档预览"
       >
-        <div
-          className={cn(
-            'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
-            isFullBleedMobile && 'min-h-12 px-3 pt-[env(safe-area-inset-top,0px)]',
-            isNarrowLayout && !isFullBleedMobile && 'h-12 px-3',
-            !isNarrowLayout && 'h-14 px-5',
-          )}
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            {(!isNarrowLayout || isFullBleedMobile) && (
-              <FileText className="size-4 shrink-0 text-[#165DFF]" />
+        <div className="flex min-w-0 items-center gap-2">
+          {(!isNarrowLayout || isFullBleedMobile) && <FileText className="size-4 shrink-0 text-[#165DFF]" />}
+          <h2
+            className={cn(
+              'min-w-0 truncate font-semibold text-[#1D2129]',
+              isNarrowLayout ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
             )}
-            <h2
-              className={cn(
-                'min-w-0 truncate font-semibold text-[#1D2129]',
-                isNarrowLayout ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
-              )}
-              title={fileName}
-            >
-              {fileName}
-            </h2>
-            {isNarrowLayout && (
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={!fileUrl}
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
-                aria-label={localize("com_knowledge.download_file")}
-              >
-                <Download className="size-4" />
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex size-8 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
-            aria-label="关闭文档预览"
+            title={fileName}
           >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div
-          className={cn(
-            'min-h-0 flex-1 overflow-auto overscroll-contain',
+            {fileName}
+          </h2>
+          {isNarrowLayout && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!fileUrl}
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
+              aria-label={localize("com_knowledge.download_file")}
+            >
+              <Download className="size-4" />
+            </button>
           )}
-        >
-          <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
         </div>
-      </aside>
-    </>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+          aria-label="关闭文档预览"
+        >
+          <X className="size-4" strokeWidth={1.5} />
+        </button>
+      </div>
+
+      <div
+        className={cn(
+          'min-h-0 flex-1 overflow-auto overscroll-contain',
+        )}
+      >
+        <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
+      </div>
+    </aside>
   );
 }

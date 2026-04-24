@@ -5,7 +5,10 @@ import pytest
 
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.role_access import AccessType
-from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+from bisheng.knowledge.domain.services.knowledge_permission_service import (
+    _PERMISSION_SYNC_TIMEOUT_SECONDS,
+    KnowledgePermissionService,
+)
 
 
 @pytest.mark.asyncio
@@ -102,7 +105,7 @@ def test_check_access_sync_uses_view_permission_id():
     service = KnowledgePermissionService()
     login_user = SimpleNamespace(user_id=7)
 
-    def _close_and_allow(coro):
+    def _close_and_allow(coro, **_kwargs):
         coro.close()
         return True
 
@@ -119,6 +122,7 @@ def test_check_access_sync_uses_view_permission_id():
 
     assert allowed is True
     assert mock_run_async.call_args.args[0].cr_code.co_name == 'check_permission_id_async'
+    assert mock_run_async.call_args.kwargs['timeout'] == _PERMISSION_SYNC_TIMEOUT_SECONDS
 
 
 @pytest.mark.asyncio
@@ -150,7 +154,7 @@ def test_ensure_access_sync_raises_when_rebac_denies():
     class _Denied(Exception):
         pass
 
-    def _close_and_deny(coro):
+    def _close_and_deny(coro, **_kwargs):
         coro.close()
         return False
 
