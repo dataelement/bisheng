@@ -28,7 +28,7 @@ import { useTranslation } from "react-i18next"
 interface DepartmentSettingsProps {
   dept: DepartmentTreeNode
   tree: DepartmentTreeNode[]
-  onChanged: () => void
+  onChanged: (removedDeptId?: string) => void
 }
 
 function adminsToOptions(admins: DepartmentAdmin[]): DepartmentUserOption[] {
@@ -282,7 +282,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
               description: t("deleteSuccess"),
               variant: "success",
             })
-            onChanged()
+            onChanged(dept.dept_id)
           }
           next()
         })
