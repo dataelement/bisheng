@@ -30,8 +30,7 @@ export default function AppChatEntry() {
     // hook into currentAppInfoState, so the sidebar card is populated here too.
 
     const buildQs = useCallback(() => {
-        const from = new URLSearchParams(location.search).get('from');
-        return from ? `?from=${from}` : '';
+        return location.search || '';
     }, [location.search]);
 
     const navigateToNewChat = useCallback(() => {

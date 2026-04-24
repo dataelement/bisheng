@@ -71,22 +71,20 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 export function SideNav() {
     const location = useLocation();
     const navigate = useNavigate();
+    const { conversationId, fid: flowId, type: flowType } = useParams();
     const handleGoBack = () => {
-        const storedBackTarget = (() => {
+        let fromHomeEntry = false;
+        if (conversationId) {
             try {
-                return JSON.parse(sessionStorage.getItem('appChatBackTarget') || 'null') as
-                    | { source?: string; flowId?: string }
-                    | null;
+                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
             } catch {
-                return null;
+                // ignore storage failures
             }
-        })();
-        const fromHomeRecommendedApp =
-            (location.state as { fromHomeRecommendedApp?: boolean } | null)?.fromHomeRecommendedApp ||
-            new URLSearchParams(location.search).get('from') === 'home-recommended' ||
-            (storedBackTarget?.source === 'home-recommended' && storedBackTarget?.flowId === String(flowId));
-        if (fromHomeRecommendedApp) {
-            sessionStorage.removeItem('appChatBackTarget');
+        }
+        const searchParams = new URLSearchParams(location.search);
+        const from = searchParams.get('from');
+        const entry = searchParams.get('entry');
+        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
             navigate('/c/new');
             return;
         }
@@ -94,7 +92,6 @@ export function SideNav() {
     };
 
     const localize = useLocalize();
-    const { fid: flowId, type: flowType } = useParams();
     const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
     const { data: bsConfig } = useGetBsConfig();
 
@@ -266,8 +263,8 @@ export function SideNav() {
                 )}
             </div>
 
-            {/* Footer user panel */}
-            <div className="shrink-0 border-t border-[#F2F3F5] pt-2">
+            {/* Footer user panel: mobile only (<768px) */}
+            <div className="shrink-0 border-t border-[#F2F3F5] pt-2 hidden max-[768px]:block">
                 <UserPopMenu variant="drawer" />
             </div>
         </div>
