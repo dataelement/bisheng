@@ -85,6 +85,11 @@ export default function DepartmentPage() {
     loadTree(removedDeptId)
   }, [loadTree])
 
+  const handleDepartmentSettingsChanged = useCallback((removedDeptId?: string) => {
+    loadTree(removedDeptId)
+    setMembersRefreshSignal((prev) => prev + 1)
+  }, [loadTree])
+
   const handleLocateMemberFromGlobal = useCallback(
     ({
       primaryDeptDeptId,
@@ -173,6 +178,8 @@ export default function DepartmentPage() {
               <MemberTable
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
+                dept={selectedDept}
+                tree={tree}
                 isArchived={selectedDept.status === "archived"}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
@@ -185,7 +192,7 @@ export default function DepartmentPage() {
               <DepartmentSettings
                 dept={selectedDept}
                 tree={tree}
-                onChanged={handleTreeChange}
+                onChanged={handleDepartmentSettingsChanged}
               />
             </TabsContent>
           </Tabs>
