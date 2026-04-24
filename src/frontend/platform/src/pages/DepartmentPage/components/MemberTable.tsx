@@ -30,7 +30,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/bs-ui/tooltip"
-import { getDepartmentMembersApi } from "@/controllers/API/department"
+import {
+  getDepartmentMembersApi,
+  searchGlobalMembersApi,
+  type GlobalMemberSearchRow,
+} from "@/controllers/API/department"
 import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
@@ -38,6 +42,7 @@ import UserPwdModal from "@/pages/LoginPage/UserPwdModal"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { DepartmentMember } from "@/types/api/department"
 import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
+import { Loader2 } from "lucide-react"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog"
@@ -49,6 +54,14 @@ interface MemberTableProps {
   onChanged: () => void
   /** 父级在部门设置等变更后递增，用于在不切换部门时强制重新拉取成员（如部门管理员 FGA 更新后刷新「角色」列） */
   membersRefreshSignal?: number
+  /** 全组织搜索定位后高亮该用户行 */
+  highlightUserId?: number | null
+  onHighlightConsumed?: () => void
+  /** 点击全组织搜索结果时，通知父级切换部门并滚动左侧树 */
+  onRequestLocateMember?: (payload: {
+    primaryDeptDeptId: string
+    userId: number
+  }) => void
 }
 
 export function MemberTable({
@@ -56,6 +69,9 @@ export function MemberTable({
   deptName,
   onChanged,
   membersRefreshSignal = 0,
+  highlightUserId = null,
+  onHighlightConsumed,
+  onRequestLocateMember,
 }: MemberTableProps) {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
@@ -67,8 +83,20 @@ export function MemberTable({
   const [isPrimaryFilter, setIsPrimaryFilter] = useState<string>("all")
   const [addOpen, setAddOpen] = useState(false)
   const [editMember, setEditMember] = useState<DepartmentMember | null>(null)
+  const [memberScope, setMemberScope] = useState<"dept" | "org">("dept")
+  const [globalRows, setGlobalRows] = useState<GlobalMemberSearchRow[]>([])
+  const [globalTotal, setGlobalTotal] = useState(0)
+  const [globalPage, setGlobalPage] = useState(1)
+  const [globalLoading, setGlobalLoading] = useState(false)
   const pageRef = useRef(page)
   pageRef.current = page
+
+  useEffect(() => {
+    setMemberScope("dept")
+    setGlobalPage(1)
+    setGlobalRows([])
+    setGlobalTotal(0)
+  }, [deptId])
 
   const memberDisplayNames = useMemo(
     () => buildMemberDisplayNameMap(members),
@@ -76,6 +104,7 @@ export function MemberTable({
   )
 
   const loadMembers = useCallback(() => {
+    if (memberScope !== "dept") return
     const params: Record<string, string | number> = {
       page: pageRef.current,
       limit: 20,
@@ -92,18 +121,65 @@ export function MemberTable({
         setTotal(res.total)
       }
     })
-  }, [deptId, keyword, isPrimaryFilter])
+  }, [deptId, keyword, isPrimaryFilter, memberScope])
 
   useEffect(() => {
+    if (memberScope !== "dept") return
     setPage(1)
     pageRef.current = 1
     loadMembers()
-  }, [deptId, keyword, isPrimaryFilter])
+  }, [deptId, keyword, isPrimaryFilter, memberScope, loadMembers])
 
   useEffect(() => {
     if (membersRefreshSignal === 0) return
+    if (memberScope !== "dept") return
     loadMembers()
-  }, [membersRefreshSignal, loadMembers])
+  }, [membersRefreshSignal, loadMembers, memberScope])
+
+  const loadGlobalMembers = useCallback(() => {
+    const kw = keyword.trim()
+    if (!kw) {
+      setGlobalRows([])
+      setGlobalTotal(0)
+      setGlobalLoading(false)
+      return
+    }
+    setGlobalLoading(true)
+    captureAndAlertRequestErrorHoc(
+      searchGlobalMembersApi({ keyword: kw, page: globalPage, limit: 20 })
+    ).then((res) => {
+      setGlobalLoading(false)
+      if (res) {
+        setGlobalRows(res.data)
+        setGlobalTotal(res.total)
+      }
+    })
+  }, [keyword, globalPage])
+
+  useEffect(() => {
+    if (memberScope !== "org") return
+    setGlobalPage(1)
+  }, [keyword, memberScope])
+
+  useEffect(() => {
+    if (memberScope !== "org") return
+    const t = window.setTimeout(() => void loadGlobalMembers(), 280)
+    return () => window.clearTimeout(t)
+  }, [memberScope, keyword, globalPage, loadGlobalMembers])
+
+  useEffect(() => {
+    if (memberScope !== "dept" || highlightUserId == null) return
+    const hit = members.some((m) => m.user_id === highlightUserId)
+    if (!hit) return
+    const t = window.setTimeout(() => {
+      const el = document.querySelector(
+        `[data-member-row="${highlightUserId}"]`
+      )
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      onHighlightConsumed?.()
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [members, highlightUserId, memberScope, onHighlightConsumed])
 
   const handlePageChange = useCallback(
     (p: number) => {
@@ -113,6 +189,10 @@ export function MemberTable({
     },
     [loadMembers]
   )
+
+  const handleGlobalPageChange = useCallback((p: number) => {
+    setGlobalPage(p)
+  }, [])
 
   const handleToggleEnabled = useCallback(
     (m: DepartmentMember, enabled: boolean) => {
@@ -175,28 +255,129 @@ export function MemberTable({
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex gap-0.5 rounded-md bg-muted p-0.5">
+          <button
+            type="button"
+            className={cname(
+              "rounded px-3 py-1.5 text-sm transition-colors",
+              memberScope === "dept"
+                ? "bg-background text-foreground shadow"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setMemberScope("dept")}
+          >
+            {t("bs:department.memberSearchScopeCurrent")}
+          </button>
+          <button
+            type="button"
+            className={cname(
+              "rounded px-3 py-1.5 text-sm transition-colors",
+              memberScope === "org"
+                ? "bg-background text-foreground shadow"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setMemberScope("org")}
+          >
+            {t("bs:department.memberSearchScopeOrg")}
+          </button>
+        </div>
         <SearchInput
           placeholder={t("bs:department.searchMember")}
           className="w-[200px]"
+          value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
-        <Select value={isPrimaryFilter} onValueChange={setIsPrimaryFilter}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("bs:department.all")}</SelectItem>
-            <SelectItem value="1">{t("bs:department.primary")}</SelectItem>
-            <SelectItem value="0">{t("bs:department.secondary")}</SelectItem>
-          </SelectContent>
-        </Select>
+        {memberScope === "dept" && (
+          <Select value={isPrimaryFilter} onValueChange={setIsPrimaryFilter}>
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("bs:department.all")}</SelectItem>
+              <SelectItem value="1">{t("bs:department.primary")}</SelectItem>
+              <SelectItem value="0">{t("bs:department.secondary")}</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex-1" />
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          {t("bs:department.createLocalUser")}
-        </Button>
+        {memberScope === "dept" && (
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            {t("bs:department.createLocalUser")}
+          </Button>
+        )}
       </div>
+      {memberScope === "org" && (
+        <p className="mb-3 text-xs text-muted-foreground">
+          {t("bs:department.globalMemberSearchHint")}
+        </p>
+      )}
 
+      {memberScope === "org" && (
+        <div className="mb-4 rounded-md border">
+          {globalLoading && globalRows.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("bs:department.memberEditLoading")}
+            </div>
+          ) : !keyword.trim() ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              {t("bs:department.globalMemberEmptyKeyword")}
+            </div>
+          ) : globalRows.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              {t("bs:department.globalMemberNoResults")}
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[160px]">{t("system.username")}</TableHead>
+                    <TableHead>{t("bs:department.globalMemberPrimaryPath")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {globalRows.map((r) => (
+                    <TableRow
+                      key={`${r.user_id}-${r.primary_department_dept_id}`}
+                      className={cname(
+                        onRequestLocateMember && "cursor-pointer hover:bg-accent/60"
+                      )}
+                      onClick={() => {
+                        setMemberScope("dept")
+                        onRequestLocateMember?.({
+                          primaryDeptDeptId: r.primary_department_dept_id,
+                          userId: r.user_id,
+                        })
+                      }}
+                    >
+                      <TableCell className="font-medium">{r.user_name}</TableCell>
+                      <TableCell
+                        className="max-w-md truncate text-muted-foreground"
+                        title={r.primary_department_path}
+                      >
+                        {r.primary_department_path || "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="flex justify-end border-t px-2 py-2">
+                <AutoPagination
+                  page={globalPage}
+                  pageSize={20}
+                  total={globalTotal}
+                  showTotal
+                  onChange={handleGlobalPageChange}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {memberScope === "dept" && (
       <TooltipProvider delayDuration={200}>
       <Table
         noScroll
@@ -270,7 +451,15 @@ export function MemberTable({
             </TableRow>
           ) : (
             members.map((m) => (
-              <TableRow key={m.user_id}>
+              <TableRow
+                key={m.user_id}
+                data-member-row={m.user_id}
+                className={cname(
+                  highlightUserId != null && m.user_id === highlightUserId
+                    ? "bg-accent/50"
+                    : ""
+                )}
+              >
                 <TableCell {...mrc.getTdProps(0)} title={memberDisplayNames.get(m.user_id) ?? m.user_name}>
                   {memberDisplayNames.get(m.user_id) ?? m.user_name}
                 </TableCell>
@@ -372,7 +561,9 @@ export function MemberTable({
         </TableBody>
       </Table>
       </TooltipProvider>
+      )}
 
+      {memberScope === "dept" && (
       <div className="mt-4 flex justify-end">
         <AutoPagination
           page={page}
@@ -382,6 +573,7 @@ export function MemberTable({
           onChange={handlePageChange}
         />
       </div>
+      )}
 
       {addOpen && (
         <CreateLocalMemberDialog

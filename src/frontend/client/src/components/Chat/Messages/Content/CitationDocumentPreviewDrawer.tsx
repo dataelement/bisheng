@@ -1,7 +1,7 @@
 import { Download, FileText, X } from 'lucide-react';
+import { useEffect } from 'react';
 import type { ChatCitation } from '~/api/chatApi';
-import { useLocalize } from '~/hooks';
-import useMediaQuery from '~/hooks/useMediaQuery';
+import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import { cn } from '~/utils';
 import {
@@ -94,9 +94,26 @@ export default function CitationDocumentPreviewDrawer({
   onClose,
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
-  const isH5 = useMediaQuery('(max-width: 576px)');
-  const isFullBleedMobile = isH5;
-  if (!preview || !isRagCitation(preview.detail)) {
+  const isNarrowLayout = usePrefersMobileLayout();
+  const isPhoneViewport = useMediaQuery('(max-width: 576px)');
+  const isFullBleedMobile = isPhoneViewport;
+  const canRenderPreview = !!preview && isRagCitation(preview.detail);
+
+  useEffect(() => {
+    if (!canRenderPreview || !isNarrowLayout) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [canRenderPreview, isNarrowLayout]);
+
+  if (!canRenderPreview) {
     return null;
   }
 
@@ -118,16 +135,16 @@ export default function CitationDocumentPreviewDrawer({
   return (
     <>
       <div
-        className={`fixed inset-0 z-[58] ${isH5 ? 'bg-black/20' : 'bg-black/10'}`}
+        className={`fixed inset-0 z-[88] ${isNarrowLayout ? 'bg-black/20' : 'bg-black/10'}`}
         aria-hidden="true"
         onClick={onClose}
       />
       <aside
         className={cn(
-          'z-[60] flex flex-col bg-white',
-          isFullBleedMobile && 'fixed inset-0',
-          !isH5 &&
-            'fixed inset-y-0 right-0 w-[min(860px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+          'z-[89] flex flex-col bg-white',
+          isFullBleedMobile && 'fixed inset-0 overflow-hidden overscroll-contain touch-pan-y',
+          !isFullBleedMobile &&
+            'fixed inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
         )}
         aria-label="文档预览"
       >
@@ -135,24 +152,24 @@ export default function CitationDocumentPreviewDrawer({
           className={cn(
             'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
             isFullBleedMobile && 'min-h-12 px-3 pt-[env(safe-area-inset-top,0px)]',
-            isH5 && !isFullBleedMobile && 'h-12 px-3',
-            !isH5 && 'h-14 px-5',
+            isNarrowLayout && !isFullBleedMobile && 'h-12 px-3',
+            !isNarrowLayout && 'h-14 px-5',
           )}
         >
           <div className="flex min-w-0 items-center gap-2">
-            {(!isH5 || isFullBleedMobile) && (
+            {(!isNarrowLayout || isFullBleedMobile) && (
               <FileText className="size-4 shrink-0 text-[#165DFF]" />
             )}
             <h2
               className={cn(
                 'min-w-0 truncate font-semibold text-[#1D2129]',
-                isH5 ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
+                isNarrowLayout ? 'text-[14px] leading-5' : 'text-[16px] leading-6',
               )}
               title={fileName}
             >
               {fileName}
             </h2>
-            {isH5 && (
+            {isNarrowLayout && (
               <button
                 type="button"
                 onClick={handleDownload}
@@ -176,10 +193,10 @@ export default function CitationDocumentPreviewDrawer({
 
         <div
           className={cn(
-            'min-h-0 flex-1',
+            'min-h-0 flex-1 overflow-auto overscroll-contain',
           )}
         >
-          <CitationDocumentPreviewContent preview={preview} compactMode={isH5} />
+          <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
         </div>
       </aside>
     </>

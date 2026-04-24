@@ -1025,6 +1025,123 @@ class DepartmentService:
         ]
         return {'data': data, 'total': total}
 
+    @classmethod
+    async def aget_global_members_search(
+        cls, keyword: str, page: int, limit: int, login_user,
+    ) -> dict:
+        """Search members by username across visible org tree (primary department only).
+
+        数据范围与左侧部门树一致：先取 :meth:`aget_tree` 的可见节点 id 集合，仅返回主属部门
+        落在该集合内的用户（系统超管 / 租户管理员 / 部门管理员子树与树接口相同）。
+        """
+        kw = (keyword or '').strip()
+        if not kw:
+            return {'data': [], 'total': 0}
+        page = max(1, page)
+        limit = max(1, min(limit, 50))
+
+        tree = await cls.aget_tree(login_user)
+
+        def _collect_visible_ids(nodes: List[DepartmentTreeNode]) -> Set[int]:
+            out: Set[int] = set()
+            for n in nodes:
+                out.add(int(n.id))
+                if n.children:
+                    out |= _collect_visible_ids(n.children)
+            return out
+
+        visible_ids = _collect_visible_ids(tree)
+        if not visible_ids:
+            return {'data': [], 'total': 0}
+
+        async with get_async_db_session() as session:
+            from bisheng.user.domain.models.user import User
+
+            name_rows = await session.exec(
+                select(Department.id, Department.name).where(
+                    Department.status == 'active',
+                )
+            )
+            id_to_name = {int(r.id): r.name for r in name_rows.all()}
+
+            def _primary_dept_display_path(dept: Department) -> str:
+                """path 列为祖先内部 id 链（如 ``/22/``），通常不含本部门 id；根常为 ``/``。
+
+                展示「自根到主属部门」的名称链，避免只显示父级或根路径解析为空。
+                """
+                labels: List[str] = []
+                ancestor_ids: List[int] = []
+                for part in (dept.path or '').split('/'):
+                    if not part.strip():
+                        continue
+                    try:
+                        i = int(part)
+                    except ValueError:
+                        continue
+                    ancestor_ids.append(i)
+                    labels.append(id_to_name.get(i, f'#{i}'))
+                self_id = int(dept.id)
+                self_nm = id_to_name.get(self_id) or (dept.name or '')
+                if self_id not in ancestor_ids and self_nm:
+                    labels.append(self_nm)
+                return '/'.join(labels) if labels else (self_nm or '')
+
+            base_group = (
+                select(
+                    User.user_id,
+                    User.user_name,
+                    func.min(Department.id).label('dept_int_id'),
+                )
+                .join(
+                    UserDepartment,
+                    (UserDepartment.user_id == User.user_id)
+                    & (UserDepartment.is_primary == 1),
+                )
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(
+                    User.delete == 0,
+                    Department.status == 'active',
+                    col(Department.id).in_(visible_ids),
+                    User.user_name.like(f'%{kw}%'),
+                )
+                .group_by(User.user_id, User.user_name)
+            )
+            count_stmt = select(func.count()).select_from(base_group.subquery())
+            total = (await session.exec(count_stmt)).one()
+
+            page_stmt = (
+                base_group.order_by(User.user_name)
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+            rows = (await session.exec(page_stmt)).all()
+
+            if not rows:
+                return {'data': [], 'total': int(total)}
+
+            dept_int_ids = [int(r.dept_int_id) for r in rows]
+            dept_rows = (
+                await session.exec(
+                    select(Department).where(Department.id.in_(dept_int_ids))
+                )
+            ).all()
+            dept_by_id = {int(d.id): d for d in dept_rows}
+
+        data = []
+        for r in rows:
+            d = dept_by_id.get(int(r.dept_int_id))
+            if not d:
+                continue
+            data.append(
+                {
+                    'user_id': int(r.user_id),
+                    'user_name': r.user_name,
+                    'primary_department_dept_id': d.dept_id,
+                    'primary_department_path': _primary_dept_display_path(d),
+                }
+            )
+        return {'data': data, 'total': int(total)}
+
     @staticmethod
     async def _aget_ancestor_chain_ids(session, dept: Department) -> List[int]:
         """沿 parent_id 自当前部门上至根，返回内部 id 列表（含当前与各级祖先）。

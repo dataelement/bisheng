@@ -2,19 +2,13 @@ import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import type { DepartmentTreeNode } from "@/types/api/department"
 import { ChevronDown, ChevronRight, Building2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SelectedSubject } from "./types"
 
-interface DepartmentNode {
-  id: number
-  dept_id: string
-  name: string
-  parent_id: number | null
-  member_count?: number
-  children?: DepartmentNode[]
-}
+const INDENT_PX = 20
 
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[]
@@ -36,7 +30,7 @@ export function SubjectSearchDepartment({
   disabledLabel,
 }: SubjectSearchDepartmentProps) {
   const { t } = useTranslation('permission')
-  const [tree, setTree] = useState<DepartmentNode[]>([])
+  const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   const [loading, setLoading] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
@@ -52,7 +46,7 @@ export function SubjectSearchDepartment({
 
   const selectedIds = new Set(value.map((s) => s.id))
 
-  const toggle = (node: DepartmentNode) => {
+  const toggle = (node: DepartmentTreeNode, pathLabel: string) => {
     if (disabledIdSet.has(node.id)) return
     if (selectedIds.has(node.id)) {
       onChange(value.filter((s) => s.id !== node.id))
@@ -60,7 +54,7 @@ export function SubjectSearchDepartment({
       onChange([...value, {
         type: 'department',
         id: node.id,
-        name: node.name,
+        name: pathLabel,
         include_children: includeChildren,
       }])
     }
@@ -75,19 +69,17 @@ export function SubjectSearchDepartment({
     })
   }
 
-  // Filter tree nodes by keyword (flat match on name)
-  const matchesKeyword = useCallback((node: DepartmentNode): boolean => {
+  const matchesKeyword = useCallback((node: DepartmentTreeNode): boolean => {
     if (!keyword) return true
     const lower = keyword.toLowerCase()
     if (node.name.toLowerCase().includes(lower)) return true
     return (node.children || []).some(matchesKeyword)
   }, [keyword])
 
-  // Auto-expand nodes that match keyword
   useEffect(() => {
     if (!keyword) return
     const ids = new Set<number>()
-    const collect = (nodes: DepartmentNode[]) => {
+    const collect = (nodes: DepartmentTreeNode[]) => {
       for (const n of nodes) {
         if (matchesKeyword(n)) {
           ids.add(n.id)
@@ -121,6 +113,7 @@ export function SubjectSearchDepartment({
               key={node.id}
               node={node}
               depth={0}
+              pathSegments={[node.name]}
               expanded={expanded}
               selectedIds={selectedIds}
               disabledIds={disabledIdSet}
@@ -147,6 +140,7 @@ export function SubjectSearchDepartment({
 function TreeNode({
   node,
   depth,
+  pathSegments,
   expanded,
   selectedIds,
   disabledIds,
@@ -155,14 +149,15 @@ function TreeNode({
   onToggle,
   onExpand,
 }: {
-  node: DepartmentNode
+  node: DepartmentTreeNode
   depth: number
+  pathSegments: string[]
   expanded: Set<number>
   selectedIds: Set<number>
   disabledIds: Set<number>
   disabledLabel?: string
-  matchesKeyword: (n: DepartmentNode) => boolean
-  onToggle: (n: DepartmentNode) => void
+  matchesKeyword: (n: DepartmentTreeNode) => boolean
+  onToggle: (n: DepartmentTreeNode, pathLabel: string) => void
   onExpand: (id: number) => void
 }) {
   if (!matchesKeyword(node)) return null
@@ -170,46 +165,57 @@ function TreeNode({
   const hasChildren = node.children && node.children.length > 0
   const isExpanded = expanded.has(node.id)
   const isDisabled = disabledIds.has(node.id)
+  const pathLabel = pathSegments.join('/')
 
   return (
     <>
       <div
-        className={`flex items-center gap-1 px-2 py-1.5 ${
+        className={`flex items-stretch gap-0 pr-2 ${
           isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent"
         }`}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
-        {hasChildren ? (
-          <button
-            className="p-0.5 rounded hover:bg-muted"
-            onClick={(e) => { e.stopPropagation(); onExpand(node.id) }}
-          >
-            {isExpanded
-              ? <ChevronDown className="h-3.5 w-3.5" />
-              : <ChevronRight className="h-3.5 w-3.5" />}
-          </button>
-        ) : (
-          <span className="w-5" />
-        )}
-        <Checkbox
-          checked={selectedIds.has(node.id)}
-          disabled={isDisabled}
-          onCheckedChange={() => onToggle(node)}
+        <div
+          className="shrink-0"
+          style={{ width: depth * INDENT_PX }}
+          aria-hidden
         />
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm truncate">{node.name}</span>
-        {node.member_count != null && (
-          <span className="text-xs text-muted-foreground ml-1">({node.member_count})</span>
-        )}
-        {isDisabled && disabledLabel && (
-          <span className="ml-auto text-xs text-muted-foreground">{disabledLabel}</span>
-        )}
+        <div className="flex min-w-0 flex-1 items-center gap-1 py-1.5 pl-1">
+          {hasChildren ? (
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 hover:bg-muted"
+              onClick={(e) => { e.stopPropagation(); onExpand(node.id) }}
+            >
+              {isExpanded
+                ? <ChevronDown className="h-3.5 w-3.5" />
+                : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+          ) : (
+            <span className="inline-flex w-5 shrink-0 justify-center" />
+          )}
+          <Checkbox
+            checked={selectedIds.has(node.id)}
+            disabled={isDisabled}
+            onCheckedChange={() => onToggle(node, pathLabel)}
+          />
+          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate text-sm" title={pathLabel}>
+            {node.name}
+          </span>
+          {node.member_count != null && (
+            <span className="shrink-0 text-xs text-muted-foreground">({node.member_count})</span>
+          )}
+          {isDisabled && disabledLabel && (
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{disabledLabel}</span>
+          )}
+        </div>
       </div>
       {hasChildren && isExpanded && node.children!.map((child) => (
         <TreeNode
           key={child.id}
           node={child}
           depth={depth + 1}
+          pathSegments={[...pathSegments, child.name]}
           expanded={expanded}
           selectedIds={selectedIds}
           disabledIds={disabledIds}

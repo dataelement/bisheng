@@ -101,26 +101,26 @@ export function SideNav() {
     const showShareApp = flowData?.can_share === true;
 
     return (
-        <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+        <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden pl-3 pr-2 pt-3 pb-2 text-[#212121]">
             {/* H5 overlay: close sidebar — PC uses NavToggle to collapse */}
             <button
                 type="button"
                 onClick={() => setSidebarVisible(false)}
-                className="absolute right-2 top-2 z-20 hidden shrink-0 touch-mobile:flex items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
+                className="absolute right-3 top-3 z-20 hidden shrink-0 touch-mobile:flex items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
                 aria-label={localize('com_nav_close_sidebar')}
             >
                 <X size={16} className="text-[#4E5969]" />
             </button>
 
             {/* PC: back + title — original desktop sidebar chrome */}
-            <div className="hidden touch-desktop:flex shrink-0 items-center gap-2 pt-1">
+            <div className="hidden touch-desktop:flex shrink-0 items-center gap-2">
                 <button
                     type="button"
                     onClick={() => navigate('/apps')}
-                    className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[#212121] transition-colors hover:bg-[#f7f8fa]"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] transition-colors hover:bg-[#f7f8fa]"
                     aria-label={localize('com_ui_go_back')}
                 >
-                    <ChevronLeft className="size-4" />
+                    <ChevronLeft size={16} className="shrink-0" />
                 </button>
                 <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#212121]">
                     {localize('com_app_chat_sidebar_title')}

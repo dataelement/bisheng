@@ -25,6 +25,11 @@ export default function Departments() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
+  const [memberHighlightUserId, setMemberHighlightUserId] = useState<number | null>(null)
+  const [treeScrollRequest, setTreeScrollRequest] = useState<{
+    deptId: string
+    requestId: number
+  } | null>(null)
   const [leftPaneWidth, setLeftPaneWidth] = useState(280)
   const isResizingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -84,6 +89,34 @@ export default function Departments() {
     }
   }, [tree, selectedDeptId, findNode])
 
+  const handleLocateMemberFromGlobal = useCallback(
+    ({
+      primaryDeptDeptId,
+      userId,
+    }: {
+      primaryDeptDeptId: string
+      userId: number
+    }) => {
+      setSelectedDeptId(primaryDeptDeptId)
+      const node = findNode(tree, primaryDeptDeptId)
+      if (node) setSelectedDept(node)
+      setMemberHighlightUserId(userId)
+      setTreeScrollRequest((prev) => ({
+        deptId: primaryDeptDeptId,
+        requestId: (prev?.requestId ?? 0) + 1,
+      }))
+    },
+    [tree, findNode]
+  )
+
+  const handleTreeScrollHandled = useCallback(() => {
+    setTreeScrollRequest(null)
+  }, [])
+
+  const handleMemberHighlightConsumed = useCallback(() => {
+    setMemberHighlightUserId(null)
+  }, [])
+
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (!isResizingRef.current) return
@@ -124,6 +157,8 @@ export default function Departments() {
           selectedDeptId={selectedDeptId}
           onSelect={handleSelect}
           onCreateChild={handleCreateClick}
+          scrollRequest={treeScrollRequest}
+          onScrollRequestHandled={handleTreeScrollHandled}
         />
         <button
           className="mt-4 w-full rounded-md border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-primary hover:text-primary"
@@ -169,6 +204,9 @@ export default function Departments() {
                 deptName={selectedDept.name}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
+                highlightUserId={memberHighlightUserId}
+                onHighlightConsumed={handleMemberHighlightConsumed}
+                onRequestLocateMember={handleLocateMemberFromGlobal}
               />
             </TabsContent>
             <TabsContent value="settings">

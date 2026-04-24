@@ -28,7 +28,6 @@ import { ConversationData, QueryKeys } from '~/types/chat';
 import AppAvator from '../Avator';
 
 const CITATION_BROWSER_SMALL_BREAKPOINT = 768;
-const CITATION_MOBILE_BREAKPOINT = 576;
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
@@ -39,7 +38,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [isLingsi, setIsLingsi] = useState(false);
   const [inputText, setInputText] = useState('');
   const isH5 = usePrefersMobileLayout();
-  const isCitationMobile = useMediaQuery(`(max-width: ${CITATION_MOBILE_BREAKPOINT}px)`);
+  const isCitationMobile = isH5;
   const useInlineCitationPanel = useMediaQuery(`(min-width: ${CITATION_BROWSER_SMALL_BREAKPOINT + 1}px)`);
   const useExpandedCitationPanel = useInlineCitationPanel;
   const [citationPanelPayload, setCitationPanelPayload] = useState<CitationReferencesDesktopPayload | null>(null);
@@ -268,6 +267,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         return;
       }
 
+      if (target.closest('[data-citation-popover-surface]')) {
+        return;
+      }
+
       if (target.closest('[data-citation-references-trigger="true"]')) {
         return;
       }
@@ -335,7 +338,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
-                          contentWidthClassName="max-w-[768px] mx-auto"
+                          contentWidthClassName="w-full max-w-[800px] mx-auto touch-mobile:max-w-full touch-mobile:px-3"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={handleOpenCitationPanel}
                           activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
@@ -398,8 +401,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {!isCitationMobile && useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
                       <div
                         ref={citationPanelRef}
+                        data-citation-popover-surface
                         className={cn(
-                          'flex h-full shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300',
+                          'flex h-full min-w-0 shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300',
                           useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
                         )}
                       >
@@ -424,13 +428,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     )}
                     {!isCitationMobile && !useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
                       <div className="pointer-events-none fixed inset-0 z-30 flex justify-end">
+                        {/* z-0 + 面板的 z-10：避免全屏透明按钮在堆叠中盖住右栏，使点击被误判为点遮罩而直接关闭 */}
                         <button
                           type="button"
                           aria-label="关闭参考资料浮层"
-                          className="absolute inset-0 pointer-events-auto bg-transparent"
+                          className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
                           onClick={handleCloseCitationPanel}
                         />
-                        <div className="pointer-events-auto flex h-full w-[min(520px,calc(100vw-24px))] flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300">
+                        <div
+                          ref={citationPanelRef}
+                          data-citation-popover-surface
+                          className="relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
                           <CitationReferencesDrawer
                             panelOnly
                             desktopMode="inline-panel"

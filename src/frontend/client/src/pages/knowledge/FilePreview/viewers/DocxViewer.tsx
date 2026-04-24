@@ -54,11 +54,11 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="flex-1 overflow-auto bg-[#fbfbfb]">
-            <div className="flex justify-center py-6 px-4">
+        <div className="min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
+            <div className="box-border flex w-full justify-center py-6 px-3 sm:px-4">
                 <div
                     ref={containerRef}
-                    className="bg-white shadow-md max-w-[800px] w-full rounded-sm"
+                    className="w-full max-w-[800px] rounded-sm bg-white shadow-md"
                     style={{
                         transform: `scale(${scale})`,
                         transformOrigin: "top center",
