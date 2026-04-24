@@ -270,6 +270,11 @@ class UserService:
                 source='local',
             ))
             await session.commit()
+            from bisheng.department.domain.services.department_change_handler import (
+                DepartmentChangeHandler,
+            )
+            ops = DepartmentChangeHandler.on_members_added(dept.id, [user_id])
+            await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def _ensure_user_default_tenant_association(cls, user_id: int) -> None:

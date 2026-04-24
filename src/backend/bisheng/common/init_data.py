@@ -312,6 +312,7 @@ async def _backfill_guest_department_membership(session):
     if not user_rows:
         return
 
+    added_user_ids = []
     for uid in user_rows:
         has_any = (await session.exec(
             select(UserDepartment.id).where(UserDepartment.user_id == uid)
@@ -324,7 +325,14 @@ async def _backfill_guest_department_membership(session):
             is_primary=1,
             source='local',
         ))
+        added_user_ids.append(int(uid))
     await session.commit()
+    if added_user_ids:
+        from bisheng.department.domain.services.department_change_handler import (
+            DepartmentChangeHandler,
+        )
+        ops = DepartmentChangeHandler.on_members_added(guest.id, added_user_ids)
+        await DepartmentChangeHandler.execute_async(ops)
 
 
 async def _migrate_rbac_to_rebac_if_needed():

@@ -314,6 +314,42 @@ class TestPermissionServiceAuthorize:
         assert invalidate_user.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_authorize_department_with_children_writes_subtree_tuples(self, mock_fga):
+        """Department grants with include_children=True must write every subtree department."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(
+                 PermissionService,
+                 '_expand_subject',
+                 new_callable=AsyncMock,
+                 return_value=['department:5#member', 'department:6#member', 'department:7#member'],
+             ), \
+             patch.object(
+                 PermissionService,
+                 '_affected_user_ids_for_subject',
+                 new_callable=AsyncMock,
+                 return_value=set(),
+             ), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user',
+                   new_callable=AsyncMock):
+            await PermissionService.authorize(
+                object_type='knowledge_space',
+                object_id='space-1',
+                grants=[AuthorizeGrantItem(
+                    subject_type='department',
+                    subject_id=5,
+                    relation='viewer',
+                    include_children=True,
+                )],
+                enforce_fga_success=True,
+            )
+
+        mock_fga.assert_tuple_exists('department:5#member', 'viewer', 'knowledge_space:space-1')
+        mock_fga.assert_tuple_exists('department:6#member', 'viewer', 'knowledge_space:space-1')
+        mock_fga.assert_tuple_exists('department:7#member', 'viewer', 'knowledge_space:space-1')
+
+    @pytest.mark.asyncio
     async def test_authorize_user_group_invalidates_group_users(self, mock_fga):
         from bisheng.permission.domain.services.permission_service import PermissionService
 

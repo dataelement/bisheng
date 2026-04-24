@@ -92,7 +92,7 @@ export function PermissionGrantTab({
       relation,
       model_id: selectedModelId,
       ...(s.type === "department"
-        ? { include_children: Boolean(s.include_children) }
+        ? { include_children: includeChildren }
         : {}),
     }));
 
@@ -165,6 +165,11 @@ export function PermissionGrantTab({
               className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs"
             >
               {s.name}
+              {s.type === "department" && s.include_children && (
+                <span className="text-gray-500">
+                  ({localize("com_permission.include_children")})
+                </span>
+              )}
               <button
                 className="hover:text-red-500"
                 onClick={() => removeSelected(s.id)}

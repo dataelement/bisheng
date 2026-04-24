@@ -130,6 +130,9 @@ def patches(monkeypatch):
         m.UserDepartmentDao, 'aget_memberships_in_depts',
         AsyncMock(return_value=[]),
     )
+    from bisheng.department.domain.services import department_change_handler as dch
+    dept_execute = AsyncMock()
+    monkeypatch.setattr(dch.DepartmentChangeHandler, 'execute_async', dept_execute)
 
     # AuditLog for cross-source migration
     monkeypatch.setattr(
@@ -153,6 +156,7 @@ def patches(monkeypatch):
         assert_chain=assert_chain,
         tmh_process=tmh_process,
         sync_user=sync_user,
+        dept_execute=dept_execute,
     )
 
 
@@ -190,6 +194,30 @@ class TestNewUserHappyPath:
         # sync_user(user_id, trigger=LOGIN)
         assert call_args.args[0] == 7
         assert call_args.kwargs['trigger'] == UserTenantSyncTrigger.LOGIN
+
+    async def test_repairs_department_member_tuples_for_primary_and_secondary(
+        self, patches,
+    ):
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        primary = _dept('D1', id=11)
+        secondary = _dept('D2', id=12)
+        patches.assert_chain.return_value = {'D1': primary, 'D2': secondary}
+
+        await LoginSyncService.execute(_payload(secondary=['D2']), request_ip='')
+
+        ops = [
+            op
+            for call in patches.dept_execute.await_args_list
+            for op in call.args[0]
+        ]
+        assert ('write', 'user:7', 'member', 'department:11') in [
+            (op.action, op.user, op.relation, op.object) for op in ops
+        ]
+        assert ('write', 'user:7', 'member', 'department:12') in [
+            (op.action, op.user, op.relation, op.object) for op in ops
+        ]
 
 
 @pytest.mark.asyncio
@@ -363,12 +391,11 @@ class TestDepartmentAdminFgaReconcile:
         with patch.object(dch.DepartmentChangeHandler, 'execute_async', exec_mock):
             await LoginSyncService.execute(payload, request_ip='')
 
-        exec_mock.assert_awaited_once()
-        call_ops = exec_mock.await_args.args[0]
-        assert len(call_ops) == 1
-        op = call_ops[0]
+        ops = [op for call in exec_mock.await_args_list for op in call.args[0]]
+        admin_ops = [op for op in ops if op.relation == 'admin']
+        assert len(admin_ops) == 1
+        op = admin_ops[0]
         assert op.action == 'delete'
-        assert op.relation == 'admin'
         assert op.user == 'user:7'
         assert op.object == 'department:11'
         adelete.assert_awaited_once_with(7, 11)
@@ -415,7 +442,8 @@ class TestDepartmentAdminFgaReconcile:
         with patch.object(dch.DepartmentChangeHandler, 'execute_async', exec_mock):
             await LoginSyncService.execute(payload, request_ip='')
 
-        exec_mock.assert_not_awaited()
+        ops = [op for call in exec_mock.await_args_list for op in call.args[0]]
+        assert [op for op in ops if op.relation == 'admin'] == []
 
     async def test_leader_dept_grants_admin_tuple(self, patches, monkeypatch):
         from bisheng.department.domain.services import (
@@ -457,12 +485,11 @@ class TestDepartmentAdminFgaReconcile:
         with patch.object(dch.DepartmentChangeHandler, 'execute_async', exec_mock):
             await LoginSyncService.execute(payload, request_ip='')
 
-        exec_mock.assert_awaited_once()
-        call_ops = exec_mock.await_args.args[0]
-        assert len(call_ops) == 1
-        op = call_ops[0]
+        ops = [op for call in exec_mock.await_args_list for op in call.args[0]]
+        admin_ops = [op for op in ops if op.relation == 'admin']
+        assert len(admin_ops) == 1
+        op = admin_ops[0]
         assert op.action == 'write'
-        assert op.relation == 'admin'
         from bisheng.database.models.department_admin_grant import (
             DEPARTMENT_ADMIN_GRANT_SOURCE_SSO,
         )
