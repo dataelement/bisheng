@@ -14,6 +14,7 @@ import {
     getCitationSourceLabel,
     getLegacyCitationPreview,
     isRagCitation,
+    isRagCitationMissingPreviewUrl,
     normalizeCitationType,
     transformPrivateCitations,
     type CitationDetailLoader,
@@ -443,6 +444,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
     const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
     const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
     const citationBatchRequestKeyRef = useRef<string>("");
+    const citationResolvedIdsRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         Object.entries(initialCitationDetailMap).forEach(([citationId, detail]) => {
@@ -462,7 +464,12 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
         const citationIds = Array.from(new Set(
             Object.values(citationMap)
                 .map((item) => item.citationId)
-                .filter((citationId) => citationId && !citationId.startsWith("citation:") && !citationDetailCacheRef.current[citationId]),
+                .filter((citationId) => {
+                    if (!citationId || citationId.startsWith("citation:")) return false;
+                    if (citationResolvedIdsRef.current.has(citationId)) return false;
+                    const cached = citationDetailCacheRef.current[citationId];
+                    return !cached || isRagCitationMissingPreviewUrl(cached);
+                }),
         ));
 
         if (!citationIds.length) {
@@ -480,6 +487,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                 const nextMap: Record<string, ChatCitation> = {};
                 items.forEach((detail) => {
                     if (detail?.citationId) {
+                        citationResolvedIdsRef.current.add(detail.citationId);
                         citationDetailCacheRef.current[detail.citationId] = detail;
                         nextMap[detail.citationId] = detail;
                     }

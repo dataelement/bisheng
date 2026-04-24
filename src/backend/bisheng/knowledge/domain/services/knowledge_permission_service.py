@@ -17,6 +17,8 @@ from bisheng.permission.domain.services.permission_service import PermissionServ
 logger = logging.getLogger(__name__)
 
 
+_PERMISSION_SYNC_TIMEOUT_SECONDS = 60
+
 _KNOWLEDGE_ACCESS_RELATION = {
     AccessType.KNOWLEDGE: 'can_read',
     AccessType.KNOWLEDGE_WRITE: 'can_edit',
@@ -71,7 +73,8 @@ class KnowledgePermissionService:
                 login_user=login_user,
                 knowledge_id=knowledge_id,
                 permission_id=permission_id,
-            )
+            ),
+            timeout=_PERMISSION_SYNC_TIMEOUT_SECONDS,
         )
 
     @staticmethod
@@ -316,7 +319,7 @@ class KnowledgePermissionService:
             object_type='knowledge_library',
             object_id=str(knowledge_id),
             login_user=login_user,
-        ))
+        ), timeout=_PERMISSION_SYNC_TIMEOUT_SECONDS)
 
     async def ensure_access_async(
             self,

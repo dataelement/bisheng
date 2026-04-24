@@ -12,6 +12,7 @@ import {
   getCitationDocumentUrl,
   isRagCitation,
   normalizeCitationType,
+  resolveCitationDocumentUrl,
   toAbsolutePreviewUrl,
   type CitationPreview,
   type CitationReferenceItem,
@@ -428,13 +429,15 @@ export default function CitationReferencesDrawer({
 
     setDocumentPreview(nextPreview);
   };
-  const handleDownloadDocument = () => {
+  const handleDownloadDocument = async () => {
     if (!documentPreview) {
       return;
     }
 
     const fileName = getCitationDocumentName(documentPreview.detail);
-    const fileUrl = toAbsolutePreviewUrl(getCitationDocumentUrl(documentPreview.detail));
+    const fileUrl = toAbsolutePreviewUrl(
+      getCitationDocumentUrl(documentPreview.detail) || await resolveCitationDocumentUrl(documentPreview.detail),
+    );
     if (!fileUrl) {
       return;
     }

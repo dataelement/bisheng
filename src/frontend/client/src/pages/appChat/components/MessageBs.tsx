@@ -43,8 +43,8 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ logo, title, data, onUnlike = () => { },readOnly, onSource }:
-    { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ logo, title, data, onUnlike = () => { },readOnly, onSource, isGuestMode = false }:
+    { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any, isGuestMode?: boolean }) {
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
@@ -119,7 +119,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
                         citations={(data as any).citations}
                         buttonClassName="ml-4"
                     />
-                    <MessageSource
+                    {!isGuestMode && <MessageSource
                         extra={data.extra || {}}
                         end={data.end}
                         source={data.source}
@@ -128,7 +128,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
                             messageId: data.id,
                             message,
                         })}
-                    />
+                    />}
                     {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}
