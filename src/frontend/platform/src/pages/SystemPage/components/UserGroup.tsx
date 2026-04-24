@@ -6,6 +6,7 @@ import { PlusIcon } from "@/components/bs-icons/plus";
 import { deleteUserGroupV2, listUserGroupsV2, UserGroupV2 } from "@/controllers/API/userGroups";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { message } from "@/components/bs-ui/toast/use-toast";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
     Table,
@@ -51,12 +52,20 @@ export default function UserGroups() {
     }
     const handleDelete = (ug: UserGroupV2) => {
         bsConfirm({
+            title: t("prompt"),
             desc: t('system.deleteGroup', { name: ug.group_name }),
             okTxt: t('delete'),
-            onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteUserGroupV2(ug.id).then(loadData))
-                next()
-            }
+            onOk: async (next) => {
+                try {
+                    const res = await captureAndAlertRequestErrorHoc(
+                        deleteUserGroupV2(ug.id).then(() => loadData()),
+                    )
+                    if (res === false) return
+                    message({ variant: "success", description: t("deleteSuccess") })
+                } finally {
+                    next()
+                }
+            },
         })
     }
 

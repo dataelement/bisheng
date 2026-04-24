@@ -49,3 +49,21 @@ CREATE TABLE IF NOT EXISTS `gt_block_record`
     `update_time` datetime    not null,
     `resource_id` varchar(64) null
 );
+
+-- v2.5 部门维度限流（与 bisheng-gateway db/update_v_2.5.sql 对齐）
+CREATE TABLE IF NOT EXISTS `gt_department` (
+    `id`            INT NOT NULL PRIMARY KEY COMMENT 'Matches department.id in bisheng',
+    `dept_name`     VARCHAR(256) NOT NULL,
+    `dept_limit`    INT DEFAULT 0 NOT NULL COMMENT '0 = unlimited',
+    `create_time`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT '部门流量控制';
+
+CREATE TABLE IF NOT EXISTS `gt_department_resource` (
+    `id`              INT AUTO_INCREMENT PRIMARY KEY,
+    `department_id`   INT NOT NULL,
+    `resource_id`     VARCHAR(256) NOT NULL COMMENT 'assistant/skill/workflow ID',
+    `resource_limit`  INT DEFAULT 0 NOT NULL COMMENT '0 = unlimited',
+    `resource_type`   TINYINT NOT NULL COMMENT '2=skill, 3=assistant, 5=workflow',
+    INDEX `idx_dept_resource` (`department_id`, `resource_id`)
+) COMMENT '部门-资源流量限制';

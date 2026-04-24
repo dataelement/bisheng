@@ -178,13 +178,22 @@ class RoleDao(RoleBase):
 
     @classmethod
     def delete_role_by_group_id(cls, group_id: int):
-        from bisheng.user.domain.models.user_role import UserRole
+        """Remove roles scoped to this user group and their user_role bindings.
+
+        Previous implementation used ``one.UserRole`` on ``select(UserRole, Role)`` rows,
+        but ``session.exec`` returns ``(UserRole, Role)`` tuples — AttributeError when any
+        user had such a role (500 on delete group with members).
+        """
         with get_sync_db_session() as session:
-            all_user = select(UserRole, Role).join(
-                Role, and_(UserRole.role_id == Role.id,
-                           Role.group_id == group_id)).group_by(UserRole.id)
-            all_user = session.exec(all_user).all()
-            session.exec(delete(UserRole).where(UserRole.id.in_([one.UserRole.id for one in all_user])))
+            role_id_rows = session.exec(select(Role.id).where(Role.group_id == group_id)).all()
+            role_ids: List[int] = []
+            for row in role_id_rows:
+                if row is None:
+                    continue
+                rid = row[0] if isinstance(row, (tuple, list)) else row
+                role_ids.append(int(rid))
+            if role_ids:
+                session.exec(delete(UserRole).where(UserRole.role_id.in_(role_ids)))
             session.exec(delete(Role).where(Role.group_id == group_id))
             session.commit()
 

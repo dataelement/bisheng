@@ -1,5 +1,6 @@
 import TipPng from "@/assets/tip.jpg";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { DelIcon, LoadIcon } from "@/components/bs-icons";
 import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { RelationLevel } from "@/components/bs-comp/permission/types";
@@ -21,7 +22,7 @@ import { FlowVersionItem } from "@/types/flow";
 import { flowVersionCompatible } from "@/util/flowCompatible";
 import { findParallelNodes, importFlow } from "@/util/flowUtils";
 import { cloneDeep, isEqual } from "lodash-es";
-import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
+import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, Shield, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker, useLocation, useNavigate } from "react-router-dom";
@@ -37,6 +38,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const updateAppModalRef = useRef(null)
     // const { uploadFlow } = useFlowStore()
     const { t, i18n } = useTranslation('flow')
+    const { t: tbs } = useTranslation('bs')
     const [modelVersionId, setModelVersionId] = useState(0)
     const navigate = useNavigate()
     const { state } = useLocation();
@@ -46,6 +48,8 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const level = flowId ? permLevels[flowId] : undefined;
     const hasLevel = (current: RelationLevel | undefined, allowed: RelationLevel[]) => current ? allowed.includes(current) : false;
     const canEdit = hasLevel(level, ['owner', 'manager', 'editor']);
+    /** 与构建列表卡片「权限」盾牌一致：所有者 / 管理者可管理应用成员与权限 */
+    const canManage = hasLevel(level, ['owner', 'manager']);
 
     // console.log('flow :>> ', flow);
 
@@ -259,6 +263,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     // still held the non-online version's data. Blocking re-entry fixes it.
     const savingRef = useRef(false)
     const [saving, setSaving] = useState(false)
+    const [permDialogOpen, setPermDialogOpen] = useState(false)
 
     const {
         returnPage,
@@ -426,6 +431,18 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         <div
                             className="rounded-sm py-1.5 pl-2 pr-8 text-sm hover:bg-[#EBF0FF] dark:text-gray-50 dark:hover:bg-gray-700"
                             onClick={handleExportClick}> {t('exportWorkflow')}</div>
+                        {canManage && (
+                            <div
+                                className="flex items-center gap-2 rounded-sm py-1.5 pl-2 pr-8 text-sm hover:bg-[#EBF0FF] dark:text-gray-50 dark:hover:bg-gray-700"
+                                onClick={() => {
+                                    setOpen(false)
+                                    setPermDialogOpen(true)
+                                }}
+                            >
+                                <Shield className="h-4 w-4 shrink-0" />
+                                {tbs('build.authorizationManagement')}
+                            </div>
+                        )}
                     </PopoverContent>
                 </Popover>
             </div>
@@ -493,6 +510,15 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {flowId && canManage ? (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="workflow"
+                    resourceId={flowId}
+                    resourceName={flow?.name || ""}
+                />
+            ) : null}
         </header >
     );
 };

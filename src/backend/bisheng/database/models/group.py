@@ -151,7 +151,8 @@ class GroupDao(GroupBase):
     @classmethod
     async def adelete(cls, group_id: int) -> None:
         async with get_async_db_session() as session:
-            session.exec(delete(Group).where(Group.id == group_id))
+            session.expire_on_commit = False
+            await session.exec(delete(Group).where(Group.id == group_id))
             await session.commit()
 
     @classmethod

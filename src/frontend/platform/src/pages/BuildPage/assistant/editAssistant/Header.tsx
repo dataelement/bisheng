@@ -1,10 +1,11 @@
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
-import { ChevronLeft, SquarePen } from "lucide-react";
+import { ChevronLeft, Shield, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -21,6 +22,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
     const canEdit = canManage || currentLevel === 'editor'
     {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
 
     const needSaveRef = useRef(false)
     useEffect(() => {
@@ -71,9 +73,29 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
                 }}
             >{t('api.externalPublishing')}</div>}
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+            {canManage && assistantState?.id && (
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="flex items-center gap-2 px-4"
+                    onClick={() => setPermDialogOpen(true)}
+                >
+                    <Shield className="h-4 w-4 shrink-0" />
+                    {t('build.authorizationManagement')}
+                </Button>
+            )}
             <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>
             <Button type="submit" className="px-10" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>{assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}</Button>
+            {canManage && assistantState?.id ? (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="assistant"
+                    resourceId={String(assistantState.id)}
+                    resourceName={assistantState.name || ""}
+                />
+            ) : null}
         </div>
     </div>
 };
