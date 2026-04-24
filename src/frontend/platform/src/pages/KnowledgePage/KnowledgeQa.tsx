@@ -467,6 +467,7 @@ export default function KnowledgeQa(params) {
                                                     case 'permission':
                                                         setPermTarget({ id: String(el.id), name: el.name });
                                                         setPermDialogOpen(true);
+                                                        setModalKey(prev => prev + 1);
                                                         break;
                                                     case 'copy':
                                                         canUseCopy(el) &&
