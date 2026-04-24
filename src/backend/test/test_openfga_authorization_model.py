@@ -4,9 +4,9 @@ Verifies:
 - v2.0.2 model version bump (user_group admin/member compatibility)
 - tenant type carries shared_to relation; no parent relation
 - Every resource gets shared_with: [tenant] + viewer tupleToUserset(shared_with, member)
-- viewer's directly_related_user_types stays at 3 canonical sources (no #-nesting,
+- viewer's directly_related_user_types stays at bounded canonical sources (no #-nesting,
   which OpenFGA protobuf rejects)
-- manager/editor stay at the three standard sources
+- manager/editor stay at bounded direct subject sources
 - llm_server / llm_model types preallocated for F020
 """
 
@@ -153,8 +153,8 @@ def test_resource_editor_excludes_tenant(types_by_name, resource_type):
         f'{resource_type}.editor unexpectedly carries tenant type: {editor_types}'
 
 
-def test_resource_viewer_three_standard_sources_preserved(types_by_name):
-    """Viewer must still keep user / department#member / user_group#member."""
+def test_resource_viewer_standard_sources_preserved(types_by_name):
+    """Viewer must keep direct user, department, and user-group subjects."""
     viewer_types = types_by_name['workflow']['metadata']['relations']['viewer'][
         'directly_related_user_types']
     assert {'type': 'user'} in viewer_types
