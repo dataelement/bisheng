@@ -266,6 +266,7 @@ docker/mysql/data/*
 docker/office/bisheng/*.gz
 
 bisheng-sync.sh
+/deploy.sh
 !src/backend/bisheng/telemetry_search/**/*.pyc
 .omx/
 
