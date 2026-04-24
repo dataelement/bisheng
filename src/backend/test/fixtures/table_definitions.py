@@ -127,6 +127,16 @@ CREATE TABLE IF NOT EXISTS roleaccess (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
 
+TABLE_GROUP_RESOURCE = """\
+CREATE TABLE IF NOT EXISTS groupresource (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id VARCHAR(255),
+    third_id VARCHAR(255),
+    type INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
 TABLE_FLOW = """\
 CREATE TABLE IF NOT EXISTS flow (
     id VARCHAR(255) PRIMARY KEY,
@@ -411,6 +421,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'usergroup': TABLE_USERGROUP,
     'role': TABLE_ROLE,
     'roleaccess': TABLE_ROLE_ACCESS,
+    'groupresource': TABLE_GROUP_RESOURCE,
     'flow': TABLE_FLOW,
     'knowledge': TABLE_KNOWLEDGE,
     'department': TABLE_DEPARTMENT,

@@ -521,6 +521,9 @@ class TestSpaceListings:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
             new_callable=AsyncMock,
             return_value='owner',
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
             new_callable=AsyncMock,
@@ -533,6 +536,38 @@ class TestSpaceListings:
         assert result[0].user_role == UserRoleEnum.ADMIN
         assert result[0].subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
         assert result[0].is_followed is True
+
+    @pytest.mark.asyncio
+    async def test_get_my_followed_spaces_excludes_direct_grant_without_view_space(self, service):
+        granted_space = _make_space(space_id=2, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_followed_members',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.list_accessible_ids',
+            new_callable=AsyncMock,
+            return_value=['2'],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock,
+            return_value=[granted_space],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_read',
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value=set(),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await service.get_my_followed_spaces()
+
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_excludes_spaces_created_by_current_user(self, service):
@@ -579,6 +614,9 @@ class TestSpaceListings:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
             new_callable=AsyncMock,
             return_value='can_manage',
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value={'manage_space_relation'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
             new_callable=AsyncMock,
