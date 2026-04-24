@@ -1870,6 +1870,7 @@
     "search_department": "部署を検索",
     "search_user": "ユーザーを検索",
     "search_user_group": "ユーザーグループを検索",
+    "selected_prefix": "選択済み",
     "subject_department": "部署",
     "subject_user": "ユーザー",
     "subject_user_group": "ユーザーグループ",
@@ -1877,7 +1878,8 @@
     "success_modify": "権限を更新しました",
     "success_revoke": "権限を解除しました",
     "tab_grant": "権限付与",
-    "tab_list": "既存権限"
+    "tab_list": "既存権限",
+    "uniform_grant": "一括付与："
   },
   "com_label_operation_tip_mobile": "操作ヒント：上で表示するラベルを選び、下でドラッグして並べ替えます"
 }

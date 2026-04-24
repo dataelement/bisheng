@@ -611,6 +611,13 @@ export default function CitationReferencesDrawer({
   }
 
   if (!references.length) {
+    if (actionButtons) {
+      return (
+        <div className={cn('flex h-6 items-center gap-1', buttonClassName)}>
+          {actionButtons}
+        </div>
+      );
+    }
     return null;
   }
 

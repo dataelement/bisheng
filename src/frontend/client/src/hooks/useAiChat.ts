@@ -384,7 +384,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, isLingsi]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, isLingsi]
     );
 
     // --- Stop generating ---
@@ -553,7 +553,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools]
     );
 
     return {

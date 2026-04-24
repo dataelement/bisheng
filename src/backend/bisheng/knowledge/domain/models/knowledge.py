@@ -290,22 +290,28 @@ class KnowledgeDao(KnowledgeBase):
                                   sort_by: str = "update_time",
                                   page: int = 0,
                                   limit: int = 10,
-                                  filter_knowledge: List[int] = None) -> List[Knowledge]:
+                                  filter_knowledge: List[int] = None,
+                                  preferred_ids: Optional[List[int]] = None) -> List[Knowledge]:
         statement = select(Knowledge)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name, page, limit,
                                                 filter_knowledge)
 
+        order_clauses = []
+        if preferred_ids:
+            # Float pinned ids to the top of the global sort so they land on page 1
+            # no matter what sort_by is, then fall back to the requested sort.
+            order_clauses.append(case((Knowledge.id.in_(preferred_ids), 0), else_=1))
         if sort_by == "create_time":
-            statement = statement.order_by(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.create_time.desc())
         elif sort_by == "update_time":
-            statement = statement.order_by(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.update_time.desc())
         elif sort_by == "name":
-            statement = statement.order_by(
-                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
-                text('CONVERT(name USING gbk) ASC'),
-            )
+            order_clauses.append(text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'))
+            order_clauses.append(text('CONVERT(name USING gbk) ASC'))
+        if order_clauses:
+            statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -487,7 +493,8 @@ class KnowledgeDao(KnowledgeBase):
                                  knowledge_type: KnowledgeTypeEnum = None,
                                  sort_by: str = "update_time",
                                  page: int = 0,
-                                 limit: int = 0) -> List[Knowledge]:
+                                 limit: int = 0,
+                                 preferred_ids: Optional[List[int]] = None) -> List[Knowledge]:
         statement = select(Knowledge)
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
@@ -495,15 +502,18 @@ class KnowledgeDao(KnowledgeBase):
 
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        order_clauses = []
+        if preferred_ids:
+            order_clauses.append(case((Knowledge.id.in_(preferred_ids), 0), else_=1))
         if sort_by == "create_time":
-            statement = statement.order_by(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.create_time.desc())
         elif sort_by == "update_time":
-            statement = statement.order_by(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.update_time.desc())
         elif sort_by == "name":
-            statement = statement.order_by(
-                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
-                text('CONVERT(name USING gbk) ASC'),
-            )
+            order_clauses.append(text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'))
+            order_clauses.append(text('CONVERT(name USING gbk) ASC'))
+        if order_clauses:
+            statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 

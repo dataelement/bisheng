@@ -359,15 +359,29 @@ export const ChatKnowledge = ({
     [allSpaces, debouncedSpaceKeyword]
   );
 
+  // Comma-separated ids of admin-configured org KBs. Passed to the backend so
+  // those ids are floated to the top of the global sort — otherwise a
+  // configured KB sitting on page 2+ of the alpha list could never be promoted
+  // by client-side reshuffle alone.
+  const preferredIds = useMemo(() => {
+    const configured = (config as any)?.orgKbs || [];
+    if (!configured.length) return '';
+    return configured.map((k: any) => String(k.id)).join(',');
+  }, [config]);
+
   // Org KB data fetching (paginated via react-query)
   const { data: orgData, isFetching: orgFetching } = useGetOrgToolList({
-    page: orgPage, page_size: PAGE_SIZE, name: debouncedOrgKeyword, sort_by: 'name',
+    page: orgPage,
+    page_size: PAGE_SIZE,
+    name: debouncedOrgKeyword,
+    sort_by: 'name',
+    preferred_ids: preferredIds,
   });
 
   useEffect(() => {
     setOrgPage(1);
     setAllOrgKbs([]);
-  }, [debouncedOrgKeyword]);
+  }, [debouncedOrgKeyword, preferredIds]);
 
   useEffect(() => {
     if (orgData) {

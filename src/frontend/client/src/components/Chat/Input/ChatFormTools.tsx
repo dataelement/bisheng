@@ -36,11 +36,6 @@ export const ChatToolDown = ({
 }) => {
   const localize = useLocalize();
 
-  // 每次重置工具
-  useEffect(() => {
-    setSearchType("");
-  }, []);
-
   if (!config?.webSearch.enabled) return null;
 
   return (

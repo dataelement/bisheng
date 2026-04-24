@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/bs-ui/tooltip"
 import {
+  getDepartmentAdminsApi,
   getDepartmentMembersApi,
   searchGlobalMembersApi,
   type GlobalMemberSearchRow,
@@ -40,7 +41,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
-import { DepartmentMember } from "@/types/api/department"
+import type { DepartmentAdmin, DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
 import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
 import { Loader2 } from "lucide-react"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
@@ -51,6 +52,8 @@ import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog"
 interface MemberTableProps {
   deptId: string
   deptName: string
+  dept?: DepartmentTreeNode | null
+  tree?: DepartmentTreeNode[]
   isArchived?: boolean
   onChanged: () => void
   /** 父级在部门设置等变更后递增，用于在不切换部门时强制重新拉取成员（如部门管理员 FGA 更新后刷新「角色」列） */
@@ -68,6 +71,8 @@ interface MemberTableProps {
 export function MemberTable({
   deptId,
   deptName,
+  dept = null,
+  tree = [],
   isArchived = false,
   onChanged,
   membersRefreshSignal = 0,
@@ -90,6 +95,10 @@ export function MemberTable({
   const [globalTotal, setGlobalTotal] = useState(0)
   const [globalPage, setGlobalPage] = useState(1)
   const [globalLoading, setGlobalLoading] = useState(false)
+  const [directAdmins, setDirectAdmins] = useState<DepartmentAdmin[]>([])
+  const [inheritedAdmins, setInheritedAdmins] = useState<
+    (DepartmentAdmin & { sourceDeptName: string })[]
+  >([])
   const pageRef = useRef(page)
   pageRef.current = page
 
@@ -104,6 +113,71 @@ export function MemberTable({
     () => buildMemberDisplayNameMap(members),
     [members]
   )
+
+  const ancestorDepartments = useMemo(() => {
+    const nodeById = new Map<number, DepartmentTreeNode>()
+    const walk = (nodes: DepartmentTreeNode[]) => {
+      for (const n of nodes) {
+        nodeById.set(n.id, n)
+        if (n.children?.length) walk(n.children)
+      }
+    }
+    walk(tree)
+
+    const current = dept ?? [...nodeById.values()].find((n) => n.dept_id === deptId)
+    const ancestors: DepartmentTreeNode[] = []
+    let parentId = current?.parent_id ?? null
+    const seen = new Set<number>()
+    while (parentId != null && !seen.has(parentId)) {
+      seen.add(parentId)
+      const parent = nodeById.get(parentId)
+      if (!parent) break
+      ancestors.push(parent)
+      parentId = parent.parent_id
+    }
+    return ancestors
+  }, [dept, deptId, tree])
+
+  const loadAdminSummary = useCallback(() => {
+    let cancelled = false
+    const run = async () => {
+      const direct = await captureAndAlertRequestErrorHoc(
+        getDepartmentAdminsApi(deptId)
+      )
+      if (cancelled) return
+      const directRows = Array.isArray(direct) ? direct : []
+      const directUserIds = new Set(directRows.map((a) => Number(a.user_id)))
+      const inheritedResults = await Promise.all(
+        ancestorDepartments.map(async (ancestor) => {
+          try {
+            const rows = await getDepartmentAdminsApi(ancestor.dept_id)
+            return (rows || []).map((row) => ({
+              ...row,
+              sourceDeptName: ancestor.name,
+            }))
+          } catch {
+            return []
+          }
+        })
+      )
+      if (cancelled) return
+      const seenInherited = new Set<number>()
+      const inheritedRows = inheritedResults
+        .flat()
+        .filter((row) => {
+          const uid = Number(row.user_id)
+          if (directUserIds.has(uid) || seenInherited.has(uid)) return false
+          seenInherited.add(uid)
+          return true
+        })
+      setDirectAdmins(directRows)
+      setInheritedAdmins(inheritedRows)
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [ancestorDepartments, deptId])
 
   const loadMembers = useCallback(() => {
     if (memberScope !== "dept") return
@@ -137,6 +211,8 @@ export function MemberTable({
     if (memberScope !== "dept") return
     loadMembers()
   }, [membersRefreshSignal, loadMembers, memberScope])
+
+  useEffect(() => loadAdminSummary(), [loadAdminSummary, membersRefreshSignal])
 
   const loadGlobalMembers = useCallback(() => {
     const kw = keyword.trim()
@@ -322,6 +398,46 @@ export function MemberTable({
         <p className="mb-3 text-xs text-muted-foreground">
           {t("bs:department.globalMemberSearchHint")}
         </p>
+      )}
+
+      {memberScope === "dept" && (directAdmins.length > 0 || inheritedAdmins.length > 0) && (
+        <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2">
+          {directAdmins.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium text-muted-foreground">
+                {t("bs:department.directAdmins")}
+              </span>
+              {directAdmins.map((admin) => (
+                <Badge key={admin.user_id} variant="outline">
+                  {admin.user_name}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {inheritedAdmins.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium text-muted-foreground">
+                {t("bs:department.inheritedAdmins")}
+              </span>
+              {inheritedAdmins.map((admin) => (
+                <TooltipProvider key={`${admin.user_id}-${admin.sourceDeptName}`} delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary" className="cursor-default">
+                        {admin.user_name}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {t("bs:department.inheritedAdminSource", {
+                        department: admin.sourceDeptName,
+                      })}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {memberScope === "org" && (

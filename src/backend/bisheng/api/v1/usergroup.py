@@ -2,6 +2,7 @@
 import logging
 from typing import Annotated, List, Optional
 
+import anyio
 from fastapi import APIRouter, Body, Depends, Query, Request
 
 from bisheng.api.services.role_group_service import RoleGroupService
@@ -72,7 +73,13 @@ async def create_group(request: Request, group: GroupCreate,
     """
     Add Usergroup
     """
-    return resp_200(RoleGroupService().create_group(request, login_user, group))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().create_group,
+        request,
+        login_user,
+        group,
+    )
+    return resp_200(data)
 
 
 @router.put('/create')
@@ -82,7 +89,13 @@ async def update_group(request: Request,
     """
     Can edit existing usergroups
     """
-    return resp_200(RoleGroupService().update_group(request, login_user, group))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().update_group,
+        request,
+        login_user,
+        group,
+    )
+    return resp_200(data)
 
 
 @router.delete('/create', status_code=200)
@@ -92,8 +105,12 @@ async def delete_group(request: Request,
     """
     Can delete existing usergroups
     """
-
-    return RoleGroupService().delete_group(request, login_user, group_id)
+    return await anyio.to_thread.run_sync(
+        RoleGroupService().delete_group,
+        request,
+        login_user,
+        group_id,
+    )
 
 
 @router.post('/set_user_group')
@@ -107,7 +124,14 @@ async def set_user_group(request: Request,
     """
     if not group_id:
         raise UserGroupEmptyError()
-    return resp_200(RoleGroupService().replace_user_groups(request, login_user, user_id, group_id))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().replace_user_groups,
+        request,
+        login_user,
+        user_id,
+        group_id,
+    )
+    return resp_200(data)
 
 
 @router.get('/get_user_group')
@@ -138,8 +162,14 @@ async def set_group_admin(
     """
     Get groupingadmin, batch setting interface, overriding the historicaladmin
     """
-
-    return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().set_group_admin,
+        request,
+        login_user,
+        user_ids,
+        group_id,
+    )
+    return resp_200(data)
 
 @router.post('/set_group_members')
 async def set_group_members(
@@ -150,7 +180,14 @@ async def set_group_members(
     """
     Batch set group members (non-admin), overriding the historical members
     """
-    return resp_200(RoleGroupService().set_group_members(request, login_user, user_ids, group_id))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().set_group_members,
+        request,
+        login_user,
+        user_ids,
+        group_id,
+    )
+    return resp_200(data)
 
 
 @router.post('/set_update_user', status_code=200)

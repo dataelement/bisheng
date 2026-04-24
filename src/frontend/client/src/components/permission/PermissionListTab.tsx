@@ -10,10 +10,19 @@ import type {
   ResourceType,
   RelationModel,
 } from "~/api/permission";
-import { Building2, Loader2, RotateCcw, Trash2, User, Users } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Avatar, AvatarName } from "~/components/ui/Avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/DropdownMenu";
+import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
-import { RelationModelOption, RelationSelect } from "./RelationSelect";
+import { cn } from "~/utils";
+import { RelationModelOption } from "./RelationSelect";
 
 const SUBJECT_ICONS = {
   user: User,
@@ -21,28 +30,57 @@ const SUBJECT_ICONS = {
   user_group: Users,
 };
 
+const LIST_SUBJECT_TYPES = ["user", "department", "user_group"] as const;
+type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number];
+
 interface PermissionListTabProps {
   resourceType: ResourceType;
   resourceId: string;
   refreshKey: number;
+  // UI-only: when provided, hides the internal subject type switcher
+  // and locks the list to the given subject type.
+  fixedSubjectType?: ListSubjectType;
 }
-
-const LIST_SUBJECT_TYPES = ["user", "department", "user_group"] as const;
-type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number];
 
 export function PermissionListTab({
   resourceType,
   resourceId,
   refreshKey,
+  fixedSubjectType,
 }: PermissionListTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const confirm = useConfirm();
   const [entries, setEntries] = useState<PermissionEntry[]>([]);
-  const [listTab, setListTab] = useState<ListSubjectType>("user");
+  const [listTab, setListTab] = useState<ListSubjectType>(fixedSubjectType ?? "user");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
+  const [models, setModels] = useState<RelationModelOption[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isListScrolling, setIsListScrolling] = useState(false);
+  const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const mergeGrantableWithEntries = useCallback(
+    (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
+      const opts: RelationModelOption[] = (grantable || []).map((m) => ({
+        id: m.id,
+        name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
+        relation: m.relation as RelationLevel,
+      }));
+      const ids = new Set(opts.map((o) => o.id));
+      for (const entry of list) {
+        if (!entry.model_id || ids.has(entry.model_id)) continue;
+        ids.add(entry.model_id);
+        opts.push({
+          id: entry.model_id,
+          name: entry.model_name || entry.relation,
+          relation: entry.relation as RelationLevel,
+        });
+      }
+      return opts;
+    },
+    [localize],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -57,62 +95,84 @@ export function PermissionListTab({
     }
   }, [resourceType, resourceId]);
 
-  useEffect(() => { loadData(); }, [loadData, refreshKey]);
+  useEffect(() => {
+    loadData();
+  }, [loadData, refreshKey]);
 
-  const filteredEntries = useMemo(
-    () => entries.filter((e) => e.subject_type === listTab),
-    [entries, listTab]
-  );
+  useEffect(() => {
+    setListTab(fixedSubjectType ?? "user");
+    setSearchQuery("");
+  }, [resourceId, fixedSubjectType]);
 
-  useEffect(() => { setListTab("user"); }, [resourceId]);
+  useEffect(() => {
+    return () => {
+      if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        setGrantableModels(Array.isArray(res) ? res : []);
+        const merged = mergeGrantableWithEntries(res, entries);
+        if (merged.length) setModels(merged);
       })
       .catch(() => {});
-  }, [resourceType, resourceId, refreshKey]);
+  }, [resourceType, resourceId, entries, mergeGrantableWithEntries, refreshKey]);
 
-  const models = useMemo<RelationModelOption[]>(() => {
-    const opts: RelationModelOption[] = grantableModels.map((m) => ({
-      id: m.id,
-      name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
-      relation: m.relation as RelationLevel,
-    }));
-    const ids = new Set(opts.map((o) => o.id));
-    for (const e of entries) {
-      if (!e.model_id || ids.has(e.model_id)) continue;
-      ids.add(e.model_id);
-      opts.push({
-        id: e.model_id,
-        name: e.model_name || e.relation,
-        relation: e.relation as RelationLevel,
-      });
+  const subjectEntries = useMemo(
+    () => entries.filter((entry) => entry.subject_type === listTab),
+    [entries, listTab],
+  );
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const visibleEntries = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return subjectEntries;
     }
-    return opts;
-  }, [entries, grantableModels, localize]);
+
+    return subjectEntries.filter((entry) => {
+      const name = entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+      const groupNames = entry.subject_group_names?.join(" ") ?? "";
+      const includeChildrenText =
+        entry.subject_type === "department" && entry.include_children
+          ? localize("com_permission.include_children")
+          : "";
+      return `${name} ${groupNames} ${includeChildrenText}`
+        .toLowerCase()
+        .includes(normalizedSearchQuery);
+    });
+  }, [localize, normalizedSearchQuery, subjectEntries]);
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
-    const model = models.find((m) => m.id === modelId);
+    const model = models.find((item) => item.id === modelId);
     const newLevel = (model?.relation || "viewer") as RelationLevel;
     if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return;
     try {
       await authorizeResource(
-        resourceType, resourceId,
-        [{
-          subject_type: entry.subject_type,
-          subject_id: entry.subject_id,
-          relation: newLevel,
-          model_id: modelId,
-          ...(entry.subject_type === "department" ? { include_children: Boolean(entry.include_children) } : {}),
-        }],
-        [{
-          subject_type: entry.subject_type,
-          subject_id: entry.subject_id,
-          relation: entry.relation,
-          ...(entry.subject_type === "department" ? { include_children: Boolean(entry.include_children) } : {}),
-        }]
+        resourceType,
+        resourceId,
+        [
+          {
+            subject_type: entry.subject_type,
+            subject_id: entry.subject_id,
+            relation: newLevel,
+            model_id: modelId,
+            ...(entry.subject_type === "department"
+              ? { include_children: Boolean(entry.include_children) }
+              : {}),
+          },
+        ],
+        [
+          {
+            subject_type: entry.subject_type,
+            subject_id: entry.subject_id,
+            relation: entry.relation,
+            ...(entry.subject_type === "department"
+              ? { include_children: Boolean(entry.include_children) }
+              : {}),
+          },
+        ],
       );
       showToast({ message: localize("com_permission.success_modify"), status: "success" });
       loadData();
@@ -131,19 +191,77 @@ export function PermissionListTab({
     if (!ok) return;
     try {
       await authorizeResource(
-        resourceType, resourceId, [],
-        [{
-          subject_type: entry.subject_type,
-          subject_id: entry.subject_id,
-          relation: entry.relation,
-          ...(entry.subject_type === "department" ? { include_children: Boolean(entry.include_children) } : {}),
-        }]
+        resourceType,
+        resourceId,
+        [],
+        [
+          {
+            subject_type: entry.subject_type,
+            subject_id: entry.subject_id,
+            relation: entry.relation,
+            ...(entry.subject_type === "department"
+              ? { include_children: Boolean(entry.include_children) }
+              : {}),
+          },
+        ],
       );
       showToast({ message: localize("com_permission.success_revoke"), status: "success" });
       loadData();
     } catch {
       showToast({ message: localize("com_permission.error_revoke_failed"), status: "error" });
     }
+  };
+
+  const subjectLabel = (type: ListSubjectType) => {
+    const map: Record<ListSubjectType, string> = {
+      user: localize("com_permission.subject_user"),
+      department: localize("com_permission.subject_department"),
+      user_group: localize("com_permission.subject_user_group"),
+    };
+    return map[type];
+  };
+
+  const getEntryDisplayName = (entry: PermissionEntry) =>
+    entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+
+  const getPermissionLabel = (entry: PermissionEntry) => {
+    const currentModelId = entry.model_id || entry.relation;
+    return (
+      models.find((item) => item.id === currentModelId)?.name ||
+      entry.model_name ||
+      localize(`com_permission.level_${entry.relation}`)
+    );
+  };
+
+  const getSearchPlaceholder = (type: ListSubjectType) => {
+    const map: Record<ListSubjectType, string> = {
+      user:
+        localize("com_subscription.search_user_placeholder") ||
+        localize("com_permission.search_user"),
+      department: localize("com_permission.search_department"),
+      user_group: localize("com_permission.search_user_group"),
+    };
+    return map[type];
+  };
+
+  const getEntryCaption = (entry: PermissionEntry) => {
+    if (entry.subject_type === "user") {
+      return entry.subject_group_names?.join("、") ?? "";
+    }
+
+    if (entry.subject_type === "department") {
+      return entry.include_children
+        ? `${localize("com_permission.subject_department")} · ${localize("com_permission.include_children")}`
+        : localize("com_permission.subject_department");
+    }
+
+    return localize("com_permission.subject_user_group");
+  };
+
+  const handleListScroll = () => {
+    setIsListScrolling(true);
+    if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
+    listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
   };
 
   if (loading) {
@@ -158,7 +276,10 @@ export function PermissionListTab({
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-12">
         <span className="text-sm text-gray-500">{localize("com_permission.error_permission_denied")}</span>
-        <button className="flex items-center gap-1 text-sm text-blue-600 hover:underline" onClick={loadData}>
+        <button
+          className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          onClick={loadData}
+        >
           <RotateCcw className="h-3.5 w-3.5" /> {localize("com_ui_retry")}
         </button>
       </div>
@@ -173,93 +294,147 @@ export function PermissionListTab({
     );
   }
 
-  const subjectLabel = (type: ListSubjectType) => {
-    const map: Record<ListSubjectType, string> = {
-      user: localize("com_permission.subject_user"),
-      department: localize("com_permission.subject_department"),
-      user_group: localize("com_permission.subject_user_group"),
-    };
-    return map[type];
-  };
-
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-1 rounded-md bg-gray-100 p-1 w-fit">
-        {LIST_SUBJECT_TYPES.map((st) => (
-          <button
-            key={st}
-            type="button"
-            className={`rounded px-3 py-1.5 text-sm transition-colors ${
-              listTab === st
-                ? "bg-white text-gray-900 shadow"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-            onClick={() => setListTab(st)}
-          >
-            {subjectLabel(st)}
-          </button>
-        ))}
-      </div>
-      <div className="max-h-[400px] overflow-y-auto">
-        {filteredEntries.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-500">
-            {localize("com_permission.list_empty_for_subject")}
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-gray-500">
-                <th className="w-[40px] py-2"></th>
-                <th className="py-2">{subjectLabel(listTab)}</th>
-                <th className="w-[140px] py-2">{localize("com_permission.level_viewer")}</th>
-                <th className="w-[60px] py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEntries.map((entry, idx) => {
+    <div className="flex h-full min-h-0 flex-col">
+      {!fixedSubjectType && (
+        <div className="flex w-fit shrink-0 gap-1 rounded-md bg-gray-100 p-1">
+          {LIST_SUBJECT_TYPES.map((subjectType) => (
+            <button
+              key={subjectType}
+              type="button"
+              className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                listTab === subjectType
+                  ? "bg-white text-gray-900 shadow"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+              onClick={() => {
+                setListTab(subjectType);
+                setSearchQuery("");
+              }}
+            >
+              {subjectLabel(subjectType)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", !fixedSubjectType && "mt-4")}>
+        <div className="relative shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={getSearchPlaceholder(listTab)}
+            className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          />
+        </div>
+
+        <div
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-on-scroll"
+          onScroll={handleListScroll}
+          data-scrolling={isListScrolling ? "true" : "false"}
+        >
+          {visibleEntries.length === 0 ? (
+            <div className="py-10 text-center text-sm text-gray-500">
+              {normalizedSearchQuery && listTab === "user"
+                ? localize("com_permission.empty_search")
+                : localize("com_permission.list_empty_for_subject")}
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {visibleEntries.map((entry, index) => {
                 const Icon = SUBJECT_ICONS[entry.subject_type] || User;
+                const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
+                const displayName = getEntryDisplayName(entry);
+                const entryCaption = getEntryCaption(entry);
+
                 return (
-                  <tr key={`${entry.subject_type}-${entry.subject_id}-${idx}`} className="border-b last:border-0">
-                    <td className="py-2">
-                      <Icon className="h-4 w-4 text-gray-400" />
-                    </td>
-                    <td className="py-2 text-sm">
-                      {entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`}
-                      {entry.include_children && (
-                        <span className="ml-1 text-xs text-gray-400">
-                          ({localize("com_permission.include_children")})
+                  <div
+                    key={`${entry.subject_type}-${entry.subject_id}-${index}`}
+                    className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
+                  >
+                    <div className="flex w-[200px] shrink-0 items-center gap-2">
+                      {entry.subject_type === "user" ? (
+                        <Avatar className="h-8 w-8">
+                          <AvatarName
+                            name={displayName}
+                            className="text-[14px] font-bold leading-[14px]"
+                          />
+                        </Avatar>
+                      ) : (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#335CFF]">
+                          <Icon className="h-4 w-4" />
                         </span>
                       )}
-                    </td>
-                    <td className="py-2">
+                      <span className="truncate text-[14px] leading-[22px] text-[#212121]">
+                        {displayName}
+                      </span>
+                    </div>
+
+                    <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                      {entryCaption}
+                    </p>
+
+                    <div className="flex w-[96px] shrink-0 justify-end">
                       {isOwner ? (
-                        <span className="text-sm text-gray-500">{localize("com_permission.level_owner")}</span>
+                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
+                          {getPermissionLabel(entry)}
+                        </span>
                       ) : (
-                        <RelationSelect
-                          value={entry.model_id || entry.relation}
-                          onChange={(v) => handleModify(entry, v)}
-                          options={models}
-                          className="h-7 w-[110px] text-xs"
-                        />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-[6px] px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
+                            >
+                              <span className="truncate">{getPermissionLabel(entry)}</span>
+                              <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
+                          >
+                            {models.map((model) => {
+                              const active = model.id === currentModelId;
+                              return (
+                                <DropdownMenuItem
+                                  key={model.id}
+                                  className={cn(
+                                    "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
+                                    active
+                                      ? "bg-[#E6EDFC] text-[#335CFF] data-[highlighted]:bg-[#E6EDFC] data-[highlighted]:text-[#335CFF]"
+                                      : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
+                                  )}
+                                  onSelect={() => {
+                                    void handleModify(entry, model.id);
+                                  }}
+                                >
+                                  {model.name}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                            <DropdownMenuSeparator className="mx-0 my-1 bg-[#EBECF0]" />
+                            <DropdownMenuItem
+                              className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]"
+                              onSelect={() => {
+                                void handleRevoke(entry);
+                              }}
+                            >
+                              {localize("com_permission.remove")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
-                    </td>
-                    <td className="py-2">
-                      {!isOwner && (
-                        <button
-                          className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                          onClick={() => handleRevoke(entry)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

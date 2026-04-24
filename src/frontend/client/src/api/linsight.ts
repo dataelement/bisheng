@@ -99,8 +99,17 @@ export function getPersonalKnowledgeInfo(): Promise<any> {
 }
 
 // 获取组织知识库
-export function getKnowledgeInfo({page = 1, name = '', page_size = 200, sort_by = 'update_time'}): Promise<any> {
-    return request.get(`/api/v1/knowledge?page_num=${page}&page_size=${page_size}&type=0&name=${name}&sort_by=${sort_by}`);
+export function getKnowledgeInfo({page = 1, name = '', page_size = 200, sort_by = 'update_time', preferred_ids = ''}: {
+    page?: number,
+    name?: string,
+    page_size?: number,
+    sort_by?: string,
+    /** Comma-separated ids pinned to the top of the global sort (admin-configured orgKbs). */
+    preferred_ids?: string,
+}): Promise<any> {
+    const base = `/api/v1/knowledge?page_num=${page}&page_size=${page_size}&type=0&name=${encodeURIComponent(name)}&sort_by=${sort_by}`;
+    const pinned = preferred_ids ? `&preferred_ids=${encodeURIComponent(preferred_ids)}` : '';
+    return request.get(`${base}${pinned}`);
 }
 
 // 获取linsight剩余次数
