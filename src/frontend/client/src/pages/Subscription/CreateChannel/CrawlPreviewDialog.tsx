@@ -23,6 +23,8 @@ import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/
 import type { InformationSource } from "~/api/channels";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
+import { extractApiStatusCode } from "../errorUtils";
+import { crawlErrorMessageKey } from "./crawlErrorUtils";
 
 interface CrawlPreviewDialogProps {
     open: boolean;
@@ -33,18 +35,6 @@ interface CrawlPreviewDialogProps {
 }
 
 type CrawlStatus = "loading" | "success" | "error";
-
-/** Maps API / legacy codes (19003–19005, 13003–13005) to i18n keys for crawl preview errors. */
-function crawlErrorMessageKey(code: number | null): string {
-  if (code === 19004 || code === 13004) {
-    return "com_subscription.crawl_error_19004";
-  }
-  if (code === 19005 || code === 13005) {
-    return "com_subscription.crawl_error_19005";
-  }
-  // 19003, 13003, unknown, network
-  return "com_subscription.crawl_error_19003";
-}
 
 export function CrawlPreviewDialog({
     open,
@@ -81,9 +71,7 @@ export function CrawlPreviewDialog({
                     const code = Number(codeRaw);
                     setStatus("error");
                     // 19005/13005：单篇或非列表页；19004/13004：权限；19003/13003：解析失败；其它非 200 同 19003
-                    if (
-                        [19005, 13005, 19004, 13004, 19003, 13003].includes(code)
-                    ) {
+                    if ([19006, 19005, 19004, 19003].includes(code)) {
                         setErrorCode(code);
                     } else {
                         setErrorCode(19003);
@@ -131,10 +119,11 @@ export function CrawlPreviewDialog({
                     articles
                 });
                 setStatus("success");
-            } catch {
+            } catch (error) {
                 if (requestIdRef.current !== currentId) return;
                 setStatus("error");
-                setErrorCode(19003);
+                const code = extractApiStatusCode(error);
+                setErrorCode(code === 19006 ? 19006 : 19003);
             }
         })();
     }, [open, url]);
@@ -164,11 +153,16 @@ export function CrawlPreviewDialog({
 
     const handleAddSource = () => {
         (async () => {
+            let shouldClose = false;
             try {
                 setAdding(true);
                 let created: InformationSource | null = null;
                 try {
                     const res = await addWebsiteSourceApi({ url });
+                    const code = extractApiStatusCode(res);
+                    if (code && code !== 200) {
+                        return;
+                    }
                     const raw: any = (res as any)?.data ?? res ?? {};
                     created = {
                         id: String(raw.id ?? raw.source_id ?? `web-${Date.now()}`),
@@ -177,7 +171,11 @@ export function CrawlPreviewDialog({
                         url: raw.url ?? url,
                         avatar: raw.icon ?? raw.avatar ?? previewData?.icon
                     };
-                } catch {
+                } catch (error) {
+                    const code = extractApiStatusCode(error);
+                    if (code != null) {
+                        return;
+                    }
                     // 如果后端报错，就退回到本地添加，避免用户操作“失效”
                     if (previewData) {
                         created = {
@@ -190,10 +188,13 @@ export function CrawlPreviewDialog({
                 }
                 if (created) {
                     onAddSource(created);
+                    shouldClose = true;
                 }
             } finally {
                 setAdding(false);
-                onOpenChange(false);
+                if (shouldClose) {
+                    onOpenChange(false);
+                }
             }
         })();
     };

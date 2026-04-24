@@ -20,9 +20,9 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 )
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import resp_200, resp_500
+from bisheng.common.schemas.api import resp_200
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
-from bisheng.core.external.bisheng_information_client.client import InformationSourceAddError, BusinessType
+from bisheng.core.external.bisheng_information_client.client import BusinessType
 
 logger = logging.getLogger(__name__)
 
@@ -138,17 +138,13 @@ async def get_channel_square(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Channel square query: Paginated query of all released channels, supports fuzzy search, displays subscription status and subscriber count."""
-    try:
-        result = await channel_service.get_channel_square(
-            keyword=keyword,
-            page=page,
-            page_size=page_size,
-            login_user=login_user
-        )
-        return resp_200(data=result.model_dump())
-    except Exception as e:
-        logger.error(f"Failed to get channel square: {e}")
-        return resp_500(message="Failed to get channel square")
+    result = await channel_service.get_channel_square(
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        login_user=login_user
+    )
+    return resp_200(data=result.model_dump())
 
 
 @router.post("/subscribe")
@@ -183,21 +179,14 @@ async def list_channel_members(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Paginated query of channel member list, supports fuzzy search by username."""
-    try:
-        result = await channel_service.list_channel_members(
-            channel_id=channel_id,
-            page=page,
-            page_size=page_size,
-            keyword=keyword,
-            login_user=login_user
-        )
-        return resp_200(data=result.model_dump())
-    except ValueError as e:
-        logger.warning(f"List members failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to list channel members: {e}")
-        return resp_500(message="Failed to list channel members")
+    result = await channel_service.list_channel_members(
+        channel_id=channel_id,
+        page=page,
+        page_size=page_size,
+        keyword=keyword,
+        login_user=login_user
+    )
+    return resp_200(data=result.model_dump())
 
 
 @router.post("/update_member_role")
@@ -237,29 +226,22 @@ async def search_channel_articles(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Paginated search of articles by channel, supports keyword search, source filtering, sub-channel filtering, results with highlighting."""
-    try:
-        # Parse comma-separated source ID list
-        parsed_source_ids = None
-        if source_ids:
-            parsed_source_ids = [s.strip() for s in source_ids.split(',') if s.strip()]
+    # Parse comma-separated source ID list
+    parsed_source_ids = None
+    if source_ids:
+        parsed_source_ids = [s.strip() for s in source_ids.split(',') if s.strip()]
 
-        result = await channel_service.search_channel_articles(
-            channel_id=channel_id,
-            keyword=keyword,
-            source_ids=parsed_source_ids,
-            sub_channel_name=sub_channel_name,
-            page=page,
-            page_size=page_size,
-            login_user=login_user,
-            only_unread=only_unread,
-        )
-        return resp_200(data=result.model_dump())
-    except ValueError as e:
-        logger.warning(f"Search channel articles failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to search channel articles: {e}")
-        return resp_500(message="Failed to search channel articles")
+    result = await channel_service.search_channel_articles(
+        channel_id=channel_id,
+        keyword=keyword,
+        source_ids=parsed_source_ids,
+        sub_channel_name=sub_channel_name,
+        page=page,
+        page_size=page_size,
+        login_user=login_user,
+        only_unread=only_unread,
+    )
+    return resp_200(data=result.model_dump())
 
 
 @router.get("/articles/detail/{article_id}")
@@ -269,18 +251,11 @@ async def get_article_detail(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Get article details by article ID and record read status."""
-    try:
-        result = await channel_service.get_article_detail(
-            article_id=article_id,
-            login_user=login_user,
-        )
-        return resp_200(data=result.model_dump())
-    except ValueError as e:
-        logger.warning(f"Get article detail failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to get article detail: {e}")
-        return resp_500(message="Failed to get article detail")
+    result = await channel_service.get_article_detail(
+        article_id=article_id,
+        login_user=login_user,
+    )
+    return resp_200(data=result.model_dump())
 
 
 @router.get("/{channel_id}")
@@ -290,15 +265,8 @@ async def get_channel_detail(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Get channel details, including basic channel information, creator, subscriber count, article count, etc."""
-    try:
-        result = await channel_service.get_channel_detail(channel_id, login_user)
-        return resp_200(data=result.model_dump())
-    except ValueError as e:
-        logger.warning(f"Get channel detail failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to get channel detail: {e}")
-        return resp_500(message="Failed to get channel detail")
+    result = await channel_service.get_channel_detail(channel_id, login_user)
+    return resp_200(data=result.model_dump())
 
 
 @router.put("/{channel_id}")
@@ -309,15 +277,8 @@ async def update_channel_info(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Update channel information API"""
-    try:
-        result = await channel_service.update_channel(channel_id, req_param, login_user)
-        return resp_200(data=result.model_dump())
-    except ValueError as e:
-        logger.warning(f"Update channel info failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to update channel: {e}")
-        return resp_500(message="Failed to update channel")
+    result = await channel_service.update_channel(channel_id, req_param, login_user)
+    return resp_200(data=result.model_dump())
 
 
 @router.delete("/{channel_id}")
@@ -328,15 +289,8 @@ async def dismiss_channel(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Dismiss channel API"""
-    try:
-        await channel_service.dismiss_channel(channel_id, login_user, request)
-        return resp_200(data=True)
-    except ValueError as e:
-        logger.warning(f"Dismiss channel failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to dismiss channel: {e}")
-        return resp_500(message="Failed to dismiss channel")
+    await channel_service.dismiss_channel(channel_id, login_user, request)
+    return resp_200(data=True)
 
 
 @router.post("/{channel_id}/unsubscribe")
@@ -346,15 +300,8 @@ async def unsubscribe_channel(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Unsubscribe channel API"""
-    try:
-        await channel_service.unsubscribe_channel(channel_id, login_user)
-        return resp_200(data=True)
-    except ValueError as e:
-        logger.warning(f"Unsubscribe channel failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to unsubscribe channel: {e}")
-        return resp_500(message="Failed to unsubscribe channel")
+    await channel_service.unsubscribe_channel(channel_id, login_user)
+    return resp_200(data=True)
 
 
 @router.post("/articles/add_to_knowledge_space")

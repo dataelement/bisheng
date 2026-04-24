@@ -26,6 +26,7 @@ import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
+import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -338,7 +339,11 @@ export default function Subscription() {
 
         // 编辑模式：使用 PUT /api/v1/channel/manager/{channel_id}，保证权限设置、内容筛选、子频道等一起更新
         if (editingChannel) {
-            await updateChannelApi(editingChannel.id, payload);
+            const response = await updateChannelApi(editingChannel.id, payload);
+            const updateCode = extractApiStatusCode(response);
+            if (updateCode && updateCode !== 200) {
+                throw createApiStatusError(response);
+            }
             await queryClient.invalidateQueries({ queryKey: ["channels"] });
             // Refresh channel detail cache so ArticleList & tooltip pick up new settings
             await queryClient.invalidateQueries({ queryKey: ["channelDetail", editingChannel.id] });
@@ -349,6 +354,10 @@ export default function Subscription() {
 
         // 创建模式：POST /api/v1/channel/manager/create
         const res: any = await createManagerChannelApi(payload);
+        const createCode = extractApiStatusCode(res);
+        if (createCode && createCode !== 200) {
+            throw createApiStatusError(res);
+        }
         await queryClient.invalidateQueries({ queryKey: ["channels"] });
         const root = res?.data ?? res;
         const payloadRes = root?.data ?? root;

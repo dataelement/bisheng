@@ -37,6 +37,7 @@ import type { Channel, InformationSource } from "~/api/channels";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
+import { extractApiStatusCode } from "../errorUtils";
 
 const MAX_CHANNEL_NAME = 10;
 const MAX_CHANNEL_DESC = 100;
@@ -662,9 +663,15 @@ export function CreateChannelDrawer({
                                             form.resetForm();
                                             onOpenChange(false);
                                         }
-                                    } catch {
+                                    } catch (error) {
+                                        const code = extractApiStatusCode(error);
+                                        if (code != null) {
+                                            return;
+                                        }
                                         showToast({
-                                            message: localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry"),
+                                            message:
+                                                localize("channel_create_failed") ||
+                                                localize("com_subscription.create_channel_failed_retry"),
                                             severity: NotificationSeverity.ERROR
                                         });
                                     } finally {
