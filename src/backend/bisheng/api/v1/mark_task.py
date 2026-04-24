@@ -99,7 +99,11 @@ async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(
 @router.get('/get_user')
 async def get_user(task_id: int):
     """
-    Query under this app All Users
+    Query under this app All Users.
+
+    Only `user_id` / `user_name` are exposed — the frontend filter picker
+    consumes just those. Returning full ORM rows here would leak `password`
+    and `token_version`.
     """
 
     # accordingtype Query different sessions
@@ -108,7 +112,9 @@ async def get_user(task_id: int):
 
     for u in task.process_users.split(","):
         user = UserDao.get_user(int(u))
-        user_list.append(user)
+        if not user:
+            continue
+        user_list.append({"user_id": user.user_id, "user_name": user.user_name})
 
     return resp_200(data=user_list)
 
