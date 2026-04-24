@@ -151,10 +151,12 @@ export default function NewChat({
             </div>
           </div>
         )}
-        {/* 与 SideNavModuleTabs 一致：四等分格内居中，避免 justify-center + 负边距导致首页选中块视觉偏左 */}
-        <div className="mb-2 hidden w-full min-w-0 shrink-0 touch-mobile:block">
-          <HubModuleNavTabs equalWidth className="w-full min-w-0" />
-        </div>
+        {/* 与 SideNavModuleTabs 一致：仅小屏（<=768）展示四等分模块入口 */}
+        {isSmallScreen && (
+          <div className="mb-2 w-full min-w-0 shrink-0">
+            <HubModuleNavTabs equalWidth className="w-full min-w-0" />
+          </div>
+        )}
         {isSmallScreen && (
           <div className='flex gap-1 w-full'>
             {/* 新建btn */}

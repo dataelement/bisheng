@@ -368,7 +368,7 @@ export function ArticleList({
                             <Button
                                 onClick={() => onOpenChannelShare?.(channel)}
                                 variant="ghost"
-                                className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:px-2 touch-mobile:text-[#212121] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white"
+                                className="h-8 gap-1 px-4 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:px-4 touch-mobile:text-[#212121] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white"
                             >
                                 <ShareOutlineIcon className="size-4 shrink-0 text-gray-800" />
                                 {localize("com_subscription.share")}
@@ -378,7 +378,7 @@ export function ArticleList({
                 </div>
 
                 {/* 子频道 Tabs + 搜索/筛选 — md+ 横向；H5 纵向 */}
-                <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:items-center touch-desktop:justify-between touch-desktop:gap-0">
+                <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:flex-wrap touch-desktop:items-center touch-desktop:justify-between touch-desktop:gap-3">
                     <div className="relative min-w-0">
                         {tabsScrollShadow.left ? (
                             <div
@@ -429,7 +429,7 @@ export function ArticleList({
                         className={cn(
                             "flex w-full min-w-0 flex-col gap-2",
                             "range-576-768:flex-row range-576-768:items-center range-576-768:gap-3",
-                            "touch-desktop:ml-4 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:items-center touch-desktop:gap-3"
+                            "touch-desktop:ml-0 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:flex-wrap touch-desktop:items-center touch-desktop:justify-end touch-desktop:gap-3"
                         )}
                     >
                         <SearchInput
@@ -437,7 +437,7 @@ export function ArticleList({
                             value={searchKey}
                             onChange={setSearchQuery}
                             placeholder={localize("com_subscription.search_articles_of_interest")}
-                            className="w-full min-w-0 range-576-768:flex-1 range-576-768:min-w-0 touch-desktop:w-auto"
+                            className="min-w-0"
                         />
 
                         {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排；576–768 与桌面同为单行 */}
@@ -445,7 +445,7 @@ export function ArticleList({
                             className={cn(
                                 "flex w-full min-w-0 flex-wrap items-center justify-start gap-2 lt-576:justify-end",
                                 "range-576-768:contents",
-                                "touch-desktop:contents"
+                                "touch-desktop:flex touch-desktop:w-auto touch-desktop:min-w-0 touch-desktop:justify-end"
                             )}
                         >
                             <MultiSourceSelect

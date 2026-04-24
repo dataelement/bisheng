@@ -241,7 +241,7 @@ export function FilterConditionEditor({
 
             <div className="space-y-2">
                 {groups.map((group, groupIndex) => (
-                    <div key={group.id} className="relative pl-10 pb-1">
+                    <div key={group.id} className={cn("relative pl-10 pb-1", groupIndex > 0 && "pt-2")}>
                         {/* 第二层：And/OR 在线的左侧，虚线包住当前组；底部小括号指向本层新增条件的加号 */}
                         {group.conditions.length > 1 && (
                             <>
@@ -271,12 +271,12 @@ export function FilterConditionEditor({
                                     <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                                 </button>
                                 {/* 第二层连接线：单元素连续圆角括号，更自然 */}
-                                <div className="absolute left-9 top-4 bottom-1 w-[21px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
+                                <div className="absolute left-9 top-4 -bottom-3 w-[21px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
                                 {!atTotalLimit && (
                                     <button
                                         type="button"
                                         onClick={() => addConditionInGroup(groupIndex)}
-                                        className="absolute left-[57px] -bottom-2 flex items-center justify-center w-8 h-8 text-[#86909C] bg-white transition-colors"
+                                        className="absolute left-[57px] -bottom-6 flex h-8 w-8 items-center justify-center rounded text-[#86909C] transition-colors"
                                         title={localize("com_subscription.add_condition_under_current_relation")}
                                     >
                                         <ChannelPlusIcon className={FILTER_COND_ICON_MD} />
@@ -285,12 +285,12 @@ export function FilterConditionEditor({
                             </>
                         )}
 
-                        <div className="pl-4 space-y-2">
+                        <div className="pl-4 space-y-1">
                             {group.conditions.map((cond, condIndex) => (
                                 <div
                                     key={cond.id}
                                     className={cn(
-                                        "flex items-start gap-2",
+                                        "flex items-start gap-4",
                                         group.conditions.length === 1 && "-ml-8"
                                     )}
                                 >

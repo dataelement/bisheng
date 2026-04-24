@@ -1,8 +1,10 @@
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
 import { currentChatState } from '~/pages/appChat/store/atoms';
 import { cn } from '~/utils';
@@ -58,10 +60,12 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 
 interface StandaloneSideNavProps {
   sidebar: ReturnType<typeof useStandaloneSidebar>;
+  onCloseSidebar?: () => void;
 }
 
-export function StandaloneSideNav({ sidebar }: StandaloneSideNavProps) {
+export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNavProps) {
   const localize = useLocalize();
+  const { data: bsConfig } = useGetBsConfig();
   const { mode } = useStandaloneChatContext();
   const chatState = useRecoilValue(currentChatState);
   const isGuest = mode === 'guest';
@@ -87,7 +91,25 @@ export function StandaloneSideNav({ sidebar }: StandaloneSideNavProps) {
     '';
 
   return (
-    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden pl-3 pr-2 pt-3 pb-2 text-[#212121]">
+      {bsConfig?.sidebarIcon?.image ? (
+        <img
+          src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
+          alt="logo"
+          className="absolute left-3 top-3 z-20 hidden size-6 object-contain max-[768px]:block"
+        />
+      ) : null}
+      <button
+        type="button"
+        onClick={onCloseSidebar}
+        className={cn(
+          'absolute right-3 top-3 z-20 hidden shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors',
+          onCloseSidebar ? 'max-[768px]:flex' : '',
+        )}
+        aria-label={localize('com_nav_close_sidebar')}
+      >
+        <X size={16} className="text-[#4E5969]" />
+      </button>
       {/* App card */}
       <div className="shrink-0 pt-8">
         <TooltipProvider delayDuration={300}>

@@ -155,7 +155,7 @@ export function ChannelSidebar({
             >
                 {mobileDrawerMode ? (
                     <>
-                        <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-2.5">
+                        <div className="shrink-0 px-3 py-2.5">
                             <div className="flex items-center justify-between">
                                 {bsConfig?.sidebarIcon?.image ? (
                                     <img
@@ -183,7 +183,7 @@ export function ChannelSidebar({
                                 if (link.closeDrawerOnNavigate) onDrawerClose?.();
                             }}
                         />
-                        <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-3">
+                        <div className="shrink-0 px-3 pt-4 pb-6">
                             <Button
                                 variant="secondary"
                                 type="button"
