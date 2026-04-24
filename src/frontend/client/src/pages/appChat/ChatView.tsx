@@ -40,10 +40,8 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
             updatedAt: new Date().toISOString(),
             createdAt: new Date().toISOString(),
         }, ...prev]);
-        const from = new URLSearchParams(location.search).get('from');
-        const nextPath = from
-            ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
-            : `/app/${chatId}/${flowId}/${flowType}`;
+        const qs = location.search || '';
+        const nextPath = `/app/${chatId}/${flowId}/${flowType}${qs}`;
         navigate(nextPath);
     }, [flowId, flowType, location.search, navigate, setConversations]);
 
