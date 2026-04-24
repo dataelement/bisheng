@@ -94,6 +94,7 @@ class MigrationStats:
     step6_folder_hierarchy: int = 0
     step6_folders: int = 0
     step6_files: int = 0
+    step7_department_membership: int = 0
     total: int = 0
     by_object_type: dict = field(default_factory=dict)
     by_relation: dict = field(default_factory=dict)
@@ -161,6 +162,7 @@ class RBACToReBACMigrator:
             (4, 'Space/Channel Members', self.step4_space_channel_members),
             (5, 'Resource Owners', self.step5_resource_owners),
             (6, 'Folder Hierarchy', self.step6_folder_hierarchy),
+            (7, 'Department Membership', self.step7_department_membership),
         ]
 
         for step_num, step_name, step_fn in steps:
@@ -186,6 +188,7 @@ class RBACToReBACMigrator:
             1: 'step1_super_admin', 2: 'step2_user_group',
             3: 'step3_role_access', 4: 'step4_space_channel',
             5: 'step5_resource_owners', 6: 'step6_folder_hierarchy',
+            7: 'step7_department_membership',
         }
         attr = attr_map.get(step_num)
         if attr:
@@ -194,7 +197,8 @@ class RBACToReBACMigrator:
     def _compute_summary(self):
         s = self._stats
         s.total = (s.step1_super_admin + s.step2_user_group + s.step3_role_access
-                   + s.step4_space_channel + s.step5_resource_owners + s.step6_folder_hierarchy)
+                   + s.step4_space_channel + s.step5_resource_owners
+                   + s.step6_folder_hierarchy + s.step7_department_membership)
         # Aggregate by object_type and relation from _global_seen
         by_type: dict[str, int] = {}
         by_rel: dict[str, int] = {}
@@ -223,6 +227,7 @@ class RBACToReBACMigrator:
         lines.append(f'Step 6 — Folder Hierarchy:      {s.step6_folder_hierarchy}')
         if s.step6_folders or s.step6_files:
             lines.append(f'         folders: {s.step6_folders}, files: {s.step6_files}')
+        lines.append(f'Step 7 — Department Membership: {s.step7_department_membership}')
         lines.append(f'')
         lines.append(f'Total unique tuples: {s.total}')
         if s.by_object_type:
@@ -485,6 +490,30 @@ class RBACToReBACMigrator:
 
         self._stats.step6_folders = folders
         self._stats.step6_files = file_count
+        self._collect(ops)
+        return await self._flush()
+
+    async def step7_department_membership(self) -> int:
+        """Step 7: user_department -> user:{uid} member department:{dept_id}."""
+        from bisheng.core.database import get_async_db_session
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        async with get_async_db_session() as session:
+            with bypass_tenant_filter():
+                result = await session.execute(
+                    sa_text('SELECT user_id, department_id FROM user_department')
+                )
+                rows = result.fetchall()
+
+        ops = [
+            TupleOperation(
+                action='write',
+                user=f'user:{user_id}',
+                relation='member',
+                object=f'department:{department_id}',
+            )
+            for user_id, department_id in rows
+        ]
         self._collect(ops)
         return await self._flush()
 

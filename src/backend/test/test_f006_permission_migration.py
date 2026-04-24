@@ -343,6 +343,30 @@ class TestStep2UserGroupMembership:
         assert count == 0
 
 
+class TestStep7DepartmentMembership:
+    """Step 7: user_department -> department membership tuples."""
+
+    @pytest.mark.asyncio
+    async def test_department_members_written(self, migrator_dry, patch_db):
+        session = patch_db
+        await insert_rows(session, 'user_department', [
+            {'user_id': 21, 'department_id': 5, 'is_primary': 1, 'source': 'local'},
+            {'user_id': 22, 'department_id': 5, 'is_primary': 0, 'source': 'local'},
+            {'user_id': 23, 'department_id': 9, 'is_primary': 1, 'source': 'local'},
+        ])
+
+        count = await migrator_dry.step7_department_membership()
+        assert count == 3
+        assert migrator_dry._global_seen[('user:21', 'department:5')] == 'member'
+        assert migrator_dry._global_seen[('user:22', 'department:5')] == 'member'
+        assert migrator_dry._global_seen[('user:23', 'department:9')] == 'member'
+
+    @pytest.mark.asyncio
+    async def test_department_membership_empty(self, migrator_dry, patch_db):
+        count = await migrator_dry.step7_department_membership()
+        assert count == 0
+
+
 # ═══════════════════════════════════════════════════════════════════
 # T2: Idempotent rerun test
 # ═══════════════════════════════════════════════════════════════════
@@ -726,6 +750,11 @@ async def _seed_comprehensive_data(session):
     await insert_rows(session, 'channel', [
         {'user_id': 4, 'name': 'chan1'},
     ])
+    # Department memberships
+    await insert_rows(session, 'user_department', [
+        {'user_id': 2, 'department_id': 10, 'is_primary': 1, 'source': 'local'},
+        {'user_id': 3, 'department_id': 11, 'is_primary': 1, 'source': 'local'},
+    ])
     # Knowledge files (folder hierarchy)
     await insert_rows(session, 'knowledgefile', [
         {'knowledge_id': 1, 'file_name': 'root_folder', 'file_type': 0, 'file_level_path': ''},
@@ -751,6 +780,7 @@ class TestFullDryRun:
         assert stats.step4_space_channel == 3   # 3 ACTIVE members
         assert stats.step5_resource_owners >= 1
         assert stats.step6_folder_hierarchy == 2  # 1 folder + 1 file
+        assert stats.step7_department_membership == 2
         assert stats.total > 0
         # Dry run: FGA should have no tuples
         mock_fga.assert_tuple_count(0)
@@ -783,8 +813,8 @@ class TestFullMigration:
         with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
             await migrator_write.run()
 
-        # Checkpoint should show all 6 steps complete
-        assert migrator_write._load_checkpoint() == 6
+        # Checkpoint should show all 7 steps complete
+        assert migrator_write._load_checkpoint() == 7
 
 
 class TestIdempotentFullRun:
@@ -848,3 +878,4 @@ class TestCheckpointResume:
         assert stats.step4_space_channel == 0
         assert stats.step5_resource_owners >= 0  # executed
         assert stats.step6_folder_hierarchy >= 0  # executed
+        assert stats.step7_department_membership >= 0  # executed

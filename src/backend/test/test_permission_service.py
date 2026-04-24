@@ -282,6 +282,63 @@ class TestPermissionServiceAuthorize:
         mock_fga.assert_tuple_exists('user:5', 'viewer', 'knowledge_library:abc')
         mock_fga.assert_tuple_exists('user:5', 'viewer', 'knowledge_space:abc')
 
+    @pytest.mark.asyncio
+    async def test_authorize_department_invalidates_expanded_users(self, mock_fga):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(
+                 PermissionService,
+                 '_expand_subject',
+                 new_callable=AsyncMock,
+                 return_value=['department:5#member'],
+             ), \
+             patch.object(
+                 PermissionService,
+                 '_affected_user_ids_for_subject',
+                 new_callable=AsyncMock,
+                 return_value={8, 9},
+             ), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user',
+                   new_callable=AsyncMock) as invalidate_user:
+            await PermissionService.authorize(
+                object_type='workflow',
+                object_id='abc',
+                grants=[AuthorizeGrantItem(
+                    subject_type='department', subject_id=5, relation='viewer',
+                )],
+            )
+
+        invalidate_user.assert_any_await(8)
+        invalidate_user.assert_any_await(9)
+        assert invalidate_user.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_authorize_user_group_invalidates_group_users(self, mock_fga):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(
+                 PermissionService,
+                 '_affected_user_ids_for_subject',
+                 new_callable=AsyncMock,
+                 return_value={18, 19, 20},
+             ), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user',
+                   new_callable=AsyncMock) as invalidate_user:
+            await PermissionService.authorize(
+                object_type='workflow',
+                object_id='abc',
+                grants=[AuthorizeGrantItem(
+                    subject_type='user_group', subject_id=7, relation='viewer',
+                )],
+            )
+
+        invalidate_user.assert_any_await(18)
+        invalidate_user.assert_any_await(19)
+        invalidate_user.assert_any_await(20)
+        assert invalidate_user.await_count == 3
+
 
 class TestPermissionServiceCreatorFallback:
 

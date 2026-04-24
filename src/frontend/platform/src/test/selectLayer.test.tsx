@@ -65,6 +65,41 @@ describe("select layering", () => {
 
     expect(dialog).not.toBeNull();
     expect(dialog?.className).toContain("z-50");
-    expect(listbox.className).toContain("z-[60]");
+    expect(listbox.className).toContain("z-[120]");
+  });
+
+  it("does not constrain dialog select menus to the trigger height", async () => {
+    render(
+      <Dialog open onOpenChange={() => {}}>
+        <DialogContent>
+          <DialogTitle>Permission dialog</DialogTitle>
+          <DialogDescription>Permission dialog description</DialogDescription>
+          <RelationSelect
+            value="owner"
+            onChange={() => {}}
+            options={[
+              { id: "owner", name: "Owner", relation: "owner" },
+              { id: "viewer", name: "Viewer", relation: "viewer" },
+              { id: "editor", name: "Editor", relation: "editor" },
+              { id: "manager", name: "Manager", relation: "manager" },
+            ]}
+          />
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const trigger = screen.getByRole("combobox");
+    trigger.focus();
+    fireEvent.keyDown(trigger, {
+      key: "ArrowDown",
+      code: "ArrowDown",
+      keyCode: 40,
+    });
+
+    await screen.findByRole("listbox");
+    const viewport = document.querySelector("[data-radix-select-viewport]");
+
+    expect(viewport).not.toBeNull();
+    expect(viewport?.className).not.toContain("h-[var(--radix-select-trigger-height)]");
   });
 });

@@ -10,14 +10,16 @@ raw SQL must manually add ``WHERE tenant_id = X``.
 """
 
 import logging
-from typing import Optional, Set
+from typing import FrozenSet, Optional, Set
 
-from sqlalchemy import event
+from sqlalchemy import event, false
 from sqlmodel import Session
 
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     get_current_tenant_id,
+    get_visible_tenant_ids,
+    is_strict_tenant_filter,
     is_tenant_filter_bypassed,
 )
 
@@ -76,15 +78,29 @@ def register_tenant_filter_events() -> None:
         if not tables_to_filter:
             return
 
-        # Resolve current tenant_id
-        tid = _resolve_tenant_id()
-        if tid is None:
-            # Should not reach here — _resolve_tenant_id raises or returns a value
-            return
+        visible_tenant_ids = _resolve_visible_tenant_ids()
+        if visible_tenant_ids is not None:
+            if not visible_tenant_ids:
+                for _ in tables_to_filter:
+                    stmt = stmt.where(false())
+            elif len(visible_tenant_ids) == 1:
+                tid = next(iter(visible_tenant_ids))
+                for table in tables_to_filter:
+                    stmt = stmt.where(table.c.tenant_id == tid)
+            else:
+                tenant_ids = sorted(visible_tenant_ids)
+                for table in tables_to_filter:
+                    stmt = stmt.where(table.c.tenant_id.in_(tenant_ids))
+        else:
+            # Resolve current tenant_id
+            tid = _resolve_tenant_id()
+            if tid is None:
+                # Should not reach here — _resolve_tenant_id raises or returns a value
+                return
 
-        # Inject WHERE clause for each tenant-aware table
-        for table in tables_to_filter:
-            stmt = stmt.where(table.c.tenant_id == tid)
+            # Inject WHERE clause for each tenant-aware table
+            for table in tables_to_filter:
+                stmt = stmt.where(table.c.tenant_id == tid)
 
         orm_execute_state.statement = stmt
 
@@ -180,3 +196,13 @@ def _resolve_tenant_id() -> int:
     else:
         from bisheng.common.errcode.tenant import NoTenantContextError
         raise NoTenantContextError()
+
+
+def _resolve_visible_tenant_ids() -> Optional[FrozenSet[int]]:
+    """Resolve the visible tenant IN-list for the current request, if any."""
+    if is_strict_tenant_filter():
+        return None
+    visible = get_visible_tenant_ids()
+    if visible is None:
+        return None
+    return frozenset(int(one) for one in visible)
