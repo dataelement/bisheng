@@ -65,7 +65,7 @@ describe("select layering", () => {
 
     expect(dialog).not.toBeNull();
     expect(dialog?.className).toContain("z-50");
-    expect(listbox.className).toContain("z-[100]");
+    expect(listbox.className).toContain("z-[120]");
   });
 
   it("does not constrain dialog select menus to the trigger height", async () => {
