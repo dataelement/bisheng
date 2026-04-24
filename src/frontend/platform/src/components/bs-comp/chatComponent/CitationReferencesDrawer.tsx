@@ -6,6 +6,7 @@ import {
   buildCitationDocumentPreview,
   buildCitationReferenceItems,
   createCitationDetailMap,
+  getCitationDocumentFileType,
   isRagCitation,
   normalizeCitationType,
   type CitationPreview,
@@ -29,10 +30,35 @@ type CitationReferencesDrawerProps = {
 function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === "web";
   return (
-    <div className={cname("text-[14px] font-medium leading-5", isWeb ? "text-[#7C3AED]" : "text-[#165DFF]")}>
+    <div
+      className={cname(
+        "inline-flex h-[18px] min-w-[16px] items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px]",
+        isWeb ? "bg-[#F7F3FF] text-[#7224D9]" : "bg-[#F5F8FF] text-[#024DE3]",
+      )}
+    >
       [{label}] - {isWeb ? "网页" : "文档"}
     </div>
   );
+}
+
+function splitDocumentTitle(title: string, detail: ChatCitation | null, preview: CitationPreview | null) {
+  const fileType = String(getCitationDocumentFileType(detail) || preview?.sourceMeta || "")
+    .toLowerCase()
+    .replace(/^\./, "");
+
+  if (!fileType) {
+    return { name: title, extension: "" };
+  }
+
+  const normalizedExtension = `.${fileType}`;
+  if (title.toLowerCase().endsWith(normalizedExtension)) {
+    return {
+      name: title.slice(0, title.length - normalizedExtension.length),
+      extension: normalizedExtension,
+    };
+  }
+
+  return { name: title, extension: normalizedExtension };
 }
 
 function CitationReferenceCard({
@@ -53,56 +79,73 @@ function CitationReferenceCard({
   const isWeb = normalizeCitationType(type) === "web";
   const title = preview?.title || "暂无标题";
   const canOpenDocument = !!detail && isRagCitation(detail, type);
+  const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
+
+  const titleContent = canOpenDocument ? (
+    <button
+      type="button"
+      onClick={() => onOpenDocumentPreview(detail!)}
+      className="flex min-w-0 items-center gap-1 text-left hover:text-[#165DFF]"
+      title={title}
+    >
+      <span className="truncate">{documentName}</span>
+      {documentExtension ? <span className="shrink-0">{documentExtension}</span> : null}
+    </button>
+  ) : preview?.link ? (
+    <a
+      href={preview.link}
+      target="_blank"
+      rel="noreferrer"
+      className="block min-w-0 truncate hover:text-[#165DFF]"
+      title={title}
+    >
+      {title}
+    </a>
+  ) : (
+    <span className="block min-w-0 truncate" title={title}>{title}</span>
+  );
 
   return (
-    <div className="rounded-[8px] bg-[#FAFAFA] px-4 py-3">
-      <div className="mb-3">
+    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
+      <div className="flex items-center">
         <SourceTypeBadge preview={preview} label={item.data.label} type={item.data.type} />
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 text-[15px] font-medium leading-6 text-[#1D2129]">
-        <CitationSourceIcon detail={detail} preview={preview} type={type} />
-        {canOpenDocument ? (
-          <button
-            type="button"
-            onClick={() => onOpenDocumentPreview(detail!)}
-            className="min-w-0 truncate text-left hover:text-[#165DFF] hover:underline"
-            title={title}
-          >
-            {title}
-          </button>
-        ) : preview?.link ? (
-          <a
-            href={preview.link}
-            target="_blank"
-            rel="noreferrer"
-            className="min-w-0 truncate hover:text-[#165DFF] hover:underline"
-            title={title}
-          >
-            {title}
-          </a>
-        ) : (
-          <span className="min-w-0 truncate" title={title}>{title}</span>
-        )}
+      <div className="flex min-w-0 items-center gap-1 text-[14px] font-normal leading-[22px] text-[#1D2129]">
+        {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+        <div className="min-w-0 flex-1">
+          {titleContent}
+        </div>
       </div>
 
-      {(isLoading || hasError) && (
-        <div className="mt-2 min-h-[22px] text-[14px] leading-[22px] text-[#4E5969]">
-          {isLoading ? (
-            <span className="inline-flex items-center gap-2 text-[#86909C]">
-              <Loader2 className="size-3.5 animate-spin" />
-              加载溯源详情...
-            </span>
-          ) : (
-            <span className="text-[#86909C]">溯源详情加载失败</span>
-          )}
-        </div>
-      )}
+      {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
+        {isLoading ? (
+          <span className="inline-flex items-center gap-2 text-[#86909C]">
+            <Loader2 className="size-3.5 animate-spin" />
+            加载溯源详情...
+          </span>
+        ) : hasError ? (
+          <span className="text-[#86909C]">溯源详情加载失败</span>
+        ) : (
+          null
+        )}
+      </div>}
 
-      <div className="mt-3 flex min-w-0 items-center gap-2 text-[13px] leading-5 text-[#86909C]">
-        <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
-        <span className="min-w-0 truncate">{preview?.sourceName || (isWeb ? "网页" : "政策文件")}</span>
-        {preview?.sourceMeta && <span className="shrink-0">{preview.sourceMeta}</span>}
+      <div className="flex min-w-0 items-center gap-1 text-[12px] leading-5 text-[#86909C]">
+        {isWeb ? (
+          <>
+            <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ECECEC] bg-white">
+              <CitationSourceIcon detail={detail} preview={preview} type={type} />
+            </div>
+            <span className="truncate">{preview?.sourceName || "网页"}</span>
+            {preview?.sourceMeta ? <span className="shrink-0">{preview.sourceMeta}</span> : null}
+          </>
+        ) : (
+          <>
+            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
+            <span className="truncate">{preview?.sourceName || "政策文件"}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -283,22 +326,24 @@ export default function CitationReferencesDrawer({
             className="fixed inset-y-0 right-0 z-50 flex w-[min(520px,calc(100vw-24px))] flex-col border-l border-[#E5E6EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
             aria-label="参考资料"
           >
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#F2F3F5] px-6">
-              <div className="flex items-center gap-3">
-                <h2 className="text-[16px] font-semibold leading-6 text-[#1D2129]">参考资料</h2>
-                <span className="text-[16px] leading-6 text-[#165DFF]">{references.length}</span>
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white px-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">参考资料</h2>
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
+                  {references.length}
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="inline-flex size-8 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
                 aria-label="关闭参考资料"
               >
-                <X className="size-5" />
+                <X className="size-4" strokeWidth={1.5} />
               </button>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
               {references.map((item) => {
                 const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
                 return (
