@@ -55,6 +55,9 @@ class WebMenuResource(Enum):
     BOARD = 'board'                       # Dashboard / kanban
     # System management
     SUBSCRIPTION = 'subscription'         # Subscription management
+    # Workbench sidebar (user portal) — granular toggles under ``workstation``
+    HOME = 'home'                         # Chat / 首页
+    APPS = 'apps'                         # 应用中心 / Agent hub
     # Deprecated (AD-07, kept for backward compat)
     FRONTEND = 'frontend'                 # deprecated
     BACKEND = 'backend'                   # deprecated

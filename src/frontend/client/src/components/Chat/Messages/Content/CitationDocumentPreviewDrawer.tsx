@@ -1,5 +1,5 @@
 import { Download, FileText, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -12,6 +12,7 @@ import {
   getCitationDocumentUrl,
   getCitationItemBBoxes,
   isRagCitation,
+  resolveCitationDocumentUrl,
   toAbsolutePreviewUrl,
   type CitationPdfBBox,
 } from './citationUtils';
@@ -65,11 +66,36 @@ export function CitationDocumentPreviewContent({
   const { detail, itemId, locateChunk } = preview;
   const fileName = getCitationDocumentName(detail);
   const rawFileUrl = getCitationDocumentUrl(detail);
-  const fileType = resolveFileType(detail, rawFileUrl);
-  const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
+  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(rawFileUrl);
+  const [isResolvingFileUrl, setIsResolvingFileUrl] = useState(false);
+  const fileType = resolveFileType(detail, resolvedRawFileUrl || rawFileUrl);
+  const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || rawFileUrl);
   const shouldLocateChunk = locateChunk && fileType === 'pdf';
   const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(detail, itemId) : [];
   const targetBBox = bboxes[0] ?? null;
+
+  useEffect(() => {
+    let active = true;
+    setResolvedRawFileUrl(rawFileUrl);
+
+    if (rawFileUrl) {
+      setIsResolvingFileUrl(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setIsResolvingFileUrl(true);
+    void resolveCitationDocumentUrl(detail).then((nextUrl) => {
+      if (!active) return;
+      setResolvedRawFileUrl(nextUrl || '');
+      setIsResolvingFileUrl(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [detail, rawFileUrl]);
 
   return (
     <div className={cn('min-h-0 flex-1', className)}>
@@ -82,6 +108,10 @@ export function CitationDocumentPreviewContent({
           targetBBox={targetBBox}
           compactMode={compactMode}
         />
+      ) : isResolvingFileUrl ? (
+        <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+          正在加载文件预览...
+        </div>
       ) : (
         <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
           暂无可预览文件地址
@@ -100,6 +130,10 @@ export default function CitationDocumentPreviewDrawer({
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
+  const detail = preview?.detail ?? null;
+  const fileName = getCitationDocumentName(detail);
+  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(() => getCitationDocumentUrl(detail));
+  const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl);
   const canRenderPreview = !!preview && isRagCitation(preview.detail);
 
   useEffect(() => {
@@ -124,18 +158,43 @@ export default function CitationDocumentPreviewDrawer({
     };
   }, [canRenderPreview, isNarrowLayout, setChatMobileNavHidden]);
 
+  useEffect(() => {
+    let active = true;
+    const nextRawFileUrl = getCitationDocumentUrl(detail);
+    setResolvedRawFileUrl(nextRawFileUrl);
+
+    if (nextRawFileUrl) {
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!detail || !isRagCitation(detail)) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void resolveCitationDocumentUrl(detail).then((nextUrl) => {
+      if (!active) return;
+      setResolvedRawFileUrl(nextUrl || '');
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [detail]);
+
   if (!canRenderPreview) {
     return null;
   }
 
-  const { detail } = preview;
-  const fileName = getCitationDocumentName(detail);
-  const rawFileUrl = getCitationDocumentUrl(detail);
-  const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
-  const handleDownload = () => {
-    if (!fileUrl) return;
+  const handleDownload = async () => {
+    const nextFileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || await resolveCitationDocumentUrl(detail));
+    setResolvedRawFileUrl((current) => current || nextFileUrl);
+    if (!nextFileUrl) return;
     const link = document.createElement('a');
-    link.href = fileUrl;
+    link.href = nextFileUrl;
     link.download = fileName;
     link.target = '_blank';
     document.body.appendChild(link);

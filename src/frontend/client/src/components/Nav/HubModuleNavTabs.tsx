@@ -6,7 +6,7 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import { useAuthContext, useLocalize } from '~/hooks';
-import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
+import { lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
 
 export type HubModuleSection = 'home' | 'apps' | 'channel' | 'knowledge';
@@ -40,15 +40,20 @@ export function useHubModuleLinks(): HubModuleLink[] {
   const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
     ? (user as { plugins: string[] }).plugins
     : null;
-  const showSubscriptionTab = plugins ? plugins.includes('subscription') : true;
-  const showKnowledgeSpaceTab = plugins ? plugins.includes('knowledge_space') : true;
+  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
+  const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
+  const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
+  const showSubscriptionTab = showWorkbenchItem('subscription');
+  const showKnowledgeSpaceTab = showWorkbenchItem('knowledge_space');
+  const showHomeTab = showWorkbenchItem('home');
+  const showAppsTab = showWorkbenchItem('apps');
 
   return useMemo(
     () =>
       [
         {
           section: 'home',
-          to: lastSectionPaths.home || '/c/new',
+          to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
           icon: HomeIcon,
           label: localize('com_nav_home'),
           isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
@@ -56,7 +61,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         },
         {
           section: 'apps',
-          to: appsSectionLinkTarget(),
+          to: '/apps',
           icon: GlobeIcon,
           label: localize('com_nav_app_center'),
           isActive:
@@ -65,7 +70,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         },
         {
           section: 'channel',
-          to: lastSectionPaths.channel || '/channel',
+          to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
           icon: LinkIcon,
           label: localize('com_ui_channel'),
           isActive: pathname.startsWith('/channel'),
@@ -73,18 +78,20 @@ export function useHubModuleLinks(): HubModuleLink[] {
         },
         {
           section: 'knowledge',
-          to: lastSectionPaths.knowledge || '/knowledge',
+          to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
           icon: BookOpenIcon,
           label: localize('com_knowledge.knowledge_space'),
           isActive: pathname.startsWith('/knowledge'),
           closeDrawerOnNavigate: true,
         },
       ].filter((link) => {
+        if (link.section === 'home') return showHomeTab;
+        if (link.section === 'apps') return showAppsTab;
         if (link.section === 'channel') return showSubscriptionTab;
         if (link.section === 'knowledge') return showKnowledgeSpaceTab;
         return true;
       }),
-    [localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab],
+    [localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
   );
 }
 

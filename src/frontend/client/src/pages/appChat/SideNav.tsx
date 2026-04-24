@@ -1,6 +1,6 @@
 import { ChevronLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
@@ -69,9 +69,29 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 }
 
 export function SideNav() {
+    const location = useLocation();
     const navigate = useNavigate();
+    const { conversationId, fid: flowId, type: flowType } = useParams();
+    const handleGoBack = () => {
+        let fromHomeEntry = false;
+        if (conversationId) {
+            try {
+                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
+            } catch {
+                // ignore storage failures
+            }
+        }
+        const searchParams = new URLSearchParams(location.search);
+        const from = searchParams.get('from');
+        const entry = searchParams.get('entry');
+        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
+            navigate('/c/new');
+            return;
+        }
+        navigate('/apps');
+    };
+
     const localize = useLocalize();
-    const { fid: flowId, type: flowType } = useParams();
     const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
     const { data: bsConfig } = useGetBsConfig();
 
@@ -119,7 +139,7 @@ export function SideNav() {
             <div className="hidden touch-desktop:flex shrink-0 items-center gap-2">
                 <button
                     type="button"
-                    onClick={() => navigate('/apps')}
+                    onClick={handleGoBack}
                     className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] transition-colors hover:bg-[#f7f8fa]"
                     aria-label={localize('com_ui_go_back')}
                 >
@@ -243,8 +263,8 @@ export function SideNav() {
                 )}
             </div>
 
-            {/* Footer user panel */}
-            <div className="shrink-0 border-t border-[#F2F3F5] pt-2">
+            {/* Footer user panel: mobile only (<768px) */}
+            <div className="shrink-0 border-t border-[#F2F3F5] pt-2 hidden max-[768px]:block">
                 <UserPopMenu variant="drawer" />
             </div>
         </div>

@@ -16,6 +16,7 @@ from bisheng.common.errcode.user import (
     UserPasswordExpireError,
     UserNameTooLongError,
     UserNoRoleForLoginError,
+    UserNoWebMenuForLoginError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
@@ -25,7 +26,7 @@ from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_cl
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
-from bisheng.database.constants import DefaultRole
+from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
@@ -294,16 +295,27 @@ class UserService:
     async def _reject_login_if_user_has_no_usable_access(
         cls, db_user: User,
     ) -> Optional[UnifiedResponseModel]:
-        """无角色且非部门/用户组管理员时拒绝登录，避免进入管理端后仅 403 且无出口。"""
+        """无角色且非部门/用户组管理员时拒绝登录；有角色但生效菜单既不包含工作台也不包含管理后台时拒绝登录。
+
+        需审批模式下角色可仅勾选一级菜单（workstation/admin）而无二级项，仍视为有菜单权限，允许登录。
+        """
         roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-        if roles:
+        if not roles:
+            if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
+                return None
+            group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
+            if group_admins:
+                return None
+            return UserNoRoleForLoginError.return_resp()
+
+        if any(ur.role_id == AdminRole for ur in roles):
             return None
         if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
             return None
-        group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
-        if group_admins:
-            return None
-        return UserNoRoleForLoginError.return_resp()
+
+        if not await LoginUser.user_has_workbench_or_admin_effective_menu(db_user):
+            return UserNoWebMenuForLoginError.return_resp()
+        return None
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):

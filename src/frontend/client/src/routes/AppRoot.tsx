@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
 import type { ContextType } from '~/common';
@@ -11,6 +11,7 @@ import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { cn } from '~/utils';
 
 export default function AppRoot() {
+    const location = useLocation();
     const [bannerHeight, setBannerHeight] = useState(0);
     const [navVisible, setNavVisible] = useState(() => {
         const savedNavVisible = localStorage.getItem('navVisible');
@@ -29,6 +30,27 @@ export default function AppRoot() {
     }
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
+    const handleGoBack = () => {
+        let fromHomeEntry = false;
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
+        if (conversationId) {
+            try {
+                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
+            } catch {
+                // ignore storage failures
+            }
+        }
+        const searchParams = new URLSearchParams(location.search);
+        const from = searchParams.get('from');
+        const entry = searchParams.get('entry');
+        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
+            navigate('/c/new');
+            return;
+        }
+        navigate('/apps');
+    };
 
     useEffect(() => {
         const prevBodyOverflow = document.body.style.overflow;
@@ -104,7 +126,7 @@ export default function AppRoot() {
                             </button>
                         )}
                         <button
-                            onClick={() => navigate('/apps')}
+                            onClick={handleGoBack}
                             className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
                         >
                             <ChevronLeft size={16} className="text-[#212121]" />

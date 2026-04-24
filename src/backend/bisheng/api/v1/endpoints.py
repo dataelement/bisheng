@@ -41,7 +41,7 @@ if bisheng_settings.debug:
 def get_env():
     from bisheng import __version__
     """Get environment variable parameters"""
-    uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv']
+    uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv', 'wps', 'dps', 'et']
 
     etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
     if etl_for_lm_url:
@@ -137,7 +137,7 @@ async def update_web_config(request: Request,
 
 async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None,
                        bucket_name: str = None) \
-        -> UploadFileResponse:
+    -> UploadFileResponse:
     if file.size == 0:
         raise UploadFileEmptyError()
     file_ext = file.filename.split('.')[-1].lower()

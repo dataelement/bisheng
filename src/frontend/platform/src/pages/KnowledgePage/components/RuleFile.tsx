@@ -172,7 +172,8 @@ export default function RuleFile({
         }
     }, [isAdjustMode, setOriginalSplitRule, setStrategies]);
 
-    const hasPdf = useMemo(() => rules?.fileList?.some(item => item.suffix === 'pdf'), [rules]);
+    // const hasPdf = useMemo(() => rules?.fileList?.some(item => item.suffix === 'pdf'), [rules]);
+    const hasPdf = false;
 
     const splitModes = [
         { id: 'auto', title: t('autoSplit'), desc: t('autoSplitDesc') },
@@ -240,6 +241,7 @@ export default function RuleFile({
                                 </div>
                             </>
                         )}
+
                     </div>
                 </div>
 
