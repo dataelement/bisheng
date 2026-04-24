@@ -453,6 +453,14 @@ class UserDao(UserBase):
             result = await session.exec(statement)
             return result.first()
 
+    @classmethod
+    async def aget_users_by_external_id(cls, external_id: str) -> List['User']:
+        """Get all users by external_id globally, including soft-deleted rows."""
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.external_id == external_id)
+            result = await session.exec(statement)
+            return list(result.all())
+
     # ---------------------------------------------------------------
     # v2.5.1 F012: token_version helpers
     # ---------------------------------------------------------------

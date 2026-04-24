@@ -18,7 +18,6 @@ import {
 } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
-import { PlusIcon } from "@/components/bs-icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CreateTenantDialog } from "./components/CreateTenantDialog";
@@ -108,21 +107,24 @@ export default function TenantPage() {
     <div className="relative h-full px-2 py-4 overflow-hidden">
       <div className="flex justify-between items-center mb-4">
         <span className="text-lg font-bold">{t("tenant.management")}</span>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
           <SearchInput
             placeholder={t("tenant.search")}
             onChange={(e: any) => search(e.target.value)}
           />
-          <Button
-            onClick={() => {
-              setEditTenant(null);
-              setCreateOpen(true);
-            }}
-          >
-            <PlusIcon />
-            {t("tenant.create")}
-          </Button>
         </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+        <p className="font-medium">
+          {t("tenant.v251Title", { defaultValue: "v2.5.1 租户创建方式已调整" })}
+        </p>
+        <p className="mt-1 leading-6">
+          {t("tenant.v251Desc", {
+            defaultValue:
+              "Root Tenant 由系统自动初始化；新增子租户需通过部门挂载流程完成。当前页面仅保留现有 Tenant 的查看、编辑、配额和成员管理。",
+          })}
+        </p>
       </div>
 
       <div className="h-[calc(100vh-200px)] overflow-y-auto">

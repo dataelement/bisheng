@@ -60,6 +60,12 @@ function unwrap<T>(res: any): T {
   return res?.data ?? res;
 }
 
+function unwrapArray<T = any>(res: any): T[] {
+  const data = unwrap<any>(res);
+  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+  return Array.isArray(rows) ? rows : [];
+}
+
 function withPermissionRequestOptions(config?: PermissionRequestConfig) {
   return {
     skip403Redirect: true,
@@ -78,7 +84,7 @@ export async function getResourcePermissions(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
     withPermissionRequestOptions(config)
   );
-  return unwrap(res);
+  return unwrapArray<PermissionEntry>(res);
 }
 
 export async function authorizeResource(
@@ -119,7 +125,7 @@ export async function getGrantableRelationModels(
     params: { object_type: objectType, object_id: objectId },
     ...withPermissionRequestOptions(config),
   });
-  return unwrap(res);
+  return unwrapArray<RelationModel>(res);
 }
 
 export async function canOpenPermissionDialog(
@@ -145,7 +151,13 @@ export async function searchUsers(
     params: { name, page_num: 1, page_size: 200 },
     ...withPermissionRequestOptions(config),
   });
-  return unwrap(res);
+  const data = unwrap<any>(res);
+  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+  const list = Array.isArray(rows) ? rows : [];
+  return {
+    data: list,
+    total: Number(data?.total ?? list.length),
+  };
 }
 
 export async function getDepartmentTree(
@@ -155,7 +167,7 @@ export async function getDepartmentTree(
     `/api/v1/departments/tree`,
     withPermissionRequestOptions(config)
   );
-  return unwrap(res);
+  return unwrapArray(res);
 }
 
 export async function getUserGroups(

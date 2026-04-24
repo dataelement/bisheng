@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, Integer, JSON, String, false, text, func, delete, and_, or_, UniqueConstraint
+from sqlalchemy import Column, Computed, DateTime, Integer, JSON, String, false, text, func, delete, and_, or_, UniqueConstraint
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -50,9 +50,24 @@ class Role(RoleBase, table=True):
         default=None,
         sa_column=Column(Integer, nullable=True, comment='Role creator user ID'),
     )
+    department_scope_key: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            Computed('COALESCE(department_id, -1)', persisted=True),
+            nullable=False,
+            comment='Normalized department scope key; -1 = no scope restriction',
+        ),
+    )
 
     __table_args__ = (
-        UniqueConstraint('tenant_id', 'role_type', 'role_name', 'department_id', name='uk_tenant_roletype_rolename_scope'),
+        UniqueConstraint(
+            'tenant_id',
+            'role_type',
+            'role_name',
+            'department_scope_key',
+            name='uk_tenant_roletype_rolename_scope_key',
+        ),
     )
 
 

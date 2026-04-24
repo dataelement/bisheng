@@ -197,7 +197,7 @@ html {
 @font-face {
   font-family: AlibabaPuHuiTi-3-55-Regular;
   /* src: url("assets/text-security-disc.woff") format("woff"); */
-  src: url("assets/AlibabaPuHuiTi-3-55-Regular.woff") format("woff");
+  src: url("/workspace/fonts/AlibabaPuHuiTi-3-55-Regular.woff") format("woff");
 }
 
 .text-token-text-primary {

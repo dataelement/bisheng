@@ -46,7 +46,7 @@ export function PermissionListTab({
 
   const mergeGrantableWithEntries = useCallback(
     (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
-      const opts: RelationModelOption[] = (grantable || []).map((m) => ({
+      const opts: RelationModelOption[] = (Array.isArray(grantable) ? grantable : []).map((m) => ({
         id: m.id,
         name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
         relation: m.relation as RelationLevel,

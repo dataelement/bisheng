@@ -635,14 +635,53 @@ async def user_addrole(*,
         raise HTTPException(status_code=500, detail='Setting as system administrator is not allowed')
 
     if not login_user.is_admin():
+        from bisheng.database.models.department import DepartmentDao
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.role.domain.services.role_service import RoleService
+
         # Determine which user groups you have administrative access to
         admin_group = UserGroupDao.get_user_admin_group(login_user.user_id)
         admin_group = [one.group_id for one in admin_group]
-        if not admin_group:
-            raise HTTPException(status_code=500, detail='No rights')
         # Get a list of all roles under an admin group
-        admin_roles = RoleDao.get_role_by_groups(admin_group, '', 0, 0)
-        admin_roles = [one.id for one in admin_roles]
+        admin_roles = set()
+        if admin_group:
+            admin_roles.update(one.id for one in RoleDao.get_role_by_groups(admin_group, '', 0, 0))
+
+        try:
+            admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+        except Exception:
+            logger.exception(
+                'user_addrole: department admin check failed user=%s',
+                getattr(login_user, 'user_id', None),
+            )
+            admin_depts = []
+        try:
+            is_tenant_admin = await PermissionService.check(
+                user_id=login_user.user_id,
+                relation='admin',
+                object_type='tenant',
+                object_id=str(login_user.tenant_id),
+                login_user=login_user,
+            )
+        except Exception:
+            logger.exception(
+                'user_addrole: tenant admin check failed user=%s',
+                getattr(login_user, 'user_id', None),
+            )
+            is_tenant_admin = False
+
+        if admin_depts or is_tenant_admin:
+            visible_roles = await RoleService.list_roles(
+                keyword=None,
+                page=1,
+                limit=0,
+                login_user=login_user,
+                include_global_for_binding=True,
+            )
+            admin_roles.update(one.id for one in visible_roles['data'])
+
+        if not admin_roles:
+            raise HTTPException(status_code=500, detail='No rights')
         # Do the intersection to get the list of roles visible to the user group administrator
         for i in range(len(old_roles) - 1, -1, -1):
             if old_roles[i] not in admin_roles:
@@ -688,6 +727,98 @@ def update_user_role_hook(request: Request, login_user: LoginUser, user_id: int,
     AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_ids, note)
 
 
+# AccessType.value → (fga_object_type, fga_relation)
+_ACCESS_TYPE_TO_FGA: Dict[int, tuple] = {
+    1:  ('knowledge_library', 'viewer'),
+    3:  ('knowledge_library', 'editor'),
+    5:  ('assistant', 'viewer'),
+    6:  ('assistant', 'editor'),
+    7:  ('tool', 'viewer'),
+    8:  ('tool', 'editor'),
+    9:  ('workflow', 'viewer'),
+    10: ('workflow', 'editor'),
+    11: ('dashboard', 'viewer'),
+    12: ('dashboard', 'editor'),
+}
+
+
+def _has_resource_permission_user_binding(
+    obj_type: str,
+    resource_id: str,
+    relation: str,
+    user_id: int,
+    bindings: list[dict],
+) -> bool:
+    check_types = {obj_type}
+    if obj_type == 'knowledge_library':
+        check_types.add('knowledge_space')
+    elif obj_type == 'knowledge_space':
+        check_types.add('knowledge_library')
+
+    return any(
+        binding.get('resource_type') in check_types
+        and str(binding.get('resource_id')) == str(resource_id)
+        and binding.get('subject_type') == 'user'
+        and str(binding.get('subject_id')) == str(user_id)
+        and binding.get('relation') == relation
+        for binding in bindings
+    )
+
+
+async def _sync_role_access_fga(
+    role_id: int,
+    access_type: int,
+    old_ids: set[str],
+    new_ids: set[str],
+) -> None:
+    mapping = _ACCESS_TYPE_TO_FGA.get(access_type)
+    if not mapping:
+        return
+
+    removed = old_ids - new_ids
+    added = new_ids - old_ids
+    if not removed and not added:
+        return
+
+    user_roles = await UserRoleDao.aget_roles_user([role_id])
+    user_ids = [ur.user_id for ur in user_roles]
+    if not user_ids:
+        return
+
+    obj_type, relation = mapping
+    from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+    from bisheng.permission.domain.services.permission_service import PermissionService
+    from bisheng.permission.domain.services.permission_cache import PermissionCache
+    from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+    fga_object_types = [obj_type]
+    if obj_type == 'knowledge_library':
+        fga_object_types.append('knowledge_space')
+
+    bindings = await _get_bindings() if removed else []
+    operations: list[TupleOperation] = []
+    for uid in user_ids:
+        for rid in removed:
+            for fga_type in fga_object_types:
+                if _has_resource_permission_user_binding(fga_type, rid, relation, uid, bindings):
+                    continue
+                operations.append(TupleOperation(
+                    action='delete', user=f'user:{uid}',
+                    relation=relation, object=f'{fga_type}:{rid}',
+                ))
+        for aid in added:
+            for fga_type in fga_object_types:
+                operations.append(TupleOperation(
+                    action='write', user=f'user:{uid}',
+                    relation=relation, object=f'{fga_type}:{aid}',
+                ))
+
+    if operations:
+        await PermissionService.batch_write_tuples(operations)
+        for uid in user_ids:
+            await PermissionCache.invalidate_user(uid)
+
+
 @router.post('/role_access/refresh', status_code=200)
 async def access_refresh(*, request: Request, data: RoleRefresh,
                          login_user: LoginUser = Depends(LoginUser.get_login_user)):
@@ -702,7 +833,13 @@ async def access_refresh(*, request: Request, data: RoleRefresh,
     role_id = data.role_id
     access_type = data.type
     access_id = data.access_id
+
+    old_records = await RoleAccessDao.aget_role_access([role_id], AccessType(access_type))
+    old_ids = {str(r.third_id) for r in old_records}
+
     await RoleAccessDao.update_role_access_all(role_id, AccessType(access_type), access_id)
+
+    await _sync_role_access_fga(role_id, access_type, old_ids, {str(aid) for aid in access_id})
 
     update_role_hook(request, login_user, db_role)
     return resp_200()
