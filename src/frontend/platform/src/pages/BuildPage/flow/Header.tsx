@@ -251,6 +251,14 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
 
     const [tabType, setTabType] = useState('edit')
     const [open, setOpen] = useState(false)
+    // Save concurrency lock. A double-click used to launch two save pipelines,
+    // each running forceUpdateFlow → unmount/remount → refrenshVersions. The
+    // second refrenshVersions ran after window.flow_version was already
+    // consumed (deleted) by the first, so it fell back to is_current===1 and
+    // set the context version back to the online one while the flow store
+    // still held the non-online version's data. Blocking re-entry fixes it.
+    const savingRef = useRef(false)
+    const [saving, setSaving] = useState(false)
 
     const {
         returnPage,
@@ -317,16 +325,27 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 </Button>}
             </div>
             {/* Right Section with Options */}
-            <div className="flex items-center gap-3">
+            <div className="header-right flex items-center gap-3">
                 <Notification />
                 <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8`} onClick={handleRunClick}>
                     <Play className="size-3.5 mr-1" />
                     {t('run')}
                 </Button>
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} disabled={!canEdit} onClick={async () => {
-                    window.flow_version = Number(version.id)
-                    await handleSaveClick()
-                    forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} disabled={!canEdit || saving} onClick={async () => {
+                    if (savingRef.current) return
+                    savingRef.current = true
+                    setSaving(true)
+                    try {
+                        window.flow_version = Number(version.id)
+                        await handleSaveClick()
+                        forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
+                    } finally {
+                        // forceUpdateFlow unmounts this component, so these
+                        // writes may hit the outgoing instance — that's fine;
+                        // the remount initialises fresh ref/state.
+                        savingRef.current = false
+                        setSaving(false)
+                    }
                 }}>
                     {t('save')}
                 </Button>
