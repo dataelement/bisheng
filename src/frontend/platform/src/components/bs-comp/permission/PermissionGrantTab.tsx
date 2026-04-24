@@ -66,6 +66,19 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
     return models.find((m) => m.id === selectedModelId)?.relation || 'viewer'
   }, [models, selectedModelId])
 
+  const availableModels = useMemo(() => {
+    if (subjectType === 'user') {
+      return models
+    }
+    return models.filter((model) => model.relation !== 'owner')
+  }, [models, subjectType])
+
+  useEffect(() => {
+    if (!availableModels.length) return
+    if (availableModels.some((model) => model.id === selectedModelId)) return
+    setSelectedModelId(availableModels[0].id)
+  }, [availableModels, selectedModelId])
+
   useEffect(() => {
     setSelected((prev) =>
       prev.map((item) =>
@@ -174,7 +187,7 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
         <RelationSelect
           value={selectedModelId}
           onChange={setSelectedModelId}
-          options={models}
+          options={availableModels}
           className="w-[160px]"
         />
         <Button
