@@ -188,8 +188,8 @@ export async function updateChannelApi(
     channelId: string,
     data: any
 ): Promise<any> {
-    const res: any = await request.put(`/api/v1/channel/manager/${channelId}`, data);
-    return res?.data ?? res;
+    const res: any = await request.put(`/api/v1/channel/manager/${channelId}`, data, { showError: true });
+    return res;
 }
 
 /**
@@ -391,7 +391,7 @@ export interface CreateManagerChannelPayload {
 export async function createManagerChannelApi(
     data: CreateManagerChannelPayload
 ): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/create`, data);
+    return await request.post(`/api/v1/channel/manager/create`, data, { showError: true });
 }
 
 /**
@@ -428,7 +428,7 @@ export async function searchManagerSourcesApi(params: {
     sources: ManagerSource[];
     total: number;
 }> {
-    const res: any = await request.get(`/api/v1/channel/manager/search_sources`, { params });
+    const res: any = await request.get(`/api/v1/channel/manager/search_sources`, { params, showError: true });
     const root = res?.data ?? res;
     const payload = root?.data ?? root;
     return {
@@ -447,7 +447,7 @@ export async function getFeedbackTips(): Promise<any> {
 export async function addWebsiteSourceApi(body: {
     url: string;
 }): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/add_website_source`, body);
+    return await request.post(`/api/v1/channel/manager/add_website_source`, body, { showError: true });
 }
 
 /**
@@ -460,7 +460,10 @@ export async function addWechatSourceApi(body: {
     [key: string]: any;
 }, options?: any): Promise<any> {
     // options supports AbortController signal, e.g. { signal }
-    return await request.post(`/api/v1/channel/manager/add_wechat_source`, body, options);
+    return await request.post(`/api/v1/channel/manager/add_wechat_source`, body, {
+        showError: true,
+        ...options,
+    });
 }
 
 /**
@@ -470,7 +473,7 @@ export async function addWechatSourceApi(body: {
 export async function crawlTempSourceApi(body: {
     url: string;
 }): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/crawl`, body);
+    return await request.post(`/api/v1/channel/manager/crawl`, body, { showError: true });
 }
 
 /**
@@ -604,4 +607,3 @@ export function truncateName(name: string, max = 20): string {
     if (name.length <= max) return name;
     return name.slice(0, max) + "...";
 }
-
