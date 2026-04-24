@@ -8,6 +8,7 @@ import {
     addWechatSourceApi
 } from "~/api/channels";
 import { useLocalize } from "~/hooks";
+import { extractApiStatusCode } from "../errorUtils";
 
 const MAX_SOURCES = 50;
 const PAGE_SIZE = 20;
@@ -198,7 +199,6 @@ export function useSourceManager(
                 setSearchPage(1);
                 setSearchHasMore(res.total > mapped.length);
             } catch {
-                // 出错时保持现有列表
             } finally {
                 setLoadingSources(false);
             }
@@ -240,6 +240,7 @@ export function useSourceManager(
                 });
                 setSearchPage(nextPage);
                 setSearchHasMore(nextPage * PAGE_SIZE < res.total);
+            } catch {
             } finally {
                 setLoadingSources(false);
             }
@@ -332,9 +333,12 @@ export function useSourceManager(
                         if (prev.some((s) => s.id === created.id || s.url === created.url)) return prev;
                         return [...prev, created];
                     });
-                } catch {
+                } catch (error) {
                     if (wechatRequestTokenRef.current !== token) return;
-                    setWechatAddError(true);
+                    const code = extractApiStatusCode(error);
+                    if (code == null) {
+                        setWechatAddError(true);
+                    }
                 } finally {
                     if (wechatRequestTokenRef.current !== token) return;
                     // Clear controller for this run

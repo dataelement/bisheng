@@ -356,10 +356,10 @@ export default function MainLayout() {
               overlay
             />
           </div>
-          {/* 透明热区：右侧保持底层白底主区域原样，仅接收点击关闭 */}
+          {/* 右侧蒙层：与首页侧边抽屉保持一致 */}
           <button
             type="button"
-            className="min-w-0 flex-1 bg-transparent"
+            className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
             aria-label={localize('com_nav_close_sidebar')}
             onClick={() => setMobileSidebarOpen(false)}
           />

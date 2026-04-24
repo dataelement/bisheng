@@ -22,6 +22,9 @@ from bisheng.database.models.department import (
     UserDepartment,
     UserDepartmentDao,
 )
+from bisheng.department.domain.services.department_change_handler import (
+    DepartmentChangeHandler,
+)
 from bisheng.tenant.domain.constants import UserTenantSyncTrigger
 from bisheng.tenant.domain.services.user_tenant_sync_service import (
     UserTenantSyncService,
@@ -111,6 +114,9 @@ class UserDepartmentService:
                     .values(is_primary=1)
                 )
             await session.commit()
+
+        ops = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
+        await DepartmentChangeHandler.execute_async(ops)
 
         # Fire the leaf-tenant sync AFTER the DB write is committed so the
         # resolver can see the new primary. sync_user may raise

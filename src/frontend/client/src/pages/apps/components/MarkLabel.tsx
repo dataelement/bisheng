@@ -1,5 +1,6 @@
 import { GripVertical, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { getAllLabelsApi, updateHomeLabelApi } from '~/api/apps';
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components";
@@ -112,6 +113,7 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
             return next;
         });
     };
+    const dragItemClassName = "flex h-8 min-h-8 w-full cursor-grab items-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white px-2 py-0 active:cursor-grabbing";
 
     return (
         <Dialog
@@ -214,32 +216,35 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                                                     draggableId={`tag-${String(b.value)}`}
                                                     index={index}
                                                 >
-                                                    {(dragProvided) => (
-                                                        <div
-                                                            ref={dragProvided.innerRef}
-                                                            {...dragProvided.draggableProps}
-                                                            {...dragProvided.dragHandleProps}
-                                                            className="flex h-8 min-h-8 w-full cursor-grab items-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white px-2 py-0 active:cursor-grabbing"
-                                                        >
-                                                            <GripVertical className="size-3.5 shrink-0 text-[#C9CDD4]" />
-                                                            <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-[#1D2129]">
-                                                                {b.label}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                className="inline-flex size-6 shrink-0 items-center justify-center rounded text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
-                                                                aria-label={localize('com_label_remove_display')}
-                                                                onMouseDown={(e) => e.stopPropagation()}
-                                                                onTouchStart={(e) => e.stopPropagation()}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDelete(b.value);
-                                                                }}
+                                                    {(dragProvided, dragSnapshot) => {
+                                                        const node = (
+                                                            <div
+                                                                ref={dragProvided.innerRef}
+                                                                {...dragProvided.draggableProps}
+                                                                {...dragProvided.dragHandleProps}
+                                                                className={dragItemClassName}
                                                             >
-                                                                <X className="size-3.5" />
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                                <GripVertical className="size-3.5 shrink-0 text-[#C9CDD4]" />
+                                                                <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-[#1D2129]">
+                                                                    {b.label}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex size-6 shrink-0 items-center justify-center rounded text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+                                                                    aria-label={localize('com_label_remove_display')}
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                    onTouchStart={(e) => e.stopPropagation()}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDelete(b.value);
+                                                                    }}
+                                                                >
+                                                                    <X className="size-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                        return dragSnapshot.isDragging ? createPortal(node, document.body) : node;
+                                                    }}
                                                 </Draggable>
                                             ))}
                                             {dropProvided.placeholder}

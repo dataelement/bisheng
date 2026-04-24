@@ -56,8 +56,8 @@ async def get_knowledge(*,
     """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     login_user = get_default_operator()
-    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
-                                                      page_num, page_size)
+    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name, page=page_num,
+                                                      limit=page_size)
     return resp_200(data={'data': res, 'total': total})
 
 

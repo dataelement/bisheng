@@ -1,9 +1,4 @@
-import { Badge } from "@/components/bs-ui/badge";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Input, SearchInput } from "@/components/bs-ui/input";
-import { Label } from "@/components/bs-ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
     batchAddFileTagsApi,
@@ -11,12 +6,11 @@ import {
     deleteKnowledgeTagApi,
     getKnowledgeTagsApi,
     KnowledgeTagItem,
-    setFileTagsApi,
-    updateKnowledgeTagApi
+    setFileTagsApi
 } from "@/controllers/API/knowledgeTags";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Edit2, Plus, Tag as TagIcon, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface KnowledgeTagSelectProps {
@@ -29,7 +23,7 @@ interface KnowledgeTagSelectProps {
 }
 
 const TAG_NAME_MAX_LENGTH = 8;
-const FILE_TAG_LIMIT = 5;
+const FILE_TAG_LIMIT = 10;
 
 export default function KnowledgeTagSelect({
     knowledgeId,
@@ -44,10 +38,9 @@ export default function KnowledgeTagSelect({
     const [open, setOpen] = useState(false);
     const [tags, setTags] = useState<KnowledgeTagItem[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
-    const [keyword, setKeyword] = useState('');
-    const [editingTagId, setEditingTagId] = useState<number | null>(null);
-    const [editName, setEditName] = useState('');
-    const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [inputValue, setInputValue] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
 
     const isBatch = fileIds.length > 1;
     const numericKnowledgeId = Number(knowledgeId);
@@ -60,11 +53,10 @@ export default function KnowledgeTagSelect({
         setSelectedTagIds(initialTags.map(tag => tag.id));
     };
 
-    const fetchTags = async (searchKeyword: string) => {
+    const fetchTags = async () => {
         if (!numericKnowledgeId) return;
         const response = await captureAndAlertRequestErrorHoc(
             getKnowledgeTagsApi(numericKnowledgeId, {
-                keyword: searchKeyword.trim() || undefined,
                 page: 1,
                 limit: 100
             })
@@ -79,26 +71,10 @@ export default function KnowledgeTagSelect({
 
     useEffect(() => {
         if (!open) return;
+        setInputValue("");
         syncSelectedTags();
-        fetchTags(keyword);
+        fetchTags();
     }, [open, numericKnowledgeId]);
-
-    useEffect(() => {
-        if (!open) return;
-        if (fetchTimerRef.current) {
-            clearTimeout(fetchTimerRef.current);
-        }
-        fetchTimerRef.current = setTimeout(() => {
-            fetchTags(keyword);
-        }, 250);
-
-        return () => {
-            if (fetchTimerRef.current) {
-                clearTimeout(fetchTimerRef.current);
-                fetchTimerRef.current = null;
-            }
-        };
-    }, [keyword, open, numericKnowledgeId]);
 
     useEffect(() => {
         if (!open || isBatch) return;
@@ -108,9 +84,7 @@ export default function KnowledgeTagSelect({
     const handleOpenChange = (nextOpen: boolean) => {
         setOpen(nextOpen);
         if (!nextOpen) {
-            setKeyword('');
-            setEditingTagId(null);
-            setEditName('');
+            setInputValue("");
             syncSelectedTags();
         }
     };
@@ -125,7 +99,7 @@ export default function KnowledgeTagSelect({
         return true;
     };
 
-    const handleSingleFileTagToggle = async (tagId: number) => {
+    const toggleTag = (tagId: number) => {
         const nextIds = selectedTagIds.includes(tagId)
             ? selectedTagIds.filter(id => id !== tagId)
             : [...selectedTagIds, tagId];
@@ -135,54 +109,25 @@ export default function KnowledgeTagSelect({
             return;
         }
 
-        const result = await captureAndAlertRequestErrorHoc(
-            setFileTagsApi({
-                knowledge_id: numericKnowledgeId,
-                file_id: fileIds[0],
-                tag_ids: nextIds
-            })
-        );
-
-        if (result === false || result === 'canceled') {
-            return;
-        }
-
         setSelectedTagIds(nextIds);
-        onUpdate();
     };
 
-    const handleBatchAddTag = async (tagId: number, showSuccessToast = true) => {
-        const result = await captureAndAlertRequestErrorHoc(
-            batchAddFileTagsApi({
-                knowledge_id: numericKnowledgeId,
-                file_ids: fileIds,
-                tag_ids: [tagId]
-            })
-        );
-
-        if (result === false || result === 'canceled') {
-            return;
-        }
-
-        setSelectedTagIds(prev => (prev.includes(tagId) ? prev : [...prev, tagId]));
-        if (showSuccessToast) {
-            toast({ variant: 'success', description: t('tagAdded') });
-        }
-        onUpdate();
-    };
-
-    const handleTagCheck = async (tagId: number) => {
-        if (!isEditable) return;
-        if (isBatch) {
-            await handleBatchAddTag(tagId);
-            return;
-        }
-        await handleSingleFileTagToggle(tagId);
-    };
-
-    const handleCreateTag = async () => {
-        const tagName = keyword.trim();
+    const handleCreateTag = async (tagName: string) => {
         if (!validateTagName(tagName)) return;
+
+        if (selectedTagIds.length >= FILE_TAG_LIMIT) {
+            toast({ variant: 'error', description: t('tagsCountLimitExceeded') });
+            return;
+        }
+
+        const existing = tags.find((tag) => tag.name.trim().toLowerCase() === tagName.trim().toLowerCase());
+        if (existing) {
+            if (!selectedTagIds.includes(existing.id)) {
+                setSelectedTagIds((prev) => [...prev, existing.id]);
+            }
+            setInputValue("");
+            return;
+        }
 
         const result = await captureAndAlertRequestErrorHoc(
             createKnowledgeTagApi(numericKnowledgeId, tagName)
@@ -194,217 +139,166 @@ export default function KnowledgeTagSelect({
 
         const newTag = result as KnowledgeTagItem;
         setTags(prev => [newTag, ...prev.filter(tag => tag.id !== newTag.id)]);
-        setKeyword('');
-        toast({ variant: 'success', description: t('tagAdded') });
-        if (isBatch) {
-            await handleBatchAddTag(newTag.id, false);
-            return;
-        }
-        await handleSingleFileTagToggle(newTag.id);
+        setSelectedTagIds((prev) => (prev.includes(newTag.id) ? prev : [...prev, newTag.id]));
+        setInputValue("");
     };
 
-    const handleStartEdit = (tag: KnowledgeTagItem) => {
-        setEditingTagId(tag.id);
-        setEditName(tag.name);
+    const handleDeleteTag = async (tag: KnowledgeTagItem) => {
+        if (deletingTagId !== null) return;
+        setDeletingTagId(tag.id);
+        const result = await captureAndAlertRequestErrorHoc(deleteKnowledgeTagApi(numericKnowledgeId, tag.id));
+        if (result === false || result === 'canceled') {
+            setDeletingTagId(null);
+            return;
+        }
+        setTags(prev => prev.filter(item => item.id !== tag.id));
+        setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
+        toast({ variant: 'success', description: t('tagDeleted') });
+        setDeletingTagId(null);
     };
-
-    const handleUpdateTag = async (tagId: number) => {
-        const tagName = editName.trim();
-        setEditingTagId(null);
-
-        if (!tagName) {
-            setEditName('');
-            return;
-        }
-        if (!validateTagName(tagName)) {
-            return;
-        }
-
-        const currentTag = tags.find(tag => tag.id === tagId);
-        if (currentTag?.name === tagName) {
-            setEditName('');
-            return;
-        }
-
-        const result = await captureAndAlertRequestErrorHoc(
-            updateKnowledgeTagApi(numericKnowledgeId, tagId, tagName)
-        );
-
-        if (!result || result === 'canceled') {
-            return;
-        }
-
-        const updatedTag = result as KnowledgeTagItem;
-        setTags(prev => prev.map(tag => (tag.id === tagId ? updatedTag : tag)));
-        toast({ variant: 'success', description: t('tagUpdated') });
-        setEditName('');
-        onUpdate();
-    };
-
-    const handleDeleteTag = (tag: KnowledgeTagItem) => {
-        bsConfirm({
-            title: t('prompt'),
-            desc: t('confirmDeleteTag', { name: tag.name }),
-            onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteKnowledgeTagApi(numericKnowledgeId, tag.id)).then((result) => {
-                    if (result === false || result === 'canceled') {
-                        next();
-                        return;
-                    }
-                    setTags(prev => prev.filter(item => item.id !== tag.id));
-                    setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
-                    toast({ variant: 'success', description: t('tagDeleted') });
-                    onUpdate();
-                    next();
-                });
-            }
-        });
-    };
-
-    const showCreate = useMemo(() => {
-        const normalizedKeyword = keyword.trim().toLowerCase();
-        if (!normalizedKeyword) return false;
-        return !tags.some(tag => tag.name.trim().toLowerCase() === normalizedKeyword);
-    }, [keyword, tags]);
 
     const selectedTags = useMemo(
         () => tags.filter(tag => selectedTagIds.includes(tag.id)),
         [tags, selectedTagIds]
     );
 
+    const handleSave = async () => {
+        setLoading(true);
+        const payloadTagIds = [...selectedTagIds];
+        const result = await captureAndAlertRequestErrorHoc(
+            isBatch
+                ? batchAddFileTagsApi({
+                    knowledge_id: numericKnowledgeId,
+                    file_ids: fileIds,
+                    tag_ids: payloadTagIds
+                })
+                : setFileTagsApi({
+                    knowledge_id: numericKnowledgeId,
+                    file_id: fileIds[0],
+                    tag_ids: payloadTagIds
+                })
+        );
+        setLoading(false);
+        if (result === false || result === 'canceled') {
+            return;
+        }
+        onUpdate();
+        handleOpenChange(false);
+    };
+
     return (
-        <Popover open={open} onOpenChange={handleOpenChange}>
-            <PopoverTrigger asChild>{children}</PopoverTrigger>
-            <PopoverContent
-                align="start"
-                className="w-[320px] p-4"
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogTrigger asChild>{children}</DialogTrigger>
+            <DialogContent
+                close={false}
+                onPointerDownOutside={(event) => event.preventDefault()}
+                onInteractOutside={(event) => event.preventDefault()}
+                className="w-[600px] max-w-[calc(100vw-32px)] gap-0 rounded-xl border-none p-0"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="space-y-4">
-                    <SearchInput
-                        placeholder={t('searchTags')}
-                        value={keyword}
-                        onChange={(event) => setKeyword(event.target.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Enter' && showCreate && isEditable) {
-                                event.preventDefault();
-                                handleCreateTag();
-                            }
+                <DialogHeader className="px-6 py-4">
+                    <DialogTitle className="text-[16px] font-medium leading-6 text-[#212121]">
+                        编辑标签
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 px-6 pb-3">
+                    <div
+                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"
+                        onClick={(event) => {
+                            const target = event.currentTarget.querySelector("input") as HTMLInputElement | null;
+                            target?.focus();
                         }}
-                    />
-
-                    <div className="max-h-[260px] space-y-1 overflow-y-auto">
-                        {tags.map((tag) => (
-                            <div
+                    >
+                        {selectedTags.map((tag) => (
+                            <span
                                 key={tag.id}
-                                className="group flex min-h-8 items-center justify-between rounded px-2 hover:bg-muted"
+                                className="flex h-[22px] items-center justify-center gap-1 whitespace-nowrap rounded-[4px] bg-[#f2f3f5] px-2 text-sm leading-[22px] text-[#4e5969]"
                             >
-                                <div className="flex min-w-0 flex-1 items-center gap-2 py-1">
-                                    <Checkbox
-                                        id={`knowledge-tag-${tag.id}`}
-                                        checked={selectedTagIds.includes(tag.id)}
-                                        disabled={!isEditable || (isBatch && selectedTagIds.includes(tag.id))}
-                                        onCheckedChange={() => handleTagCheck(tag.id)}
-                                    />
-                                    {editingTagId === tag.id ? (
-                                        <Input
-                                            autoFocus
-                                            maxLength={TAG_NAME_MAX_LENGTH}
-                                            className="h-7 px-2"
-                                            value={editName}
-                                            onChange={(event) => setEditName(event.target.value)}
-                                            onBlur={() => handleUpdateTag(tag.id)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter') {
-                                                    handleUpdateTag(tag.id);
-                                                }
-                                                if (event.key === 'Escape') {
-                                                    setEditingTagId(null);
-                                                    setEditName('');
-                                                }
-                                            }}
-                                        />
-                                    ) : (
-                                        <Label
-                                            htmlFor={`knowledge-tag-${tag.id}`}
-                                            className="flex-1 cursor-pointer truncate"
-                                        >
-                                            {tag.name}
-                                        </Label>
-                                    )}
-                                </div>
-
-                                {isEditable && editingTagId !== tag.id && (
-                                    <div className="ml-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                        <button
-                                            className="rounded p-1 hover:bg-background"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                handleStartEdit(tag);
-                                            }}
-                                        >
-                                            <Edit2 size={12} className="text-muted-foreground" />
-                                        </button>
-                                        <button
-                                            className="rounded p-1 hover:bg-background"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                handleDeleteTag(tag);
-                                            }}
-                                        >
-                                            <Trash2 size={12} className="text-muted-foreground" />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                                {tag.name}
+                                <button
+                                    type="button"
+                                    className="flex h-4 w-4 items-center justify-center text-[#86909c] hover:text-[#4e5969]"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        toggleTag(tag.id);
+                                    }}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </span>
                         ))}
-
-                        {!tags.length && !showCreate && (
-                            <div className="py-6 text-center text-sm text-muted-foreground">
-                                {t('noTags')}
-                            </div>
-                        )}
-
-                        {showCreate && isEditable && (
-                            <button
-                                className="flex w-full items-center rounded px-2 py-2 text-left text-sm text-primary hover:bg-primary/10"
-                                onClick={handleCreateTag}
-                            >
-                                <Plus size={16} className="mr-2" />
-                                {t('createTagWithName', { name: keyword.trim() })}
-                            </button>
-                        )}
+                        <input
+                            type="text"
+                            value={inputValue}
+                            maxLength={TAG_NAME_MAX_LENGTH}
+                            onChange={(event) => setInputValue(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    void handleCreateTag(inputValue.trim());
+                                }
+                            }}
+                            placeholder={selectedTags.length === 0 && !inputValue ? "请输入要添加的标签，回车保存" : ""}
+                            className="min-h-[22px] min-w-[120px] flex-1 bg-transparent text-sm leading-[22px] text-[#212121] outline-none placeholder-[#86909c]"
+                        />
+                        <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-[#999]">
+                            {selectedTagIds.length}/{FILE_TAG_LIMIT}
+                        </span>
                     </div>
 
-                    {!isBatch && (
-                        <div className="border-t pt-3">
-                            <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                                <span>{t('selectedItems')}</span>
-                                <span>{selectedTagIds.length}/{FILE_TAG_LIMIT}</span>
-                            </div>
-                            {selectedTags.length ? (
-                                <div className="flex flex-wrap gap-1">
-                                    {selectedTags.map((tag) => (
-                                        <Badge key={tag.id} variant="secondary" className="h-6 gap-1 px-2 py-0">
-                                            <TagIcon size={12} />
-                                            <span className="max-w-[180px] truncate">{tag.name}</span>
-                                            {isEditable && (
-                                                <X
-                                                    size={12}
-                                                    className="cursor-pointer"
-                                                    onClick={() => handleTagCheck(tag.id)}
-                                                />
-                                            )}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-xs text-muted-foreground">{t('noTagsSelected')}</div>
+                    <div className="flex flex-col gap-2 pt-1">
+                        <div className="text-[14px] font-medium leading-5 text-[#212121]">已有标签</div>
+                        <div className="flex flex-wrap gap-1">
+                            {tags.length === 0 && (
+                                <span className="text-[12px] text-[#86909c]">暂无标签</span>
                             )}
+                            {tags.map((tag) => {
+                                const isSelected = selectedTagIds.includes(tag.id);
+                                return (
+                                    <span
+                                        key={tag.id}
+                                        onClick={() => toggleTag(tag.id)}
+                                        className={`flex h-7 items-center justify-center gap-1 rounded-[4px] px-2 text-[12px] leading-[20px] transition-colors ${isSelected
+                                            ? "cursor-default bg-primary/10 text-[#165dff]"
+                                            : "cursor-pointer bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb]"
+                                            }`}
+                                    >
+                                        {tag.name}
+                                        <button
+                                            type="button"
+                                            className="flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void handleDeleteTag(tag);
+                                            }}
+                                            disabled={deletingTagId === tag.id}
+                                        >
+                                            <Trash2 className="size-3" />
+                                        </button>
+                                    </span>
+                                );
+                            })}
                         </div>
-                    )}
+                    </div>
                 </div>
-            </PopoverContent>
-        </Popover>
+                <div className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3">
+                    <button
+                        type="button"
+                        className="h-8 rounded-[6px] border border-[#d9d9d9] bg-white px-4 text-[14px] font-normal text-[#1d2129] transition-colors hover:bg-[#f7f8fa]"
+                        onClick={() => handleOpenChange(false)}
+                    >
+                        取消
+                    </button>
+                    <button
+                        type="button"
+                        className="h-8 rounded-[6px] bg-[#335CFF] px-4 text-[14px] font-normal text-white transition-colors hover:bg-[#5A7EFF] disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => void handleSave()}
+                        disabled={loading || !isEditable}
+                    >
+                        确认
+                    </button>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }

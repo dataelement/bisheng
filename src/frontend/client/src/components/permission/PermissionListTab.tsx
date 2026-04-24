@@ -42,29 +42,7 @@ export function PermissionListTab({
   const [listTab, setListTab] = useState<ListSubjectType>("user");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [models, setModels] = useState<RelationModelOption[]>([]);
-
-  const mergeGrantableWithEntries = useCallback(
-    (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
-      const opts: RelationModelOption[] = (Array.isArray(grantable) ? grantable : []).map((m) => ({
-        id: m.id,
-        name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
-        relation: m.relation as RelationLevel,
-      }));
-      const ids = new Set(opts.map((o) => o.id));
-      for (const e of list) {
-        if (!e.model_id || ids.has(e.model_id)) continue;
-        ids.add(e.model_id);
-        opts.push({
-          id: e.model_id,
-          name: e.model_name || e.relation,
-          relation: e.relation as RelationLevel,
-        });
-      }
-      return opts;
-    },
-    [localize]
-  );
+  const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -91,11 +69,29 @@ export function PermissionListTab({
   useEffect(() => {
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        const merged = mergeGrantableWithEntries(res, entries);
-        if (merged.length) setModels(merged);
+        setGrantableModels(Array.isArray(res) ? res : []);
       })
       .catch(() => {});
-  }, [resourceType, resourceId, entries, mergeGrantableWithEntries, refreshKey]);
+  }, [resourceType, resourceId, refreshKey]);
+
+  const models = useMemo<RelationModelOption[]>(() => {
+    const opts: RelationModelOption[] = grantableModels.map((m) => ({
+      id: m.id,
+      name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
+      relation: m.relation as RelationLevel,
+    }));
+    const ids = new Set(opts.map((o) => o.id));
+    for (const e of entries) {
+      if (!e.model_id || ids.has(e.model_id)) continue;
+      ids.add(e.model_id);
+      opts.push({
+        id: e.model_id,
+        name: e.model_name || e.relation,
+        relation: e.relation as RelationLevel,
+      });
+    }
+    return opts;
+  }, [entries, grantableModels, localize]);
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
     const model = models.find((m) => m.id === modelId);

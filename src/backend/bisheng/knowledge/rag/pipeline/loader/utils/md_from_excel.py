@@ -58,56 +58,52 @@ def remove_characters(s, chars_to_remove=["\n", "\r"]):
 
 
 def unmerge_and_read_sheet(sheet_obj):
-    """
-    read out openpyxl Sheet object, unmerge cells by populating the top-left value of the merge range into all cells in the range.
-    and returns the data as a list of lists.
-    """
     if sheet_obj.max_row == 0 or sheet_obj.max_column == 0:
         return []
+
     max_row = sheet_obj.max_row
     max_column = sheet_obj.max_column
-    data_grid = [
-        [None for _ in range(max_column)] for _ in range(max_row)
-    ]
 
-    # Berturut-turut50Row Blank Row Stop Reading Content
+    # 处理 merged cells
+    merged_map = {}
+    for merged_range in sheet_obj.merged_cells.ranges:
+        min_col, min_row, max_col, max_row_r = merged_range.bounds
+        val = sheet_obj.cell(row=min_row, column=min_col).value
+        for r in range(min_row, max_row_r + 1):
+            for c in range(min_col, max_col + 1):
+                merged_map[(r, c)] = val
+
+    data_grid = []
     empty_row_num = 0
     max_empty_rows = 50
-    empty_row_end = 0
+
     for r_idx, row in enumerate(sheet_obj.iter_rows()):
-        if empty_row_num > max_empty_rows:
-            break
+        row_data = []
         row_empty = True
+
         for c_idx, cell in enumerate(row):
-            data_grid[r_idx][c_idx] = cell.value
-            if cell.value:
+            value = merged_map.get((r_idx+1, c_idx+1), cell.value)
+            row_data.append(value)
+
+            if value is not None and str(value).strip() != "":
                 row_empty = False
+
+        data_grid.append(row_data)
+
         if row_empty:
             empty_row_num += 1
+            if empty_row_num > max_empty_rows:
+                data_grid = data_grid[:-max_empty_rows]
+                break
         else:
             empty_row_num = 0
-    if empty_row_num > 0:
-        data_grid = data_grid[:-empty_row_num]
 
-    merged_cell_ranges = list(sheet_obj.merged_cells.ranges)
-    for merged_range in merged_cell_ranges:
-        min_col, min_row, max_col, max_row = merged_range.bounds
-        top_left_cell_value = sheet_obj.cell(row=min_row, column=min_col).value
-        # ignore empty rows
-        if min_row > len(data_grid):
-            continue
-        for r in range(min_row, max_row + 1):
-            for c in range(min_col, max_col + 1):
-                data_grid[r - 1][c - 1] = top_left_cell_value
-
-    # Some Excel files keep an oversized used-range with thousands of trailing empty columns.
-    # Trim only the tailing all-empty columns so Markdown generation reflects the real data area.
+    # 裁剪空列
     max_non_empty_col = 0
     for row in data_grid:
-        for col_idx in range(len(row) - 1, -1, -1):
-            cell_value = row[col_idx]
-            if cell_value is not None and str(cell_value).strip() != "":
-                max_non_empty_col = max(max_non_empty_col, col_idx + 1)
+        for i in range(len(row) - 1, -1, -1):
+            if row[i] is not None and str(row[i]).strip() != "":
+                max_non_empty_col = max(max_non_empty_col, i + 1)
                 break
 
     if max_non_empty_col > 0:

@@ -28,6 +28,7 @@ import { buildCreateChannelPayload } from "./channelUtils";
 import { Menu, Plus } from "lucide-react";
 import { cn } from "~/utils";
 import { ChannelShareDialog } from "./ChannelShareDialog";
+import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -358,7 +359,11 @@ export default function Subscription() {
 
         // 编辑模式：使用 PUT /api/v1/channel/manager/{channel_id}，保证权限设置、内容筛选、子频道等一起更新
         if (editingChannel) {
-            await updateChannelApi(editingChannel.id, payload);
+            const response = await updateChannelApi(editingChannel.id, payload);
+            const updateCode = extractApiStatusCode(response);
+            if (updateCode && updateCode !== 200) {
+                throw createApiStatusError(response);
+            }
             await queryClient.invalidateQueries({ queryKey: ["channels"] });
             // Refresh channel detail cache so ArticleList & tooltip pick up new settings
             await queryClient.invalidateQueries({ queryKey: ["channelDetail", editingChannel.id] });
@@ -369,6 +374,10 @@ export default function Subscription() {
 
         // 创建模式：POST /api/v1/channel/manager/create
         const res: any = await createManagerChannelApi(payload);
+        const createCode = extractApiStatusCode(res);
+        if (createCode && createCode !== 200) {
+            throw createApiStatusError(res);
+        }
         await queryClient.invalidateQueries({ queryKey: ["channels"] });
         const root = res?.data ?? res;
         const payloadRes = root?.data ?? root;
@@ -487,7 +496,7 @@ export default function Subscription() {
                             </div>
                             <button
                                 type="button"
-                                className="min-w-0 flex-1 bg-transparent"
+                                className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
                                 aria-label={localize("com_nav_close_sidebar")}
                                 onClick={() => setChannelListDrawerOpen(false)}
                             />

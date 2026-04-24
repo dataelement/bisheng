@@ -10,6 +10,7 @@ import {
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { createApiStatusError, extractApiStatusCode } from "../errorUtils";
 
 interface UseChannelActionsOptions {
     activeChannelId?: string;
@@ -59,7 +60,11 @@ export function useChannelActions({
         }
 
         try {
-            await updateChannelApi(channel.id, { name: channel.name, description: channel.description });
+            const response = await updateChannelApi(channel.id, { name: channel.name, description: channel.description });
+            const updateCode = extractApiStatusCode(response);
+            if (updateCode && updateCode !== 200) {
+                throw createApiStatusError(response);
+            }
             queryClient.invalidateQueries({ queryKey: ["channelDetail", channel.id] });
             showToast({ message: localize("com_subscription.channel_updated"), severity: NotificationSeverity.SUCCESS });
         } catch (e) {

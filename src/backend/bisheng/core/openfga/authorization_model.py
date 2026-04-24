@@ -20,17 +20,17 @@ v2.5.1 F013 changes:
   (Option A of the 2026-04-19 DSL redesign — OpenFGA protobuf does not accept
   nested relation refs like tenant#shared_to#member in
   directly_related_user_types, forcing this explicit expansion).
-- manager/editor remain at the standard three sources (user, department#member,
-  user_group#member) — resource grants stay bounded (Round 3 narrowing).
+- manager/editor remain at the bounded direct sources (user, department#member,
+  user_group#member, user_group#admin) — resource grants stay bounded
+  (Round 3 narrowing plus legacy groupresource migration compatibility).
 - New types llm_server / llm_model preallocated for F020 LLM multi-tenant.
 """
 
 import copy
 
-# v2.0.1 — 2026-04-19 DSL redesign replacing tenant#shared_to#member userset
-# (rejected by OpenFGA protobuf regex ^[^:#@\s]{1,50}$) with resource-level
-# shared_with: [tenant] + tupleToUserset viewer extension.
-MODEL_VERSION = 'v2.0.1'
+# v2.0.2 — user_group#admin now implies user_group#member and can manage
+# legacy groupresource-managed resources.
+MODEL_VERSION = 'v2.0.2'
 
 
 def _user_types():
@@ -39,6 +39,7 @@ def _user_types():
         {'type': 'user'},
         {'type': 'department', 'relation': 'member'},
         {'type': 'user_group', 'relation': 'member'},
+        {'type': 'user_group', 'relation': 'admin'},
     ]
 
 
@@ -255,7 +256,14 @@ AUTHORIZATION_MODEL: dict = {
             'type': 'user_group',
             'relations': {
                 'admin': {'this': {}},
-                'member': {'this': {}},
+                'member': {
+                    'union': {
+                        'child': [
+                            {'this': {}},
+                            {'computedUserset': {'relation': 'admin'}},
+                        ]
+                    }
+                },
             },
             'metadata': {
                 'relations': {

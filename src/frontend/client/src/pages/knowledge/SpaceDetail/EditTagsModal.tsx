@@ -177,7 +177,6 @@ export function EditTagsModal({
             });
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             showToast({ message: localize("com_knowledge.delete_tag_success"), status: "success" });
-            onSaved?.();
         } catch {
             showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "error" });
         } finally {
@@ -198,9 +197,13 @@ export function EditTagsModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden">
-                <DialogHeader className="h-auto shrink-0 space-y-0 border-b border-[#ECECEC] px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
-                    <DialogTitle className="text-[20px] leading-7 font-medium text-[#212121]">
+            <DialogContent
+                onPointerDownOutside={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
+                className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
+            >
+                <DialogHeader className="h-auto shrink-0 space-y-0 px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
+                    <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
                     <button
@@ -259,7 +262,7 @@ export function EditTagsModal({
 
                     {/* Existing Space Tags */}
                     <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[12px] leading-5 font-normal text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
+                        <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
                                 <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
@@ -296,11 +299,11 @@ export function EditTagsModal({
                 </div>
 
                 <DialogFooter className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:mt-auto touch-mobile:h-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
-                    <Button variant="outline" className="h-8 px-4 touch-mobile:flex-1" onClick={handleClose}>
+                    <Button variant="outline" className="h-8 rounded-[6px] px-4 font-normal touch-mobile:flex-1" onClick={handleClose}>
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 px-4 touch-mobile:flex-1"
+                        className="h-8 rounded-[6px] px-4 font-normal touch-mobile:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >
