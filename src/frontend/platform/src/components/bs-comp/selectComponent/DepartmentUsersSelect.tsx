@@ -6,7 +6,7 @@ import { getDepartmentMembersApi, getDepartmentTreeApi } from "@/controllers/API
 import { getUsersApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight, User as UserIcon } from "lucide-react"
+import { Building2, ChevronDown, ChevronRight, User as UserIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -192,7 +192,7 @@ export default function DepartmentUsersSelect({
   const displayText = useMemo(() => {
     if (!value?.length) return placeholder || t("system.selectUser")
     if (value.length === 1) return value[0].label
-    return `${t("system.selectUser")} (${value.length})`
+    return `${placeholder || t("system.selectUser")} (${value.length})`
   }, [placeholder, t, value])
 
   const keywordTrim = keyword.trim()
@@ -338,6 +338,24 @@ export default function DepartmentUsersSelect({
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
           </Button>
         </PopoverTrigger>
+        {value?.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {value.map((v) => (
+              <span
+                key={v.value}
+                className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs text-foreground"
+              >
+                {v.label}
+                {!disabled && !lockedSet.has(Number(v.value)) && (
+                  <X
+                    className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"
+                    onClick={() => setPicked(v)}
+                  />
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <PopoverContent
         align="start"
