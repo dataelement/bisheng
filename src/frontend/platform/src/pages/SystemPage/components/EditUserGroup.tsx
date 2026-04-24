@@ -172,7 +172,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.groupCreator')}</p>
             <p className="text-sm text-muted-foreground font-normal mb-2">{t('system.groupCreatorReadonlyHint')}</p>
-            <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+            <div className="rounded-md border bg-muted/50 px-4 py-3 text-sm text-muted-foreground cursor-not-allowed select-none">
                 {(data as UserGroupV2).id
                     ? ((data as UserGroupV2).create_user_name?.trim()
                         || (data as UserGroupV2).group_admins?.map((a) => a.user_name).filter(Boolean).join(", ")
