@@ -34,17 +34,27 @@ export default function Departments() {
   const isResizingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const loadTree = useCallback(() => {
+  const selectFallbackDepartment = useCallback((nodes: DepartmentTreeNode[]) => {
+    const fallback = nodes[0] ?? null
+    setSelectedDeptId(fallback?.dept_id ?? null)
+    setSelectedDept(fallback)
+  }, [])
+
+  const loadTree = useCallback((removedDeptId?: string) => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
       if (res) {
         setTree(res)
+        if (removedDeptId && selectedDeptId === removedDeptId) {
+          selectFallbackDepartment(res)
+          return
+        }
         if (!selectedDeptId && res.length > 0) {
           setSelectedDeptId(res[0].dept_id)
           setSelectedDept(res[0])
         }
       }
     })
-  }, [selectedDeptId])
+  }, [selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
     loadTree()
@@ -77,17 +87,25 @@ export default function Departments() {
     loadTree()
   }, [loadTree])
 
-  const handleTreeChange = useCallback(() => {
-    loadTree()
+  const handleTreeChange = useCallback((removedDeptId?: string) => {
+    loadTree(removedDeptId)
     setMembersRefreshSignal((n) => n + 1)
   }, [loadTree])
 
   useEffect(() => {
     if (selectedDeptId && tree.length > 0) {
       const node = findNode(tree, selectedDeptId)
-      if (node) setSelectedDept(node)
+      if (node) {
+        setSelectedDept(node)
+      } else {
+        selectFallbackDepartment(tree)
+      }
     }
-  }, [tree, selectedDeptId, findNode])
+    if (selectedDeptId && tree.length === 0) {
+      setSelectedDeptId(null)
+      setSelectedDept(null)
+    }
+  }, [tree, selectedDeptId, findNode, selectFallbackDepartment])
 
   const handleLocateMemberFromGlobal = useCallback(
     ({
@@ -202,6 +220,7 @@ export default function Departments() {
               <MemberTable
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
+                isArchived={selectedDept.status === "archived"}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
                 highlightUserId={memberHighlightUserId}
