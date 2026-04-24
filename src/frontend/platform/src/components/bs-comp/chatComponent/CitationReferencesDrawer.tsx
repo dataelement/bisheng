@@ -8,6 +8,7 @@ import {
   createCitationDetailMap,
   getCitationDocumentFileType,
   isRagCitation,
+  isRagCitationMissingPreviewUrl,
   normalizeCitationType,
   type CitationPreview,
   type CitationReferenceItem,
@@ -81,29 +82,7 @@ function CitationReferenceCard({
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
-  const titleContent = canOpenDocument ? (
-    <button
-      type="button"
-      onClick={() => onOpenDocumentPreview(detail!)}
-      className="flex min-w-0 items-center gap-1 text-left hover:text-[#165DFF]"
-      title={title}
-    >
-      <span className="truncate">{documentName}</span>
-      {documentExtension ? <span className="shrink-0">{documentExtension}</span> : null}
-    </button>
-  ) : preview?.link ? (
-    <a
-      href={preview.link}
-      target="_blank"
-      rel="noreferrer"
-      className="block min-w-0 truncate hover:text-[#165DFF]"
-      title={title}
-    >
-      {title}
-    </a>
-  ) : (
-    <span className="block min-w-0 truncate" title={title}>{title}</span>
-  );
+  const nameRowTextClass = "text-[14px] font-normal leading-[22px] text-[#1D2129]";
 
   return (
     <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
@@ -111,12 +90,47 @@ function CitationReferenceCard({
         <SourceTypeBadge preview={preview} label={item.data.label} type={item.data.type} />
       </div>
 
-      <div className="flex min-w-0 items-center gap-1 text-[14px] font-normal leading-[22px] text-[#1D2129]">
-        {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
-        <div className="min-w-0 flex-1">
-          {titleContent}
+      {canOpenDocument ? (
+        <button
+          type="button"
+          onClick={() => onOpenDocumentPreview(detail!)}
+          className={cname(
+            "flex w-full min-w-0 items-center gap-1 rounded-[4px] text-left",
+            nameRowTextClass,
+            "transition-colors hover:text-[#165DFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#165DFF]/25",
+          )}
+          title={title}
+        >
+          {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+          <div className="min-w-0 flex-1">
+            <span className="inline-flex min-w-0 max-w-full items-baseline gap-0.5">
+              <span className="min-w-0 flex-1 truncate text-left">{documentName}</span>
+              {documentExtension ? <span className="shrink-0">{documentExtension}</span> : null}
+            </span>
+          </div>
+        </button>
+      ) : preview?.link ? (
+        <a
+          href={preview.link}
+          target="_blank"
+          rel="noreferrer"
+          className={cname(
+            "flex w-full min-w-0 items-center gap-1 rounded-[4px] hover:text-[#165DFF]",
+            nameRowTextClass,
+          )}
+          title={title}
+        >
+          {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+          <span className="min-w-0 flex-1 truncate">{title}</span>
+        </a>
+      ) : (
+        <div className={cname("flex min-w-0 items-center gap-1", nameRowTextClass)}>
+          {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+          <span className="min-w-0 flex-1 truncate" title={title}>
+            {title}
+          </span>
         </div>
-      </div>
+      )}
 
       {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
         {isLoading ? (
@@ -166,6 +180,7 @@ export default function CitationReferencesDrawer({
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>("");
+  const resolvedIdsRef = useRef<Set<string>>(new Set());
 
   const references = useMemo(
     () => buildCitationReferenceItems({ content, webContent, citations }),
@@ -192,7 +207,12 @@ export default function CitationReferencesDrawer({
     const citationIds = Array.from(new Set(
       references
         .map((item) => item.data.citationId)
-        .filter((citationId) => citationId && !citationId.startsWith("citation:") && !detailCacheRef.current[citationId]),
+        .filter((citationId) => {
+          if (!citationId || citationId.startsWith("citation:")) return false;
+          if (resolvedIdsRef.current.has(citationId)) return false;
+          const cached = detailCacheRef.current[citationId];
+          return !cached || isRagCitationMissingPreviewUrl(cached);
+        }),
     ));
 
     if (!citationIds.length) {
@@ -210,6 +230,7 @@ export default function CitationReferencesDrawer({
         const nextMap: Record<string, ChatCitation> = {};
         items.forEach((detail) => {
           if (detail?.citationId) {
+            resolvedIdsRef.current.add(detail.citationId);
             detailCacheRef.current[detail.citationId] = detail;
             nextMap[detail.citationId] = detail;
           }
@@ -285,11 +306,20 @@ export default function CitationReferencesDrawer({
     const citationIds = Array.from(new Set(
       references
         .map((item) => item.data.citationId)
-        .filter((citationId) => citationId && !citationId.startsWith("citation:") && !detailMap[citationId]),
+        .filter((citationId) => {
+          if (!citationId || citationId.startsWith("citation:")) return false;
+          if (resolvedIdsRef.current.has(citationId)) return false;
+          const cached = detailMap[citationId];
+          return !cached || isRagCitationMissingPreviewUrl(cached);
+        }),
     ));
 
     citationIds.forEach((citationId) => {
-      void loadCitationDetail(citationId);
+      void loadCitationDetail(citationId).then((detail) => {
+        if (detail?.citationId) {
+          resolvedIdsRef.current.add(detail.citationId);
+        }
+      });
     });
   }, [allowRemoteCitationResolve, detailMap, loadCitationDetail, open, references]);
 
@@ -305,14 +335,17 @@ export default function CitationReferencesDrawer({
         type="button"
         onClick={() => setOpen(true)}
         className={cname(
-          "inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[13px] leading-none text-[#86909C] transition-colors hover:bg-[#F2F3F5] hover:text-[#4E5969]",
+          "inline-flex h-6 items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors hover:bg-[#F7F7F7]",
           buttonClassName,
         )}
       >
-        <CitationSourceIconStack icons={referenceEntryIcons} />
-        <span>参考资料</span>
-        <span className="text-[#165DFF]">{references.length}</span>
-        <ChevronRight className="size-4" />
+        <div className="flex h-5 w-11 shrink-0 items-center overflow-hidden">
+          <CitationSourceIconStack icons={referenceEntryIcons} />
+        </div>
+        <div className="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap">
+          <span className="whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+          <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
+        </div>
       </button>
 
       {open && (

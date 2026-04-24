@@ -17,7 +17,7 @@ import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
-export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false }) {
+export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false, isGuestMode = false }) {
     const { messageScrollRef, chatId, messages } = useMessage(readOnly)
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
@@ -83,8 +83,9 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
                             data={msg}
                             logo={logo}
                             title={title}
+                            isGuestMode={isGuestMode}
                             onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
-                            onSource={(data) => { sourceRef.current?.openModal({ ...data, chatId }) }}
+                            onSource={isGuestMode ? undefined : (data) => { sourceRef.current?.openModal({ ...data, chatId }) }}
                         />;
                     case 'divider':
                         return <div key={msg.id} className={'flex items-center justify-center py-4 text-gray-400 text-sm'}>
@@ -141,6 +142,6 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
         )}
 
         <MessageFeedbackForm ref={thumbRef}></MessageFeedbackForm>
-        <ResouceModal ref={sourceRef}></ResouceModal>
+        {!isGuestMode && <ResouceModal ref={sourceRef}></ResouceModal>}
     </div>
 };
