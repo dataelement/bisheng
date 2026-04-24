@@ -79,8 +79,8 @@ export default function AppRoot() {
                     {/* Floating actions - visible when sidebar is collapsed */}
                     <div
                         className={cn(
-                            'absolute top-[20px] left-[12px] z-[40] flex items-center gap-[8px] transition-all duration-300',
-                            sidebarVisible ? 'opacity-0 pointer-events-none' : 'opacity-100 top-3'
+                            'absolute top-3 left-[12px] z-[40] flex items-center gap-[8px] transition-all duration-300',
+                            sidebarVisible ? 'opacity-0 pointer-events-none' : 'opacity-100',
                         )}
                     >
                         {isTabletOrMobile && (

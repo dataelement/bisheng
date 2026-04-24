@@ -530,7 +530,11 @@ export const ChatKnowledge = ({
             }}
             className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <PaperclipIcon className="size-[18px] text-slate-600" strokeWidth={1.25} />
+            <img
+              src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/link.svg`}
+              alt=""
+              className="size-[18px] text-slate-600"
+            />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
@@ -547,7 +551,11 @@ export const ChatKnowledge = ({
             >
               <div className="flex min-w-0 items-center gap-3">
                 <div className="relative shrink-0">
-                  <BookOpen className="size-[18px] text-slate-600" />
+                  <img
+                    src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg`}
+                    alt=""
+                    className="size-[18px] text-slate-600"
+                  />
                   {selectedKnowledgeSpaces.length > 0 && (
                     <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                   )}
@@ -568,7 +576,11 @@ export const ChatKnowledge = ({
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="relative shrink-0">
-                    <BooksIcon className="size-[18px] text-slate-600" strokeWidth={1.25} />
+                    <img
+                      src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
+                      alt=""
+                      className="size-[18px] text-slate-600"
+                    />
                     {selectedOrgKbs.length > 0 && (
                       <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                     )}

@@ -193,7 +193,7 @@ function TreeNode({
     return (
         <div className="w-full min-w-0 max-w-full">
             <div
-                className={`group flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
+                className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
                     ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
@@ -237,7 +237,7 @@ function TreeNode({
                         onCancel={onCancelEdit}
                     />
                 ) : (
-                    <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="min-w-0 flex-1 overflow-hidden pr-0 transition-[padding-right] duration-150 group-hover:pr-8">
                         <span className="block truncate" title={node.name}>{node.name}</span>
                     </span>
                 )}
@@ -246,7 +246,7 @@ function TreeNode({
                 {!isEditing && (
                     <button
                         type="button"
-                        className="shrink-0 opacity-0 group-hover:opacity-100 h-8 w-8 flex items-center justify-center rounded text-[#86909c] hover:text-primary transition-colors duration-150"
+                        className="absolute right-2 top-1/2 z-[1] h-8 w-8 -translate-y-1/2 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 flex items-center justify-center rounded text-[#86909c] hover:text-primary transition-colors duration-150"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
@@ -643,13 +643,13 @@ export function AddToKnowledgeModal({
                     >
                         <ChevronLeft className="size-5" />
                     </button>
-                    <h2 className="min-w-0 flex-1 text-left text-[20px] font-medium leading-7 text-[#212121]">
+                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-[#212121]">
                         {titleLabel}
                     </h2>
                 </div>
             ) : (
                 <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] touch-mobile:px-4">
-                    <DialogTitle className="text-[20px] font-medium leading-7 text-[#212121]">
+                    <DialogTitle className="text-[16px] font-medium leading-7 text-[#212121]">
                         {titleLabel}
                     </DialogTitle>
                 </DialogHeader>
@@ -690,9 +690,9 @@ export function AddToKnowledgeModal({
                         useFlexTree
                             ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover"
                             : cn(
-                                  "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover",
-                                  mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
-                              )
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover",
+                                mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
+                            )
                     }
                 >
                     {spacesLoading ? (

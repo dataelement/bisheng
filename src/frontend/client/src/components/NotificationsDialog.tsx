@@ -75,7 +75,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [rejectTarget, setRejectTarget] = useState<null | { notificationId: string; requestId: number; targetName: string }>(null);
     const [rejectReason, setRejectReason] = useState("");
     const [decisionSubmitting, setDecisionSubmitting] = useState(false);
-    const [isTouchMobile, setIsTouchMobile] = useState(false);
+    const [isNarrowMobileLayout, setIsNarrowMobileLayout] = useState(false);
+    const [canHover, setCanHover] = useState(false);
+    const [hasTouchInput, setHasTouchInput] = useState(false);
+    const isTouchMobile = isNarrowMobileLayout && (hasTouchInput || !canHover);
     const { showToast } = useToastContext();
     const requestHoverTimersRef = useRef<Record<string, number>>({});
     const autoReadTimersRef = useRef<Record<string, number>>({});
@@ -162,10 +165,15 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     useEffect(() => {
         if (typeof window === "undefined") return;
         const detect = () => {
-            const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
-            const hasTouch = navigator.maxTouchPoints > 0;
-            const narrowViewport = window.matchMedia("(max-width: 1023px)").matches;
-            setIsTouchMobile((coarsePointer || hasTouch) && narrowViewport);
+            // 断点约定：
+            // - <=768: 走移动端布局样式（含 PC 小屏）
+            // - <=768 且不可 hover / 有触控输入：按触屏交互处理
+            const narrowViewport = window.matchMedia("(max-width: 768px)").matches;
+            const hoverCapable = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+            const touchCapable = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+            setIsNarrowMobileLayout(narrowViewport);
+            setCanHover(hoverCapable);
+            setHasTouchInput(touchCapable);
         };
         detect();
         window.addEventListener("resize", detect);
@@ -923,36 +931,36 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 }}
                 className={cn(
                     "p-0 gap-0 shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]",
-                    isTouchMobile
+                    isNarrowMobileLayout
                         ? "fixed inset-0 left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-none"
                         : "h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] rounded-2xl",
                 )}
             >
-                <div className={cn("flex h-full flex-col overflow-hidden", isTouchMobile ? "rounded-none" : "rounded-2xl")}>
+                <div className={cn("flex h-full flex-col overflow-hidden", isNarrowMobileLayout ? "rounded-none" : "rounded-2xl")}>
                     <Tabs
                         value={activeTab}
                         onValueChange={(v) => setActiveTab(v as "all" | "request")}
                         className="flex min-h-0 flex-1 flex-col"
                     >
                         <div className="flex min-h-0 flex-1 flex-col">
-                            <div className={cn("flex-shrink-0 space-y-3 py-3", isTouchMobile ? "px-4 pb-4 pt-4 pr-12" : "px-6")}>
+                            <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-12" : "px-6")}>
                                 {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
-                                <div className={cn("flex flex-col", isTouchMobile ? "gap-3" : "gap-4")}>
-                                    <h2 className={cn("text-[#1d2129]", isTouchMobile ? "text-[20px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
+                                <div className={cn("flex flex-col", isNarrowMobileLayout ? "gap-3" : "gap-4")}>
+                                    <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[20px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
                                         {localize("com_notifications_title")}
                                     </h2>
-                                    <div className={cn("flex gap-4", isTouchMobile ? "flex-col" : "flex-row items-center justify-between")}>
-                                    <TabsList className={cn("h-auto bg-transparent p-0", isTouchMobile ? "w-full justify-start gap-6" : "inline-flex w-auto justify-center gap-2")}>
+                                    <div className={cn("flex gap-4", isNarrowMobileLayout ? "flex-col" : "flex-row items-center justify-between")}>
+                                    <TabsList className={cn("h-auto bg-transparent p-0", isNarrowMobileLayout ? "w-full justify-start gap-6" : "inline-flex w-auto justify-center gap-2")}>
                                         <TabsTrigger
                                             value="all"
                                             className={cn(
                                                 "relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121]",
-                                                !isTouchMobile && "h-8 data-[state=inactive]:text-[#4E5969]",
+                                                !isNarrowMobileLayout && "h-8 data-[state=inactive]:text-[#4E5969]",
                                             )}
                                         >
                                             {localize("com_notifications_tab_all")}
                                             {unreadCounts.all > 0 && (
-                                                <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isTouchMobile ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
+                                                <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
                                                     {formatBadge(unreadCounts.all)}
                                                 </span>
                                             )}
@@ -961,19 +969,19 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                             value="request"
                                             className={cn(
                                                 "relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121]",
-                                                !isTouchMobile && "h-8 data-[state=inactive]:text-[#4E5969]",
+                                                !isNarrowMobileLayout && "h-8 data-[state=inactive]:text-[#4E5969]",
                                             )}
                                         >
                                             {localize("com_notifications_tab_request")}
                                             {unreadCounts.request > 0 && (
-                                                <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isTouchMobile ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
+                                                <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
                                                     {formatBadge(unreadCounts.request)}
                                                 </span>
                                             )}
                                         </TabsTrigger>
                                     </TabsList>
 
-                                    {!isTouchMobile && (
+                                    {!isNarrowMobileLayout && (
                                     <div className="flex items-center gap-3">
                                         <ExpandableSearchField
                                             value={searchQuery}
@@ -1011,7 +1019,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 </div>
 
                                 {/* H5：与稿一致 — 搜索与「仅看未读」「已读全部」同一行，gap 12px */}
-                                {isTouchMobile && (
+                                {isNarrowMobileLayout && (
                                 <div className="flex min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                                     <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#EBECF0] bg-white px-3 py-[5px]">
                                         <Search className="size-4 shrink-0 text-[#8B8FA8]" aria-hidden />
@@ -1056,7 +1064,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "all" ? "true" : "false"}
-                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isTouchMobile ? "px-4 py-3" : "px-6 py-3")}
+                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-6 py-3")}
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -1083,7 +1091,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "request" ? "true" : "false"}
-                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isTouchMobile ? "px-4 py-3" : "px-6 py-3")}
+                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-6 py-3")}
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (

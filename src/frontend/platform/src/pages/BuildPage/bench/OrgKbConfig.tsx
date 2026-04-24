@@ -130,13 +130,16 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     };
 
     return (
-        <div className="mt-2">
+        <div className="mt-2 min-w-0 max-w-full">
             <p className="text-sm text-muted-foreground mb-2">
                 {t("bench.configureOrgKbs", "配置组织知识库")}
             </p>
-            <div className="flex gap-4">
+            <div className="flex min-w-0 w-full max-w-full gap-4">
                 {/* Selected panel */}
-                <div className="w-1/2 flex border rounded-lg bg-white min-w-0" style={{ minHeight: 280 }}>
+                <div
+                    className="flex w-1/2 min-w-0 max-w-[50%] border rounded-lg bg-white"
+                    style={{ minHeight: 280 }}
+                >
                     <div className="flex-1 p-4 flex flex-col min-w-0">
                         {orgKbs.length > 0 && (
                             <div className="flex items-center justify-between pb-2 text-xs text-muted-foreground">
@@ -161,7 +164,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                         <div
                                             {...provided.droppableProps}
                                             ref={provided.innerRef}
-                                            className="space-y-2 overflow-y-auto"
+                                            className="space-y-2 overflow-x-hidden overflow-y-auto"
                                             style={{ maxHeight: 320 }}
                                         >
                                             {orgKbs.map((kb, index) => (
@@ -181,22 +184,23 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                                                 }`}
                                                         >
                                                             <AlignJustify className="w-4 h-4 shrink-0 text-gray-400" />
-                                                            <div className="text-primary">
+                                                            <div className="shrink-0 text-primary">
                                                                 <KbTypeIcon />
                                                             </div>
                                                             <TooltipProvider>
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <span className="flex-1 min-w-0 truncate text-sm">
+                                                                        <span className="block min-w-0 flex-1 truncate text-sm">
                                                                             {kb.name}
                                                                         </span>
                                                                     </TooltipTrigger>
                                                                     <TooltipContent>
-                                                                        <p className="max-w-[240px]">{kb.name}</p>
+                                                                        <p className="max-w-[240px] break-words">{kb.name}</p>
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             </TooltipProvider>
                                                             <Checkbox
+                                                                className="shrink-0"
                                                                 checked={kb.default_checked}
                                                                 onCheckedChange={(v) =>
                                                                     handleDefaultCheckedChange(kb.id, !!v)
@@ -224,16 +228,20 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                 </div>
 
                 {/* Full KB picker panel */}
-                <div className="w-1/2 flex border rounded-lg bg-white flex-col" style={{ minHeight: 280 }}>
-                    <div className="p-3 border-b">
-                        <h3 className="font-medium text-sm mb-2">{t("bench.allKbs", "全部知识库")}</h3>
+                <div
+                    className="flex w-1/2 min-w-0 max-w-[50%] flex-col overflow-hidden border rounded-lg bg-white"
+                    style={{ minHeight: 280 }}
+                >
+                    <div className="shrink-0 border-b p-3 min-w-0">
+                        <h3 className="mb-2 text-sm font-medium">{t("bench.allKbs", "全部知识库")}</h3>
                         <SearchInput
+                            className="w-full min-w-0 max-w-full"
                             placeholder={t("bench.searchKbName", "搜索知识库名称")}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2" style={{ maxHeight: 360 }}>
+                    <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2" style={{ maxHeight: 360 }}>
                         {loading && (
                             <div className="py-8 text-center text-sm text-muted-foreground">
                                 {t("bench.loading")}
@@ -250,24 +258,25 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                 return (
                                     <label
                                         key={kb.id}
-                                        className="flex items-center gap-2 px-2 py-2 rounded cursor-pointer hover:bg-gray-50 min-w-0"
+                                        className="flex min-w-0 max-w-full cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-gray-50"
                                     >
                                         <Checkbox
+                                            className="shrink-0"
                                             checked={checked}
                                             onCheckedChange={() => toggleAdd(kb)}
                                         />
-                                        <div className="text-primary">
+                                        <div className="shrink-0 text-primary">
                                             <KbTypeIcon />
                                         </div>
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <span className="flex-1 min-w-0 truncate text-sm">
+                                                    <span className="block min-w-0 max-w-full flex-1 truncate text-sm">
                                                         {kb.name}
                                                     </span>
                                                 </TooltipTrigger>
                                                 <TooltipContent>
-                                                    <p className="max-w-[240px]">{kb.name}</p>
+                                                    <p className="max-w-[240px] break-words">{kb.name}</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>

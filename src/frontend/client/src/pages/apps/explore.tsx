@@ -60,7 +60,11 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                                 className="inline-flex items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-1 text-[#4E5969] hover:bg-[#F2F3F5]"
                                 aria-label={localize('com_app_start_chat')}
                             >
-                                <AiChatIcon className="size-3.5" stroke="#4E5969" />
+                                <img
+                                    src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/message.svg`}
+                                    alt=""
+                                    className="size-[18px] text-slate-600"
+                                />
                             </button>
                         </div>
                     )}
@@ -117,9 +121,10 @@ export default function ExplorePlaza() {
     const isAtLeast1024 = useMediaQuery('(min-width: 1024px)')
 
     const exploreCols = useMemo(() => {
-        // Keep Explore Plaza one column fewer than App Center, with minimum 1.
-        const appCenterCols = isAtLeast1024 ? 4 : isAtLeast768 ? 2 : 1;
-        return Math.max(1, appCenterCols - 1);
+        // md: 2 列（与应用中心一致）；lg+: 3 列（应用中心 4 列减 1）
+        if (isAtLeast1024) return 3;
+        if (isAtLeast768) return 2;
+        return 1;
     }, [isAtLeast768, isAtLeast1024]);
 
     // Modify Fetch Function

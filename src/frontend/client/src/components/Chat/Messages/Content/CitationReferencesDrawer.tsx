@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Download, Loader2, X } from 'lucide-react';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
-import useMediaQuery from '~/hooks/useMediaQuery';
+import { useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 import {
   buildCitationDocumentPreview,
@@ -55,7 +55,6 @@ export type CitationReferencesDesktopPayload = {
 
 type CitationDesktopView = 'list' | 'document-preview';
 const CITATION_PANEL_EXPANDED_BREAKPOINT = 768;
-const CITATION_MOBILE_BREAKPOINT = 576;
 
 function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
@@ -109,32 +108,10 @@ function CitationReferenceCard({
   const isWeb = normalizeCitationType(type) === 'web';
   const title = preview?.title || '暂无标题';
   const canOpenDocument = !!detail && isRagCitation(detail, type);
-  const sourceMetaText = [preview?.sourceName, preview?.sourceMeta].filter(Boolean).join(' | ');
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
-  const titleContent = canOpenDocument ? (
-    <button
-      type="button"
-      onClick={() => onOpenDocumentPreview(detail!)}
-      className="flex min-w-0 items-center gap-1 text-left hover:text-[#165DFF]"
-      title={title}
-    >
-      <span className="truncate">{documentName}</span>
-      {documentExtension ? <span className="shrink-0">{documentExtension}</span> : null}
-    </button>
-  ) : preview?.link ? (
-    <a
-      href={preview.link}
-      target="_blank"
-      rel="noreferrer"
-      className="block min-w-0 truncate hover:text-[#165DFF]"
-      title={title}
-    >
-      {title}
-    </a>
-  ) : (
-    <span className="block min-w-0 truncate" title={title}>{title}</span>
-  );
+  const nameRowTextClass =
+    'text-[14px] font-normal leading-[22px] text-[#1D2129]';
 
   return (
     <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
@@ -142,12 +119,47 @@ function CitationReferenceCard({
         <SourceTypeBadge preview={preview} label={item.data.label} type={item.data.type} />
       </div>
 
-      <div className="flex min-w-0 items-center gap-1 text-[14px] font-normal leading-[22px] text-[#1D2129]">
-        {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
-        <div className="min-w-0 flex-1">
-          {titleContent}
+      {canOpenDocument ? (
+        <button
+          type="button"
+          onClick={() => onOpenDocumentPreview(detail!)}
+          className={cn(
+            'flex w-full min-w-0 items-center gap-1 rounded-[4px] text-left',
+            nameRowTextClass,
+            'transition-colors hover:text-[#165DFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#165DFF]/25',
+          )}
+          title={title}
+        >
+          {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+          <div className="min-w-0 flex-1">
+            <span className="inline-flex min-w-0 max-w-full items-baseline gap-0.5">
+              <span className="min-w-0 flex-1 truncate text-left">{documentName}</span>
+              {documentExtension ? <span className="shrink-0">{documentExtension}</span> : null}
+            </span>
+          </div>
+        </button>
+      ) : preview?.link ? (
+        <a
+          href={preview.link}
+          target="_blank"
+          rel="noreferrer"
+          className={cn(
+            'flex w-full min-w-0 items-center gap-1 rounded-[4px] hover:text-[#165DFF]',
+            nameRowTextClass,
+          )}
+          title={title}
+        >
+          {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+          <span className="min-w-0 flex-1 truncate">{title}</span>
+        </a>
+      ) : (
+        <div className={cn('flex min-w-0 items-center gap-1', nameRowTextClass)}>
+          {!isWeb && <CitationSourceIcon detail={detail} preview={preview} type={type} />}
+          <span className="min-w-0 flex-1 truncate" title={title}>
+            {title}
+          </span>
         </div>
-      </div>
+      )}
 
       {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
         {isLoading ? (
@@ -199,7 +211,9 @@ export default function CitationReferencesDrawer({
   initialDocumentPreview,
   desktopPreviewVariant = 'auto',
 }: CitationReferencesDrawerProps) {
-  const isH5 = useMediaQuery(`(max-width: ${CITATION_MOBILE_BREAKPOINT}px)`);
+  // <=768: 走抽屉（不内联分栏）；<=576: 抽屉全屏覆盖
+  const isNarrowLayout = usePrefersMobileLayout();
+  const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const matchesExpandedDesktopPreview = useMediaQuery(`(min-width: ${CITATION_PANEL_EXPANDED_BREAKPOINT + 1}px)`);
   const useExpandedDesktopPreview = desktopPreviewVariant === 'expanded'
     ? true
@@ -321,7 +335,7 @@ export default function CitationReferencesDrawer({
   }, []);
 
   useEffect(() => {
-    const shouldUseDesktopInlinePanel = !isH5
+    const shouldUseDesktopInlinePanel = !isNarrowLayout
       && desktopMode === 'inline-panel'
       && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
     const shouldLoadDetails = panelOnly ? true : shouldUseDesktopInlinePanel ? !!open : internalOpen;
@@ -338,10 +352,10 @@ export default function CitationReferencesDrawer({
     citationIds.forEach((citationId) => {
       void loadCitationDetail(citationId);
     });
-  }, [detailMap, desktopMode, internalOpen, isH5, loadCitationDetail, open, panelOnly, references]);
+  }, [detailMap, desktopMode, internalOpen, isNarrowLayout, loadCitationDetail, open, panelOnly, references]);
 
   const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
-  const isDesktopInlinePanel = !isH5
+  const isDesktopInlinePanel = !isNarrowLayout
     && desktopMode === 'inline-panel'
     && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
@@ -440,7 +454,8 @@ export default function CitationReferencesDrawer({
       null,
     )
     : { name: '文档预览', extension: '' };
-  const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-[360px]';
+  // 非 expanded：侧栏内预览区横向铺满，避免 max-w + items-center 在侧栏中留出左右大空白
+  const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-full';
   const desktopHeaderPadding = useExpandedDesktopPreview ? 'px-0 py-0' : 'px-3 py-4';
   const desktopHeaderHeight = useExpandedDesktopPreview ? 'h-10' : 'h-[22px]';
   const desktopHeaderGap = useExpandedDesktopPreview ? 'gap-3' : 'gap-4';
@@ -454,13 +469,13 @@ export default function CitationReferencesDrawer({
     : 'text-[#A9AEB8] hover:bg-[#F7F8FA]';
   const desktopContentOuterClass = useExpandedDesktopPreview
     ? 'items-center justify-between gap-6 p-2'
-    : 'items-center gap-4';
+    : 'w-full min-w-0 items-stretch gap-0';
   const desktopBodyWrapperClass = useExpandedDesktopPreview
     ? 'max-w-[464px] rounded-[12px] bg-[#F7F8FA]'
-    : 'max-w-[336px] bg-transparent';
+    : 'w-full min-w-0 max-w-full overflow-hidden bg-[#F7F8FA]';
   const desktopBodyClass = useExpandedDesktopPreview
-    ? 'min-h-0 flex-1 bg-[#F7F8FA]'
-    : 'min-h-0 flex-1 bg-transparent';
+    ? 'min-h-0 flex-1 w-full bg-[#F7F8FA]'
+    : 'min-h-0 w-full flex-1 bg-[#fbfbfb]';
   const referenceListContent = (
     <>
       <div className={cn(
@@ -471,7 +486,7 @@ export default function CitationReferencesDrawer({
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
             参考资料
           </h2>
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
+          <span className="inline-flex h-4 w-4 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
             {references.length}
           </span>
         </div>
@@ -514,8 +529,20 @@ export default function CitationReferencesDrawer({
 
   const documentPreviewContent = (
     <div className={cn('flex min-h-0 flex-1 flex-col bg-white', desktopContentOuterClass)}>
-      <div className={cn('flex w-full shrink-0 flex-col', useExpandedDesktopPreview ? 'max-w-[464px] gap-4' : 'max-w-[360px]')}>
-        <div className={cn('flex items-center', desktopHeaderHeight, desktopHeaderGap, desktopHeaderPadding)}>
+      <div
+        className={cn(
+          'flex shrink-0 flex-col',
+          useExpandedDesktopPreview ? 'w-full max-w-[464px] gap-4' : 'w-full max-w-full gap-0',
+        )}
+      >
+        <div
+          className={cn(
+            'flex w-full min-w-0 shrink-0 items-center border-b border-[#ECECEC] bg-white',
+            desktopHeaderHeight,
+            desktopHeaderGap,
+            desktopHeaderPadding,
+          )}
+        >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="flex min-w-0 items-center">
               <h2
@@ -572,7 +599,7 @@ export default function CitationReferencesDrawer({
   if (panelOnly) {
     return (
       <section
-        className={cn('flex h-full min-h-0 flex-col bg-white', !isH5 && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
+        className={cn('flex h-full min-h-0 flex-col bg-white', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
         aria-label="参考资料"
       >
         {panelContent}
@@ -612,14 +639,14 @@ export default function CitationReferencesDrawer({
       {!isDesktopInlinePanel && isOpen && (
         <>
           <div
-            className={cn('fixed inset-0 z-40', isH5 ? 'bg-black/30' : 'bg-transparent')}
+            className={cn('fixed inset-0 z-40', isPhoneViewport ? 'bg-black/30' : 'bg-transparent')}
             aria-hidden="true"
             onClick={() => setOpenState(false)}
           />
           <aside
             className={cn(
               'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
-              isH5
+              isPhoneViewport
                 ? 'inset-0'
                 : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
             )}
