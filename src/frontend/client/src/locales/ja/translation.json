@@ -1419,7 +1419,7 @@
     "folder": "フォルダ",
     "folder_depth_limit_reached": "フォルダー階層の上限に達しました",
     "folder_name_empty": "フォルダー名を入力してください",
-    "format_list": "pdf（スキャンを含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp",
+    "format_list": "pdf（スキャンを含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、dps、et",
     "format_suffix": "形式",
     "get_download_link_failed": "ダウンロードリンクの取得に失敗しました",
     "go_to_square": "広場へ行く",

@@ -181,6 +181,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                   flowId={flowId}
                   flowType={numericFlowType}
                   apiVersion={apiVersion}
+                  isGuestMode={isGuestMode}
                 />
               ) : historyLoaded ? (
                 <ChatEmptyState onNewChat={createNewChat} />

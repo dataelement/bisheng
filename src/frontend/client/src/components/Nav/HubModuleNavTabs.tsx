@@ -6,7 +6,7 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import { useAuthContext, useLocalize } from '~/hooks';
-import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
+import { lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
 
 export type HubModuleSection = 'home' | 'apps' | 'channel' | 'knowledge';
@@ -61,7 +61,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         },
         {
           section: 'apps',
-          to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
+          to: '/apps',
           icon: GlobeIcon,
           label: localize('com_nav_app_center'),
           isActive:

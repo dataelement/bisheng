@@ -26,7 +26,7 @@ const systemNoticeTodayKey = () => {
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { UserPopMenu } from './UserPopMenu';
-import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
+import { lastSectionPaths } from './appModuleNavPaths';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -114,7 +114,7 @@ function Sidebar({
     },
     {
       section: 'apps',
-      to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
+      to: '/apps',
       icon: <GlobeIcon />,
       label: localize('com_nav_app_center'),
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),

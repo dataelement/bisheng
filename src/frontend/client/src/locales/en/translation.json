@@ -1503,7 +1503,7 @@
     "folder": "Folder",
     "folder_depth_limit_reached": "Folder depth limit reached",
     "folder_name_empty": "Folder name cannot be empty",
-    "format_list": "pdf (including scans), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp",
+    "format_list": "pdf (including scans), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp, wps, dps, et",
     "format_suffix": "format",
     "get_download_link_failed": "Failed to get download link",
     "go_to_square": "Go to square",

@@ -194,6 +194,7 @@ class RoleDao(RoleBase):
                 role_ids.append(int(rid))
             if role_ids:
                 session.exec(delete(UserRole).where(UserRole.role_id.in_(role_ids)))
+                session.exec(delete(RoleAccess).where(RoleAccess.role_id.in_(role_ids)))
             session.exec(delete(Role).where(Role.group_id == group_id))
             session.commit()
 

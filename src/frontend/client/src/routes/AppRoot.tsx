@@ -31,22 +31,21 @@ export default function AppRoot() {
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
     const handleGoBack = () => {
-        const storedBackTarget = (() => {
+        let fromHomeEntry = false;
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
+        if (conversationId) {
             try {
-                return JSON.parse(sessionStorage.getItem('appChatBackTarget') || 'null') as
-                    | { source?: string; flowId?: string }
-                    | null;
+                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
             } catch {
-                return null;
+                // ignore storage failures
             }
-        })();
-        const currentFlowId = window.location.pathname.split('/')[4] ?? '';
-        const fromHomeRecommendedApp =
-            (location.state as { fromHomeRecommendedApp?: boolean } | null)?.fromHomeRecommendedApp ||
-            new URLSearchParams(location.search).get('from') === 'home-recommended' ||
-            (storedBackTarget?.source === 'home-recommended' && storedBackTarget?.flowId === currentFlowId);
-        if (fromHomeRecommendedApp) {
-            sessionStorage.removeItem('appChatBackTarget');
+        }
+        const searchParams = new URLSearchParams(location.search);
+        const from = searchParams.get('from');
+        const entry = searchParams.get('entry');
+        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
             navigate('/c/new');
             return;
         }

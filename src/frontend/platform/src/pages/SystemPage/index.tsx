@@ -39,7 +39,7 @@ export default function index() {
   return (
     <div className="flex h-full w-full flex-col px-2 pt-4">
       <Tabs defaultValue={defaultTab} className="flex min-h-0 w-full flex-1 flex-col">
-        <TabsList className="shrink-0">
+        <TabsList className="shrink-0 self-start">
           {showOrgTab && (
             <TabsTrigger value="organization">
               {t("system.orgAndMembers")}

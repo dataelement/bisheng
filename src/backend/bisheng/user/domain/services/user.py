@@ -29,6 +29,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_mini
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import md5_hash, get_request_ip, generate_uuid
@@ -228,9 +229,17 @@ class UserService:
         admin = await UserDao.aget_user(1)
         if admin:
             db_user = await UserDao.add_user_and_default_role(db_user)
+            await LegacyRBACSyncService.sync_user_auth_created(
+                db_user.user_id,
+                [DefaultRole],
+            )
         else:
             db_user.user_id = 1
             db_user = await UserDao.add_user_and_admin_role(db_user)
+            await LegacyRBACSyncService.sync_user_auth_created(
+                db_user.user_id,
+                [AdminRole],
+            )
         if settings.multi_tenant.enabled:
             await cls._ensure_user_default_tenant_association(db_user.user_id)
         await cls._ensure_user_guest_department_membership(db_user.user_id)

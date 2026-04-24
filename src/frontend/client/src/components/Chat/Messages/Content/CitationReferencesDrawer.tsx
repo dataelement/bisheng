@@ -12,6 +12,7 @@ import {
   getCitationDocumentUrl,
   isRagCitation,
   normalizeCitationType,
+  resolveCitationDocumentUrl,
   toAbsolutePreviewUrl,
   type CitationPreview,
   type CitationReferenceItem,
@@ -428,13 +429,15 @@ export default function CitationReferencesDrawer({
 
     setDocumentPreview(nextPreview);
   };
-  const handleDownloadDocument = () => {
+  const handleDownloadDocument = async () => {
     if (!documentPreview) {
       return;
     }
 
     const fileName = getCitationDocumentName(documentPreview.detail);
-    const fileUrl = toAbsolutePreviewUrl(getCitationDocumentUrl(documentPreview.detail));
+    const fileUrl = toAbsolutePreviewUrl(
+      getCitationDocumentUrl(documentPreview.detail) || await resolveCitationDocumentUrl(documentPreview.detail),
+    );
     if (!fileUrl) {
       return;
     }
@@ -608,6 +611,13 @@ export default function CitationReferencesDrawer({
   }
 
   if (!references.length) {
+    if (actionButtons) {
+      return (
+        <div className={cn('flex h-6 items-center gap-1', buttonClassName)}>
+          {actionButtons}
+        </div>
+      );
+    }
     return null;
   }
 

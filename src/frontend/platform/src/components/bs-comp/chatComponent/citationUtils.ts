@@ -40,10 +40,16 @@ export const CITATION_SEPARATOR = "\ue201";
 export const CITATION_END = "\ue202";
 
 export function normalizeCitationMarkers(content: string) {
-  return content
-    .replace(/\\u[eE]200/g, CITATION_START)
-    .replace(/\\u[eE]201/g, CITATION_SEPARATOR)
-    .replace(/\\u[eE]202/g, CITATION_END);
+  return content.replace(/(\\+)u([eE]20[012])/g, (match, slashes, code) => {
+    if (slashes.length % 2 !== 0) {
+      const prefix = slashes.slice(1);
+      const marker = code.toLowerCase();
+      if (marker === 'e200') return prefix + CITATION_START;
+      if (marker === 'e201') return prefix + CITATION_SEPARATOR;
+      if (marker === 'e202') return prefix + CITATION_END;
+    }
+    return match;
+  });
 }
 
 function padTimeUnit(value: number) {
@@ -219,7 +225,27 @@ export function getCitationItem(detail: ChatCitation | null, itemId?: string) {
 
 export function getCitationDocumentName(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.documentName || payload?.title || payload?.knowledgeName || "文档预览";
+  const firstItem = payload?.items?.[0];
+  const candidates = [
+    payload?.documentName,
+    payload?.fileName,
+    payload?.filename,
+    payload?.file_name,
+    firstItem?.documentName,
+    firstItem?.fileName,
+    firstItem?.filename,
+    firstItem?.file_name,
+    firstItem?.title,
+    payload?.title,
+    payload?.knowledgeName,
+  ];
+
+  const normalized = candidates
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .filter((item) => !/^(new chat|新对话)$/i.test(item));
+
+  return normalized[0] || "文档预览";
 }
 
 export function getCitationDocumentFileType(detail?: ChatCitation | null) {
@@ -228,9 +254,28 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
   return String(fileType).toLowerCase();
 }
 
-export function getCitationDocumentUrl(detail?: ChatCitation | null) {
+export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.previewUrl || payload?.downloadUrl || payload?.sourceUrl || "";
+  return payload?.previewUrl || payload?.downloadUrl || "";
+}
+
+export function getCitationDocumentDownloadUrl(detail?: ChatCitation | null) {
+  const payload = detail?.sourcePayload;
+  return payload?.downloadUrl || "";
+}
+
+export function isRagCitationMissingPreviewUrl(detail?: ChatCitation | null) {
+  if (!detail?.citationId) {
+    return false;
+  }
+  if (!isRagCitation(detail)) {
+    return false;
+  }
+  return !getCitationDocumentPreviewUrl(detail);
+}
+
+export function getCitationDocumentUrl(detail?: ChatCitation | null) {
+  return getCitationDocumentDownloadUrl(detail);
 }
 
 export function toAbsolutePreviewUrl(url?: string | null) {
@@ -362,11 +407,11 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
   }
 
   return {
-    title: payload.documentName || payload.title || payload.knowledgeName || `引用 ${data.label ?? ""}`,
+    title: getCitationDocumentName(detail) || `引用 ${data.label ?? ""}`,
     snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
     sourceName: payload.knowledgeName || payload.fileType || "政策文件",
     sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : "",
-    link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
+    link: payload.downloadUrl,
     type,
   };
 }
@@ -390,11 +435,11 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
   }
 
   return {
-    title: payload.documentName || payload.title || payload.knowledgeName || `引用 ${data.label ?? ""}`,
+    title: getCitationDocumentName(detail) || `引用 ${data.label ?? ""}`,
     snippet: "",
     sourceName: payload.knowledgeName || payload.fileType || "政策文件",
     sourceMeta: payload.fileType || "",
-    link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
+    link: payload.downloadUrl,
     type,
   };
 }

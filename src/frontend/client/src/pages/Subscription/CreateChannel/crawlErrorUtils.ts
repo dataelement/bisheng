@@ -1,4 +1,4 @@
-export function crawlErrorMessageKey(code: number | null): string {
+export function crawlErrorMessageKey(code: number | null | undefined): string {
     if (code === 19006) {
         return "api_errors.19006";
     }

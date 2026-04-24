@@ -35,6 +35,8 @@ from bisheng.database.models.department_admin_grant import (
     DepartmentAdminGrantDao,
 )
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.database.constants import DefaultRole
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     LoginSyncRequest,
@@ -214,6 +216,10 @@ class LoginSyncService:
                 )
                 try:
                     user = await UserDao.add_user_and_default_role(new_user)
+                    await LegacyRBACSyncService.sync_user_auth_created(
+                        user.user_id,
+                        [DefaultRole],
+                    )
                 except Exception as e:  # pragma: no cover — rare integrity race
                     logger.error(
                         'F014 could not create SSO user %s: %s', ext, e,
