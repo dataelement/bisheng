@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
 import type { ContextType } from '~/common';
@@ -11,6 +11,7 @@ import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { cn } from '~/utils';
 
 export default function AppRoot() {
+    const location = useLocation();
     const [bannerHeight, setBannerHeight] = useState(0);
     const [navVisible, setNavVisible] = useState(() => {
         const savedNavVisible = localStorage.getItem('navVisible');
@@ -29,6 +30,28 @@ export default function AppRoot() {
     }
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
+    const handleGoBack = () => {
+        const storedBackTarget = (() => {
+            try {
+                return JSON.parse(sessionStorage.getItem('appChatBackTarget') || 'null') as
+                    | { source?: string; flowId?: string }
+                    | null;
+            } catch {
+                return null;
+            }
+        })();
+        const currentFlowId = window.location.pathname.split('/')[4] ?? '';
+        const fromHomeRecommendedApp =
+            (location.state as { fromHomeRecommendedApp?: boolean } | null)?.fromHomeRecommendedApp ||
+            new URLSearchParams(location.search).get('from') === 'home-recommended' ||
+            (storedBackTarget?.source === 'home-recommended' && storedBackTarget?.flowId === currentFlowId);
+        if (fromHomeRecommendedApp) {
+            sessionStorage.removeItem('appChatBackTarget');
+            navigate('/c/new');
+            return;
+        }
+        navigate('/apps');
+    };
 
     useEffect(() => {
         const prevBodyOverflow = document.body.style.overflow;
@@ -104,7 +127,7 @@ export default function AppRoot() {
                             </button>
                         )}
                         <button
-                            onClick={() => navigate('/apps')}
+                            onClick={handleGoBack}
                             className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
                         >
                             <ChevronLeft size={16} className="text-[#212121]" />

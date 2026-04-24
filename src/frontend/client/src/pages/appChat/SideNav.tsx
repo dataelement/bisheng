@@ -1,6 +1,6 @@
 import { ChevronLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
@@ -69,7 +69,30 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 }
 
 export function SideNav() {
+    const location = useLocation();
     const navigate = useNavigate();
+    const handleGoBack = () => {
+        const storedBackTarget = (() => {
+            try {
+                return JSON.parse(sessionStorage.getItem('appChatBackTarget') || 'null') as
+                    | { source?: string; flowId?: string }
+                    | null;
+            } catch {
+                return null;
+            }
+        })();
+        const fromHomeRecommendedApp =
+            (location.state as { fromHomeRecommendedApp?: boolean } | null)?.fromHomeRecommendedApp ||
+            new URLSearchParams(location.search).get('from') === 'home-recommended' ||
+            (storedBackTarget?.source === 'home-recommended' && storedBackTarget?.flowId === String(flowId));
+        if (fromHomeRecommendedApp) {
+            sessionStorage.removeItem('appChatBackTarget');
+            navigate('/c/new');
+            return;
+        }
+        navigate('/apps');
+    };
+
     const localize = useLocalize();
     const { fid: flowId, type: flowType } = useParams();
     const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
@@ -119,7 +142,7 @@ export function SideNav() {
             <div className="hidden touch-desktop:flex shrink-0 items-center gap-2">
                 <button
                     type="button"
-                    onClick={() => navigate('/apps')}
+                    onClick={handleGoBack}
                     className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] transition-colors hover:bg-[#f7f8fa]"
                     aria-label={localize('com_ui_go_back')}
                 >

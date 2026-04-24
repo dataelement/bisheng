@@ -566,6 +566,10 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
     const _chatId = generateUUID(32)
     const flowId = agent.id
     const flowType = agent.flow_type || agent.type
+    sessionStorage.setItem(
+      'appChatBackTarget',
+      JSON.stringify({ source: 'home-recommended', flowId: String(flowId) }),
+    )
     queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
       if (!convoData) return convoData;
       return addConversation(convoData, {
@@ -582,7 +586,9 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
       } as any);
     });
     setConversation((prevState: any) => ({ ...prevState, conversationId: _chatId }))
-    navigate(`/chat/${_chatId}/${flowId}/${flowType}`)
+    navigate(`/app/${_chatId}/${flowId}/${flowType}?from=home-recommended`, {
+      state: { fromHomeRecommendedApp: true },
+    })
   }
   const displayApps = dailyApps
 
