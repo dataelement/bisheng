@@ -26,6 +26,7 @@ from bisheng.permission.migration.migrate_rbac_to_rebac import (
     VerifyReport,
     ACCESS_TYPE_MAPPING,
     FLOW_TYPE_MAPPING,
+    GROUP_RESOURCE_TYPE_MAPPING,
     RELATION_PRIORITY,
     SCM_ROLE_MAPPING,
     SCM_TYPE_MAPPING,
@@ -115,6 +116,13 @@ class TestConstants:
         assert set(ACCESS_TYPE_MAPPING.keys()) == expected_keys
         # WEB_MENU (99) must not be in mapping
         assert 99 not in ACCESS_TYPE_MAPPING
+
+    def test_group_resource_type_mapping(self):
+        assert GROUP_RESOURCE_TYPE_MAPPING[1] == ('knowledge_library', 'knowledge_space')
+        assert GROUP_RESOURCE_TYPE_MAPPING[3] == ('assistant',)
+        assert GROUP_RESOURCE_TYPE_MAPPING[4] == ('tool',)
+        assert GROUP_RESOURCE_TYPE_MAPPING[5] == ('workflow',)
+        assert GROUP_RESOURCE_TYPE_MAPPING[6] == ('dashboard',)
 
     def test_flow_type_mapping(self):
         assert FLOW_TYPE_MAPPING[5] == 'assistant'
@@ -441,8 +449,9 @@ class TestStep3RoleAccess:
             {'role_id': 5, 'third_id': 'res-3', 'type': 9},   # WORKFLOW → workflow, viewer
         ])
         count = await migrator_dry.step3_role_access()
-        assert count == 3
+        assert count == 4
         assert migrator_dry._global_seen[('user:10', 'knowledge_library:res-1')] == 'viewer'
+        assert migrator_dry._global_seen[('user:10', 'knowledge_space:res-1')] == 'viewer'
         assert migrator_dry._global_seen[('user:10', 'assistant:res-2')] == 'editor'
         assert migrator_dry._global_seen[('user:10', 'workflow:res-3')] == 'viewer'
 
@@ -472,8 +481,9 @@ class TestStep3RoleAccess:
             {'role_id': 3, 'third_id': 'kb-1', 'type': 3},   # editor
         ])
         count = await migrator_dry.step3_role_access()
-        assert count == 1
+        assert count == 2
         assert migrator_dry._global_seen[('user:1', 'knowledge_library:kb-1')] == 'editor'
+        assert migrator_dry._global_seen[('user:1', 'knowledge_space:kb-1')] == 'editor'
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -694,6 +704,45 @@ class TestStep6FolderHierarchy:
         assert count == 0
 
 
+class TestStep8GroupResources:
+    """Step 8: groupresource → user_group admin manager tuples."""
+
+    @pytest.mark.asyncio
+    async def test_group_admin_resources_written(self, migrator_dry, patch_db):
+        session = patch_db
+        await insert_rows(session, 'groupresource', [
+            {'group_id': '5', 'third_id': 'wf-1', 'type': 5},
+            {'group_id': '5', 'third_id': 'asst-1', 'type': 3},
+        ])
+
+        count = await migrator_dry.step8_group_resources()
+        assert count == 2
+        assert migrator_dry._global_seen[('user_group:5#admin', 'workflow:wf-1')] == 'manager'
+        assert migrator_dry._global_seen[('user_group:5#admin', 'assistant:asst-1')] == 'manager'
+
+    @pytest.mark.asyncio
+    async def test_group_knowledge_writes_library_and_space_aliases(self, migrator_dry, patch_db):
+        session = patch_db
+        await insert_rows(session, 'groupresource', [
+            {'group_id': '6', 'third_id': '10', 'type': 1},
+        ])
+
+        count = await migrator_dry.step8_group_resources()
+        assert count == 2
+        assert migrator_dry._global_seen[('user_group:6#admin', 'knowledge_library:10')] == 'manager'
+        assert migrator_dry._global_seen[('user_group:6#admin', 'knowledge_space:10')] == 'manager'
+
+    @pytest.mark.asyncio
+    async def test_unsupported_group_resource_type_skipped(self, migrator_dry, patch_db):
+        session = patch_db
+        await insert_rows(session, 'groupresource', [
+            {'group_id': '7', 'third_id': 'ws-1', 'type': 7},
+        ])
+
+        count = await migrator_dry.step8_group_resources()
+        assert count == 0
+
+
 # ═══════════════════════════════════════════════════════════════════
 # T8: Integration tests — full pipeline
 # ═══════════════════════════════════════════════════════════════════
@@ -755,6 +804,11 @@ async def _seed_comprehensive_data(session):
         {'user_id': 2, 'department_id': 10, 'is_primary': 1, 'source': 'local'},
         {'user_id': 3, 'department_id': 11, 'is_primary': 1, 'source': 'local'},
     ])
+    # Legacy user-group managed resources
+    await insert_rows(session, 'groupresource', [
+        {'group_id': '1', 'third_id': 'wf-1', 'type': 5},
+        {'group_id': '1', 'third_id': 'ast-1', 'type': 3},
+    ])
     # Knowledge files (folder hierarchy)
     await insert_rows(session, 'knowledgefile', [
         {'knowledge_id': 1, 'file_name': 'root_folder', 'file_type': 0, 'file_level_path': ''},
@@ -781,6 +835,7 @@ class TestFullDryRun:
         assert stats.step5_resource_owners >= 1
         assert stats.step6_folder_hierarchy == 2  # 1 folder + 1 file
         assert stats.step7_department_membership == 2
+        assert stats.step8_group_resources == 2
         assert stats.total > 0
         # Dry run: FGA should have no tuples
         mock_fga.assert_tuple_count(0)
@@ -813,8 +868,8 @@ class TestFullMigration:
         with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
             await migrator_write.run()
 
-        # Checkpoint should show all 7 steps complete
-        assert migrator_write._load_checkpoint() == 7
+        # Checkpoint should show all 8 steps complete
+        assert migrator_write._load_checkpoint() == 8
 
 
 class TestIdempotentFullRun:

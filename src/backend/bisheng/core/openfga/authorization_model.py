@@ -27,10 +27,9 @@ v2.5.1 F013 changes:
 
 import copy
 
-# v2.0.1 — 2026-04-19 DSL redesign replacing tenant#shared_to#member userset
-# (rejected by OpenFGA protobuf regex ^[^:#@\s]{1,50}$) with resource-level
-# shared_with: [tenant] + tupleToUserset viewer extension.
-MODEL_VERSION = 'v2.0.1'
+# v2.0.2 — user_group#admin now implies user_group#member and can manage
+# legacy groupresource-managed resources.
+MODEL_VERSION = 'v2.0.2'
 
 
 def _user_types():
@@ -39,6 +38,7 @@ def _user_types():
         {'type': 'user'},
         {'type': 'department', 'relation': 'member'},
         {'type': 'user_group', 'relation': 'member'},
+        {'type': 'user_group', 'relation': 'admin'},
     ]
 
 
@@ -255,7 +255,14 @@ AUTHORIZATION_MODEL: dict = {
             'type': 'user_group',
             'relations': {
                 'admin': {'this': {}},
-                'member': {'this': {}},
+                'member': {
+                    'union': {
+                        'child': [
+                            {'this': {}},
+                            {'computedUserset': {'relation': 'admin'}},
+                        ]
+                    }
+                },
             },
             'metadata': {
                 'relations': {

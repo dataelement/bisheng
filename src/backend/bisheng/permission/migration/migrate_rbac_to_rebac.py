@@ -24,6 +24,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -50,6 +51,16 @@ ACCESS_TYPE_MAPPING: dict[int, tuple[str, str]] = {
     11: ('dashboard', 'viewer'),           # DASHBOARD
     12: ('dashboard', 'editor'),           # DASHBOARD_WRITE
     # 99: WEB_MENU → not migrated
+}
+
+KNOWLEDGE_LEGACY_TYPES = {'knowledge_library': 'knowledge_space'}
+
+GROUP_RESOURCE_TYPE_MAPPING: dict[int, tuple[str, ...]] = {
+    1: ('knowledge_library', 'knowledge_space'),  # KNOWLEDGE
+    3: ('assistant',),                            # ASSISTANT
+    4: ('tool',),                                 # GPTS_TOOL
+    5: ('workflow',),                             # WORK_FLOW
+    6: ('dashboard',),                            # DASHBOARD
 }
 
 FLOW_TYPE_MAPPING: dict[int, str] = {
@@ -95,6 +106,7 @@ class MigrationStats:
     step6_folders: int = 0
     step6_files: int = 0
     step7_department_membership: int = 0
+    step8_group_resources: int = 0
     total: int = 0
     by_object_type: dict = field(default_factory=dict)
     by_relation: dict = field(default_factory=dict)
@@ -163,6 +175,7 @@ class RBACToReBACMigrator:
             (5, 'Resource Owners', self.step5_resource_owners),
             (6, 'Folder Hierarchy', self.step6_folder_hierarchy),
             (7, 'Department Membership', self.step7_department_membership),
+            (8, 'Group Resources', self.step8_group_resources),
         ]
 
         for step_num, step_name, step_fn in steps:
@@ -188,7 +201,7 @@ class RBACToReBACMigrator:
             1: 'step1_super_admin', 2: 'step2_user_group',
             3: 'step3_role_access', 4: 'step4_space_channel',
             5: 'step5_resource_owners', 6: 'step6_folder_hierarchy',
-            7: 'step7_department_membership',
+            7: 'step7_department_membership', 8: 'step8_group_resources',
         }
         attr = attr_map.get(step_num)
         if attr:
@@ -198,7 +211,8 @@ class RBACToReBACMigrator:
         s = self._stats
         s.total = (s.step1_super_admin + s.step2_user_group + s.step3_role_access
                    + s.step4_space_channel + s.step5_resource_owners
-                   + s.step6_folder_hierarchy + s.step7_department_membership)
+                   + s.step6_folder_hierarchy + s.step7_department_membership
+                   + s.step8_group_resources)
         # Aggregate by object_type and relation from _global_seen
         by_type: dict[str, int] = {}
         by_rel: dict[str, int] = {}
@@ -228,6 +242,7 @@ class RBACToReBACMigrator:
         if s.step6_folders or s.step6_files:
             lines.append(f'         folders: {s.step6_folders}, files: {s.step6_files}')
         lines.append(f'Step 7 — Department Membership: {s.step7_department_membership}')
+        lines.append(f'Step 8 — Group Resources:        {s.step8_group_resources}')
         lines.append(f'')
         lines.append(f'Total unique tuples: {s.total}')
         if s.by_object_type:
@@ -239,10 +254,9 @@ class RBACToReBACMigrator:
     # ── Checkpoint ────────────────────────────────────────────────
 
     def _default_checkpoint_dir(self) -> str:
-        d = os.path.dirname(os.path.abspath(__file__))
-        if os.access(d, os.W_OK):
-            return d
-        return '/tmp'
+        d = os.path.join(tempfile.gettempdir(), 'bisheng-permission-migration')
+        os.makedirs(d, exist_ok=True)
+        return d
 
     def _checkpoint_path(self) -> str:
         return os.path.join(self.checkpoint_dir, _CHECKPOINT_FILENAME)
@@ -358,12 +372,17 @@ class RBACToReBACMigrator:
                 continue
             obj_type, relation = mapping
             for uid in role_user_map.get(role_id, []):
-                raw_ops.append(TupleOperation(
-                    action='write',
-                    user=f'user:{uid}',
-                    relation=relation,
-                    object=f'{obj_type}:{third_id}',
-                ))
+                object_types = [obj_type]
+                alias = KNOWLEDGE_LEGACY_TYPES.get(obj_type)
+                if alias:
+                    object_types.append(alias)
+                for target_type in object_types:
+                    raw_ops.append(TupleOperation(
+                        action='write',
+                        user=f'user:{uid}',
+                        relation=relation,
+                        object=f'{target_type}:{third_id}',
+                    ))
 
         self._stats.step3_raw = len(raw_ops)
         self._collect(raw_ops)
@@ -514,6 +533,38 @@ class RBACToReBACMigrator:
             )
             for user_id, department_id in rows
         ]
+        self._collect(ops)
+        return await self._flush()
+
+    async def step8_group_resources(self) -> int:
+        """Step 8: groupresource -> user_group admin manager tuples.
+
+        Legacy ``groupresource`` drives the resources managed by user-group
+        administrators, not ordinary group members, so migrate it through the
+        ``user_group:{id}#admin`` userset with manager-level access.
+        """
+        from bisheng.core.database import get_async_db_session
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        async with get_async_db_session() as session:
+            with bypass_tenant_filter():
+                result = await session.execute(
+                    sa_text('SELECT group_id, third_id, type FROM groupresource')
+                )
+                rows = result.fetchall()
+
+        ops: list[TupleOperation] = []
+        for group_id, third_id, resource_type in rows:
+            object_types = GROUP_RESOURCE_TYPE_MAPPING.get(resource_type)
+            if not object_types:
+                continue
+            for object_type in object_types:
+                ops.append(TupleOperation(
+                    action='write',
+                    user=f'user_group:{group_id}#admin',
+                    relation='manager',
+                    object=f'{object_type}:{third_id}',
+                ))
         self._collect(ops)
         return await self._flush()
 
