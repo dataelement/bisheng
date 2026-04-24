@@ -1949,6 +1949,7 @@
     "search_department": "Search departments",
     "search_user": "Search users",
     "search_user_group": "Search user groups",
+    "selected_prefix": "Selected ",
     "subject_department": "Department",
     "subject_user": "User",
     "subject_user_group": "User Group",
@@ -1956,7 +1957,8 @@
     "success_modify": "Permission updated",
     "success_revoke": "Access revoked",
     "tab_grant": "Grant Access",
-    "tab_list": "Existing Access"
+    "tab_list": "Existing Access",
+    "uniform_grant": "Apply role:"
   },
   "com_label_operation_tip_mobile": "Operation tip: Select labels to display in the upper list, drag and drop to sort in the lower list"
 }

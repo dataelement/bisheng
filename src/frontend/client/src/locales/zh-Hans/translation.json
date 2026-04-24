@@ -1872,6 +1872,7 @@
     "search_department": "搜索部门",
     "search_user": "搜索用户",
     "search_user_group": "搜索用户组",
+    "selected_prefix": "已选",
     "subject_department": "部门",
     "subject_user": "用户",
     "subject_user_group": "用户组",
@@ -1879,7 +1880,8 @@
     "success_modify": "权限修改成功",
     "success_revoke": "权限撤销成功",
     "tab_grant": "新增授权",
-    "tab_list": "已有权限"
+    "tab_list": "已有权限",
+    "uniform_grant": "统一授权："
   },
   "com_label_operation_tip_mobile": "操作提示：在上方选择要展示的标签，在下方拖拽进行排序"
 }

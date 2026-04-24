@@ -5,6 +5,7 @@ import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
 import { PermissionListTab } from "~/components/permission/PermissionListTab";
 import {
     Button,
+    Checkbox,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -50,11 +51,16 @@ export function KnowledgeSpaceShareDialog({
     const [activeTab, setActiveTab] = useState(defaultTab);
     const [refreshKey, setRefreshKey] = useState(0);
     const [copied, setCopied] = useState(false);
+    const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
+    const [grantDialogOpen, setGrantDialogOpen] = useState(false);
+    const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department" | "user_group">("user");
+    const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
 
     useEffect(() => {
         if (open) {
             setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
             setCopied(false);
+            setCurrentSubjectType("user");
         }
     }, [open, showMembersTab, showShareTab]);
 
@@ -67,8 +73,10 @@ export function KnowledgeSpaceShareDialog({
 
     const handleGrantSuccess = useCallback(() => {
         setRefreshKey((key) => key + 1);
+        setCurrentSubjectType(grantSubjectType);
+        setGrantDialogOpen(false);
         setActiveTab(PERMISSION_TAB);
-    }, []);
+    }, [grantSubjectType]);
 
     const handleCopyLink = useCallback(async () => {
         try {
@@ -86,12 +94,10 @@ export function KnowledgeSpaceShareDialog({
         }
     }, [localize, shareLink, showToast]);
 
-    const dialogTitle = `${
-        showShareTab
-            ? localize("com_knowledge.share")
-            : localize("com_permission.dialog_title")
-    } - ${resourceName}`;
-    const hasMultipleTabs = [showShareTab, showMembersTab, showPermissionTab].filter(Boolean).length > 1;
+    // UI simplification: this dialog now only exposes 权限管理.
+    // The share/members tabs remain as props to keep caller logic untouched,
+    // but they are no longer surfaced as top-level tabs here.
+    const dialogTitle = `${localize("com_permission.dialog_title")} - ${resourceName}`;
 
     const sharePanel = (
         <div className="space-y-3 pt-2">
@@ -120,31 +126,61 @@ export function KnowledgeSpaceShareDialog({
         </div>
     );
 
+    const SUBJECT_TABS: Array<{
+        value: "user" | "department" | "user_group";
+        labelKey: string;
+    }> = [
+        { value: "user", labelKey: "com_permission.subject_user" },
+        { value: "department", labelKey: "com_permission.subject_department" },
+        { value: "user_group", labelKey: "com_permission.subject_user_group" },
+    ];
+
     const permissionPanel = (
-        <>
-            <TabsList className="bg-surface-primary-alt p-1">
-                <TabsTrigger value="list">
-                    {localize("com_permission.tab_list")}
-                </TabsTrigger>
-                <TabsTrigger value="grant">
+        <Tabs
+            value={currentSubjectType}
+            onValueChange={(value) => setCurrentSubjectType(value as "user" | "department" | "user_group")}
+            className="flex min-h-0 flex-1 flex-col"
+        >
+            <div className="flex items-center justify-between gap-3">
+                <TabsList className="w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
+                    {SUBJECT_TABS.map((tab) => (
+                        <TabsTrigger
+                            key={tab.value}
+                            value={tab.value}
+                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-[rgba(51,92,255,0.15)] data-[state=active]:font-medium data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none"
+                        >
+                            {localize(tab.labelKey)}
+                        </TabsTrigger>
+                    ))}
+                </TabsList>
+
+                <Button
+                    type="button"
+                    className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
+                    onClick={() => {
+                        setGrantSubjectType(currentSubjectType);
+                        setGrantDialogOpen(true);
+                    }}
+                >
                     {localize("com_permission.tab_grant")}
-                </TabsTrigger>
-            </TabsList>
-            <TabsContent value="list" className="p-0">
-                <PermissionListTab
-                    resourceType="knowledge_space"
-                    resourceId={resourceId}
-                    refreshKey={refreshKey}
-                />
-            </TabsContent>
-            <TabsContent value="grant" className="p-0">
-                <PermissionGrantTab
-                    resourceType="knowledge_space"
-                    resourceId={resourceId}
-                    onSuccess={handleGrantSuccess}
-                />
-            </TabsContent>
-        </>
+                </Button>
+            </div>
+
+            {SUBJECT_TABS.map((tab) => (
+                <TabsContent
+                    key={tab.value}
+                    value={tab.value}
+                    className="mt-3 min-h-0 flex-1 p-0"
+                >
+                    <PermissionListTab
+                        resourceType="knowledge_space"
+                        resourceId={resourceId}
+                        refreshKey={refreshKey}
+                        fixedSubjectType={tab.value}
+                    />
+                </TabsContent>
+            ))}
+        </Tabs>
     );
 
     const memberPanel = (
@@ -158,55 +194,72 @@ export function KnowledgeSpaceShareDialog({
     );
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[680px]">
-                <DialogHeader>
-                    <DialogTitle>{dialogTitle}</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle>{dialogTitle}</DialogTitle>
+                    </DialogHeader>
 
-                {hasMultipleTabs ? (
-                    <Tabs value={activeTab} onValueChange={setActiveTab}>
-                        <TabsList className="bg-surface-primary-alt p-1">
-                            {showShareTab && (
-                                <TabsTrigger value={SHARE_TAB}>
-                                    {localize("com_knowledge.share")}
-                                </TabsTrigger>
+                    <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        {permissionPanel}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
+                <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle>
+                            {localize("com_permission.tab_grant")} - {resourceName}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="flex items-center gap-3">
+                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
+                                {SUBJECT_TABS.map((tab) => (
+                                    <button
+                                        key={tab.value}
+                                        type="button"
+                                        className={[
+                                            "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors",
+                                            grantSubjectType === tab.value
+                                                ? "bg-[rgba(51,92,255,0.15)] font-medium text-[#335CFF]"
+                                                : "font-normal text-[#818181]",
+                                        ].join(" ")}
+                                        onClick={() => setGrantSubjectType(tab.value)}
+                                    >
+                                        {localize(tab.labelKey)}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {grantSubjectType === "department" && (
+                                <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
+                                    <Checkbox
+                                        checked={grantIncludeChildren}
+                                        onCheckedChange={(value) => setGrantIncludeChildren(value === true)}
+                                    />
+                                    {localize("com_permission.include_children")}
+                                </label>
                             )}
-                            {showMembersTab && (
-                                <TabsTrigger value={MEMBERS_TAB}>
-                                    {localize("com_subscription.member_management")}
-                                </TabsTrigger>
-                            )}
-                            {showPermissionTab && (
-                                <TabsTrigger value={PERMISSION_TAB}>
-                                    {localize("com_permission.manage_permission")}
-                                </TabsTrigger>
-                            )}
-                        </TabsList>
-                        {showShareTab && (
-                            <TabsContent value={SHARE_TAB} className="p-0">
-                                {sharePanel}
-                            </TabsContent>
-                        )}
-                        {showMembersTab && (
-                            <TabsContent value={MEMBERS_TAB} className="flex min-h-0 flex-1 p-0">
-                                {memberPanel}
-                            </TabsContent>
-                        )}
-                        {showPermissionTab && (
-                            <TabsContent value={PERMISSION_TAB} className="p-0">
-                                <Tabs defaultValue="list">{permissionPanel}</Tabs>
-                            </TabsContent>
-                        )}
-                    </Tabs>
-                ) : showShareTab ? (
-                    sharePanel
-                ) : showMembersTab ? (
-                    memberPanel
-                ) : (
-                    <Tabs defaultValue="list">{permissionPanel}</Tabs>
-                )}
-            </DialogContent>
-        </Dialog>
+                        </div>
+
+                        <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+                            <PermissionGrantTab
+                                resourceType="knowledge_space"
+                                resourceId={resourceId}
+                                onSuccess={handleGrantSuccess}
+                                fixedSubjectType={grantSubjectType}
+                                includeChildren={grantIncludeChildren}
+                                onIncludeChildrenChange={setGrantIncludeChildren}
+                                hideDepartmentIncludeChildrenControl
+                            />
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
