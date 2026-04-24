@@ -37,6 +37,7 @@ class ExcelLoader(BaseBishengLoader):
                 content = f.read()
                 one_metadata = self.file_metadata.copy()
                 one_metadata["chunk_index"] = chunk_index
+                one_metadata["bbox"] = ""
                 if len(content) > self.max_chunk_limit:
                     raise KnowledgeExcelChunkMaxError()
                 documents.append(Document(page_content=content, metadata=one_metadata))
