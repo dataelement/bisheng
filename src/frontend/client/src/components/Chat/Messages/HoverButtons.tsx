@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRecoilState } from "recoil";
 import {
   CheckMark,
@@ -13,8 +13,6 @@ import type {
   TMessage,
 } from "~/types/chat";
 import { useGenerationsByLatest, useLocalize } from "~/hooks";
-import MessageSource from "~/pages/appChat/components/MessageSource";
-import ResouceModal from "~/pages/appChat/components/ResouceModal";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -79,7 +77,6 @@ export default function HoverButtons({
   }
 
   const { isCreatedByUser, error } = message;
-  const sourceRef = useRef(null);
   const { referenceContent, referenceWebContent } = useMemo(() => {
     const rawText = message.text || "";
     let regularContent = rawText.replace(/:::thinking[\s\S]*?:::/, "").trim();
@@ -146,22 +143,6 @@ export default function HoverButtons({
           onDesktopOpen={onOpenCitationPanel}
         />
       )}
-      <div className="mr-2 pt-0.5">
-        <MessageSource
-          extra={null}
-          end={true}
-          source={message.source}
-          onSource={() => {
-            sourceRef.current?.openModal({
-              messageId: message.messageId,
-              message: message.text
-                .replace(/:::thinking[\s\S]*?:::/, "")
-                .trim(),
-              chatId: message.conversationId,
-            });
-          }}
-        />
-      </div>
       {/* {TextToSpeech && (
         <MessageAudio
           index={index}
@@ -242,8 +223,6 @@ export default function HoverButtons({
           text={message.text.replace(/:::([\s\S]*?):::/g, "")}
         />
       )}
-
-      <ResouceModal ref={sourceRef}></ResouceModal>
     </div>
   );
 }

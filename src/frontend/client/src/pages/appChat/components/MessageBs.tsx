@@ -7,7 +7,6 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
 import MessageButtons from "./MessageButtons";
-import MessageSource from "./MessageSource";
 import useLocalize from "~/hooks/useLocalize";
 
 
@@ -49,7 +48,6 @@ export default function MessageBs({
     data,
     onUnlike = () => { },
     readOnly,
-    onSource,
     isGuestMode = false,
     onOpenCitationPanel,
     activeCitationMessageId,
@@ -59,7 +57,6 @@ export default function MessageBs({
     data: ChatMessageType;
     onUnlike?: any;
     readOnly?: string;
-    onSource?: any;
     isGuestMode?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
@@ -162,16 +159,6 @@ export default function MessageBs({
                         onDesktopOpen={onOpenCitationPanel}
                         buttonClassName="ml-4"
                     />
-                    {!isGuestMode && <MessageSource
-                        extra={data.extra || {}}
-                        end={data.end}
-                        source={data.source}
-                        className="pl-4"
-                        onSource={() => onSource?.({
-                            messageId: data.id,
-                            message,
-                        })}
-                    />}
                     {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}
