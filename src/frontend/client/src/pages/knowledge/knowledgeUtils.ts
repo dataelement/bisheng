@@ -8,13 +8,24 @@ export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
 }
 
 // ─── File upload constants ──────────────────────────────────────────
-/** Allowed file extensions for upload (shared across drag-drop, file input, and validation) */
+/**
+ * Allowed file extensions for upload — fully populated set (assumes ETL4LM is enabled).
+ * Prefer `getAllowedExtensions(enableEtl4lm)` for runtime-correct lists.
+ */
 export const ALLOWED_EXTENSIONS = [
     "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
 ] as const;
 
-/** MIME types accepted during drag validation */
+/** Subset used when ETL4LM is NOT deployed — drops images. */
+const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
+    "pdf", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
+];
+
+/**
+ * MIME types accepted during drag validation — fully populated set.
+ * Prefer `getAllowedMimeTypes(enableEtl4lm)` for runtime-correct lists.
+ */
 export const ALLOWED_MIME_TYPES = [
     "application/pdf",
     "text/plain",
@@ -28,8 +39,28 @@ export const ALLOWED_MIME_TYPES = [
     "image/png", "image/jpeg", "image/bmp",
 ] as const;
 
-/** Accept attribute value for <input type="file"> */
+/** MIME types when ETL4LM is NOT deployed (no images). */
+const ALLOWED_MIME_TYPES_NO_ETL4LM: readonly string[] = ALLOWED_MIME_TYPES.filter(
+    (m) => !m.startsWith("image/")
+);
+
+/** Accept attribute value for <input type="file"> — full set, prefer `getFileInputAccept()`. */
 export const FILE_INPUT_ACCEPT = ALLOWED_EXTENSIONS.map(e => `.${e}`).join(",");
+
+/** Returns extension list based on whether ETL4LM is deployed. */
+export function getAllowedExtensions(enableEtl4lm: boolean): readonly string[] {
+    return enableEtl4lm ? ALLOWED_EXTENSIONS : ALLOWED_EXTENSIONS_NO_ETL4LM;
+}
+
+/** Returns MIME-type list based on whether ETL4LM is deployed. */
+export function getAllowedMimeTypes(enableEtl4lm: boolean): readonly string[] {
+    return enableEtl4lm ? ALLOWED_MIME_TYPES : ALLOWED_MIME_TYPES_NO_ETL4LM;
+}
+
+/** Returns the `<input accept="">` value for the current ETL4LM mode. */
+export function getFileInputAccept(enableEtl4lm: boolean): string {
+    return getAllowedExtensions(enableEtl4lm).map((e) => `.${e}`).join(",");
+}
 
 /** Default maximum single file size in MB (used when env config is not available) */
 export const DEFAULT_MAX_FILE_SIZE_MB = 200;

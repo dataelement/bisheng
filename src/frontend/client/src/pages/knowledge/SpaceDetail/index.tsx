@@ -10,7 +10,12 @@ import {
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { ALLOWED_EXTENSIONS, DEFAULT_MAX_FILE_SIZE_MB, triggerUrlDownload } from "../knowledgeUtils";
+import {
+    DEFAULT_MAX_FILE_SIZE_MB,
+    getAllowedExtensions,
+    getFileInputAccept,
+    triggerUrlDownload,
+} from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
@@ -172,6 +177,9 @@ export function KnowledgeSpaceContent({
     const bishengConfig = useRecoilValue(bishengConfState);
     const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
     const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const enableEtl4lm = bishengConfig?.enable_etl4lm ?? false;
+    const allowedExtensions = getAllowedExtensions(enableEtl4lm);
+    const fileInputAccept = getFileInputAccept(enableEtl4lm);
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -213,7 +221,7 @@ export function KnowledgeSpaceContent({
                     return;
                 }
                 const ext = f.name.split('.').pop()?.toLowerCase();
-                if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {
+                if (!ext || !allowedExtensions.includes(ext)) {
                     showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
@@ -230,6 +238,7 @@ export function KnowledgeSpaceContent({
         onDragStateChange,
         onUploadFile,
         maxFileSizeMB,
+        enableEtl4lm,
     });
 
     const handleSearch = (params: SearchParams) => {
@@ -487,7 +496,7 @@ export function KnowledgeSpaceContent({
                 className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept=".pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.csv,.doc,.png,.jpg,.jpeg,.bmp"
+                accept={fileInputAccept}
             />
             {/* Header */}
             <KnowledgeSpaceHeader
@@ -506,6 +515,11 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
+                supportedFormatsLabel={localize(
+                    enableEtl4lm
+                        ? "com_knowledge.supported_formats_with_etl4lm"
+                        : "com_knowledge.supported_formats_basic"
+                )}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
