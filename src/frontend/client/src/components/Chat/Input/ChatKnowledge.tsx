@@ -385,25 +385,63 @@ export const ChatKnowledge = ({
   };
 
   const hasAnySelection = value.length > 0;
+  const orgEnabled = !!config?.knowledgeBase?.enabled;
 
   const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
   const menuContentRef = useRef<HTMLDivElement>(null);
   const spaceLayout = useSubMenuLayout(menuContentRef, 'space', openSub === 'space');
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
+  const trigger = (
+    <DropdownMenuTrigger disabled={disabled}>
+      <div className={cn(
+        "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
+        hasAnySelection && "!bg-[rgba(20,59,255,0.10)] !border-[#0253E8] text-[#0253E8] shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]",
+        disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
+      )}>
+        <BookOpenText size={16} />
+        <span className="text-xs break-keep">{localize('com_tools_knowledge_base')}</span>
+        <ChevronRight size={14} className={cn("rotate-90", hasAnySelection ? "opacity-100" : "opacity-40")} />
+      </div>
+    </DropdownMenuTrigger>
+  );
+
+  // Org KB 关闭时，下拉直接展开「知识空间」列表（跳过子菜单层），减少一次点击。
+  if (!orgEnabled) {
+    return (
+      <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
+        {trigger}
+        <DropdownMenuContent
+          align="start"
+          collisionPadding={BOTTOM_GAP}
+          className="w-[280px] max-h-[480px] p-3 rounded-2xl shadow-xl border-slate-100 bg-white flex flex-col overflow-hidden"
+          style={{
+            '--tw-enter-duration': '0.35s',
+            '--tw-enter-easing': 'ease-in-out',
+            maxHeight: 'min(var(--radix-popper-available-height, 480px), 480px)',
+          } as React.CSSProperties}
+        >
+          <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_ui_knowledge_space')}</p>
+          <KnowledgeListPanel
+            placeholder={localize('com_chat_knowledge_placeholder_search_space')}
+            keyword={spaceKeyword}
+            setKeyword={setSpaceKeyword}
+            items={filteredSpaces}
+            selectedItems={selectedKnowledgeSpaces}
+            onToggle={(item) => handleToggle(item, 'space')}
+            isFetching={spaceFetching}
+            hasMore={false}
+            onLoadMore={() => { }}
+            emptyText={localize('com_chat_knowledge_empty_no_spaces')}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   return (
     <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
-      <DropdownMenuTrigger disabled={disabled}>
-        <div className={cn(
-          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
-          hasAnySelection && "!bg-[rgba(20,59,255,0.10)] !border-[#0253E8] text-[#0253E8] shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]",
-          disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
-        )}>
-          <BookOpenText size={16} />
-          <span className="text-xs break-keep">{localize('com_tools_knowledge_base')}</span>
-          <ChevronRight size={14} className={cn("rotate-90", hasAnySelection ? "opacity-100" : "opacity-40")} />
-        </div>
-      </DropdownMenuTrigger>
+      {trigger}
 
       <DropdownMenuContent ref={menuContentRef} align="start" collisionPadding={BOTTOM_GAP} className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
 
@@ -459,8 +497,7 @@ export const ChatKnowledge = ({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
-        {/* 组织知识库 — 仅在 bsConfig.knowledgeBase.enabled === true 时显示 */}
-        {config?.knowledgeBase?.enabled && (
+        {/* 组织知识库（orgEnabled === true 时进入此分支才会渲染） */}
         <DropdownMenuSub
           open={openSub === 'org'}
           onOpenChange={(o) => {
@@ -511,7 +548,6 @@ export const ChatKnowledge = ({
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        )}
 
       </DropdownMenuContent>
     </DropdownMenu>
