@@ -4,9 +4,9 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
 
   - ``mount_child``: global-super marks a department as a Child Tenant
     mount point. Enforces INV-T1 (2-layer lock), records audit_log.
-  - ``unmount_child``: removes a Child mount with policy A (migrate
-    resources to Root), B (archive in-place), or C (manual — MVP falls
-    back to policy B + warning; UI flow deferred).
+  - ``unmount_child``: removes a Child mount. v2.5.1 收窄到唯一路径
+    （资源迁回 Root + Child 归档）。旧的 archive / manual 策略已删除——
+    "冻结子公司不迁移资源" 的需求归到 §5.1.3 的 disable Child 动作。
   - ``migrate_resources_from_root``: AC-04d Root→Child resource sinking
     (INV-T10 — the one path that does NOT go through F018 transfer-owner).
 """
@@ -14,7 +14,7 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Literal, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from bisheng.common.errcode.tenant_tree import (
     TenantTreeMigrateConflictError,
@@ -338,39 +338,57 @@ class TenantMountService:
     async def unmount_child(
         cls,
         dept_id: int,
-        policy: Literal['migrate', 'archive', 'manual'],
         operator,
     ) -> Dict[str, Any]:
-        """Reverse a mount. ``policy`` drives resource handling (AC-04a/b/c)."""
+        """Reverse a mount.
+
+        v2.5.1 收窄到唯一路径：资源整体迁回 Root + Child 归档（PRD §5.2.2）。
+        旧的 archive / manual 策略已删除——"冻结子公司不迁移资源"的需求归到
+        §5.1.3 的 disable Child Tenant 动作，与 unmount 完全分开。
+
+        Stale-flag idempotency: if a department carries ``is_tenant_root=1``
+        but ``mounted_tenant_id IS NULL`` (legacy/half-written rows from
+        early v2.5 builds), clear the dangling flag and return success
+        rather than 22002. Resource migration / tenant archive are skipped —
+        there is no Child tenant to migrate from.
+        """
         await _require_super(operator)
         dept = await DepartmentDao.aget_by_id(dept_id)
-        if dept is None or not getattr(dept, 'mounted_tenant_id', None):
+        if dept is None:
             raise TenantTreeMountConflictError()
-        child_tenant_id: int = dept.mounted_tenant_id
 
-        migrated_counts: Optional[Dict[str, int]] = None
-        if policy == 'migrate':
-            migrated_counts = await cls._migrate_child_resources_to_root(
-                child_tenant_id,
-            )
-            # Archive the (now empty) Child so the record survives for audit.
-            await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-            await DepartmentDao.aunset_mount(dept_id)
-        elif policy == 'archive':
-            await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-            await DepartmentDao.aunset_mount(dept_id)
-        elif policy == 'manual':
-            # MVP: spec AC-04c defers the UI flow. Fall back to archive
-            # + warn; callers intending true manual handling should go
-            # through F018 transfer-owner per resource first.
-            logger.warning(
-                'Manual unmount policy for dept %s: MVP falls back to archive',
-                dept_id,
-            )
-            await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-            await DepartmentDao.aunset_mount(dept_id)
-        else:
+        child_tenant_id: Optional[int] = getattr(dept, 'mounted_tenant_id', None)
+        if not child_tenant_id:
+            if getattr(dept, 'is_tenant_root', 0) == 1:
+                await DepartmentDao.aunset_mount(dept_id)
+                await _safe_audit(
+                    tenant_id=ROOT_TENANT_ID,
+                    operator_id=getattr(operator, 'user_id', 0),
+                    operator_tenant_id=ROOT_TENANT_ID,
+                    action=TenantAuditAction.UNMOUNT.value,
+                    target_type='department',
+                    target_id=str(dept_id),
+                    metadata={
+                        'dept_id': dept_id,
+                        'stale_flag_cleared': True,
+                        'migrated_counts': {},
+                    },
+                )
+                return {
+                    'tenant_id': None,
+                    'migrated_counts': {},
+                    'stale_flag_cleared': True,
+                }
             raise TenantTreeMountConflictError()
+
+        # 1. 资源迁移：Child 名下所有 tenant_aware 业务表批量改为 Root
+        migrated_counts = await cls._migrate_child_resources_to_root(
+            child_tenant_id,
+        )
+        # 2. Archive the (now empty) Child so the record survives for audit
+        await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
+        # 3. 清挂载点（is_tenant_root=False, mounted_tenant_id=NULL）
+        await DepartmentDao.aunset_mount(dept_id)
 
         # F017 hook: revoke the ``tenant:{child}#shared_to → tenant:{root}``
         # tuple + the Child-scoped tenant-level tuples before we write the
@@ -378,9 +396,6 @@ class TenantMountService:
         # later via the F013 compensator / housekeeping.
         await cls._on_child_unmounted(child_tenant_id)
 
-        meta: Dict[str, Any] = {'policy': policy, 'dept_id': dept_id}
-        if migrated_counts is not None:
-            meta['migrated_counts'] = migrated_counts
         await _safe_audit(
             tenant_id=child_tenant_id,
             operator_id=getattr(operator, 'user_id', 0),
@@ -388,12 +403,15 @@ class TenantMountService:
             action=TenantAuditAction.UNMOUNT.value,
             target_type='tenant',
             target_id=str(child_tenant_id),
-            metadata=meta,
+            metadata={
+                'dept_id': dept_id,
+                'migrated_counts': migrated_counts,
+            },
         )
-        result: Dict[str, Any] = {'policy': policy, 'tenant_id': child_tenant_id}
-        if migrated_counts is not None:
-            result['migrated_counts'] = migrated_counts
-        return result
+        return {
+            'tenant_id': child_tenant_id,
+            'migrated_counts': migrated_counts,
+        }
 
     @classmethod
     async def _migrate_child_resources_to_root(
@@ -404,12 +422,48 @@ class TenantMountService:
         Thin delegate over ``TenantDao.abulk_update_tenant_id`` so the
         service layer does not own raw SQL — kept only as a semantic
         wrapper (fixed table whitelist, fixed from=child / to=Root).
+
+        Skips tables that are not present in the current deployment's
+        schema (deployments that haven't run later alembic migrations may
+        be missing ``dataset`` / ``linsight_*`` etc).
         """
+        existing = await cls._filter_existing_tables(_UNMOUNT_MIGRATE_TABLES)
         return await TenantDao.abulk_update_tenant_id(
-            tables=_UNMOUNT_MIGRATE_TABLES,
+            tables=existing,
             from_tenant_id=child_tenant_id,
             to_tenant_id=ROOT_TENANT_ID,
         )
+
+    @classmethod
+    async def _filter_existing_tables(cls, candidate: List[str]) -> List[str]:
+        """Return only the tables that currently exist in the live schema.
+
+        Queries ``information_schema.tables`` directly — works on MySQL and
+        PostgreSQL without needing a sync inspector. Some 114-style dev
+        deployments are missing tables from later alembic migrations
+        (``dataset``, ``linsight_*`` etc); skipping silently keeps the
+        unmount transaction whole.
+        """
+        from sqlalchemy import text as sa_text
+
+        from bisheng.core.database import get_async_db_session
+
+        async with get_async_db_session() as session:
+            res = await session.execute(
+                sa_text(
+                    'SELECT table_name FROM information_schema.tables '
+                    'WHERE table_schema = DATABASE()'
+                )
+            )
+            present = {row[0] for row in res.fetchall()}
+        kept = [t for t in candidate if t in present]
+        missing = [t for t in candidate if t not in present]
+        if missing:
+            logger.warning(
+                'unmount migrate skipping missing tables: %s',
+                missing,
+            )
+        return kept
 
     # -----------------------------------------------------------------------
     # migrate_resources_from_root (AC-04d)

@@ -7,8 +7,8 @@ contract under test:
   - ``mount_child`` performs exactly the sequence: super-admin gate →
     department load → 4 conflict checks → create child tenant →
     set mount on department → audit_log entry (action=tenant.mount).
-  - ``unmount_child`` dispatches correctly over the 3 policies and
-    always writes ``action='tenant.unmount'`` with policy in metadata.
+  - ``unmount_child`` always migrates Child resources to Root + archives
+    Child + unsets the mount; writes ``action='tenant.unmount'`` audit row.
   - ``migrate_resources_from_root`` enforces (1) super-admin only,
     (2) ``resource.tenant_id == 1`` per row, and logs the batch as
     ``action='resource.migrate_tenant'``.
@@ -183,38 +183,6 @@ class TestMountChild:
 @pytest.mark.asyncio
 class TestUnmountChild:
 
-    async def test_archive_policy_archives_tenant_and_unsets_mount(self, super_admin):
-        from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
-        dept = _mk_dept(dept_id=7, is_tenant_root=1, mounted_tenant_id=2)
-
-        with patch(
-            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aget_by_id',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch(
-            'bisheng.tenant.domain.services.tenant_mount_service.TenantDao.aupdate_tenant',
-            new_callable=AsyncMock, return_value=_mk_tenant(tid=2, status='archived'),
-        ) as update_tenant, patch(
-            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aunset_mount',
-            new_callable=AsyncMock,
-        ) as unset, patch(
-            'bisheng.tenant.domain.services.tenant_mount_service.AuditLogDao.ainsert_v2',
-            new_callable=AsyncMock,
-        ) as audit:
-            result = await TenantMountService.unmount_child(
-                dept_id=7, policy='archive', operator=super_admin,
-            )
-
-        assert result['policy'] == 'archive'
-        # Tenant set to archived
-        update_call = update_tenant.call_args
-        assert update_call.kwargs.get('status') == 'archived' or \
-               (len(update_call.args) >= 2 and update_call.args[1] == 'archived') or \
-               update_call.kwargs == {'status': 'archived'} or True
-        unset.assert_awaited_once_with(7)
-        audit_kwargs = audit.call_args.kwargs
-        assert audit_kwargs['action'] == 'tenant.unmount'
-        assert audit_kwargs['metadata']['policy'] == 'archive'
-
     async def test_no_mount_point_raises(self, super_admin):
         from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
         dept = _mk_dept(dept_id=7, is_tenant_root=0, mounted_tenant_id=None)
@@ -225,11 +193,53 @@ class TestUnmountChild:
         ):
             with pytest.raises(TenantTreeMountConflictError):
                 await TenantMountService.unmount_child(
-                    dept_id=7, policy='archive', operator=super_admin,
+                    dept_id=7, operator=super_admin,
                 )
 
-    async def test_migrate_policy_moves_resources_to_root(self, super_admin):
-        """Strategy A: batch UPDATE each tenant-aware table from child_id → 1."""
+    async def test_stale_flag_only_clears_mount_and_returns(self, super_admin):
+        """Legacy data: is_tenant_root=1 but mounted_tenant_id IS NULL.
+
+        Should be idempotent — clear the stale flag, skip resource
+        migration / tenant archive, return success with stale_flag_cleared.
+        """
+        from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+        dept = _mk_dept(dept_id=7, is_tenant_root=1, mounted_tenant_id=None)
+
+        with patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock, return_value=dept,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantMountService._migrate_child_resources_to_root',
+            new_callable=AsyncMock,
+        ) as migrate, patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantDao.aupdate_tenant',
+            new_callable=AsyncMock,
+        ) as archive, patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aunset_mount',
+            new_callable=AsyncMock,
+        ) as unset, patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.AuditLogDao.ainsert_v2',
+            new_callable=AsyncMock,
+        ) as audit:
+            result = await TenantMountService.unmount_child(
+                dept_id=7, operator=super_admin,
+            )
+
+        migrate.assert_not_awaited()
+        archive.assert_not_awaited()
+        unset.assert_awaited_once_with(7)
+        assert result == {
+            'tenant_id': None,
+            'migrated_counts': {},
+            'stale_flag_cleared': True,
+        }
+        audit_kwargs = audit.call_args.kwargs
+        assert audit_kwargs['action'] == 'tenant.unmount'
+        assert audit_kwargs['metadata']['stale_flag_cleared'] is True
+        assert audit_kwargs['metadata']['dept_id'] == 7
+
+    async def test_unmount_migrates_resources_archives_and_unsets(self, super_admin):
+        """v2.5.1 唯一路径：迁移资源到 Root + 归档 Child + 清挂载点。"""
         from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
         dept = _mk_dept(dept_id=7, is_tenant_root=1, mounted_tenant_id=2)
 
@@ -245,20 +255,22 @@ class TestUnmountChild:
         ), patch(
             'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aunset_mount',
             new_callable=AsyncMock,
-        ), patch(
+        ) as unset, patch(
             'bisheng.tenant.domain.services.tenant_mount_service.AuditLogDao.ainsert_v2',
             new_callable=AsyncMock,
         ) as audit:
             result = await TenantMountService.unmount_child(
-                dept_id=7, policy='migrate', operator=super_admin,
+                dept_id=7, operator=super_admin,
             )
 
         migrate.assert_awaited_once_with(2)
-        assert result['policy'] == 'migrate'
+        unset.assert_awaited_once_with(7)
+        assert result['tenant_id'] == 2
         assert result['migrated_counts'] == {'flow': 3, 'knowledge': 2}
         audit_kwargs = audit.call_args.kwargs
         assert audit_kwargs['action'] == 'tenant.unmount'
         assert audit_kwargs['metadata']['migrated_counts'] == {'flow': 3, 'knowledge': 2}
+        assert audit_kwargs['metadata']['dept_id'] == 7
 
 
 # =========================================================================
