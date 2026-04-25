@@ -205,6 +205,8 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
         prevInProgressRef.current = 0;
     }, []);
 
+    useEffect(() => () => clear(), [clear]);
+
     return {
         queue,
         inProgressCount,

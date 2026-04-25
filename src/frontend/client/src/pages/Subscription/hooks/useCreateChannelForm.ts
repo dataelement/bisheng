@@ -114,8 +114,6 @@ export function useCreateChannelForm() {
     // UI state
     const [showAddSourcePanel, setShowAddSourcePanel] = useState(false);
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-    const [crawlDialogOpen, setCrawlDialogOpen] = useState(false);
-    const [crawlUrl, setCrawlUrl] = useState("");
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [createdChannelId, setCreatedChannelId] = useState<string | null>(null);
@@ -137,8 +135,6 @@ export function useCreateChannelForm() {
         setLastAddedSubChannelId(null);
         setShowAddSourcePanel(false);
         setShowCancelConfirm(false);
-        setCrawlDialogOpen(false);
-        setCrawlUrl("");
         setShowSuccess(false);
         setSubmitting(false);
         setCreatedChannelId(null);
@@ -343,8 +339,6 @@ export function useCreateChannelForm() {
         // UI state
         showAddSourcePanel, setShowAddSourcePanel,
         showCancelConfirm, setShowCancelConfirm,
-        crawlDialogOpen, setCrawlDialogOpen,
-        crawlUrl, setCrawlUrl,
         showSuccess, setShowSuccess,
         submitting, setSubmitting,
         createdChannelId, setCreatedChannelId,

@@ -28,7 +28,8 @@ interface AddSourceDropdownProps {
     onSourcesChange: (sources: InformationSource[]) => void;
     expanded: boolean;
     onExpandChange: (v: boolean) => void;
-    onRequestCrawl: (url: string) => void;
+    onEnqueueCrawl: (url: string) => void;
+    queueInProgressCount: number;
     resetToken?: number;
 }
 
@@ -37,7 +38,8 @@ export function AddSourceDropdown({
     onSourcesChange,
     expanded,
     onExpandChange,
-    onRequestCrawl,
+    onEnqueueCrawl,
+    queueInProgressCount,
     resetToken
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
@@ -339,15 +341,20 @@ export function AddSourceDropdown({
                                     </Button>
                                     <Button
                                         onClick={() => {
-                                            // 前置校验：避免已满 50 个信源后仍打开爬取预览弹窗
-                                            if (mgr.pendingSources.length >= MAX_SOURCES) {
+                                            // 50 上限：已选 + 队列在跑的 = 阻断
+                                            if (mgr.pendingSources.length + queueInProgressCount >= MAX_SOURCES) {
                                                 showToast({
-                                                    message: "已达频道 50 个信源上限，无法再爬取",
+                                                    message: localize("com_subscription.maximum_channel_source")
+                                                        || `已达频道 ${MAX_SOURCES} 个信源上限，无法再爬取`,
                                                     severity: NotificationSeverity.WARNING,
                                                 });
                                                 return;
                                             }
-                                            onRequestCrawl(mgr.searchKeyword.trim());
+                                            onEnqueueCrawl(mgr.searchKeyword.trim());
+                                            // 清搜索回 list 视图，并切到「网站」tab
+                                            setInputValue("");
+                                            mgr.handleClearSearch();
+                                            mgr.setActiveTab("website");
                                         }}
                                         className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-[#165DFF] hover:bg-[#4080FF]"
                                     >
@@ -405,27 +412,19 @@ export function AddSourceDropdown({
                                                         <span
                                                             className={cn(
                                                                 "inline-flex max-w-full items-center align-middle",
-                                                                source.type === "website" && source.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
+                                                                source.type === "website" && source.url && "group/link text-[#1D2129] transition-colors"
                                                             )}
-                                                            onClick={
-                                                                source.type === "website" && source.url
-                                                                    ? (e) => {
-                                                                          e.stopPropagation();
-                                                                          window.open(source.url, "_blank");
-                                                                      }
-                                                                    : undefined
-                                                            }
                                                         >
-                                                            <span
-                                                                className={cn(
-                                                                    "truncate",
-                                                                    source.type === "website" && source.url && "hover:underline"
-                                                                )}
-                                                            >
+                                                            <span className="truncate">
                                                                 {truncateName(source.name, MAX_NAME_DISPLAY)}
                                                             </span>
                                                             {source.type === "website" && source.url && (
-                                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 flex-shrink-0 opacity-0 transition-opacity group-hover/link:opacity-100" />
+                                                                <ChannelRightSmallUpIcon
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        window.open(source.url, "_blank");
+                                                                    }}
+                                                                    className="ml-0.5 w-4 h-4 flex-shrink-0 opacity-0 transition-opacity group-hover/link:opacity-100" />
                                                             )}
                                                         </span>
                                                         {mgr.isSearchMode && (

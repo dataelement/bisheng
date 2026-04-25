@@ -26,7 +26,11 @@ import {
 } from "~/components/ui/AlertDialog";
 import { AddSourceDropdown } from "./AddSourceDropdown";
 import { CrawlPreviewDialog } from "./CrawlPreviewDialog";
+import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
+import { CrawlQueuePanel } from "./CrawlQueuePanel";
 import { CreateChannelSuccessContent } from "./CreateChannelSuccess";
+import { useCrawlQueue } from "../hooks/useCrawlQueue";
+import { normalizeUrlForSearch } from "../urlNormalize";
 import { SubChannelBlock, type SubChannelData } from "./SubChannelBlock";
 import {
     FilterConditionEditor,
@@ -89,6 +93,21 @@ export function CreateChannelDrawer({
     const { showToast } = useToastContext();
     const localize = useLocalize();
     const form = useCreateChannelForm();
+    const crawlQueue = useCrawlQueue({
+        onSourceAdded: (source) => {
+            form.setSources((prev) => {
+                if (prev.some((s) => s.id === source.id)) return prev;
+                return [...prev, source];
+            });
+        },
+    });
+
+    const [previewItemId, setPreviewItemId] = useState<string | null>(null);
+    const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+    const previewItem = previewItemId
+        ? crawlQueue.queue.find((it) => it.id === previewItemId) ?? null
+        : null;
+
     const isEditMode = mode === "edit" && !!editingChannel;
     const confirm = useConfirm();
     const [isComposingName, setIsComposingName] = useState(false);
@@ -164,12 +183,20 @@ export function CreateChannelDrawer({
 
     const handleClose = async (nextOpen: boolean) => {
         if (!nextOpen) {
+            if (crawlQueue.inProgressCount > 0) {
+                showToast({
+                    message: localize("com_subscription.wait_for_crawl_completion"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
             if (form.showSuccess) {
+                crawlQueue.clear();
                 form.resetForm();
                 onOpenChange(false);
                 return;
             }
-            if (isCreateFormPristine()) {
+            if (isCreateFormPristine() && crawlQueue.queue.length === 0) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
@@ -177,9 +204,10 @@ export function CreateChannelDrawer({
             const confirmed = await confirm({
                 description: localize("com_subscription.unsaved_tab_confirm_close"),
                 cancelText: localize("com_subscription.continue_editing"),
-                confirmText: localize("com_subscription.confirm_close")
+                confirmText: localize("com_subscription.confirm_close"),
             });
             if (!confirmed) return;
+            crawlQueue.clear();
             form.resetForm();
             onOpenChange(false);
         }
@@ -245,20 +273,43 @@ export function CreateChannelDrawer({
                         >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
-                                <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F] mr-1">*</span>
-                                    {localize("com_subscription.add_information_source")}
-                                </Label>
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-[14px] text-[#1D2129]">
+                                        <span className="text-[#F53F3F] mr-1">*</span>
+                                        {localize("com_subscription.add_information_source")}
+                                    </Label>
+                                    <CrawlQueuePanel
+                                        queue={crawlQueue.queue}
+                                        inProgressCount={crawlQueue.inProgressCount}
+                                        panelOpen={crawlQueue.panelOpen}
+                                        onPanelOpenChange={crawlQueue.setPanelOpen}
+                                        onAbort={crawlQueue.abort}
+                                        onOpenPreview={(id) => setPreviewItemId(id)}
+                                        onOpenFeedback={() => setFeedbackDialogOpen(true)}
+                                    />
+                                </div>
                                 <AddSourceDropdown
                                     sources={form.sources}
                                     onSourcesChange={form.setSources}
                                     expanded={form.showAddSourcePanel}
                                     onExpandChange={form.setShowAddSourcePanel}
                                     resetToken={form.sourceSearchResetToken}
-                                    onRequestCrawl={(url) => {
-                                        form.setCrawlUrl(url);
-                                        form.setCrawlDialogOpen(true);
+                                    onEnqueueCrawl={(url) => {
+                                        const norm = normalizeUrlForSearch(url);
+                                        if (!norm) return;
+                                        const dupInQueue = crawlQueue.queue.some((it) => normalizeUrlForSearch(it.url) === norm);
+                                        const dupInSources = form.sources.some((s) => s.url && normalizeUrlForSearch(s.url) === norm);
+                                        if (dupInQueue || dupInSources) {
+                                            showToast({
+                                                message: localize("com_subscription.url_already_in_queue"),
+                                                severity: NotificationSeverity.WARNING,
+                                            });
+                                            return;
+                                        }
+                                        crawlQueue.enqueue(url);
+                                        crawlQueue.setPanelOpen(true);
                                     }}
+                                    queueInProgressCount={crawlQueue.inProgressCount}
                                 />
                             </div>
 
@@ -620,8 +671,15 @@ export function CreateChannelDrawer({
                                 {localize("cancel")}
                             </Button>
                             <Button
-                                disabled={form.submitting}
+                                disabled={form.submitting || crawlQueue.inProgressCount > 0}
                                 onClick={async () => {
+                                    if (crawlQueue.inProgressCount > 0) {
+                                        showToast({
+                                            message: localize("com_subscription.wait_for_crawl_completion"),
+                                            severity: NotificationSeverity.WARNING,
+                                        });
+                                        return;
+                                    }
                                     const data: CreateChannelFormData = {
                                         sources: form.sources,
                                         channelName: form.channelName.trim(),
@@ -691,21 +749,19 @@ export function CreateChannelDrawer({
                 </SheetContent>
             </Sheet>
 
-            <CrawlPreviewDialog
-                open={form.crawlDialogOpen}
-                onOpenChange={form.setCrawlDialogOpen}
-                url={form.crawlUrl}
-                onCancel={() => {
-                    // 失败/取消后回到「添加信息源」面板，并清空输入框
-                    form.setShowAddSourcePanel(true);
-                    form.setSourceSearchResetToken((t) => t + 1);
-                }}
-                onAddSource={(source) => {
-                    form.setSources((prev) => [...prev, source]);
-                    form.setCrawlDialogOpen(false);
-                    // 添加成功后回到「添加信息源」面板，并展示选中状态
-                    form.setShowAddSourcePanel(true);
-                }}
+            {previewItem && (
+                <CrawlPreviewDialog
+                    open
+                    onOpenChange={(v) => { if (!v) setPreviewItemId(null); }}
+                    url={previewItem.url}
+                    mode="view"
+                    initialPreview={previewItem.preview}
+                    onAddSource={() => { /* noop in view mode */ }}
+                />
+            )}
+            <CrawlFeedbackDialog
+                open={feedbackDialogOpen}
+                onOpenChange={setFeedbackDialogOpen}
             />
         </>
     );
