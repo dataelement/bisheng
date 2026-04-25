@@ -35,6 +35,11 @@ const statusColors: Record<string, string> = {
     "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
 };
 
+// Root tenant is system-protected (INV-T11): disable/archive/delete are
+// rejected server-side with errcode 22008. Hide the disable button to avoid
+// surfacing an error path; edit/quota remain allowed.
+const isRootTenant = (tenant: Tenant) => tenant.id === 1;
+
 export default function TenantPage() {
   const { t } = useTranslation("bs");
   const { appConfig } = useContext(locationContext);
@@ -235,14 +240,16 @@ export default function TenantPage() {
                         >
                           {t("tenant.quota")}
                         </button>
-                        <button
-                          className="text-primary hover:underline text-sm"
-                          onClick={() => handleToggleStatus(tenant)}
-                        >
-                          {tenant.status === "active"
-                            ? t("tenant.disable")
-                            : t("tenant.enable")}
-                        </button>
+                        {!isRootTenant(tenant) && (
+                          <button
+                            className="text-primary hover:underline text-sm"
+                            onClick={() => handleToggleStatus(tenant)}
+                          >
+                            {tenant.status === "active"
+                              ? t("tenant.disable")
+                              : t("tenant.enable")}
+                          </button>
+                        )}
                       </>
                     )}
                     {tenant.status !== "active" && (
