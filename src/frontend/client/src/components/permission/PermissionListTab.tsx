@@ -147,6 +147,10 @@ export function PermissionListTab({
     () => entries.filter((entry) => entry.subject_type === listTab),
     [entries, listTab],
   );
+  const ownerEntryCount = useMemo(
+    () => entries.filter((entry) => entry.subject_type === "user" && entry.relation === "owner").length,
+    [entries],
+  );
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
@@ -202,7 +206,12 @@ export function PermissionListTab({
       showToast({ message: localize("com_permission.success_modify"), status: "success" });
       loadData();
     } catch {
-      showToast({ message: localize("com_permission.error_revoke_failed"), status: "error" });
+      showToast({
+        message: entry.relation === "owner"
+          ? localize("com_permission.error_last_owner")
+          : localize("com_permission.error_revoke_failed"),
+        status: "error",
+      });
     }
   };
 
@@ -233,7 +242,12 @@ export function PermissionListTab({
       showToast({ message: localize("com_permission.success_revoke"), status: "success" });
       loadData();
     } catch {
-      showToast({ message: localize("com_permission.error_revoke_failed"), status: "error" });
+      showToast({
+        message: entry.relation === "owner"
+          ? localize("com_permission.error_last_owner")
+          : localize("com_permission.error_revoke_failed"),
+        status: "error",
+      });
     }
   };
 
@@ -372,6 +386,7 @@ export function PermissionListTab({
                 const Icon = SUBJECT_ICONS[entry.subject_type] || User;
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
+                const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
 
@@ -403,11 +418,7 @@ export function PermissionListTab({
                     </p>
 
                     <div className="flex w-[96px] shrink-0 justify-end">
-                      {isOwner ? (
-                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
-                          {getPermissionLabel(entry)}
-                        </span>
-                      ) : (
+                      {!isOwner || canManageOwnerEntry ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -452,6 +463,10 @@ export function PermissionListTab({
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      ) : (
+                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
+                          {getPermissionLabel(entry)}
+                        </span>
                       )}
                     </div>
                   </div>

@@ -91,7 +91,7 @@ class PermissionService:
 
         # L5: OpenFGA check
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 logger.warning('FGAClient not available, falling back to owner / implicit dept-admin')
                 implicit_level = await cls._get_implicit_permission_level_after_gate(
@@ -168,7 +168,7 @@ class PermissionService:
                 )
 
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 logger.warning('FGAClient not available for list_objects, using fallback scopes only')
                 ids = await cls._finalize_accessible_ids(
@@ -321,7 +321,7 @@ class PermissionService:
             pre_recorded_ids = await cls._pre_record_failed_tuples(operations)
 
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 if not crash_safe:
                     await cls._save_failed_tuples(operations, 'FGAClient not available')
@@ -493,7 +493,7 @@ class PermissionService:
         and returns structured ResourcePermissionItem list.
         """
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 return []
 
@@ -747,7 +747,7 @@ class PermissionService:
             return shortcut_level
 
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 return await cls._get_implicit_permission_level_after_gate(
                     user_id, object_type, object_id,
@@ -1569,6 +1569,25 @@ class PermissionService:
         from bisheng.core.openfga.manager import get_fga_client
         return get_fga_client()
 
+    @classmethod
+    async def _aget_fga(cls):
+        """Async accessor for FGAClient.
+
+        PermissionService methods are async and FGAManager is initialized
+        asynchronously. Prefer the async accessor here so write paths do not
+        falsely degrade to ``FGAClient not available`` when the sync accessor
+        cannot materialize the optional context.
+
+        Falls back to ``_get_fga()`` so existing tests that patch the sync
+        helper keep working without broad rewrites.
+        """
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        if fga is not None:
+            return fga
+        return cls._get_fga()
+
     # ── F013 helpers (Tenant tree) ──────────────────────────────
 
     @classmethod
@@ -1625,7 +1644,7 @@ class PermissionService:
         user's visible set. Depends on F017 to write the shared_to tuples
         at resource creation time. Returns False on any FGA error.
         """
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             return False
         try:

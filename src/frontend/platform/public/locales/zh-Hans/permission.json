@@ -43,6 +43,7 @@
   "error": {
     "permissionDenied": "权限不足，无法执行此操作",
     "grantFailed": "授权失败",
+    "lastOwner": "至少保留一个所有者，无法移除最后一个所有者",
     "revokeFailed": "撤回失败"
   },
   "success": {

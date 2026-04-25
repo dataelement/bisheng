@@ -91,6 +91,10 @@ export function PermissionListTab({
     () => entries.filter((e) => e.subject_type === listTab),
     [entries, listTab],
   )
+  const ownerEntryCount = useMemo(
+    () => entries.filter((entry) => entry.subject_type === 'user' && entry.relation === 'owner').length,
+    [entries],
+  )
 
   /** 换资源时回到「用户」Tab；不在用户操作切换时强行改 tab（空 tab 也要能停留并展示空态） */
   useEffect(() => {
@@ -183,6 +187,11 @@ export function PermissionListTab({
             : {}),
         }],
       ),
+      () => {
+        if (entry.relation !== 'owner') return false
+        message({ title: t('error.lastOwner'), variant: 'error' })
+        return true
+      },
     )
     if (res !== false) {
       message({ title: t('success.modify'), variant: 'success' })
@@ -208,6 +217,11 @@ export function PermissionListTab({
                 : {}),
             }],
           ),
+          () => {
+            if (entry.relation !== 'owner') return false
+            message({ title: t('error.lastOwner'), variant: 'error' })
+            return true
+          },
         ).then((res) => {
           if (res !== false) {
             message({ title: t('success.revoke'), variant: 'success' })
@@ -296,6 +310,7 @@ export function PermissionListTab({
           {filteredEntries.map((entry, idx) => {
             const Icon = SUBJECT_ICONS[entry.subject_type] || User
             const isOwner = entry.relation === 'owner'
+            const canManageOwnerEntry = isOwner && ownerEntryCount > 1
             const subjectLabel =
               entry.subject_type === 'department'
                 ? (deptPathById.get(entry.subject_id)
@@ -320,19 +335,19 @@ export function PermissionListTab({
                   </div>
                 </TableCell>
                 <TableCell>
-                  {isOwner ? (
-                    <span className="text-sm text-muted-foreground">{t('level.owner')}</span>
-                  ) : (
+                  {!isOwner || canManageOwnerEntry ? (
                     <RelationSelect
                       value={entry.model_id || entry.relation}
                       onChange={(v) => handleModify(entry, v)}
                       options={models}
                       className="h-7 w-[110px] text-xs"
                     />
+                  ) : (
+                    <span className="text-sm text-muted-foreground">{t('level.owner')}</span>
                   )}
                 </TableCell>
                 <TableCell>
-                  {!isOwner && (
+                  {(!isOwner || canManageOwnerEntry) && (
                     <button
                       className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                       onClick={() => handleRevoke(entry)}
