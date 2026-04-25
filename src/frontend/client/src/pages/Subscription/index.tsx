@@ -23,6 +23,7 @@ import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
+import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Menu, Plus } from "lucide-react";
 import { cn } from "~/utils";
 import { ChannelShareDialog } from "./ChannelShareDialog";
@@ -349,7 +350,11 @@ export default function Subscription() {
 
         // 编辑模式：使用 PUT /api/v1/channel/manager/{channel_id}，保证权限设置、内容筛选、子频道等一起更新
         if (editingChannel) {
-            await updateChannelApi(editingChannel.id, payload);
+            const response = await updateChannelApi(editingChannel.id, payload);
+            const updateCode = extractApiStatusCode(response);
+            if (updateCode && updateCode !== 200) {
+                throw createApiStatusError(response);
+            }
             await queryClient.invalidateQueries({ queryKey: ["channels"] });
             // Refresh channel detail cache so ArticleList & tooltip pick up new settings
             await queryClient.invalidateQueries({ queryKey: ["channelDetail", editingChannel.id] });
@@ -397,19 +402,19 @@ export default function Subscription() {
         <div className="relative flex h-full min-h-0 flex-col touch-desktop:flex-row">
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <ChannelSquare
-                    refreshKey={channelSquareRefreshKey}
-                    onBack={() => {
-                        setShowChannelSquare(false);
-                        navigate("/channel", { replace: true });
-                    }}
-                    onPreviewChannel={(id) => {
-                        setManualPreviewChannelId(id);
-                        userClosedSharePreviewRef.current = false;
-                        setPreviewDrawerOpen(true);
-                        navigate(`/channel/share/${id}?square=1`);
-                    }}
-                />
+                    <ChannelSquare
+                        refreshKey={channelSquareRefreshKey}
+                        onBack={() => {
+                            setShowChannelSquare(false);
+                            navigate("/channel", { replace: true });
+                        }}
+                        onPreviewChannel={(id) => {
+                            setManualPreviewChannelId(id);
+                            userClosedSharePreviewRef.current = false;
+                            setPreviewDrawerOpen(true);
+                            navigate(`/channel/share/${id}?square=1`);
+                        }}
+                    />
                 </div>
             ) : (
                 <>
