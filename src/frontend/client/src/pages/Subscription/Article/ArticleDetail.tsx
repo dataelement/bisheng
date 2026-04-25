@@ -1,5 +1,6 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import {
+    ArrowLeft,
     ArrowUp,
     Copy,
     Download,
@@ -27,9 +28,10 @@ interface ArticleDetailProps {
     onFullScreen?: () => void;
     onExitAiAssistant?: () => void;
     onAiAssistant?: () => void;
+    onBack?: () => void;
 }
 
-export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
+export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant, onBack }: ArticleDetailProps) {
     const localize = useLocalize();
     /** 小屏文章详情已是全幅叠层，不提供「全屏」入口；对话与正文分屏仅在大屏 */
     const isNarrowShell = usePrefersMobileLayout();
@@ -207,10 +209,22 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
             {/* Top Toolbar */}
             <div className="border-b border-black pb-4">
                 <div className="flex items-start justify-between">
-                    <h2 className={`font-semibold leading-relaxed flex-1 ${aiAssistantOpen ? 'pl-10' : ''}`}
-                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}>
-                        {article.title}
-                    </h2>
+                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                        {isNarrowShell && onBack ? (
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                aria-label={localize("com_ui_go_back")}
+                                className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] text-[#4E5969] hover:bg-[#F7F8FA]"
+                            >
+                                <ArrowLeft className="size-4" />
+                            </button>
+                        ) : null}
+                        <h2 className={`font-semibold leading-relaxed flex-1 ${aiAssistantOpen ? 'pl-10' : ''}`}
+                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}>
+                            {article.title}
+                        </h2>
+                    </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">

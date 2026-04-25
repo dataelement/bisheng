@@ -45,17 +45,25 @@ export default function Share() {
 
     if (!shareInfo) return null
 
-    switch (type) {
-        case 'linsight_session':
-            return <Sop id={shareInfo.resource_id} vid={vid} shareToken={shareToken} />
-        case 'workbench_chat':
-            return <ChatView id={shareInfo.resource_id} shareToken={shareToken} />;
-        default:
-            return <AppChat
-                chatId={shareInfo.resource_id}
-                flowId={shareInfo.meta_data.flowId}
-                shareToken={shareToken}
-                flowType={Apptypes[type]}
-            />
-    }
+    const content = (() => {
+        switch (type) {
+            case 'linsight_session':
+                return <Sop id={shareInfo.resource_id} vid={vid} shareToken={shareToken} />
+            case 'workbench_chat':
+                return <ChatView id={shareInfo.resource_id} shareToken={shareToken} />;
+            default:
+                return <AppChat
+                    chatId={shareInfo.resource_id}
+                    flowId={shareInfo.meta_data.flowId}
+                    shareToken={shareToken}
+                    flowType={Apptypes[type]}
+                />
+        }
+    })();
+
+    return (
+        <div className="flex min-h-[100dvh] w-full flex-1 basis-0 flex-col items-start gap-[10px] self-stretch p-2">
+            {content}
+        </div>
+    );
 };

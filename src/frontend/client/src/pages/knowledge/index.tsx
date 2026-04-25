@@ -661,7 +661,7 @@ export default function Knowledge() {
                                     className="h-full min-w-0 flex-shrink-0 overflow-hidden"
                                 >
                                     {isH5 ? (
-                                        <div className="flex h-8 items-center justify-between px-2">
+                                        <div className="mt-4 flex h-8 items-center justify-between px-4">
                                             <button
                                                 type="button"
                                                 aria-label={localize("com_nav_open_sidebar")}
@@ -746,7 +746,7 @@ export default function Knowledge() {
                 /* Empty state when no space is selected */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     {isH5 ? (
-                        <div className="absolute left-0 right-0 top-0 z-10 flex h-10 items-center justify-between px-2">
+                        <div className="absolute left-0 right-0 top-4 z-10 flex h-8 items-center justify-between px-4">
                             <button
                                 type="button"
                                 aria-label={localize("com_nav_open_sidebar")}

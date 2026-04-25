@@ -25,9 +25,27 @@ export default function AppCenter() {
     const isH5Layout = useMediaQuery('(max-width: 576px)');
     const isMobileLayout = usePrefersMobileLayout();
     const appGridRef = useRef<HTMLDivElement | null>(null);
-    const [appGridCols, setAppGridCols] = useState(4);
+    const [appGridCols, setAppGridCols] = useState(() => {
+        if (typeof window === 'undefined') return 4;
+        const width = window.innerWidth;
+        const mobile = window.matchMedia('(max-width: 767px)').matches;
+        if (mobile) {
+            return width < 480 ? 1 : 2;
+        }
+        if (width < 480) return 1;
+        if (width < 600) return 2;
+        if (width < 768) return 3;
+        return 4;
+    });
 
     useEffect(() => {
+        // Prevent first-render flash: when entering on mobile, clamp columns
+        // from viewport width before ResizeObserver reports container width.
+        if (typeof window !== 'undefined' && isMobileLayout) {
+            const width = window.innerWidth;
+            setAppGridCols(width < 480 ? 1 : 2);
+        }
+
         const el = appGridRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
 

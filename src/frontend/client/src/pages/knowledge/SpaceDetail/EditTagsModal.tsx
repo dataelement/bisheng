@@ -298,7 +298,7 @@ export function EditTagsModal({
                     </div>
                 </div>
 
-                <DialogFooter className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:mt-auto touch-mobile:h-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
+                <DialogFooter className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:!mt-auto touch-mobile:!h-auto touch-mobile:!flex-row touch-mobile:!justify-stretch touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
                     <Button variant="outline" className="h-8 rounded-[6px] px-4 font-normal touch-mobile:flex-1" onClick={handleClose}>
                         {localize("com_knowledge.cancel")}</Button>
                     <Button

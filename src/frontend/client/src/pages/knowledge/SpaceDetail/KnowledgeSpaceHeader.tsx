@@ -29,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { AiChatIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 
@@ -99,6 +99,7 @@ export function KnowledgeSpaceHeader({
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const isNarrow576 = useMediaQuery("(max-width: 576px)");
     const toolbarMeasureRef = useRef<HTMLDivElement>(null);
     const [toolbarCompact, setToolbarCompact] = useState(false);
 
@@ -135,7 +136,7 @@ export function KnowledgeSpaceHeader({
                 >
                     <List className="size-4 shrink-0" />
                 </button>
-                {enableCardMode && (
+                {enableCardMode && !isNarrow576 && (
                     <button
                         type="button"
                         onClick={() => setViewMode("card")}

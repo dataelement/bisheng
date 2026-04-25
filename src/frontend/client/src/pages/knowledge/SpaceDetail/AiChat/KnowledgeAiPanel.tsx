@@ -98,10 +98,12 @@ export function KnowledgeAiPanel({
     return (
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e6eb] shrink-0">
-                <h3 className="text-sm leading-6 font-medium text-[#1d2129]">
-                    {localize("com_knowledge.ai_assistant")}</h3>
-                <div className="flex items-center gap-1">
+            <div className="relative flex items-center justify-between px-4 py-3 shrink-0">
+                <div className="w-7 h-7 shrink-0" aria-hidden />
+                <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-[#1d2129]">
+                    {localize("com_knowledge.ai_assistant")}
+                </h3>
+                <div className="ml-auto flex items-center gap-1">
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -151,11 +153,21 @@ export function KnowledgeAiPanel({
                                     className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
                                     onClick={onClose}
                                 >
-                                    <img
+                                    <svg
                                         className="size-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/double-right.svg`}
-                                        alt=""
-                                    />
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        aria-hidden
+                                    >
+                                        <path
+                                            d="M15 18L9 12L15 6"
+                                            stroke="#4E5969"
+                                            strokeWidth="2.25"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                        />
+                                    </svg>
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
