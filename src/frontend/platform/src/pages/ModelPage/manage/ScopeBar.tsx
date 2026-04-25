@@ -1,15 +1,11 @@
-// Header tenant-scope switcher.
+// Page-level admin-scope switcher for LLM management.
 //
-// - Global super admin: dropdown lets the operator pivot between "Full tree"
-//   (no scope) and any active Child Tenant. Selecting an entry calls
-//   `setTenantScope` then invalidates every react-query cache so the page
-//   re-fetches under the new scope.
-// - Everyone else (Child Admin, regular user): a read-only chip showing the
-//   user's current leaf Tenant. They cannot switch, but the chip serves as an
-//   identity cue ("which Tenant am I in?") consistent with v2.4 behaviour.
-//
-// The component lives in MainLayout so the switcher is reachable from every
-// admin page (roles, audit, departments, LLM, ...).
+// v2.5.1: scope was originally exposed as a global HeaderTenantScope
+// dropdown. A product review concluded scope only meaningfully affects
+// /api/v1/llm — roles use a global-view + field-filter pattern, audit logs
+// rely on visible_tenant_ids for child-admin isolation. The switcher now
+// lives on this page so its visible affordance matches where it changes
+// data. Renders nothing for non-super-admin users.
 
 import { ChevronDown } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -24,63 +20,33 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu"
-import { Separator } from "@/components/bs-ui/separator"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
-import { User } from "@/types/api/user"
 import { Tenant } from "@/types/api/tenant"
+import { User } from "@/types/api/user"
 import { displayTenantName } from "@/utils/tenantDisplayName"
+import { isGlobalSuperUser } from "./permissions"
 
-interface HeaderTenantScopeProps {
+interface ScopeBarProps {
     user: User
+    onScopeChange?: () => void | Promise<void>
 }
 
 const ROOT_TENANT_ID = 1
 
-function isGlobalSuper(user: User): boolean {
-    // Backend already populates ``is_global_super`` on login; fall back to
-    // role==='admin' for legacy sessions that predate F019.
-    return Boolean(user.is_global_super) || user.role === "admin"
-}
-
-export function HeaderTenantScope({ user }: HeaderTenantScopeProps): JSX.Element | null {
-    if (isGlobalSuper(user)) {
-        return (
-            <>
-                <SuperAdminScopeSwitcher />
-                <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-            </>
-        )
+export function ScopeBar({ user, onScopeChange }: ScopeBarProps): JSX.Element | null {
+    if (!isGlobalSuperUser(user)) {
+        return null
     }
-    return <ReadOnlyLeafTenantChip user={user} />
+    return <SuperAdminScopeSwitcher onScopeChange={onScopeChange} />
 }
 
-function ReadOnlyLeafTenantChip({ user }: { user: User }): JSX.Element | null {
-    // Identity-only chip for Child Admins / regular users — no dropdown, no
-    // tenant-list fetch, just "you are in <Tenant>". Falls back through
-    // leaf_tenant_name → tenant_name → tenant_code so we always render
-    // something meaningful when the multi-tenant header is enabled.
-    const label =
-        user.leaf_tenant_name ||
-        (user as User & { tenant_name?: string }).tenant_name ||
-        (user as User & { tenant_code?: string }).tenant_code ||
-        ""
-    if (!label) return null
-    return (
-        <>
-            <div
-                className="h-8 px-3 bg-header-icon rounded-lg my-4 flex items-center justify-center"
-                title={label}
-            >
-                <span className="text-sm leading-8 max-w-32 truncate">{label}</span>
-            </div>
-            <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-        </>
-    )
-}
-
-function SuperAdminScopeSwitcher(): JSX.Element {
+function SuperAdminScopeSwitcher({
+    onScopeChange,
+}: {
+    onScopeChange?: () => void | Promise<void>
+}): JSX.Element {
     const { t } = useTranslation("bs")
     const queryClient = useQueryClient()
     const { scope, loading: scopeLoading, setScope } = useAdminScope()
@@ -107,41 +73,49 @@ function SuperAdminScopeSwitcher(): JSX.Element {
         }
     }, [])
 
+    // The "no scope" entry historically rendered as "全树（默认）". Per
+    // product feedback, surface the actual Root tenant name (matching how
+    // child entries are labelled) for visual consistency. Falls back to
+    // the old i18n string while the tenant list is still loading.
+    const rootTenant = useMemo(
+        () => tenants.find((row) => row.id === ROOT_TENANT_ID),
+        [tenants],
+    )
+    const rootLabel = useMemo(() => {
+        if (rootTenant) {
+            return displayTenantName(rootTenant.tenant_name) || rootTenant.tenant_code
+        }
+        return t("tenant.adminScope.global", { defaultValue: "全树（默认）" })
+    }, [rootTenant, t])
+
     const currentLabel = useMemo(() => {
         if (scope.scope_tenant_id === null) {
-            return t("tenant.adminScope.global", { defaultValue: "全树（默认）" })
+            return rootLabel
         }
         const hit = tenants.find((row) => row.id === scope.scope_tenant_id)
         if (!hit) {
-            // Tenant list still loading or scope points at an archived tenant
             return t("tenant.adminScope.loading", { defaultValue: "加载中..." })
         }
         return displayTenantName(hit.tenant_name) || hit.tenant_code
-    }, [scope.scope_tenant_id, tenants, t])
+    }, [scope.scope_tenant_id, tenants, t, rootLabel])
 
     const handleSelect = async (next: number | null) => {
         if (scopeLoading) return
         if (next === scope.scope_tenant_id) return
         try {
             await setScope(next)
-            // v2.5.1: scope 仅影响管理类 API 的 IN-list；切换后让所有 react-query
-            // 缓存失效，当前页随之重新拉取，避免旧 scope 数据残留。
+            // Invalidate other react-query caches that surface llm-tenant
+            // -aware data (e.g. ModelSelect dropdowns).
             await queryClient.invalidateQueries()
-            // Pages that fetch via plain useState (not react-query) listen
-            // to this event so they can reload manually.
-            window.dispatchEvent(
-                new CustomEvent("bisheng:admin-scope-changed", {
-                    detail: { scopeTenantId: next },
-                }),
-            )
+            await onScopeChange?.()
             toast({
                 variant: "success",
                 description: next === null
                     ? t("tenant.adminScope.cleared", { defaultValue: "已恢复全树视图" })
                     : t("tenant.adminScope.switched", {
-                          defaultValue: "已切换管理视图",
-                          name: tenants.find((r) => r.id === next)?.tenant_name || "",
-                      }),
+                        defaultValue: "已切换管理视图",
+                        name: tenants.find((r) => r.id === next)?.tenant_name || "",
+                    }),
             })
         } catch {
             // request interceptor will surface the error toast
@@ -155,25 +129,25 @@ function SuperAdminScopeSwitcher(): JSX.Element {
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
-                    className="h-8 px-3 bg-header-icon rounded-lg my-4 flex items-center justify-center cursor-pointer"
+                    className="h-9 px-3 bg-secondary rounded-md flex items-center justify-center cursor-pointer hover:bg-secondary/80 transition-colors"
                     title={t("tenant.adminScope.label", { defaultValue: "管理视图" }) + ": " + currentLabel}
                     disabled={scopeLoading}
                 >
                     <span className="text-xs text-muted-foreground mr-1">
                         {t("tenant.adminScope.label", { defaultValue: "管理视图" })}：
                     </span>
-                    <span className="text-sm leading-8 max-w-32 truncate">{currentLabel}</span>
+                    <span className="text-sm max-w-32 truncate">{currentLabel}</span>
                     <ChevronDown className="ml-1 w-4 h-4" />
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[180px]">
+            <DropdownMenuContent align="start" className="min-w-[180px]">
                 <DropdownMenuLabel>
                     {t("tenant.adminScope.label", { defaultValue: "管理视图" })}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => handleSelect(null)}>
                     {scope.scope_tenant_id === null ? "✓ " : ""}
-                    {t("tenant.adminScope.global", { defaultValue: "全树（默认）" })}
+                    {rootLabel}
                 </DropdownMenuItem>
                 {tenantsLoading && (
                     <DropdownMenuItem disabled>

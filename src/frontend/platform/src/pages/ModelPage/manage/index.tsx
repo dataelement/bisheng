@@ -3,6 +3,7 @@ import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Switch } from "@/components/bs-ui/switch"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
+import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -17,6 +18,7 @@ import { useQuery } from "react-query"
 import { useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
+import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
@@ -104,6 +106,7 @@ export default function Management() {
 
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
+    const { appConfig } = useContext(locationContext)
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
@@ -132,14 +135,6 @@ export default function Management() {
         refetch()
     }
     useEffect(() => { reload() }, [])
-
-    // v2.5.1 F019: 顶栏切 admin-scope 后，HeaderTenantScope 派发 custom event；
-    // 这里监听后重新拉取，使本页 LLM 列表跟随 scope 变化。
-    useEffect(() => {
-        const handler = () => { void reload() }
-        window.addEventListener('bisheng:admin-scope-changed', handler)
-        return () => window.removeEventListener('bisheng:admin-scope-changed', handler)
-    }, [])
 
     const handleGetRepeatName = (name) => {
         let index = 0
@@ -186,16 +181,21 @@ export default function Management() {
             </div>
         )}
         <div className="h-full overflow-y-auto">
-            {/* admin-scope switcher now lives in MainLayout's header (v2.5.1 F019).
-                System-level config stays super-admin only regardless of active
-                scope; Child Admins never see the button. */}
-            <div className="flex justify-end gap-4">
-                {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
-                    <SettingIcon className="text-red-500" />
-                    {t('model.systemModelSettings')}
-                </Button>}
-                {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
-                <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
+            {/* v2.5.1 F019: scope switcher lives here (LLM is the only page
+                whose data actually changes with scope). System-level config
+                stays super-admin only regardless of active scope. */}
+            <div className="flex items-center justify-between gap-4">
+                <div>
+                    {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
+                </div>
+                <div className="flex gap-4">
+                    {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                        <SettingIcon className="text-red-500" />
+                        {t('model.systemModelSettings')}
+                    </Button>}
+                    {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                    <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
+                </div>
             </div>
             <div className="h-[85%]">
                 <div className="flex h-10 justify-between items-center font-medium text-muted-foreground text-sm">

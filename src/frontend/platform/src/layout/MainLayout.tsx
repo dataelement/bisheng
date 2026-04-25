@@ -29,7 +29,6 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
-import { HeaderTenantScope } from "../components/HeaderTenantScope";
 import HeaderMenu from "./HeaderMenu";
 
 export default function MainLayout() {
@@ -118,7 +117,6 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                        {appConfig.multiTenantEnabled && <HeaderTenantScope user={user} />}
                         <SelectHover
                             className={"-top-4"}
                             triagger={
