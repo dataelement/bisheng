@@ -71,6 +71,19 @@ class TagDao(Tag):
             return session.exec(statement).all()
 
     @classmethod
+    async def asearch_tags(cls, keyword: str = None, page: int = 0, limit: int = 0, *,
+                           business_type: TagBusinessTypeEnum, business_id: str) -> List[Tag]:
+        """ Get all tags by default Paginable """
+        statement = select(Tag)
+        if keyword:
+            statement = statement.where(Tag.name.like(f'%{keyword}%'))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.where(Tag.business_type == business_type, Tag.business_id == business_id)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def count_tags(cls, keyword: str = None, *, business_type: TagBusinessTypeEnum, business_id: str) -> int:
         """ Count the number of tags """
         statement = select(func.count(Tag.id))
@@ -202,13 +215,13 @@ class TagDao(Tag):
 
     @classmethod
     async def asearch_tags(
-            cls,
-            keyword: str = None,
-            page: int = 1,
-            limit: int = 10,
-            *,
-            business_type: TagBusinessTypeEnum,
-            business_id: str,
+        cls,
+        keyword: str = None,
+        page: int = 1,
+        limit: int = 10,
+        *,
+        business_type: TagBusinessTypeEnum,
+        business_id: str,
     ) -> List[Tag]:
         """Search tags by business scope asynchronously."""
         statement = select(Tag).where(
@@ -227,11 +240,11 @@ class TagDao(Tag):
 
     @classmethod
     async def acount_tags(
-            cls,
-            keyword: str = None,
-            *,
-            business_type: TagBusinessTypeEnum,
-            business_id: str,
+        cls,
+        keyword: str = None,
+        *,
+        business_type: TagBusinessTypeEnum,
+        business_id: str,
     ) -> int:
         """Count tags by business scope asynchronously."""
         statement = select(func.count(Tag.id)).where(
@@ -304,7 +317,7 @@ class TagDao(Tag):
 
     @classmethod
     async def aget_resource_tag_ids_batch(
-            cls, resource_ids: List[str], resource_type: ResourceTypeEnum
+        cls, resource_ids: List[str], resource_type: ResourceTypeEnum
     ) -> Dict[str, List[int]]:
         """Query tag ids grouped by resource id asynchronously."""
         if not resource_ids:
