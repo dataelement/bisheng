@@ -17,9 +17,11 @@ import {
   updateTenantStatusApi,
 } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { locationContext } from "@/contexts/locationContext";
 import { useTable } from "@/util/hook";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Navigate } from "react-router-dom";
 import { CreateTenantDialog } from "./components/CreateTenantDialog";
 import { TenantUserDialog } from "./components/TenantUserDialog";
 import { TenantQuotaDialog } from "./components/TenantQuotaDialog";
@@ -34,6 +36,8 @@ const statusColors: Record<string, string> = {
 
 export default function TenantPage() {
   const { t } = useTranslation("bs");
+  const { appConfig } = useContext(locationContext);
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled;
   const [createOpen, setCreateOpen] = useState(false);
   const [editTenant, setEditTenant] = useState<Tenant | null>(null);
   const [userDialogTenant, setUserDialogTenant] = useState<Tenant | null>(null);
@@ -52,7 +56,7 @@ export default function TenantPage() {
     search,
     reload,
   } = useTable<Tenant>(
-    { pageSize: 20 },
+    { pageSize: 20, unInitData: !multiTenantEnabled },
     (param: any) =>
       getTenantsApi({
         keyword: param.keyword,
@@ -102,6 +106,13 @@ export default function TenantPage() {
       })
     );
   };
+
+  // Tenant CRUD only makes sense in multi-tenant deployments. The route is
+  // permission-gated ('sys') but a super admin could still hit /tenant by URL
+  // in a single-tenant install; redirect home to keep the Root tenant safe.
+  if (!multiTenantEnabled) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="relative h-full px-2 py-4 overflow-hidden">
