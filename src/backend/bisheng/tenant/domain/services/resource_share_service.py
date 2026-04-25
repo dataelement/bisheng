@@ -68,6 +68,16 @@ class ResourceShareService:
         from bisheng.core.openfga.manager import get_fga_client
         return get_fga_client()
 
+    @classmethod
+    async def _aget_fga(cls):
+        """Async accessor matching the FGAManager lifecycle."""
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        if fga is not None:
+            return fga
+        return cls._get_fga()
+
     # ── Resource-level sharing (shared_with) ─────────────────────
 
     @classmethod
@@ -84,7 +94,7 @@ class ResourceShareService:
         Raises ValueError for unsupported resource types.
         """
         cls._validate_type(object_type)
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             logger.info('[F017] OpenFGA disabled; skip enable_sharing %s:%s', object_type, object_id)
             return []
@@ -120,7 +130,7 @@ class ResourceShareService:
         Children were added mid-flight).
         """
         cls._validate_type(object_type)
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             return []
 
@@ -160,7 +170,7 @@ class ResourceShareService:
         useful for audit/UI and for reconciling after a manual tuple edit.
         """
         cls._validate_type(object_type)
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             return []
 
@@ -189,7 +199,7 @@ class ResourceShareService:
         ``PermissionService._is_shared_to()``. Idempotent at the FGA side
         (duplicate writes are no-ops).
         """
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             return
         await fga.write_tuples(writes=[
@@ -212,7 +222,7 @@ class ResourceShareService:
         Called on Child unmount (``TenantMountService._on_child_unmounted``)
         to prevent dangling shared_to relations after the Child is removed.
         """
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             return
         await fga.write_tuples(deletes=[

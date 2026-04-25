@@ -19,6 +19,7 @@ export interface PermissionEntry {
   subject_id: number;
   subject_name: string | null;
   subject_group_names?: string[];
+  subject_member_names?: string[];
   relation: RelationLevel;
   model_id?: string;
   model_name?: string;
@@ -168,11 +169,41 @@ export async function searchUsers(
   };
 }
 
+export async function getKnowledgeSpaceGrantUsers(
+  resourceId: string,
+  params?: { keyword?: string; page?: number; page_size?: number },
+  config?: { signal?: AbortSignal }
+): Promise<{ user_id: number; user_name: string }[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/users`,
+    {
+      params: {
+        keyword: params?.keyword ?? "",
+        page: params?.page ?? 1,
+        page_size: params?.page_size ?? 2000,
+      },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray(res);
+}
+
 export async function getDepartmentTree(
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
   const res = await request.get(
     `/api/v1/departments/tree`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrapArray(res);
+}
+
+export async function getKnowledgeSpaceGrantDepartments(
+  resourceId: string,
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/departments`,
     withPermissionRequestOptions(config)
   );
   return unwrapArray(res);
@@ -188,4 +219,19 @@ export async function getUserGroups(
   const data = unwrap<any>(res);
   const rows = data?.records ?? data;
   return Array.isArray(rows) ? rows : [];
+}
+
+export async function getKnowledgeSpaceGrantUserGroups(
+  resourceId: string,
+  params?: { keyword?: string },
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/user-groups`,
+    {
+      params: { keyword: params?.keyword ?? "" },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray(res);
 }

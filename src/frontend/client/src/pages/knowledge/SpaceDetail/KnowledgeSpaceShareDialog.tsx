@@ -65,8 +65,16 @@ export function KnowledgeSpaceShareDialog({
             setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
             setCopied(false);
             setCurrentSubjectType("user");
+            setGrantSubjectType("user");
+            setGrantIncludeChildren(true);
         }
     }, [open, showMembersTab, showShareTab]);
+
+    useEffect(() => {
+        if (grantSubjectType !== "department" && grantIncludeChildren !== true) {
+            setGrantIncludeChildren(true);
+        }
+    }, [grantIncludeChildren, grantSubjectType]);
 
     useEffect(() => {
         if (!open) return;
@@ -178,6 +186,7 @@ export function KnowledgeSpaceShareDialog({
                     className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
                     onClick={() => {
                         setGrantSubjectType(currentSubjectType);
+                        setGrantIncludeChildren(true);
                         setGrantDialogOpen(true);
                     }}
                 >

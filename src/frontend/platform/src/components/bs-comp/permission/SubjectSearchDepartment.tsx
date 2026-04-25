@@ -1,18 +1,21 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
+import { getKnowledgeSpaceGrantDepartmentsApi } from "@/controllers/API/permission"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentTreeNode } from "@/types/api/department"
 import { ChevronDown, ChevronRight, Building2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { SelectedSubject } from "./types"
+import { ResourceType, SelectedSubject } from "./types"
 
 const INDENT_PX = 20
 
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[]
   onChange: (v: SelectedSubject[]) => void
+  resourceType?: ResourceType
+  resourceId?: string
   includeChildren?: boolean
   onIncludeChildrenChange?: (v: boolean) => void
   showIncludeChildrenToggle?: boolean
@@ -23,6 +26,8 @@ interface SubjectSearchDepartmentProps {
 export function SubjectSearchDepartment({
   value,
   onChange,
+  resourceType,
+  resourceId,
   includeChildren = false,
   onIncludeChildrenChange = () => undefined,
   showIncludeChildrenToggle = true,
@@ -38,11 +43,14 @@ export function SubjectSearchDepartment({
 
   useEffect(() => {
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
+    const request = resourceType === "knowledge_space" && resourceId
+      ? getKnowledgeSpaceGrantDepartmentsApi(resourceId)
+      : getDepartmentTreeApi()
+    captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setTree(res)
       setLoading(false)
     })
-  }, [])
+  }, [resourceId, resourceType])
 
   const selectedIds = new Set(value.map((s) => s.id))
 

@@ -1,6 +1,7 @@
 import { PermissionListTab } from "@/components/bs-comp/permission/PermissionListTab";
 import { getDepartmentTreeApi } from "@/controllers/API/department";
 import {
+  authorizeResource,
   getGrantableRelationModelsApi,
   getResourcePermissions,
 } from "@/controllers/API/permission";
@@ -32,10 +33,12 @@ vi.mock("@/components/bs-comp/permission/RelationSelect", () => ({
 const mockedGetDepartmentTreeApi = vi.mocked(getDepartmentTreeApi);
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetResourcePermissions = vi.mocked(getResourcePermissions);
+const mockedAuthorizeResource = vi.mocked(authorizeResource);
 
 describe("PermissionListTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedAuthorizeResource.mockResolvedValue(null as any);
     mockedGetDepartmentTreeApi.mockResolvedValue([]);
     mockedGetGrantableRelationModelsApi.mockResolvedValue([
       {
@@ -103,5 +106,61 @@ describe("PermissionListTab", () => {
 
     expect(mockedGetGrantableRelationModelsApi).not.toHaveBeenCalled();
     expect(mockedGetResourcePermissions).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the last owner row read-only", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="3215"
+        refreshKey={0}
+      />,
+    );
+
+    await screen.findByText("Alice");
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+  });
+
+  it("allows owner actions when another owner remains", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+      {
+        subject_type: "user",
+        subject_id: 3,
+        subject_name: "Bob",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="3215"
+        refreshKey={0}
+      />,
+    );
+
+    await screen.findByText("Alice");
+    expect(screen.getAllByRole("button")).toHaveLength(5);
   });
 });

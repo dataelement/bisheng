@@ -229,19 +229,38 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
     try {
       const body: {
         name?: string
-        default_role_ids: number[]
-        admin_user_ids: number[]
-      } = {
-        default_role_ids: defaultRoleIds.map(Number),
-        admin_user_ids: adminSelectValue.map((o) => o.value),
+        default_role_ids?: number[]
+        admin_user_ids?: number[]
+      } = {}
+      const baseline = baselineRef.current
+      const nextName = name.trim()
+      const nextAdminIds = adminSelectValue.map((o) => o.value)
+      const nextDefaultRoleIds = defaultRoleIds.map(Number)
+      if (canEditName && baseline && nextName !== baseline.name) {
+        body.name = nextName
       }
-      if (canEditName) body.name = name.trim()
+      if (
+        baseline &&
+        !sameIdSet(
+          nextAdminIds,
+          baseline.admins.map((o) => o.value)
+        )
+      ) {
+        body.admin_user_ids = nextAdminIds
+      }
+      if (baseline && !sameIdSet(nextDefaultRoleIds, baseline.defaultRoleIds)) {
+        body.default_role_ids = nextDefaultRoleIds
+      }
       const nextParentId = parentIdValue
       const parentChanged =
         canEditParent &&
-        baselineRef.current &&
+        baseline &&
         nextParentId !== null &&
-        nextParentId !== baselineRef.current.parentId
+        nextParentId !== baseline.parentId
+
+      if (!parentChanged && Object.keys(body).length === 0) {
+        return
+      }
 
       if (parentChanged) {
         const moveRes = await captureAndAlertRequestErrorHoc(
@@ -265,7 +284,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       setAdminSelectValue(adminOpts)
       adminSelectValueRef.current = adminOpts
       baselineRef.current = {
-        name: name.trim(),
+        name: nextName,
         admins: adminOpts,
         defaultRoleIds: [...defaultRoleIds],
         parentId: nextParentId ?? baselineRef.current?.parentId ?? dept.parent_id ?? null,

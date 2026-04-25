@@ -175,13 +175,13 @@ async def test_unsupported_resource_type_raises_on_enable():
 @pytest.mark.asyncio
 async def test_unsupported_resource_type_raises_on_disable():
     with pytest.raises(ValueError, match='Unsupported resource type'):
-        await ResourceShareService.disable_sharing('llm_server', '1')
+        await ResourceShareService.disable_sharing('dashboard', '1')
 
 
 def test_supported_types_constant_matches_spec():
-    """SUPPORTED_SHAREABLE_TYPES must match the D2 decision (5 types)."""
+    """SUPPORTED_SHAREABLE_TYPES must stay aligned with the live DSL set."""
     assert SUPPORTED_SHAREABLE_TYPES == {
-        'knowledge_space', 'workflow', 'assistant', 'channel', 'tool',
+        'knowledge_space', 'workflow', 'assistant', 'channel', 'tool', 'llm_server',
     }
 
 
@@ -202,3 +202,22 @@ async def test_distribute_to_child_noop_when_fga_disabled():
     with patch.object(ResourceShareService, '_get_fga', return_value=None):
         # Should not raise even with no FGA
         await ResourceShareService.distribute_to_child(child_id=5)
+
+
+@pytest.mark.asyncio
+async def test_enable_sharing_prefers_async_fga_accessor():
+    fga = _make_fga()
+    with patch(
+        'bisheng.core.openfga.manager.aget_fga_client',
+        new_callable=AsyncMock,
+        return_value=fga,
+    ) as async_get_fga, patch.object(
+        ResourceShareService,
+        '_get_fga',
+        return_value=None,
+    ), _patch_children([5]):
+        result = await ResourceShareService.enable_sharing('assistant', '1')
+
+    assert result == [5]
+    async_get_fga.assert_awaited_once()
+    fga.write_tuples.assert_awaited_once()

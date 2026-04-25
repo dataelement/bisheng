@@ -219,18 +219,30 @@ export function PermissionGrantTab({
         )}
       >
         {subjectType === "user" && (
-          <SubjectSearchUser value={selected} onChange={setSelected} />
+          <SubjectSearchUser
+            value={selected}
+            onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
+          />
         )}
         {subjectType === "department" && (
           <SubjectSearchDepartment
             value={selected}
             onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
             includeChildren={includeChildren}
             onIncludeChildrenChange={handleIncludeChildrenChange}
           />
         )}
         {subjectType === "user_group" && (
-          <SubjectSearchUserGroup value={selected} onChange={setSelected} />
+          <SubjectSearchUserGroup
+            value={selected}
+            onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
+          />
         )}
       </div>
 
