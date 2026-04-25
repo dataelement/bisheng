@@ -5,7 +5,7 @@ import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentTreeNode } from "@/types/api/department"
 import { ChevronDown, ChevronRight, Building2 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ResourceType, SelectedSubject } from "./types"
 
@@ -21,6 +21,48 @@ interface SubjectSearchDepartmentProps {
   showIncludeChildrenToggle?: boolean
   disabledIds?: number[]
   disabledLabel?: string
+}
+
+function collectExplicitDepartmentSelections(
+  nodes: DepartmentTreeNode[],
+  selectedDepartmentsById: Map<number, SelectedSubject>,
+  prefix: string[] = [],
+  inherited = false,
+): SelectedSubject[] {
+  const out: SelectedSubject[] = []
+  const visited = new Set<number>()
+
+  for (const node of nodes) {
+    const explicitSelection = selectedDepartmentsById.get(node.id)
+    const isSelected = inherited || Boolean(explicitSelection)
+    const pathSegments = [...prefix, node.name]
+    if (isSelected && !visited.has(node.id)) {
+      visited.add(node.id)
+      out.push({
+        type: 'department',
+        id: node.id,
+        name: pathSegments.join('/'),
+        include_children: false,
+      })
+    }
+
+    if (node.children?.length) {
+      const childSelections = collectExplicitDepartmentSelections(
+        node.children,
+        selectedDepartmentsById,
+        pathSegments,
+        inherited || Boolean(explicitSelection?.include_children),
+      )
+      for (const child of childSelections) {
+        if (!visited.has(child.id)) {
+          visited.add(child.id)
+          out.push(child)
+        }
+      }
+    }
+  }
+
+  return out
 }
 
 export function SubjectSearchDepartment({
@@ -53,6 +95,15 @@ export function SubjectSearchDepartment({
   }, [resourceId, resourceType])
 
   const selectedIds = new Set(value.map((s) => s.id))
+  const selectedDepartmentsById = useMemo(
+    () =>
+      new Map(
+        value
+          .filter((subject) => subject.type === 'department')
+          .map((subject) => [subject.id, subject] as const),
+      ),
+    [value],
+  )
 
   const toggle = (node: DepartmentTreeNode, pathLabel: string) => {
     if (disabledIdSet.has(node.id)) return
@@ -67,6 +118,16 @@ export function SubjectSearchDepartment({
       }])
     }
   }
+
+  const materializeInheritedSelection = useCallback(() => {
+    const explicitDepartments = collectExplicitDepartmentSelections(
+      tree,
+      selectedDepartmentsById,
+    )
+    const nonDepartmentSubjects = value.filter((subject) => subject.type !== 'department')
+    onIncludeChildrenChange(false)
+    onChange([...nonDepartmentSubjects, ...explicitDepartments])
+  }, [onChange, onIncludeChildrenChange, selectedDepartmentsById, tree, value])
 
   const toggleExpand = (id: number) => {
     setExpanded((prev) => {
@@ -124,9 +185,12 @@ export function SubjectSearchDepartment({
               pathSegments={[node.name]}
               expanded={expanded}
               selectedIds={selectedIds}
+              selectedDepartmentsById={selectedDepartmentsById}
+              ancestorIncluded={false}
               disabledIds={disabledIdSet}
               disabledLabel={disabledLabel}
               matchesKeyword={matchesKeyword}
+              onMaterializeInheritedSelection={materializeInheritedSelection}
               onToggle={toggle}
               onExpand={toggleExpand}
             />
@@ -151,9 +215,12 @@ function TreeNode({
   pathSegments,
   expanded,
   selectedIds,
+  selectedDepartmentsById,
+  ancestorIncluded,
   disabledIds,
   disabledLabel,
   matchesKeyword,
+  onMaterializeInheritedSelection,
   onToggle,
   onExpand,
 }: {
@@ -162,9 +229,12 @@ function TreeNode({
   pathSegments: string[]
   expanded: Set<number>
   selectedIds: Set<number>
+  selectedDepartmentsById: Map<number, SelectedSubject>
+  ancestorIncluded: boolean
   disabledIds: Set<number>
   disabledLabel?: string
   matchesKeyword: (n: DepartmentTreeNode) => boolean
+  onMaterializeInheritedSelection: () => void
   onToggle: (n: DepartmentTreeNode, pathLabel: string) => void
   onExpand: (id: number) => void
 }) {
@@ -172,6 +242,11 @@ function TreeNode({
 
   const hasChildren = node.children && node.children.length > 0
   const isExpanded = expanded.has(node.id)
+  const explicitSelection = selectedDepartmentsById.get(node.id)
+  const isExplicitlySelected = selectedIds.has(node.id)
+  const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected
+  const isChecked = isExplicitlySelected || isImplicitlySelected
+  const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children)
   const isDisabled = disabledIds.has(node.id)
   const pathLabel = pathSegments.join('/')
 
@@ -181,7 +256,13 @@ function TreeNode({
         className={`flex items-stretch gap-0 pr-2 ${
           isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent"
         }`}
-        onClick={() => onToggle(node, pathLabel)}
+        onClick={() => {
+          if (isImplicitlySelected) {
+            onMaterializeInheritedSelection()
+            return
+          }
+          onToggle(node, pathLabel)
+        }}
       >
         <div
           className="shrink-0"
@@ -203,10 +284,16 @@ function TreeNode({
             <span className="inline-flex w-5 shrink-0 justify-center" />
           )}
           <Checkbox
-            checked={selectedIds.has(node.id)}
+            checked={isChecked}
             disabled={isDisabled}
             onClick={(e) => e.stopPropagation()}
-            onCheckedChange={() => onToggle(node, pathLabel)}
+            onCheckedChange={() => {
+              if (isImplicitlySelected) {
+                onMaterializeInheritedSelection()
+                return
+              }
+              onToggle(node, pathLabel)
+            }}
           />
           <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="min-w-0 truncate text-sm" title={pathLabel}>
@@ -228,9 +315,12 @@ function TreeNode({
           pathSegments={[...pathSegments, child.name]}
           expanded={expanded}
           selectedIds={selectedIds}
+          selectedDepartmentsById={selectedDepartmentsById}
+          ancestorIncluded={nextAncestorIncluded}
           disabledIds={disabledIds}
           disabledLabel={disabledLabel}
           matchesKeyword={matchesKeyword}
+          onMaterializeInheritedSelection={onMaterializeInheritedSelection}
           onToggle={onToggle}
           onExpand={onExpand}
         />

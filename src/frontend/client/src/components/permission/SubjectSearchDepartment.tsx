@@ -3,7 +3,7 @@ import { Input } from "~/components/ui/Input";
 import { getDepartmentTree, getKnowledgeSpaceGrantDepartments } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
 
 interface DepartmentNode {
@@ -22,6 +22,39 @@ interface SubjectSearchDepartmentProps {
   resourceId?: string;
   includeChildren: boolean;
   onIncludeChildrenChange: (v: boolean) => void;
+}
+
+function collectExplicitDepartmentSelections(
+  nodes: DepartmentNode[],
+  selectedDepartmentsById: Map<number, SelectedSubject>,
+  inherited = false
+): SelectedSubject[] {
+  const out: SelectedSubject[] = [];
+  const visited = new Set<number>();
+
+  const walk = (items: DepartmentNode[], ancestorSelected: boolean) => {
+    for (const node of items) {
+      const explicitSelection = selectedDepartmentsById.get(node.id);
+      const isSelected = ancestorSelected || Boolean(explicitSelection);
+      if (isSelected && !visited.has(node.id)) {
+        visited.add(node.id);
+        out.push({
+          type: "department",
+          id: node.id,
+          name: node.name,
+          include_children: false,
+        });
+      }
+
+      const nextAncestorSelected = ancestorSelected || Boolean(explicitSelection?.include_children);
+      if (node.children?.length) {
+        walk(node.children, nextAncestorSelected);
+      }
+    }
+  };
+
+  walk(nodes, inherited);
+  return out;
 }
 
 export function SubjectSearchDepartment({
@@ -58,6 +91,15 @@ export function SubjectSearchDepartment({
   }, [resourceId, resourceType]);
 
   const selectedIds = new Set(value.map((s) => s.id));
+  const selectedDepartmentsById = useMemo(
+    () =>
+      new Map(
+        value
+          .filter((subject) => subject.type === "department")
+          .map((subject) => [subject.id, subject] as const)
+      ),
+    [value]
+  );
 
   const toggle = (node: DepartmentNode) => {
     if (selectedIds.has(node.id)) {
@@ -69,6 +111,16 @@ export function SubjectSearchDepartment({
       ]);
     }
   };
+
+  const materializeInheritedSelection = useCallback(() => {
+    const explicitDepartments = collectExplicitDepartmentSelections(
+      tree,
+      selectedDepartmentsById
+    );
+    const nonDepartmentSubjects = value.filter((subject) => subject.type !== "department");
+    onIncludeChildrenChange(false);
+    onChange([...nonDepartmentSubjects, ...explicitDepartments]);
+  }, [onChange, onIncludeChildrenChange, selectedDepartmentsById, tree, value]);
 
   const toggleExpand = (id: number) => {
     setExpanded((prev) => {
@@ -132,7 +184,10 @@ export function SubjectSearchDepartment({
               depth={0}
               expanded={expanded}
               selectedIds={selectedIds}
+              selectedDepartmentsById={selectedDepartmentsById}
+              ancestorIncluded={false}
               matchesKeyword={matchesKeyword}
+              onMaterializeInheritedSelection={materializeInheritedSelection}
               onToggle={toggle}
               onExpand={toggleExpand}
             />
@@ -143,26 +198,40 @@ export function SubjectSearchDepartment({
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, matchesKeyword, onToggle, onExpand,
+  node, depth, expanded, selectedIds, selectedDepartmentsById, ancestorIncluded, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand,
 }: {
   node: DepartmentNode;
   depth: number;
   expanded: Set<number>;
   selectedIds: Set<number>;
+  selectedDepartmentsById: Map<number, SelectedSubject>;
+  ancestorIncluded: boolean;
   matchesKeyword: (n: DepartmentNode) => boolean;
+  onMaterializeInheritedSelection: () => void;
   onToggle: (n: DepartmentNode) => void;
   onExpand: (id: number) => void;
 }) {
   if (!matchesKeyword(node)) return null;
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expanded.has(node.id);
+  const explicitSelection = selectedDepartmentsById.get(node.id);
+  const isExplicitlySelected = selectedIds.has(node.id);
+  const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected;
+  const isChecked = isExplicitlySelected || isImplicitlySelected;
+  const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
 
   return (
     <>
       <div
         className="flex cursor-pointer items-center gap-1 px-2 py-1.5 hover:bg-gray-50"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        onClick={() => onToggle(node)}
+        onClick={() => {
+          if (isImplicitlySelected) {
+            onMaterializeInheritedSelection();
+            return;
+          }
+          onToggle(node);
+        }}
       >
         {hasChildren ? (
           <button
@@ -175,9 +244,15 @@ function TreeNode({
           <span className="w-5" />
         )}
         <Checkbox
-          checked={selectedIds.has(node.id)}
+          checked={isChecked}
           onClick={(e) => e.stopPropagation()}
-          onCheckedChange={() => onToggle(node)}
+          onCheckedChange={() => {
+            if (isImplicitlySelected) {
+              onMaterializeInheritedSelection();
+              return;
+            }
+            onToggle(node);
+          }}
         />
         <Building2 className="h-4 w-4 text-gray-400" />
         <span className="truncate text-sm">{node.name}</span>
@@ -192,7 +267,10 @@ function TreeNode({
           depth={depth + 1}
           expanded={expanded}
           selectedIds={selectedIds}
+          selectedDepartmentsById={selectedDepartmentsById}
+          ancestorIncluded={nextAncestorIncluded}
           matchesKeyword={matchesKeyword}
+          onMaterializeInheritedSelection={onMaterializeInheritedSelection}
           onToggle={onToggle}
           onExpand={onExpand}
         />
