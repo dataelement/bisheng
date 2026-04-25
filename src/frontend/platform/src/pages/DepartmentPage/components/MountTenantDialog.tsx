@@ -25,8 +25,6 @@ interface MountTenantDialogProps {
   onClose: () => void
 }
 
-const TENANT_CODE_RE = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/
-
 export function MountTenantDialog({
   deptId,
   deptName,
@@ -34,14 +32,11 @@ export function MountTenantDialog({
   onClose,
 }: MountTenantDialogProps) {
   const { t } = useTranslation()
-  const [tenantCode, setTenantCode] = useState("")
   const [tenantName, setTenantName] = useState(deptName)
   const [selectedAdmins, setSelectedAdmins] = useState<DepartmentUserOption[]>([])
   const [loading, setLoading] = useState(false)
 
-  const codeValid = TENANT_CODE_RE.test(tenantCode)
   const canSubmit =
-    codeValid &&
     tenantName.trim().length > 0 &&
     selectedAdmins.length > 0 &&
     !loading
@@ -52,7 +47,6 @@ export function MountTenantDialog({
     try {
       const mounted = await captureAndAlertRequestErrorHoc(
         mountTenantApi(deptId, {
-          tenant_code: tenantCode.trim(),
           tenant_name: tenantName.trim(),
         })
       )
@@ -117,33 +111,6 @@ export function MountTenantDialog({
               {deptName}
               <span className="ml-2 text-xs text-muted-foreground">#{deptId}</span>
             </div>
-          </div>
-
-          <div>
-            <Label htmlFor="tenant_code" className="text-sm">
-              {t("bs:tenant.code", { defaultValue: "租户编码" })}{" "}
-              <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="tenant_code"
-              value={tenantCode}
-              onChange={(e) => setTenantCode(e.target.value)}
-              placeholder="e.g. finance_subsidiary"
-              maxLength={64}
-              className="mt-1"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("bs:tenant.codeRule", {
-                defaultValue: "字母开头，2-64 位字母/数字/下划线/中划线",
-              })}
-            </p>
-            {tenantCode && !codeValid && (
-              <p className="mt-1 text-xs text-red-500">
-                {t("bs:tenant.codeRule", {
-                  defaultValue: "字母开头，2-64 位字母/数字/下划线/中划线",
-                })}
-              </p>
-            )}
           </div>
 
           <div>

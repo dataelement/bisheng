@@ -57,7 +57,8 @@ export async function restoreDepartmentApi(deptId: string): Promise<any> {
 // `MountTenantRequest` on the backend; see tenant_mount.py:79.
 
 export interface MountTenantPayload {
-  tenant_code: string
+  // Optional: backend auto-generates ``t{dept_id}`` when omitted.
+  tenant_code?: string
   tenant_name: string
 }
 
