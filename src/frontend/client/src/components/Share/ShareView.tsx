@@ -1,21 +1,23 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+import AiChatMessages from '~/components/Chat/AiChatMessages';
+import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { useGetSharedMessages } from '~/hooks/queries';
 import { useLocalize, useDocumentTitle } from '~/hooks';
 import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { ShareContext } from '~/Providers';
 import { Spinner } from '~/components/svg';
-import MessagesView from './MessagesView';
-import { buildTree } from '~/utils';
 import Footer from '../Chat/Footer';
+import { toSharedChatMessages } from './shareMessageAdapters';
 
 function SharedView() {
   const localize = useLocalize();
   const { data: config } = useGetStartupConfig();
   const { shareId } = useParams();
   const { data, isLoading } = useGetSharedMessages(shareId ?? '');
-  const dataTree = data && buildTree({ messages: data.messages });
-  const messagesTree = dataTree?.length === 0 ? null : dataTree ?? null;
+  const messages = useMemo(() => toSharedChatMessages(data?.messages ?? []), [data?.messages]);
+  const hasMessages = messages.length > 0;
+  const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
 
   // configure document title
   let docTitle = '';
@@ -34,10 +36,10 @@ function SharedView() {
         <Spinner className="" />
       </div>
     );
-  } else if (data && messagesTree && messagesTree.length !== 0) {
+  } else if (data && hasMessages) {
     content = (
       <>
-        <div className="final-completion group mx-auto flex min-w-[40rem] flex-col gap-3 pb-6 pt-4 touch-desktop:max-w-3xl touch-desktop:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5">
+        <div className="final-completion group mx-auto flex w-full max-w-[800px] flex-col gap-3 px-4 pb-6 pt-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3">
           <h1 className="text-4xl font-bold">{data.title}</h1>
           <div className="border-b border-border-medium pb-6 text-base text-text-secondary">
             {new Date(data.createdAt).toLocaleDateString('en-US', {
@@ -48,7 +50,26 @@ function SharedView() {
           </div>
         </div>
 
-        <MessagesView messagesTree={messagesTree} conversationId={data.conversationId} />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
+            <AiChatMessages
+              messages={messages}
+              conversationId={data.conversationId}
+              title={data.title}
+              isLoading={false}
+              isStreaming={false}
+              hideHeaderTitle
+              hideShare
+              knowledgeChatLayout
+              contentWidthClassName="w-full max-w-[800px] mx-auto px-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3"
+              onOpenCitationPanel={onOpenCitationPanel}
+              activeCitationMessageId={activeCitationMessageId}
+              flatMode
+            />
+          </div>
+
+          {citationPanelElement}
+        </div>
       </>
     );
   } else {
@@ -67,7 +88,9 @@ function SharedView() {
       >
         <div className="transition-width relative flex h-full w-full flex-1 flex-col items-stretch overflow-hidden pt-0 dark:bg-surface-secondary">
           <div className="flex h-full flex-col text-text-primary" role="presentation">
-            {content}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {content}
+            </div>
             <div className="w-full border-t-0 pl-0 pt-2 touch-desktop:w-[calc(100%-.5rem)] touch-desktop:border-t-0 touch-desktop:border-transparent touch-desktop:pl-0 touch-desktop:pt-0 touch-desktop:dark:border-transparent">
               <Footer className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center gap-2 bg-gradient-to-t from-surface-secondary to-transparent px-2 pb-2 pt-8 text-xs text-text-secondary touch-desktop:px-[60px]" />
             </div>

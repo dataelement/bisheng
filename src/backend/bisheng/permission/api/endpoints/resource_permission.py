@@ -110,6 +110,22 @@ def _normalize_model_dict(m: dict) -> dict:
     return out
 
 
+def _is_legacy_subscription_permission_item(
+    resource_type: str,
+    item: ResourcePermissionItem,
+    binding: dict | None,
+) -> bool:
+    # Subscription/member rows are maintained outside ReBAC. Legacy code wrote
+    # active subscribers as unbound user viewer tuples; do not surface those in
+    # the explicit authorization list.
+    return (
+        resource_type in {'knowledge_space', 'channel'}
+        and item.subject_type == 'user'
+        and item.relation == 'viewer'
+        and not (binding and binding.get('model_id'))
+    )
+
+
 def _default_relation_models() -> list[dict]:
     return [
         {
@@ -572,6 +588,8 @@ async def get_resource_permissions(
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
 
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
     management_permission_ids = _management_permission_ids(resource_type)
     if management_permission_ids:
         from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
@@ -583,8 +601,6 @@ async def get_resource_permissions(
             management_permission_ids,
         )
     else:
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
         allowed = await PermissionService.check(
             user_id=login_user.user_id,
             relation='can_edit',
@@ -606,6 +622,7 @@ async def get_resource_permissions(
         if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
     }
     bindings = list(binding_map.values())
+    visible_permissions = []
     for p in permissions:
         matched = _binding_from_map(
             binding_map,
@@ -620,6 +637,10 @@ async def get_resource_permissions(
             p.model_id = matched.get('model_id')
             p.model_name = model_map.get(p.model_id, {}).get('name')
             p.include_children = matched.get('include_children')
+        if _is_legacy_subscription_permission_item(resource_type, p, matched):
+            continue
+        visible_permissions.append(p)
+    permissions = visible_permissions
     permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
     return resp_200(permissions)
 

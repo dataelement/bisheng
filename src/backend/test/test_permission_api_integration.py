@@ -14,6 +14,7 @@ from starlette.testclient import TestClient
 from bisheng.core.openfga.exceptions import FGAWriteError
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.permission.api.router import router as permission_router
+from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
 
 
 class _AdminUser:
@@ -160,6 +161,138 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 19000
         mock_has_permission.assert_awaited_once()
+
+    def test_permissions_list_reads_workflow_permissions_after_fine_grained_allow(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_has_permission, patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=7,
+                    subject_name='viewer',
+                    relation='owner',
+                ),
+            ],
+        ) as mock_get_permissions, patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['subject_id'] == 7
+        assert body['data'][0]['relation'] == 'owner'
+        mock_has_permission.assert_awaited_once()
+        mock_get_permissions.assert_awaited_once_with(
+            object_type='workflow',
+            object_id='wf-1',
+        )
+
+    def test_permissions_list_hides_legacy_subscription_viewer_tuple(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=8,
+                    subject_name='subscriber',
+                    relation='viewer',
+                ),
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=9,
+                    subject_name='manager',
+                    relation='manager',
+                ),
+            ],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/knowledge_space/1/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert [item['subject_id'] for item in body['data']] == [9]
+
+    def test_permissions_list_keeps_bound_viewer_grant(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=8,
+                    subject_name='explicit-viewer',
+                    relation='viewer',
+                ),
+            ],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 'viewer',
+                'name': '可查看',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[{
+                'key': 'knowledge_space:1:user:8:viewer:-',
+                'resource_type': 'knowledge_space',
+                'resource_id': '1',
+                'subject_type': 'user',
+                'subject_id': 8,
+                'relation': 'viewer',
+                'include_children': None,
+                'model_id': 'viewer',
+            }],
+        ):
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/knowledge_space/1/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['subject_id'] == 8
+        assert body['data'][0]['model_id'] == 'viewer'
 
     def test_permission_check_uses_permission_id_for_all_resource_types(self):
         app = _make_app(_ViewerUser)

@@ -30,7 +30,7 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceInfoResp,
     KnowledgeSpaceService,
 )
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
 
 
@@ -72,7 +72,6 @@ class DepartmentKnowledgeSpaceService:
         space_id: int,
         admin_user_ids: Iterable[int],
     ) -> None:
-        svc = KnowledgeSpaceService(request=request, login_user=login_user)
         for admin_user_id in sorted(set(int(uid) for uid in admin_user_ids if int(uid) != login_user.user_id)):
             existing = await SpaceChannelMemberDao.async_find_member(space_id, admin_user_id)
             if existing is not None:
@@ -83,20 +82,20 @@ class DepartmentKnowledgeSpaceService:
                         existing.user_role = UserRoleEnum.ADMIN
                         existing.status = MembershipStatusEnum.ACTIVE
                         await SpaceChannelMemberDao.update(existing)
-                    await svc._grant_space_membership_tuple(space_id, existing)
+                    await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
                     continue
                 if existing.user_role == UserRoleEnum.ADMIN:
                     if existing.status != MembershipStatusEnum.ACTIVE:
                         existing.status = MembershipStatusEnum.ACTIVE
                         await SpaceChannelMemberDao.update(existing)
-                    await svc._grant_space_membership_tuple(space_id, existing)
+                    await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
                     continue
                 existing.department_admin_promoted_from_role = existing.user_role.value
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
                 existing.membership_source = 'department_admin'
                 await SpaceChannelMemberDao.update(existing)
-                await svc._grant_space_membership_tuple(space_id, existing)
+                await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
                 continue
 
             member = SpaceChannelMember(
@@ -108,7 +107,53 @@ class DepartmentKnowledgeSpaceService:
                 membership_source='department_admin',
             )
             await SpaceChannelMemberDao.async_insert_member(member)
-            await svc._grant_space_membership_tuple(space_id, member)
+            await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
+
+    @classmethod
+    async def _grant_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+        try:
+            await PermissionService.authorize(
+                object_type='knowledge_space',
+                object_id=str(space_id),
+                grants=[
+                    AuthorizeGrantItem(
+                        subject_type='user',
+                        subject_id=user_id,
+                        relation='manager',
+                        include_children=False,
+                    ),
+                ],
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to write department admin manager tuple for space %s user %s: %s',
+                space_id,
+                user_id,
+                e,
+            )
+
+    @classmethod
+    async def _revoke_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+        try:
+            await PermissionService.authorize(
+                object_type='knowledge_space',
+                object_id=str(space_id),
+                revokes=[
+                    AuthorizeRevokeItem(
+                        subject_type='user',
+                        subject_id=user_id,
+                        relation='manager',
+                        include_children=False,
+                    ),
+                ],
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to delete department admin manager tuple for space %s user %s: %s',
+                space_id,
+                user_id,
+                e,
+            )
 
     @classmethod
     async def _grant_department_members_viewer(
@@ -157,20 +202,20 @@ class DepartmentKnowledgeSpaceService:
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
-                await space_service._grant_space_membership_tuple(space_id, existing)
+                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
                 return
             if existing.user_role == UserRoleEnum.ADMIN:
                 if existing.status != MembershipStatusEnum.ACTIVE:
                     existing.status = MembershipStatusEnum.ACTIVE
                     await SpaceChannelMemberDao.update(existing)
-                await space_service._grant_space_membership_tuple(space_id, existing)
+                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
                 return
             existing.department_admin_promoted_from_role = existing.user_role.value
             existing.user_role = UserRoleEnum.ADMIN
             existing.status = MembershipStatusEnum.ACTIVE
             existing.membership_source = 'department_admin'
             await SpaceChannelMemberDao.update(existing)
-            await space_service._grant_space_membership_tuple(space_id, existing)
+            await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
             return
 
         member = SpaceChannelMember(
@@ -182,7 +227,7 @@ class DepartmentKnowledgeSpaceService:
             membership_source='department_admin',
         )
         await SpaceChannelMemberDao.async_insert_member(member)
-        await space_service._grant_space_membership_tuple(space_id, member)
+        await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
 
     @classmethod
     async def _sync_removed_admin(
@@ -203,15 +248,14 @@ class DepartmentKnowledgeSpaceService:
                 existing.department_admin_promoted_from_role = None
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
-                await space_service._revoke_space_membership_tuple(space_id, user_id, UserRoleEnum.ADMIN)
-                await space_service._grant_space_membership_tuple(space_id, existing)
+                await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
                 return
             await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-            await space_service._revoke_space_membership_tuple(space_id, user_id, existing.user_role)
+            await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
             return
         if existing.user_role == UserRoleEnum.ADMIN:
             return
-        await space_service._revoke_space_membership_tuple(space_id, user_id, UserRoleEnum.ADMIN)
+        await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
 
     @classmethod
     async def batch_create_spaces(
