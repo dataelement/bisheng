@@ -256,7 +256,12 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
     if (draftChatIds.size === 0) return;
     draftChatIds.forEach((draftId) => {
       const chat = chats[draftId];
-      const hasUserMessage = chat?.messages?.some((m) => m.isSend);
+      // Runtime-sent messages set `category: 'question'` (createSendMsg) but
+      // not `isSend`; history-fetched messages set both. Check either to cover
+      // both cases — relying on `isSend` alone misses live drafts.
+      const hasUserMessage = chat?.messages?.some(
+        (m) => m.isSend || m.category === 'question',
+      );
       if (!hasUserMessage) return;
 
       draftChatIds.delete(draftId);
