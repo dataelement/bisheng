@@ -362,7 +362,11 @@ export default function DepartmentUsersSelect({
                 {!disabled && !lockedSet.has(Number(v.value)) && (
                   <X
                     className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"
-                    onClick={() => setPicked(v)}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onChange((value || []).filter((x) => Number(x.value) !== Number(v.value)))
+                    }}
                   />
                 )}
               </span>
@@ -401,4 +405,3 @@ export default function DepartmentUsersSelect({
     </Popover>
   )
 }
-
