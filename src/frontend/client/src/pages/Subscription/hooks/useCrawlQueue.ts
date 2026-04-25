@@ -113,10 +113,9 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
             const root: any = res ?? {};
             const codeRaw = root?.status_code ?? root?.code;
             if (codeRaw && codeRaw !== 200) {
-                const code = Number(codeRaw);
                 updateItem(id, {
                     status: "failed",
-                    errorCode: [19003, 19004, 19005, 19006].includes(code) ? code : 19003,
+                    errorCode: mapCrawlError({ status_code: Number(codeRaw) }),
                 });
                 return;
             }
@@ -134,9 +133,9 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
                 }
             }
             const articles: { title: string; url: string }[] =
-                ((raw.article_links as any[] | undefined) ?? []).slice(0, 20).map(item => ({
-                    title: String(item.title ?? ""),
-                    url: String(item.url ?? url),
+                ((raw.article_links as any[] | undefined) ?? []).slice(0, 20).map(link => ({
+                    title: String(link.title ?? ""),
+                    url: String(link.url ?? url),
                 }));
             preview = { name: name || url, icon: raw.icon, articles };
         } catch (error) {
