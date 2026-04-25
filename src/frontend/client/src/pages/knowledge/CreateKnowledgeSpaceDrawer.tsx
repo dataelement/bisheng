@@ -190,7 +190,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         onOpenChange(false);
                                     }}
                                 >
-                                    {localize("com_knowledge.share")}
+                                    {localize("com_knowledge.member_management")}
                                 </Button>
                             </div>
                         </div>

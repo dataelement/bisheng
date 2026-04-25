@@ -14,6 +14,7 @@ jest.mock("~/hooks", () => ({
     const dict: Record<string, string> = {
       "com_knowledge.loading": "加载中",
       "com_knowledge.join": "加入",
+      "com_knowledge.joined": "已加入",
       "com_knowledge.space_invalid_or_deleted": "该知识空间已失效或被删除",
       "com_knowledge.collapse_drawer": "收起",
       "com_knowledge.close": "关闭",

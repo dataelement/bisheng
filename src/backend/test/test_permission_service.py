@@ -106,6 +106,31 @@ class TestPermissionServiceCheck:
         assert result is True
 
     @pytest.mark.asyncio
+    async def test_department_space_member_fallback_allows_read(self, mock_fga, mock_login_user_normal):
+        """Department-bound knowledge spaces grant implicit read to exact department members."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_evaluate_tenant_gate', new_callable=AsyncMock, return_value=(False, None)), \
+             patch.object(PermissionService, '_get_resource_creator', new_callable=AsyncMock, return_value=99), \
+             patch.object(PermissionService, '_implicit_dept_admin_covers', new_callable=AsyncMock, return_value=False), \
+             patch.object(PermissionService, '_implicit_department_space_member_level',
+                          new_callable=AsyncMock, return_value='can_read'), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_check',
+                   new_callable=AsyncMock, return_value=None), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_check',
+                   new_callable=AsyncMock):
+            result = await PermissionService.check(
+                user_id=2,
+                relation='can_read',
+                object_type='knowledge_space',
+                object_id='101',
+                login_user=mock_login_user_normal,
+            )
+
+        assert result is True
+
+    @pytest.mark.asyncio
     async def test_fga_unavailable_fail_closed(self, mock_login_user_normal):
         """L5: FGA connection error → deny access."""
         from bisheng.permission.domain.services.permission_service import PermissionService

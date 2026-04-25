@@ -30,7 +30,7 @@ export default function KnowledgeSquareCard({
     const getButtonConfig = () => {
         switch (status) {
             case "joined":
-                return { text: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: isActing };
+                return { text: localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
             case "pending":
                 return { text: localize("com_knowledge.pending"), variant: "secondary" as const, disabled: true };
             case "rejected":

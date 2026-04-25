@@ -2,6 +2,7 @@ import request from "./request";
 
 export type ResourceType =
   | "knowledge_space"
+  | "knowledge_library"
   | "folder"
   | "knowledge_file"
   | "workflow"
@@ -107,13 +108,19 @@ export async function checkPermission(
   objectType: string,
   objectId: string,
   relation: string,
+  permissionIdOrConfig?: string | PermissionRequestConfig,
   config?: PermissionRequestConfig
 ): Promise<{ allowed: boolean }> {
+  const permissionId =
+    typeof permissionIdOrConfig === "string" ? permissionIdOrConfig : undefined;
+  const requestConfig =
+    typeof permissionIdOrConfig === "string" ? config : permissionIdOrConfig;
   const res = await request.post(`/api/v1/permissions/check`, {
     object_type: objectType,
     object_id: objectId,
     relation,
-  }, withPermissionRequestOptions(config));
+    permission_id: permissionId,
+  }, withPermissionRequestOptions(requestConfig));
   return unwrap(res);
 }
 

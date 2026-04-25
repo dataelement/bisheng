@@ -19,10 +19,14 @@ import {
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
+import { getGrantableRelationModels } from "~/api/permission";
+import type { RelationModel } from "~/api/permission";
 
 const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
 const PERMISSION_TAB = "permission";
+
+export type KnowledgeSpaceDialogTab = typeof SHARE_TAB | typeof MEMBERS_TAB | typeof PERMISSION_TAB;
 
 interface KnowledgeSpaceShareDialogProps {
     open: boolean;
@@ -30,6 +34,7 @@ interface KnowledgeSpaceShareDialogProps {
     resourceId: string;
     resourceName: string;
     currentUserRole?: SpaceRole | null;
+    initialTab?: KnowledgeSpaceDialogTab;
     showShareTab: boolean;
     showMembersTab?: boolean;
     showPermissionTab: boolean;
@@ -41,28 +46,63 @@ export function KnowledgeSpaceShareDialog({
     resourceId,
     resourceName,
     currentUserRole = null,
+    initialTab = MEMBERS_TAB,
     showShareTab,
     showMembersTab = false,
     showPermissionTab,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
-    const defaultTab = showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB;
-    const [activeTab, setActiveTab] = useState(defaultTab);
+    const [activeTab, setActiveTab] = useState<KnowledgeSpaceDialogTab>(initialTab);
     const [refreshKey, setRefreshKey] = useState(0);
     const [copied, setCopied] = useState(false);
     const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
     const [grantDialogOpen, setGrantDialogOpen] = useState(false);
     const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department" | "user_group">("user");
     const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
+    const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
+    const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
+
+    const resolveVisibleTab = useCallback((preferred: KnowledgeSpaceDialogTab): KnowledgeSpaceDialogTab => {
+        if (preferred === MEMBERS_TAB && showMembersTab) return MEMBERS_TAB;
+        if (preferred === PERMISSION_TAB && showPermissionTab) return PERMISSION_TAB;
+        if (preferred === SHARE_TAB && showShareTab) return SHARE_TAB;
+        if (showMembersTab) return MEMBERS_TAB;
+        if (showPermissionTab) return PERMISSION_TAB;
+        if (showShareTab) return SHARE_TAB;
+        return preferred;
+    }, [showMembersTab, showPermissionTab, showShareTab]);
 
     useEffect(() => {
         if (open) {
-            setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
+            setActiveTab(resolveVisibleTab(initialTab));
             setCopied(false);
             setCurrentSubjectType("user");
         }
-    }, [open, showMembersTab, showShareTab]);
+    }, [initialTab, open, resolveVisibleTab]);
+
+    useEffect(() => {
+        if (!open) return;
+        const nextTab = resolveVisibleTab(activeTab);
+        if (nextTab !== activeTab) {
+            setActiveTab(nextTab);
+        }
+    }, [activeTab, open, resolveVisibleTab]);
+
+    useEffect(() => {
+        if (!open) return;
+
+        setGrantableModelsLoaded(false);
+        getGrantableRelationModels("knowledge_space", resourceId)
+            .then((res) => {
+                setGrantableModels(Array.isArray(res) ? res : []);
+                setGrantableModelsLoaded(true);
+            })
+            .catch(() => {
+                setGrantableModels([]);
+                setGrantableModelsLoaded(true);
+            });
+    }, [open, resourceId]);
 
     const shareLink = useMemo(() => {
         if (typeof window === "undefined") return "";
@@ -94,10 +134,13 @@ export function KnowledgeSpaceShareDialog({
         }
     }, [localize, shareLink, showToast]);
 
-    // UI simplification: this dialog now only exposes 权限管理.
-    // The share/members tabs remain as props to keep caller logic untouched,
-    // but they are no longer surfaced as top-level tabs here.
-    const dialogTitle = `${localize("com_permission.dialog_title")} - ${resourceName}`;
+    const dialogTitle = `${
+        activeTab === MEMBERS_TAB
+            ? localize("com_knowledge.member_management")
+            : activeTab === SHARE_TAB
+                ? localize("com_knowledge.share")
+                : localize("com_permission.dialog_title")
+    } - ${resourceName}`;
 
     const sharePanel = (
         <div className="space-y-3 pt-2">
@@ -166,20 +209,20 @@ export function KnowledgeSpaceShareDialog({
                 </Button>
             </div>
 
-            {SUBJECT_TABS.map((tab) => (
-                <TabsContent
-                    key={tab.value}
-                    value={tab.value}
-                    className="mt-3 min-h-0 flex-1 p-0"
-                >
-                    <PermissionListTab
-                        resourceType="knowledge_space"
-                        resourceId={resourceId}
-                        refreshKey={refreshKey}
-                        fixedSubjectType={tab.value}
-                    />
-                </TabsContent>
-            ))}
+            <TabsContent
+                value={currentSubjectType}
+                className="mt-3 min-h-0 flex-1 p-0"
+            >
+                <PermissionListTab
+                    resourceType="knowledge_space"
+                    resourceId={resourceId}
+                    refreshKey={refreshKey}
+                    fixedSubjectType={currentSubjectType}
+                    prefetchedGrantableModels={grantableModels}
+                    prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                    skipGrantableModelsRequest
+                />
+            </TabsContent>
         </Tabs>
     );
 
@@ -202,7 +245,11 @@ export function KnowledgeSpaceShareDialog({
                     </DialogHeader>
 
                     <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        {permissionPanel}
+                        {activeTab === MEMBERS_TAB
+                            ? memberPanel
+                            : activeTab === SHARE_TAB
+                                ? sharePanel
+                                : permissionPanel}
                     </div>
                 </DialogContent>
             </Dialog>
@@ -251,6 +298,9 @@ export function KnowledgeSpaceShareDialog({
                                 resourceType="knowledge_space"
                                 resourceId={resourceId}
                                 onSuccess={handleGrantSuccess}
+                                prefetchedGrantableModels={grantableModels}
+                                prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                                skipGrantableModelsRequest
                                 fixedSubjectType={grantSubjectType}
                                 includeChildren={grantIncludeChildren}
                                 onIncludeChildrenChange={setGrantIncludeChildren}

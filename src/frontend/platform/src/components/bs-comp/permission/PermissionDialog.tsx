@@ -56,19 +56,19 @@ export function PermissionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[680px]">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-[680px]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t('dialog.title')} - {resourceName}</DialogTitle>
           <DialogDescription className="sr-only">
             {t('dialog.tabList')} / {t('dialog.tabGrant')}
           </DialogDescription>
         </DialogHeader>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="shrink-0 self-start">
             <TabsTrigger value="list">{t('dialog.tabList')}</TabsTrigger>
             <TabsTrigger value="grant">{t('dialog.tabGrant')}</TabsTrigger>
           </TabsList>
-          <TabsContent value="list">
+          <TabsContent value="list" className="min-h-0 flex-1 overflow-hidden">
             <PermissionListTab
               resourceType={resourceType}
               resourceId={resourceId}
@@ -79,7 +79,7 @@ export function PermissionDialog({
               skipGrantableModelsRequest
             />
           </TabsContent>
-          <TabsContent value="grant">
+          <TabsContent value="grant" className="min-h-0 flex-1 overflow-hidden">
             <PermissionGrantTab
               resourceType={resourceType}
               resourceId={resourceId}

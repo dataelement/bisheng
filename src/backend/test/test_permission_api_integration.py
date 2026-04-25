@@ -122,6 +122,10 @@ class TestPermissionApiIntegration:
             new_callable=AsyncMock,
             return_value='can_read',
         ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=set(),
+        ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
             new_callable=AsyncMock,
         ) as mock_authorize:
@@ -146,16 +150,98 @@ class TestPermissionApiIntegration:
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.check',
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
             new_callable=AsyncMock,
             return_value=False,
-        ) as mock_check:
+        ) as mock_has_permission:
             with TestClient(app) as client:
                 resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
                 body = resp.json()
 
         assert body['status_code'] == 19000
-        mock_check.assert_awaited_once()
+        mock_has_permission.assert_awaited_once()
+
+    def test_permission_check_uses_permission_id_for_all_resource_types(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_has_permission, patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.check',
+            new_callable=AsyncMock,
+        ) as mock_relation_check:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/check',
+                    json={
+                        'object_type': 'workflow',
+                        'object_id': 'wf-1',
+                        'relation': 'can_edit',
+                        'permission_id': 'publish_app',
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'] == {'allowed': True}
+        mock_has_permission.assert_awaited_once()
+        assert mock_has_permission.await_args.kwargs['object_type'] == 'workflow'
+        assert mock_has_permission.await_args.kwargs['object_id'] == 'wf-1'
+        assert mock_has_permission.await_args.kwargs['permission_ids'] == ['publish_app']
+        mock_relation_check.assert_not_awaited()
+
+    def test_authorize_api_requires_matching_management_permission_id(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[
+                {
+                    'id': 'viewer',
+                    'name': '可查看',
+                    'relation': 'viewer',
+                    'grant_tier': 'usage',
+                    'permissions': [],
+                    'permissions_explicit': False,
+                    'is_system': True,
+                },
+            ],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_manage',
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value={'view_app', 'edit_app'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 2,
+                            'relation': 'viewer',
+                            'model_id': 'viewer',
+                        }],
+                        'revokes': [],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 19000
+        mock_authorize.assert_not_awaited()
 
     def test_authorize_api_returns_tuple_write_error_when_fga_write_fails(self):
         app = _make_app(_AdminUser)
@@ -222,6 +308,10 @@ class TestPermissionApiIntegration:
             'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
             new_callable=AsyncMock,
             return_value='can_read',
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=set(),
         ):
             with TestClient(app) as client:
                 resp = client.get(
