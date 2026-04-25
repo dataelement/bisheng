@@ -74,6 +74,18 @@ _MANAGE_PERMISSION_BY_RESOURCE = {
 _LEGACY_REVOKE_MAX_CALLER_INDEX = 1
 _RELATION_MODELS_KEY = 'permission_relation_models_v1'
 _RELATION_MODEL_BINDINGS_KEY = 'permission_relation_model_bindings_v1'
+_PERMISSION_TEMPLATES = (
+    KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
+    APPLICATION_PERMISSION_TEMPLATE,
+    KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
+    TOOL_PERMISSION_TEMPLATE,
+)
+_RELATION_MODEL_NAME_PREFIX_PAIRS = tuple(
+    (template.get('title') or '', item.get('label') or '')
+    for template in _PERMISSION_TEMPLATES
+    for column in template.get('columns', [])
+    for item in column.get('items', [])
+)
 
 
 def _infer_grant_tier_from_relation(relation: str) -> str:
@@ -94,8 +106,17 @@ def _validate_tier_relation(grant_tier: str, relation: str) -> bool:
     return False
 
 
+def _normalize_relation_model_name(name: str | None) -> str:
+    text = (name or '').strip()
+    for title, label in _RELATION_MODEL_NAME_PREFIX_PAIRS:
+        if title and label and text == f'{title}{label}':
+            return label
+    return text
+
+
 def _normalize_model_dict(m: dict) -> dict:
     out = dict(m)
+    out['name'] = _normalize_relation_model_name(out.get('name'))
     gt = out.get('grant_tier')
     if gt not in _GRANT_TIER_VALUES:
         out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
@@ -616,7 +637,7 @@ async def get_resource_permissions(
         object_id=resource_id,
     )
     models = await _get_relation_models()
-    model_map = {m['id']: m for m in models}
+    model_map = {m['id']: _normalize_model_dict(m) for m in models}
     binding_map = {
         b.get('key'): b for b in await _get_bindings()
         if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
@@ -711,7 +732,7 @@ async def create_relation_model(
     model_id = f'custom_{uuid.uuid4().hex[:8]}'
     models.append({
         'id': model_id,
-        'name': request.name.strip(),
+        'name': _normalize_relation_model_name(request.name),
         'relation': request.relation,
         'grant_tier': _infer_grant_tier_from_relation(request.relation),
         'permissions': request.permissions or [],
@@ -736,7 +757,7 @@ async def update_relation_model(
         if m.get('id') != model_id:
             continue
         if request.name is not None:
-            m['name'] = request.name.strip()
+            m['name'] = _normalize_relation_model_name(request.name)
         if request.permissions is not None:
             m['permissions'] = request.permissions
             m['permissions_explicit'] = True

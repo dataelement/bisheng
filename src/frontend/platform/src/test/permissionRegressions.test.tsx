@@ -299,6 +299,35 @@ describe("Relation model regressions", () => {
     });
   });
 
+  it("shows relation-model template editing guidance before the selector", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "viewer",
+        name: "可查看",
+        relation: "viewer",
+        grant_tier: "usage",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetKnowledgeSpacePermissionTemplateApi.mockResolvedValue({
+      title: "知识空间模块",
+      columns: [
+        {
+          title: "空间级",
+          items: [
+            { id: "view_space", label: "查看空间", relation: "can_read" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expect(screen.getByText("system.relationModelSelectTemplateHint")).toBeInTheDocument();
+  });
+
   it("renders the knowledge-space section from the backend template source of truth", async () => {
     mockedGetRelationModelsApi.mockResolvedValue([
       {
