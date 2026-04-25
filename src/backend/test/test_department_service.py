@@ -187,6 +187,58 @@ def _create_user(session, user_name):
 
 class TestCreateDepartment:
 
+    @pytest.mark.asyncio
+    async def test_service_sets_local_external_id_to_dept_id(self):
+        """Local department rows must have external_id for later org-sync match."""
+        from bisheng.department.domain.schemas.department_schema import DepartmentCreate
+        from bisheng.department.domain.services import department_service as m
+
+        parent = SimpleNamespace(id=1, path='/1/', status='active')
+        added = []
+
+        class _Rows:
+            def __init__(self, value):
+                self.value = value
+
+            def first(self):
+                return self.value
+
+        db_session = MagicMock()
+        db_session.exec = AsyncMock(side_effect=[
+            _Rows(parent),  # parent lookup
+            _Rows(None),    # duplicate-name lookup
+            _Rows(None),    # dept_id collision lookup
+        ])
+        db_session.add.side_effect = added.append
+
+        async def _flush():
+            added[-1].id = 2
+
+        db_session.flush = AsyncMock(side_effect=_flush)
+        db_session.refresh = AsyncMock()
+        db_session.commit = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session():
+            yield db_session
+
+        with patch.object(
+            m, 'get_async_db_session', fake_session,
+        ), patch.object(
+            m, '_get_dept_id_prefix', return_value='BS',
+        ), patch.object(
+            m, 'generate_dept_id', return_value='BS@child1',
+        ), patch.object(
+            m.DepartmentChangeHandler, 'execute_async', new_callable=AsyncMock,
+        ):
+            dept = await m.DepartmentService.acreate_department(
+                DepartmentCreate(name='Engineering', parent_id=1),
+                _MockLoginUser(),
+            )
+
+        assert dept.dept_id == 'BS@child1'
+        assert dept.external_id == 'BS@child1'
+
     def test_create_department_success(self, session):
         """AC-01: Create department with valid parent, verify path."""
         root = _create_root(session)
@@ -237,8 +289,8 @@ class TestGetTree:
 
         root = _create_root(session, dept_id='BS@tree_root')
         child_a = _create_child(session, root, 'BS@tree_a', 'Dept A', sort_order=2)
-        child_b = _create_child(session, root, 'BS@tree_b', 'Dept B', sort_order=1)
-        grandchild = _create_child(session, child_a, 'BS@tree_gc', 'Sub A')
+        _child_b = _create_child(session, root, 'BS@tree_b', 'Dept B', sort_order=1)
+        _grandchild = _create_child(session, child_a, 'BS@tree_gc', 'Sub A')
 
         # Add members to child_a
         uid = _create_user(session, 'tree_user')
