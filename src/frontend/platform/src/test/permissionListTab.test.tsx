@@ -78,4 +78,30 @@ describe("PermissionListTab", () => {
       "3215",
     );
   });
+
+  it("reuses prefetched grantable relation models without refetching", async () => {
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="3215"
+        refreshKey={0}
+        prefetchedGrantableModels={[
+          {
+            id: "viewer",
+            name: "Viewer",
+            relation: "viewer",
+            permissions: [],
+            is_system: true,
+          },
+        ] as any}
+        prefetchedGrantableModelsLoaded
+        skipGrantableModelsRequest
+      />,
+    );
+
+    await screen.findByText("Alice");
+
+    expect(mockedGetGrantableRelationModelsApi).not.toHaveBeenCalled();
+    expect(mockedGetResourcePermissions).toHaveBeenCalledTimes(1);
+  });
 });

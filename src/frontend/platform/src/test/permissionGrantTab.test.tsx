@@ -87,4 +87,26 @@ describe("PermissionGrantTab", () => {
     });
     expect(screen.getByTestId("selected-model")).toHaveTextContent("manager");
   });
+
+  it("reuses prefetched grantable relation models without refetching", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="123"
+        onSuccess={vi.fn()}
+        prefetchedGrantableModels={[
+          { id: "viewer", name: "可查看", relation: "viewer", is_system: true },
+          { id: "editor", name: "可编辑", relation: "editor", is_system: true },
+        ] as any}
+        prefetchedGrantableModelsLoaded
+        skipGrantableModelsRequest
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("relation-options")).toHaveTextContent("level.viewer");
+    });
+
+    expect(mockedGetGrantableRelationModelsApi).not.toHaveBeenCalled();
+  });
 });
