@@ -35,7 +35,7 @@ import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
-import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
+import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
 
 export default function Knowledge() {
     const localize = useLocalize();
@@ -46,8 +46,8 @@ export default function Knowledge() {
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
-    const [spaceMemberDialogOpen, setSpaceMemberDialogOpen] = useState(false);
-    const [spaceMemberDialogSpace, setSpaceMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
+    const [spacePermissionDialogOpen, setSpacePermissionDialogOpen] = useState(false);
+    const [spacePermissionDialogSpace, setSpacePermissionDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -84,9 +84,9 @@ export default function Knowledge() {
         Record<string, "join" | "joined" | "pending" | "rejected">
     >({});
 
-    const openSpaceMemberDialog = (space: KnowledgeSpace) => {
-        setSpaceMemberDialogSpace(space);
-        setSpaceMemberDialogOpen(true);
+    const openSpacePermissionDialog = (space: KnowledgeSpace) => {
+        setSpacePermissionDialogSpace(space);
+        setSpacePermissionDialogOpen(true);
     };
 
     /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
@@ -586,7 +586,7 @@ export default function Knowledge() {
                     onCreateSpace={handleCreateSpace}
                     onSpaceSettings={handleSpaceSettings}
                     onManageMembers={(space) => {
-                        openSpaceMemberDialog(space);
+                        openSpacePermissionDialog(space);
                     }}
                     onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                     collapsed={sidebarCollapsed}
@@ -617,7 +617,7 @@ export default function Knowledge() {
                                 setSpaceListDrawerOpen(false);
                             }}
                             onManageMembers={(space) => {
-                                openSpaceMemberDialog(space);
+                                openSpacePermissionDialog(space);
                                 setSpaceListDrawerOpen(false);
                             }}
                             onKnowledgeSquare={() => {
@@ -787,14 +787,19 @@ export default function Knowledge() {
                 onViewSpace={() => setShowCreateDrawer(false)}
                 onManageMembers={() => {
                     setShowCreateDrawer(false);
-                    if (activeSpace) openSpaceMemberDialog(activeSpace);
+                    if (activeSpace) openSpacePermissionDialog(activeSpace);
                 }}
             />
 
-            <KnowledgeSpaceMemberDialog
-                open={spaceMemberDialogOpen}
-                onOpenChange={setSpaceMemberDialogOpen}
-                space={spaceMemberDialogSpace}
+            <KnowledgeSpaceShareDialog
+                open={spacePermissionDialogOpen}
+                onOpenChange={setSpacePermissionDialogOpen}
+                resourceId={spacePermissionDialogSpace?.id || ""}
+                resourceName={spacePermissionDialogSpace?.name || ""}
+                currentUserRole={spacePermissionDialogSpace?.role || null}
+                showShareTab={false}
+                showMembersTab={false}
+                showPermissionTab
             />
 
             <KnowledgeSpacePreviewDrawer

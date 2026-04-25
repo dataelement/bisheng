@@ -15,7 +15,6 @@ import {
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
-import { ChannelMemberDialog } from "~/components/ChannelMemberDialog";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -26,6 +25,7 @@ import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer"
 import { buildCreateChannelPayload } from "./channelUtils";
 import { Menu, Plus } from "lucide-react";
 import { cn } from "~/utils";
+import { ChannelShareDialog } from "./ChannelShareDialog";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -63,8 +63,8 @@ export default function Subscription() {
     const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
     /** Bumped on KeepAlive re-activation so share-preview effect re-runs (deps may be unchanged vs cached instance). */
     const [channelTabActivateEpoch, setChannelTabActivateEpoch] = useState(0);
-    const [channelMemberDialogOpen, setChannelMemberDialogOpen] = useState(false);
-    const [channelMemberDialogChannel, setChannelMemberDialogChannel] = useState<Channel | null>(null);
+    const [channelPermissionDialogOpen, setChannelPermissionDialogOpen] = useState(false);
+    const [channelPermissionDialogChannel, setChannelPermissionDialogChannel] = useState<Channel | null>(null);
     const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
@@ -72,9 +72,9 @@ export default function Subscription() {
     const queryClient = useQueryClient();
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
-    const openChannelMemberDialog = (channel: Channel) => {
-        setChannelMemberDialogChannel(channel);
-        setChannelMemberDialogOpen(true);
+    const openChannelPermissionDialog = (channel: Channel) => {
+        setChannelPermissionDialogChannel(channel);
+        setChannelPermissionDialogOpen(true);
     };
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
@@ -423,7 +423,7 @@ export default function Subscription() {
                             onChannelSquare={handleChannelSquare}
                             onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                             onManageMembers={(channel) => {
-                                openChannelMemberDialog(channel);
+                                openChannelPermissionDialog(channel);
                             }}
                             onChannelSettings={(channel) => {
                                 setEditingChannel(null);
@@ -459,7 +459,7 @@ export default function Subscription() {
                                     onChannelSquare={handleChannelSquare}
                                     onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                                     onManageMembers={(channel) => {
-                                        openChannelMemberDialog(channel);
+                                        openChannelPermissionDialog(channel);
                                     }}
                                     onChannelSettings={(channel) => {
                                         setEditingChannel(null);
@@ -560,7 +560,7 @@ export default function Subscription() {
                     }
                 }}
                 onManageMembers={(channelId) => {
-                    openChannelMemberDialog({
+                    openChannelPermissionDialog({
                         id: channelId,
                         name: "",
                         creator: "",
@@ -577,11 +577,10 @@ export default function Subscription() {
                 }}
             />
 
-            <ChannelMemberDialog
-                open={channelMemberDialogOpen}
-                onOpenChange={setChannelMemberDialogOpen}
-                channelId={channelMemberDialogChannel?.id || null}
-                currentUserRole={channelMemberDialogChannel?.role || null}
+            <ChannelShareDialog
+                open={channelPermissionDialogOpen}
+                onOpenChange={setChannelPermissionDialogOpen}
+                channel={channelPermissionDialogChannel}
             />
 
             {/* Full-screen overlay — absolute inset-0 covers the entire Subscription (including the channel sidebar), but doesn't affect MainLayout's primary navigation */}
