@@ -1,14 +1,9 @@
 """Async/sync interop helpers shared across the codebase.
 
-Centralizes ``run_async_safe`` — a small wrapper that dispatches an
-awaitable to the right event loop whether the caller is running inside
-one (FastAPI threadpool) or not (Celery worker, CLI, alembic upgrade).
-
-Before this module, four services each inlined a byte-identical copy of
-the helper (``OwnerService._run_async_safe`` and F017's
-``ResourceShareService`` / ``LLMTokenTracker`` / ``ModelCallLogger``);
-bug fixes had to land in four places. Everything new should import from
-here; the legacy copies forward to this implementation for now.
+Centralizes ``run_async_safe`` for sync callers that need one async result.
+The helper is intentionally sync-only: if a caller is already running on an
+event-loop thread, it must ``await`` the async API instead of blocking that
+same loop.
 """
 
 from __future__ import annotations
@@ -17,21 +12,56 @@ import asyncio
 from typing import Any, Awaitable
 
 
+def _close_coroutine(coro: Awaitable[Any]) -> None:
+    close = getattr(coro, 'close', None)
+    if callable(close):
+        close()
+
+
 def run_async_safe(coro: Awaitable[Any], *, timeout: float = 10) -> Any:
     """Run an async coroutine from a sync context.
 
-    - If there's already a running event loop (FastAPI threadpool worker
-      thread, nested Celery task), dispatch via ``run_coroutine_threadsafe``
-      so the coroutine runs on the main loop rather than a new one that
-      can't share aiomysql/redis connections.
-    - Otherwise (plain sync caller, no loop), spin up a short-lived loop
-      with ``asyncio.run``.
+    - FastAPI / Starlette sync endpoints run in an AnyIO worker thread; hop
+      back to the request loop with ``anyio.from_thread.run`` so async DB /
+      Redis / HTTP clients stay on the owning event loop.
+    - Plain sync callers without an AnyIO bridge use a short-lived loop.
+    - Async callers must not use this helper. Blocking a running loop while
+      scheduling work back to it deadlocks until the timeout expires.
 
     Returns the coroutine's result; propagates its exceptions.
     """
     try:
-        loop = asyncio.get_running_loop()
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result(timeout=timeout)
+        asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coro)
+        pass
+    else:
+        _close_coroutine(coro)
+        raise RuntimeError(
+            'run_async_safe cannot be called from a running event loop; '
+            'await the async API or run the sync caller in an AnyIO/FastAPI threadpool.'
+        )
+
+    try:
+        import anyio
+
+        async def _await(awaitable):
+            if timeout is None:
+                return await awaitable
+            with anyio.fail_after(timeout):
+                return await awaitable
+
+        return anyio.from_thread.run(_await, coro)
+    except RuntimeError as exc:
+        if 'AnyIO worker thread' not in str(exc):
+            _close_coroutine(coro)
+            raise
+    except Exception:
+        _close_coroutine(coro)
+        raise
+
+    async def _run_with_timeout():
+        if timeout is None:
+            return await coro
+        return await asyncio.wait_for(coro, timeout=timeout)
+
+    return asyncio.run(_run_with_timeout())

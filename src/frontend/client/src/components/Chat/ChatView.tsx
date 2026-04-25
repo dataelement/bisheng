@@ -338,7 +338,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
-                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3"
+                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={handleOpenCitationPanel}
                           activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
@@ -348,7 +348,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                       {/* Input area — moved inside the left column to be independent of sidebar */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
+                        <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-4">
                           {isLingsi ? (
                             <LinsightChatInput
                               disabled={!!shareToken}
@@ -478,7 +478,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                     {/* Input area for landing page */}
                     {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
+                      <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-4">
                         {isLingsi ? (
                           <LinsightChatInput
                             disabled={!!shareToken}
@@ -549,8 +549,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 };
 
 const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi: boolean }) => {
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const [showListFade, setShowListFade] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
@@ -591,41 +589,16 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   }
   const displayApps = dailyApps
 
-  const updateFadeState = useCallback(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const hasOverflow = el.scrollHeight > el.clientHeight + 1;
-    const hasMoreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
-    setShowListFade(hasOverflow && hasMoreBelow);
-  }, []);
-
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    updateFadeState();
-    const onScroll = () => updateFadeState();
-    el.addEventListener('scroll', onScroll, { passive: true });
-    const ro = new ResizeObserver(() => updateFadeState());
-    ro.observe(el);
-    return () => {
-      el.removeEventListener('scroll', onScroll);
-      ro.disconnect();
-    };
-  }, [displayApps, updateFadeState]);
-
   if (isLingsi || dailyApps.length === 0) return null
 
 
   return (
     <div className="relative z-10 w-full mt-4 pb-24">
-      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4 sm:px-0">
+      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
         <h2 className="text-sm text-gray-400">推荐应用</h2>
       </div>
-      <div className="relative max-w-[800px] mx-auto px-4 sm:px-0">
-        <div
-          ref={listRef}
-          className="max-h-[320px] overflow-y-auto pr-1 scrollbar-on-hover"
-        >
+      <div className="relative max-w-[800px] mx-auto px-4">
+        <div className="pr-1">
           <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3">
             {displayApps.map((appItem) => (
               <Card
@@ -667,9 +640,6 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
             ))}
           </div>
         </div>
-        {showListFade && (
-          <div className="pointer-events-none absolute inset-x-4 sm:inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/95 to-white/0" />
-        )}
       </div>
     </div>
   )

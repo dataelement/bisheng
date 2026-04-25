@@ -278,13 +278,13 @@ export function ArticleList({
     return (
         <div className="flex h-full w-full flex-1 flex-col">
             {/* header — 结构与知识空间页保持一致 */}
-            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-0 touch-mobile:pb-3">
+            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
                         {/* H5 第一行：仅展开 / 创建，与标题区分开 */}
                         <div
                             className={cn(
-                                "-mx-4 flex h-8 items-center gap-2 px-2",
+                                "flex h-8 items-center gap-2",
                                 onOpenChannelNav && onCreateChannel && "justify-between",
                                 !onOpenChannelNav && onCreateChannel && "justify-end",
                             )}

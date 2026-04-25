@@ -26,15 +26,12 @@ const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
 const PERMISSION_TAB = "permission";
 
-export type KnowledgeSpaceDialogTab = typeof SHARE_TAB | typeof MEMBERS_TAB | typeof PERMISSION_TAB;
-
 interface KnowledgeSpaceShareDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     resourceId: string;
     resourceName: string;
     currentUserRole?: SpaceRole | null;
-    initialTab?: KnowledgeSpaceDialogTab;
     showShareTab: boolean;
     showMembersTab?: boolean;
     showPermissionTab: boolean;
@@ -46,14 +43,14 @@ export function KnowledgeSpaceShareDialog({
     resourceId,
     resourceName,
     currentUserRole = null,
-    initialTab = MEMBERS_TAB,
     showShareTab,
     showMembersTab = false,
     showPermissionTab,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
-    const [activeTab, setActiveTab] = useState<KnowledgeSpaceDialogTab>(initialTab);
+    const defaultTab = showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB;
+    const [activeTab, setActiveTab] = useState(defaultTab);
     const [refreshKey, setRefreshKey] = useState(0);
     const [copied, setCopied] = useState(false);
     const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
@@ -63,31 +60,13 @@ export function KnowledgeSpaceShareDialog({
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
 
-    const resolveVisibleTab = useCallback((preferred: KnowledgeSpaceDialogTab): KnowledgeSpaceDialogTab => {
-        if (preferred === MEMBERS_TAB && showMembersTab) return MEMBERS_TAB;
-        if (preferred === PERMISSION_TAB && showPermissionTab) return PERMISSION_TAB;
-        if (preferred === SHARE_TAB && showShareTab) return SHARE_TAB;
-        if (showMembersTab) return MEMBERS_TAB;
-        if (showPermissionTab) return PERMISSION_TAB;
-        if (showShareTab) return SHARE_TAB;
-        return preferred;
-    }, [showMembersTab, showPermissionTab, showShareTab]);
-
     useEffect(() => {
         if (open) {
-            setActiveTab(resolveVisibleTab(initialTab));
+            setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
             setCopied(false);
             setCurrentSubjectType("user");
         }
-    }, [initialTab, open, resolveVisibleTab]);
-
-    useEffect(() => {
-        if (!open) return;
-        const nextTab = resolveVisibleTab(activeTab);
-        if (nextTab !== activeTab) {
-            setActiveTab(nextTab);
-        }
-    }, [activeTab, open, resolveVisibleTab]);
+    }, [open, showMembersTab, showShareTab]);
 
     useEffect(() => {
         if (!open) return;
@@ -134,13 +113,10 @@ export function KnowledgeSpaceShareDialog({
         }
     }, [localize, shareLink, showToast]);
 
-    const dialogTitle = `${
-        activeTab === MEMBERS_TAB
-            ? localize("com_knowledge.member_management")
-            : activeTab === SHARE_TAB
-                ? localize("com_knowledge.share")
-                : localize("com_permission.dialog_title")
-    } - ${resourceName}`;
+    // UI simplification: this dialog now only exposes 权限管理.
+    // The share/members tabs remain as props to keep caller logic untouched,
+    // but they are no longer surfaced as top-level tabs here.
+    const dialogTitle = `${localize("com_permission.dialog_title")} - ${resourceName}`;
 
     const sharePanel = (
         <div className="space-y-3 pt-2">
@@ -245,11 +221,7 @@ export function KnowledgeSpaceShareDialog({
                     </DialogHeader>
 
                     <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
-                        {activeTab === MEMBERS_TAB
-                            ? memberPanel
-                            : activeTab === SHARE_TAB
-                                ? sharePanel
-                                : permissionPanel}
+                        {permissionPanel}
                     </div>
                 </DialogContent>
             </Dialog>

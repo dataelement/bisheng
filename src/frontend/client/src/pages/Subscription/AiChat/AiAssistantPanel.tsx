@@ -6,7 +6,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
  *   - Channel article mode: when articleDocId is provided, uses useChannelChat
  *   - File chat mode: when fileChat is provided, uses useFileChat
  */
-import { BrushCleaningIcon, ChevronsRightIcon } from "lucide-react";
+import { BrushCleaningIcon, ChevronsRightIcon, X } from "lucide-react";
 import { useState } from "react";
 import { useRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -143,11 +143,33 @@ export function AiAssistantPanel({
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
             {showCompactMobileHeader ? (
-                <div className={`flex shrink-0 items-center justify-end px-3 py-2 ${noBorder ? '' : 'border-b border-gray-100'}`}>
-                    {clearChatControl}
+                <div className="relative flex h-11 shrink-0 items-center justify-between px-2">
+                    <Button
+                        variant="ghost"
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                        onClick={onClose}
+                        aria-label={localize("com_ui_go_back")}
+                    >
+                        <span className="text-[14px] leading-none font-semibold text-[#4E5969]">←</span>
+                    </Button>
+                    <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900">
+                        {localize("com_subscription.ai_assistant")}
+                    </h3>
+                    <div className="flex shrink-0 items-center">
+                        {clearChatControl}
+                    </div>
                 </div>
             ) : (
                 <div className={`relative flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
+                    {isH5 && (
+                        <Button
+                            variant="ghost"
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                            onClick={onClose}
+                        >
+                            <X className="size-4" />
+                        </Button>
+                    )}
                     <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 touch-desktop:pointer-events-auto touch-desktop:static touch-desktop:w-auto touch-desktop:translate-x-0 touch-desktop:text-left">
                         {localize("com_subscription.ai_assistant")}
                     </h3>

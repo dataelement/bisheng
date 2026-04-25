@@ -14,7 +14,7 @@ import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { PermissionDialog } from "~/components/permission";
 import { canOpenPermissionDialog } from "~/api/permission";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -78,9 +78,6 @@ export function KnowledgeSpaceContent({
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
-    const isPhoneViewport = useMediaQuery("(max-width: 576px)");
-    const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
-    const disableCardMode = isPhoneViewport && !canHover;
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
@@ -98,11 +95,6 @@ export function KnowledgeSpaceContent({
         localStorage.setItem("knowledge-view-mode", mode);
     };
 
-    useEffect(() => {
-        if (!disableCardMode) return;
-        if (viewMode !== "card") return;
-        setViewMode("list");
-    }, [disableCardMode, viewMode]);
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
@@ -555,7 +547,7 @@ export function KnowledgeSpaceContent({
                 onSearch={handleSearch}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
-                enableCardMode={!disableCardMode}
+                enableCardMode
                 statusFilter={statusFilter}
                 onFilterStatus={handleStatusFilter}
                 sortBy={sortBy}

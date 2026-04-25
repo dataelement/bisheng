@@ -666,7 +666,7 @@ def test_judge_qa_knowledge_write_uses_permission_service_write_sync_bridge():
     )
 
 
-def test_batch_download_files_uses_permission_service_read_sync_bridge():
+def test_batch_download_files_uses_permission_service_read_async_bridge():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     login_user = SimpleNamespace(user_id=7)
@@ -676,11 +676,13 @@ def test_batch_download_files_uses_permission_service_read_sync_bridge():
 
     with patch.object(
         service_module.KnowledgeDao,
-        'query_by_id',
+        'aquery_by_id',
+        new_callable=AsyncMock,
         return_value=knowledge,
     ), patch.object(
         KnowledgeService.permission_service,
-        'ensure_knowledge_read_sync',
+        'ensure_knowledge_read_async',
+        new_callable=AsyncMock,
     ) as mock_ensure_read, patch.object(
         service_module.KnowledgeFileDao,
         'select_list',
@@ -693,7 +695,7 @@ def test_batch_download_files_uses_permission_service_read_sync_bridge():
         result = asyncio.run(KnowledgeService.batch_download_files(login_user, 71, [101]))
 
     assert result == 'url:minio/object'
-    mock_ensure_read.assert_called_once_with(
+    mock_ensure_read.assert_awaited_once_with(
         login_user=login_user,
         owner_user_id=15,
         knowledge_id=71,

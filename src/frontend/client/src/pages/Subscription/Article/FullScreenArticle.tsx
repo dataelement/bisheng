@@ -41,14 +41,16 @@ export default function FullScreenArticle({ article, onExit, showFullScreenBtn =
                 <div className="fixed inset-0 z-50 cursor-col-resize" />
             )}
 
-            <Button
-                variant="outline"
-                size="icon"
-                className={`absolute left-4 h-8 w-8 z-10 ${isH5 ? "top-[11px]" : "top-4"}`}
-                onClick={onExit}
-            >
-                <ArrowLeftIcon className="size-4" />
-            </Button>
+            {!isH5 && (
+                <Button
+                    variant="outline"
+                    size="icon"
+                    className="absolute left-4 top-4 z-10 h-8 w-8"
+                    onClick={onExit}
+                >
+                    <ArrowLeftIcon className="size-4" />
+                </Button>
+            )}
 
             {/* Left article area */}
             {!showMobileAiOnly && (
@@ -60,6 +62,7 @@ export default function FullScreenArticle({ article, onExit, showFullScreenBtn =
                         <ArticleDetail
                             screenFull
                             aiAssistantOpen={showAiAssistant}
+                            onBack={isH5 ? onExit : undefined}
                             onAiAssistant={() => setShowAiAssistant(true)}
                             showFullScreenBtn={showFullScreenBtn}
                             onFullScreen={onExit}

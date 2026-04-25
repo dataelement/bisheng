@@ -32,7 +32,7 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
     const remark = chatState?.flow?.guide_word
 
 
-    return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-96 px-4">
+    return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-6 px-4">
         {/* 助手开场白 */}
         {remark && <MessageRemark
             readOnly={readOnly}

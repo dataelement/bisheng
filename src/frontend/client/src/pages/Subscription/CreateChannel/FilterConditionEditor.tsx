@@ -239,9 +239,9 @@ export function FilterConditionEditor({
                 </>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-0">
                 {groups.map((group, groupIndex) => (
-                    <div key={group.id} className={cn("relative pl-10 pb-1", groupIndex > 0 && "pt-2")}>
+                    <div key={group.id} className={cn("relative pl-10", groupIndex > 0 && "pt-5")}>
                         {/* 第二层：And/OR 在线的左侧，虚线包住当前组；底部小括号指向本层新增条件的加号 */}
                         {group.conditions.length > 1 && (
                             <>
@@ -285,7 +285,7 @@ export function FilterConditionEditor({
                             </>
                         )}
 
-                        <div className="pl-4 space-y-1">
+                        <div className="pl-4 space-y-2">
                             {group.conditions.map((cond, condIndex) => (
                                 <div
                                     key={cond.id}
@@ -295,7 +295,7 @@ export function FilterConditionEditor({
                                     )}
                                 >
                                     {/* 包含/不包含：外 6px 圆角，选中项内 4px 圆角 */}
-                                    <div className="mt-1 flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[2px]">
+                                    <div className="mt-1 flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-1">
                                         <button
                                             type="button"
                                             onClick={() =>

@@ -1498,6 +1498,7 @@
         "parse_xlsx_failed": "XlsxPopulate解析失败:",
         "parsing": "解析中...",
         "parsing_status": "解析中",
+        "pending": "申请中",
         "per_page": "每页",
         "pin_limit_reached": "已达置顶数量限制",
         "pin_space": "置顶空间",

@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
+from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
@@ -784,7 +785,7 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge:
             raise NotFoundError.http_exception()
         try:
-            cls.permission_service.ensure_knowledge_write_sync(
+            await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
                 owner_user_id=knowledge.user_id,
                 knowledge_id=knowledge.id,
@@ -1185,6 +1186,25 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
+    async def ajudge_knowledge_access(
+            cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType
+    ) -> Knowledge:
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        try:
+            await cls.permission_service.ensure_access_async(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+                access_type=access_type,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+        return db_knowledge
+
+    @classmethod
     def get_knowledge_chunks(
             cls,
             request: Request,
@@ -1422,6 +1442,22 @@ class KnowledgeService(KnowledgeUtils):
         return cls.get_file_share_url(file=file)
 
     @classmethod
+    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> Tuple[str, str]:
+        """Async permission-safe variant of ``get_file_share_with_auth``."""
+        file = await KnowledgeFileDao.query_by_id(file_id)
+        if not file:
+            raise NotFoundError(msg="file not found")
+        knowledge_info = await KnowledgeDao.aquery_by_id(file.knowledge_id)
+        if not knowledge_info:
+            raise NotFoundError(msg="knowledge not found")
+        await cls.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=knowledge_info.user_id,
+            knowledge_id=knowledge_info.id,
+        )
+        return await run_in_threadpool(cls.get_file_share_url, file=file)
+
+    @classmethod
     def get_file_share_url(cls, file_id: int = None, file: KnowledgeFile = None) -> Tuple[str, str]:
         """ Get the original download address of the file And Corresponding preview file download address """
         if file is None:
@@ -1500,7 +1536,12 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
 
-        target_knowlege = cls.create_knowledge_base(request, login_user, knowledge_new)
+        target_knowlege = await run_in_threadpool(
+            cls.create_knowledge_base,
+            request,
+            login_user,
+            knowledge_new,
+        )
 
         params = {
             "source_knowledge_id": knowledge.id,
@@ -1532,7 +1573,12 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowledge_new = Knowledge(**qa_knowldge_dict)
         target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
 
-        cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
+        await run_in_threadpool(
+            cls.create_knowledge_hook,
+            request,
+            login_user,
+            target_qa_knowlege,
+        )
 
         from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
         copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
@@ -1550,6 +1596,26 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError()
         try:
             cls.permission_service.ensure_knowledge_write_sync(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=qa_knowledge_id,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
+        return db_knowledge
+
+    @classmethod
+    async def ajudge_qa_knowledge_write(
+            cls, login_user: UserPayload, qa_knowledge_id: int
+    ) -> Knowledge:
+        db_knowledge = await KnowledgeDao.aquery_by_id(qa_knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError()
+        try:
+            await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
                 owner_user_id=db_knowledge.user_id,
                 knowledge_id=qa_knowledge_id,
@@ -1583,14 +1649,7 @@ class KnowledgeService(KnowledgeUtils):
         from pathlib import Path
 
         # ── 1. Permission check ──────────────────────────────────────────────────
-        knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge:
-            raise NotFoundError(msg="knowledge not found")
-        cls.permission_service.ensure_knowledge_read_sync(
-            login_user=login_user,
-            owner_user_id=knowledge.user_id,
-            knowledge_id=knowledge.id,
-        )
+        knowledge = await cls._get_readable_knowledge(login_user, knowledge_id)
 
         if not file_ids:
             raise NotFoundError(msg="file_ids must not be empty")

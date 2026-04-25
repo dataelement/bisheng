@@ -1578,6 +1578,7 @@
     "parse_xlsx_failed": "XlsxPopulate parsing failed:",
     "parsing": "Parsing...",
     "parsing_status": "Parsing",
+    "pending": "Pending",
     "per_page": "per page",
     "pin_limit_reached": "Pin limit reached",
     "pin_space": "Pin knowledge space",

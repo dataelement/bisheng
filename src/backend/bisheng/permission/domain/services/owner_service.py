@@ -6,57 +6,18 @@ INV-2: every resource must have exactly one owner tuple in OpenFGA.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Optional
 
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 
 logger = logging.getLogger(__name__)
 
 
-def _close_coroutine(coro) -> None:
-    close = getattr(coro, 'close', None)
-    if callable(close):
-        close()
-
-
 def _run_async_safe(coro, *, timeout: float = 10):
-    """Run an async coroutine from a sync context, handling event loop issues.
+    """Compatibility wrapper around the shared sync-to-async bridge."""
+    from bisheng.utils.async_utils import run_async_safe
 
-    In FastAPI threadpool threads, asyncio.run() creates a new event loop which
-    cannot share connections (aiomysql, Redis) with the main loop. This helper
-    first attempts to hop back to the request loop via AnyIO's worker-thread
-    bridge, then falls back to a standalone loop only when no bridge exists.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-        # Thread has a running loop — dispatch safely
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result(timeout=timeout)
-    except RuntimeError:
-        pass
-
-    # No running loop in this thread. Under FastAPI/Starlette sync
-    # endpoints we are usually inside an AnyIO worker thread and should
-    # hop back to the main event loop instead of creating a fresh loop.
-    try:
-        import anyio
-
-        async def _await(awaitable):
-            return await awaitable
-
-        return anyio.from_thread.run(_await, coro)
-    except RuntimeError as exc:
-        if 'AnyIO worker thread' not in str(exc):
-            _close_coroutine(coro)
-            raise
-    except Exception:
-        _close_coroutine(coro)
-        raise
-
-    # Standalone sync context without an AnyIO worker-thread bridge.
-    return asyncio.run(coro)
+    return run_async_safe(coro, timeout=timeout)
 
 
 # SpaceChannelMember role → FGA relation mapping (shared by KnowledgeSpace + Channel dual-write)

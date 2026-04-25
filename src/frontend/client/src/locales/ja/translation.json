@@ -1494,6 +1494,7 @@
     "parse_xlsx_failed": "XlsxPopulate の解析に失敗しました:",
     "parsing": "解析中...",
     "parsing_status": "解析中",
+    "pending": "申請中",
     "per_page": "毎ページ",
     "pin_limit_reached": "ピン留めの上限に達しました",
     "pin_space": "ナレッジスペースをピン留め",
