@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, List, Dict, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
@@ -76,7 +76,10 @@ class BatchDownloadReq(BaseModel):
 
 
 class ChatReq(BaseModel):
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+
     query: str = Field(..., description="User Query")
+    model_id: int = Field(..., alias="modelId", description="Selected LLM model ID")
 
 
 class ChatFolderReq(ChatReq):

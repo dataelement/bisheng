@@ -164,13 +164,13 @@ export function AiAssistantPanel({
             <AiChatInput
                 size="mini"
                 features={features}
-                disabled={isSimpleMode ? false : !bsConfig?.models?.length}
+                disabled={!bsConfig?.models?.length}
                 placeholder={localize("com_subscription.input_question_placeholder")}
                 isStreaming={isStreaming}
                 onScrollToBottom={() => { }}
-                modelOptions={isSimpleMode ? undefined : bsConfig?.models}
-                modelValue={isSimpleMode ? undefined : chatModel.id}
-                onModelChange={isSimpleMode ? undefined : (val) => {
+                modelOptions={bsConfig?.models}
+                modelValue={chatModel.id}
+                onModelChange={(val) => {
                     const model = bsConfig?.models?.find((m) => m.id === val);
                     setChatModel({
                         id: Number(val),
@@ -190,4 +190,3 @@ export function AiAssistantPanel({
         </div>
     );
 }
-

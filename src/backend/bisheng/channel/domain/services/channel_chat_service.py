@@ -19,15 +19,12 @@ from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleCha
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.channel import (
-    ArticleNotFoundError, ChannelChatConversationNotFoundError, KnowledgeSpaceLLMNotConfiguredError
-)
+from bisheng.common.errcode.channel import ArticleNotFoundError, ChannelChatConversationNotFoundError
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
-from bisheng.llm.domain.schemas import WorkbenchModelConfig
 
 # Article context prompt template
 ARTICLE_CONTEXT_PROMPT = (
@@ -88,28 +85,17 @@ class ChannelChatService:
         return session, True
 
     @classmethod
-    async def _get_chat_config(cls) -> Tuple[int, SubscriptionConfig]:
+    async def _get_chat_config(cls, selected_model_id: int) -> Tuple[int, SubscriptionConfig]:
         """
         Get chat configuration (model and prompts)
 
         Returns:
             tuple: (model_id, subscription_config)
-
-        Raises:
-            KnowledgeSpaceLLMNotConfiguredError: If knowledge_space_llm not configured
         """
-        # Get workbench LLM configuration
-        workbench_llm: WorkbenchModelConfig = await LLMService.get_workbench_llm()
-
-        if not workbench_llm or not workbench_llm.knowledge_space_llm:
-            raise KnowledgeSpaceLLMNotConfiguredError()
-
-        model_id = int(workbench_llm.knowledge_space_llm.id)
-
         # Get subscription configuration
         subscription_config = await WorkStationService.get_subscription_config()
 
-        return model_id, subscription_config
+        return selected_model_id, subscription_config
 
     @classmethod
     def _truncate_article_content(cls, content: str, max_length: int) -> str:
@@ -194,7 +180,7 @@ class ChannelChatService:
         # Create user message record
 
         # Get chat configuration
-        model_id, subscription_config = await cls._get_chat_config()
+        model_id, subscription_config = await cls._get_chat_config(data.model_id)
 
         # Get LLM instance
         bishengllm = await LLMService.get_bisheng_llm(

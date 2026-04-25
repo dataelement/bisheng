@@ -178,7 +178,7 @@ export default function FilePreviewPage() {
             {showAiAssistant && (
                 <div className="flex-1 h-full min-w-[360px] bg-white">
                     <AiAssistantPanel
-                        features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                        features={{ tools: false, modelSelect: true, knowledgeBase: false, fileUpload: false }}
                         onClose={() => setShowAiAssistant(false)}
                         noBorder
                         fileChat={spaceId && fileId ? { spaceId, fileId } : undefined}
