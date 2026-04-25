@@ -762,7 +762,7 @@ class TestLocalMemberCreate:
 
     @pytest.mark.asyncio
     async def test_create_local_member_rejects_deleted_person_id_with_restore_hint(self):
-        from bisheng.common.errcode.department import DepartmentInvalidRolesError
+        from bisheng.common.errcode.department import DepartmentPersonIdDeletedAccountError
         from bisheng.department.domain.schemas.department_schema import DepartmentLocalMemberCreate
         from bisheng.department.domain.services.department_service import DepartmentService
         from bisheng.user.domain.models import user as user_model_module
@@ -796,17 +796,67 @@ class TestLocalMemberCreate:
             'bisheng.department.domain.services.department_service.DepartmentService.aget_assignable_roles',
             new_callable=AsyncMock,
             return_value=[],
-        ), patch.object(
+        ) as assignable_roles, patch.object(
             user_model_module.UserDao, 'aget_login_candidates_by_account',
             new_callable=AsyncMock, return_value=[],
         ), patch.object(
             user_model_module.UserDao, 'aexists_disabled_login_account',
             new_callable=AsyncMock, return_value=True,
         ):
-            with pytest.raises(DepartmentInvalidRolesError) as exc:
+            with pytest.raises(DepartmentPersonIdDeletedAccountError) as exc:
                 await DepartmentService.acreate_local_member('BS@test', data, login_user)
 
         assert 'Please restore the original account' in exc.value.message
+        assignable_roles.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_local_member_reports_duplicate_person_id_before_role_validation(self):
+        from bisheng.common.errcode.department import DepartmentPersonIdDuplicateError
+        from bisheng.department.domain.schemas.department_schema import DepartmentLocalMemberCreate
+        from bisheng.department.domain.services.department_service import DepartmentService
+        from bisheng.user.domain.models import user as user_model_module
+        from bisheng.user.domain.services import user as user_service_module
+
+        dept = MagicMock()
+        dept.default_role_ids = []
+        login_user = _MockLoginUser(user_id=1, user_role=[1])
+        data = DepartmentLocalMemberCreate(
+            user_name='Alice',
+            person_id='person-001',
+            password='Aa123456!',
+            role_ids=[999],
+        )
+
+        @asynccontextmanager
+        async def fake_session():
+            yield MagicMock()
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock,
+            return_value=dept,
+        ), patch.object(
+            user_service_module.UserService, 'decrypt_password_plain',
+            return_value='Aa123456!',
+        ), patch.object(
+            user_model_module.UserDao, 'aget_login_candidates_by_account',
+            new_callable=AsyncMock, return_value=[MagicMock()],
+        ), patch.object(
+            user_model_module.UserDao, 'aexists_disabled_login_account',
+            new_callable=AsyncMock,
+        ) as disabled_lookup, patch(
+            'bisheng.department.domain.services.department_service.DepartmentService.aget_assignable_roles',
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as assignable_roles:
+            with pytest.raises(DepartmentPersonIdDuplicateError):
+                await DepartmentService.acreate_local_member('BS@test', data, login_user)
+
+        disabled_lookup.assert_not_called()
+        assignable_roles.assert_not_called()
 
 
 class TestRootDepartment:

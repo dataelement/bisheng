@@ -11,6 +11,7 @@ import secrets
 from typing import List, Optional, Set
 
 from sqlalchemy import and_, delete, func, or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from bisheng.common.errcode.department import (
@@ -29,6 +30,9 @@ from bisheng.common.errcode.department import (
     DepartmentParentArchivedError,
     DepartmentNotFoundError,
     DepartmentOpenFGAUnavailableError,
+    DepartmentPersonIdDeletedAccountError,
+    DepartmentPersonIdDuplicateError,
+    DepartmentPersonIdRequiredError,
     DepartmentPermissionDeniedError,
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
@@ -1260,6 +1264,14 @@ class DepartmentService:
         if not _password_meets_prd_policy(plain):
             raise DepartmentInvalidPasswordError()
 
+        person_id = (data.person_id or '').strip()
+        if not person_id:
+            raise DepartmentPersonIdRequiredError()
+        if await UserDao.aget_login_candidates_by_account(person_id):
+            raise DepartmentPersonIdDuplicateError()
+        if await UserDao.aexists_disabled_login_account(person_id):
+            raise DepartmentPersonIdDeletedAccountError()
+
         assignable = await cls.aget_assignable_roles(dept_id, login_user)
         allowed_ids = {r['id'] for r in assignable}
         explicit_ids = [int(x) for x in (data.role_ids or [])]
@@ -1271,16 +1283,6 @@ class DepartmentService:
         if AdminRole in final_role_ids or not set(final_role_ids).issubset(allowed_ids):
             raise DepartmentInvalidRolesError()
 
-        person_id = (data.person_id or '').strip()
-        if not person_id:
-            raise DepartmentInvalidRolesError(msg='Person ID is required')
-        if await UserDao.aget_login_candidates_by_account(person_id):
-            raise DepartmentInvalidRolesError(msg='Person ID already exists')
-        if await UserDao.aexists_disabled_login_account(person_id):
-            raise DepartmentInvalidRolesError(
-                msg='Person ID already belongs to a deleted account. Please restore the original account.',
-            )
-
         pwd_hash = md5_hash(plain)
         user = User(
             user_name=data.user_name,
@@ -1288,9 +1290,12 @@ class DepartmentService:
             source='local',
             external_id=person_id,
         )
-        user = UserDao.add_user_with_groups_and_roles(
-            user, [], final_role_ids,
-        )
+        try:
+            user = UserDao.add_user_with_groups_and_roles(
+                user, [], final_role_ids,
+            )
+        except IntegrityError:
+            raise DepartmentPersonIdDuplicateError() from None
         await LegacyRBACSyncService.sync_user_auth_created(
             user.user_id,
             final_role_ids,
@@ -1508,7 +1513,7 @@ class DepartmentService:
     ) -> None:
         """删除本地人员账号：清部门关系、角色（保留超管）、用户组，软删用户。"""
         from bisheng.database.constants import AdminRole
-        from bisheng.user.domain.models.user import User, UserDao
+        from bisheng.user.domain.models.user import User
         from bisheng.user.domain.models.user_role import UserRole
         from bisheng.database.models.user_group import UserGroup
 
