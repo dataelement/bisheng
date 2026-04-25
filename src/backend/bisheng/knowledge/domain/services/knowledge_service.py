@@ -1064,12 +1064,13 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
 
         extra_file_ids = None
-        all_tags = await TagDao.asearch_tags(file_name, business_type=TagBusinessTypeEnum.KNOWLEDGE,
-                                             business_id=str(knowledge_id))
-        if all_tags:
-            tag_ids = [one.id for one in all_tags]
-            extra_file_ids = await TagDao.aget_resources_by_tags(tag_ids, resource_type=ResourceTypeEnum.KNOWLEDGE_FILE)
-            if extra_file_ids:
+        if file_name:
+            all_tags = await TagDao.asearch_tags(file_name, business_type=TagBusinessTypeEnum.KNOWLEDGE,
+                                                 business_id=str(knowledge_id))
+            if all_tags:
+                tag_ids = [one.id for one in all_tags]
+                extra_file_ids = await TagDao.aget_resources_by_tags(tag_ids,
+                                                                     resource_type=ResourceTypeEnum.KNOWLEDGE_FILE)
                 extra_file_ids = [int(one.id) for one in extra_file_ids]
 
         res = await KnowledgeFileDao.aget_file_by_filters(
