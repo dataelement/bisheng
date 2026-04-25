@@ -15,7 +15,10 @@ from bisheng.common.errcode.tenant import (
     TenantNotFoundError,
     TenantSwitchForbiddenError,
 )
-from bisheng.common.errcode.tenant_tree import TenantTreeRootProtectedError
+from bisheng.common.errcode.tenant_tree import (
+    TenantArchivedNotResumableError,
+    TenantTreeRootProtectedError,
+)
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.audit_log import AuditLogDao
@@ -140,12 +143,19 @@ class TenantService:
         tenant_ids = [t.id for t in tenants]
         user_counts = await TenantDao.acount_tenant_users_batch(tenant_ids)
 
+        # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
+        # operators see the original code in the tenant list. The stored value
+        # only carries the suffix to keep the UNIQUE index on tenant_code free
+        # for a remount under the same code (see ``archived_tenant_code``).
+        from bisheng.tenant.domain.services.tenant_mount_service import (
+            display_tenant_code,
+        )
         items = []
         for t in tenants:
             items.append(TenantListItem(
                 id=t.id,
                 tenant_name=t.tenant_name,
-                tenant_code=t.tenant_code,
+                tenant_code=display_tenant_code(t.tenant_code),
                 logo=t.logo,
                 status=t.status,
                 user_count=user_counts.get(t.id, 0),
@@ -166,10 +176,13 @@ class TenantService:
         user_count = await TenantDao.acount_tenant_users(tenant_id)
         admin_users = await cls._get_tenant_admin_users(tenant_id)
 
+        from bisheng.tenant.domain.services.tenant_mount_service import (
+            display_tenant_code,
+        )
         detail = TenantDetail(
             id=tenant.id,
             tenant_name=tenant.tenant_name,
-            tenant_code=tenant.tenant_code,
+            tenant_code=display_tenant_code(tenant.tenant_code),
             logo=tenant.logo,
             status=tenant.status,
             user_count=user_count,
@@ -219,6 +232,11 @@ class TenantService:
             prior = await TenantDao.aget_by_id(tenant_id)
         if not prior:
             raise TenantNotFoundError()
+        # ``archived`` is terminal — see TenantArchivedNotResumableError.
+        # Without this guard, the frontend's "enable" button silently brings
+        # an unmounted tenant back to ``active`` with no mount point.
+        if prior.status == 'archived' and data.status != 'archived':
+            raise TenantArchivedNotResumableError()
         became_disabled = (
             prior.status != 'disabled' and data.status == 'disabled'
         )

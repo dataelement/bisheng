@@ -213,29 +213,38 @@ export default function TenantPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <button
-                      className="text-primary hover:underline text-sm"
-                      onClick={() => {
-                        setEditTenant(tenant);
-                        setCreateOpen(true);
-                      }}
-                    >
-                      {t("edit")}
-                    </button>
-                    <button
-                      className="text-primary hover:underline text-sm"
-                      onClick={() => setQuotaDialogTenant(tenant)}
-                    >
-                      {t("tenant.quota")}
-                    </button>
-                    <button
-                      className="text-primary hover:underline text-sm"
-                      onClick={() => handleToggleStatus(tenant)}
-                    >
-                      {tenant.status === "active"
-                        ? t("tenant.disable")
-                        : t("tenant.enable")}
-                    </button>
+                    {/* archived = terminal post-unmount state. The row is
+                        read-only: no edit / quota / toggle, only physical
+                        delete. Treating archived as "non-active and therefore
+                        enable-able" was the bug that resurrected unmounted
+                        tenants with no mount point. */}
+                    {tenant.status !== "archived" && (
+                      <>
+                        <button
+                          className="text-primary hover:underline text-sm"
+                          onClick={() => {
+                            setEditTenant(tenant);
+                            setCreateOpen(true);
+                          }}
+                        >
+                          {t("edit")}
+                        </button>
+                        <button
+                          className="text-primary hover:underline text-sm"
+                          onClick={() => setQuotaDialogTenant(tenant)}
+                        >
+                          {t("tenant.quota")}
+                        </button>
+                        <button
+                          className="text-primary hover:underline text-sm"
+                          onClick={() => handleToggleStatus(tenant)}
+                        >
+                          {tenant.status === "active"
+                            ? t("tenant.disable")
+                            : t("tenant.enable")}
+                        </button>
+                      </>
+                    )}
                     {tenant.status !== "active" && (
                       <button
                         className="text-red-500 hover:underline text-sm"

@@ -24,13 +24,45 @@ from bisheng.common.errcode.tenant_tree import (
     TenantTreeNestingForbiddenError,
     TenantTreeRootDeptMountError,
 )
+import time
+
 from sqlalchemy import update as sa_update
 
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao
 from bisheng.tenant.domain.constants import TenantAuditAction
+
+# When a Child is unmounted we keep the row for audit (status=archived) but
+# free up ``tenant_code`` so the same code can be remounted. Renaming with a
+# deterministic, unique-by-timestamp suffix preserves the link from audit_log
+# to the tenant id while side-stepping the UNIQUE index. Format chosen so the
+# original code is trivially recoverable (split on ``ARCHIVED_CODE_SEPARATOR``).
+ARCHIVED_CODE_SEPARATOR = '#archived#'
+
+
+def archived_tenant_code(original_code: str) -> str:
+    """Build an archive-suffixed tenant_code, e.g. ``keji#archived#1745601234``.
+
+    Idempotent: passing an already-archived code is a no-op so retrying
+    the unmount path doesn't double-suffix.
+    """
+    if ARCHIVED_CODE_SEPARATOR in original_code:
+        return original_code
+    return f'{original_code}{ARCHIVED_CODE_SEPARATOR}{int(time.time())}'
+
+
+def display_tenant_code(stored_code: str) -> str:
+    """Strip the archive suffix from ``stored_code`` for UI/audit display.
+
+    Mirror of :func:`archived_tenant_code` — pass any tenant_code and get
+    back the operator-facing string. Active rows are returned unchanged.
+    """
+    if not stored_code or ARCHIVED_CODE_SEPARATOR not in stored_code:
+        return stored_code
+    return stored_code.split(ARCHIVED_CODE_SEPARATOR, 1)[0]
 
 logger = logging.getLogger(__name__)
 
@@ -405,10 +437,38 @@ class TenantMountService:
         migrated_counts = await cls._migrate_child_resources_to_root(
             child_tenant_id,
         )
-        # 2. Archive the (now empty) Child so the record survives for audit
-        await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-        # 3. 清挂载点（is_tenant_root=False, mounted_tenant_id=NULL）
-        await DepartmentDao.aunset_mount(dept_id)
+
+        # 2 + 3 in one transaction: archive the Child + free up tenant_code
+        # via #archived#<ts> suffix + clear dept mount flag. Pre-fix split
+        # these into independent commits — if step 3 succeeded but step 2
+        # didn't (or vice versa) the dept and tenant ended up in
+        # inconsistent states. Now they commit or roll back together.
+        # The code-renaming is what lets ``mount_child`` reuse the original
+        # code on a future remount without 1062 — UNIQUE on tenant_code stays
+        # intact while the audit row is preserved with id unchanged.
+        existing_tenant = await TenantDao.aget_by_id(child_tenant_id)
+        new_archived_code = (
+            archived_tenant_code(existing_tenant.tenant_code)
+            if existing_tenant is not None
+            else None
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                if new_archived_code is not None:
+                    await session.execute(
+                        sa_update(Tenant)
+                        .where(Tenant.id == child_tenant_id)
+                        .values(
+                            status='archived',
+                            tenant_code=new_archived_code,
+                        )
+                    )
+                await session.execute(
+                    sa_update(Department)
+                    .where(Department.id == dept_id)
+                    .values(is_tenant_root=0, mounted_tenant_id=None)
+                )
+                await session.commit()
 
         # F017 hook: revoke the ``tenant:{child}#shared_to → tenant:{root}``
         # tuple + the Child-scoped tenant-level tuples before we write the
