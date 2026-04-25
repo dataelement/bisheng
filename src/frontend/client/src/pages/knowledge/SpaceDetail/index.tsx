@@ -1,7 +1,14 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
+import { FolderPlus } from "lucide-react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "~/components/ui/DropdownMenu";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { ALLOWED_EXTENSIONS, DEFAULT_MAX_FILE_SIZE_MB, triggerUrlDownload } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -13,6 +20,7 @@ import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { useLocalize } from "~/hooks";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -95,6 +103,8 @@ export function KnowledgeSpaceContent({
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+    const [contextMenuOpen, setContextMenuOpen] = useState(false);
+    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
     // Card view: compute columns by *container width* (not viewport width).
     // Thresholds (container width):
@@ -153,6 +163,7 @@ export function KnowledgeSpaceContent({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+    const canUseAddActions = isAdmin && !isSearching;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -167,6 +178,22 @@ export function KnowledgeSpaceContent({
 
     const triggerUpload = () => {
         fileInputRef.current?.click();
+    };
+
+    useEffect(() => {
+        if (!canUseAddActions) {
+            setContextMenuOpen(false);
+        }
+    }, [canUseAddActions]);
+
+    const handleContentContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+        if (!canUseAddActions) return;
+        const target = e.target;
+        if (target instanceof Element && target.closest("[data-knowledge-file-item]")) return;
+
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuOpen(true);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -493,7 +520,27 @@ export function KnowledgeSpaceContent({
 
             {/* Content Container (Scrollable) */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+                <div
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white"
+                    onContextMenu={handleContentContextMenu}
+                >
+                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-hidden="true"
+                                tabIndex={-1}
+                                className="fixed size-0 opacity-0"
+                                style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                            />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
+                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                <FolderPlus className="mr-2 size-4" />
+                                {localize("com_knowledge.new_folder")}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     {displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
@@ -521,22 +568,23 @@ export function KnowledgeSpaceContent({
                                 style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
                             >
                                 {displayFiles.map((file) => (
-                                    <FileCard
-                                        key={file.id}
-                                        file={file}
-                                        userRole={space.role}
-                                        isSelected={selectedFiles.has(file.id)}
-                                        onSelect={(selected) => handleSelectFile(file.id, selected)}
-                                        onDownload={() => handleSingleDownload(file.id)}
-                                        onRename={(newName) => onRenameFile(file.id, newName)}
-                                        onDelete={() => handleDelete(file.id)}
-                                        onEditTags={() => handleOpenEditTags(file.id)}
-                                        onRetry={() => handleSingleRetry(file.id)}
-                                        onNavigateFolder={() => onNavigateFolder(file.id)}
-                                        onPreview={handlePreviewFile}
-                                        onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
-                                        onCancelCreate={onCancelCreateFolder}
-                                    />
+                                    <div key={file.id} data-knowledge-file-item>
+                                        <FileCard
+                                            file={file}
+                                            userRole={space.role}
+                                            isSelected={selectedFiles.has(file.id)}
+                                            onSelect={(selected) => handleSelectFile(file.id, selected)}
+                                            onDownload={() => handleSingleDownload(file.id)}
+                                            onRename={(newName) => onRenameFile(file.id, newName)}
+                                            onDelete={() => handleDelete(file.id)}
+                                            onEditTags={() => handleOpenEditTags(file.id)}
+                                            onRetry={() => handleSingleRetry(file.id)}
+                                            onNavigateFolder={() => onNavigateFolder(file.id)}
+                                            onPreview={handlePreviewFile}
+                                            onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
+                                            onCancelCreate={onCancelCreateFolder}
+                                        />
+                                    </div>
                                 ))}
                             </div>
                         </div>
