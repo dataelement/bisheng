@@ -19,8 +19,9 @@ from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (assistant_router_rpc, chat_router_rpc,
-                                               knowledge_router_rpc, workflow_router_rpc,
-                                               filelib_router_rpc, flow_router_rpc)
+                                               citation_router_rpc, knowledge_router_rpc,
+                                               workflow_router_rpc, filelib_router_rpc,
+                                               flow_router_rpc)
 from bisheng.department.api.router import router as department_router
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.permission.api.router import router as permission_router
@@ -83,3 +84,4 @@ router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)
 router_rpc.include_router(llm_router_rpc)
 router_rpc.include_router(flow_router_rpc)
+router_rpc.include_router(citation_router_rpc)
