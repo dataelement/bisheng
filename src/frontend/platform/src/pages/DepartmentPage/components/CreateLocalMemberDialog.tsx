@@ -1,6 +1,6 @@
 import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
+import MultiSelect from "@/components/bs-ui/select/multi"
 import { Input, PasswordInput } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { toast } from "@/components/bs-ui/toast/use-toast"
@@ -49,15 +49,6 @@ export function CreateLocalMemberDialog({
     setSelected(new Set())
     loadRoles()
   }, [loadRoles])
-
-  const toggleRole = (id: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   const handleSubmit = async () => {
     if (!userName.trim()) {
@@ -141,31 +132,34 @@ export function CreateLocalMemberDialog({
             <p className="mt-1 text-xs text-muted-foreground">
               {t("bs:department.assignRolesOptionalHint")}
             </p>
-            <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded border p-2">
-              {roles.length === 0 ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">{t("build.empty")}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("bs:department.assignRolesEmptyHint")}
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7"
-                    onClick={loadRoles}
-                  >
-                    {t("bs:department.refreshRoles")}
-                  </Button>
-                </div>
-              ) : (
-                roles.map((r) => (
-                  <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                    <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRole(r.id)} />
-                    <span>{r.role_name}</span>
-                  </label>
-                ))
-              )}
-            </div>
+            {roles.length === 0 ? (
+              <div className="mt-2 space-y-2">
+                <p className="text-sm text-muted-foreground">{t("build.empty")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("bs:department.assignRolesEmptyHint")}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7"
+                  onClick={loadRoles}
+                >
+                  {t("bs:department.refreshRoles")}
+                </Button>
+              </div>
+            ) : (
+              <MultiSelect
+                multiple
+                className="mt-2"
+                options={roles.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+                value={Array.from(selected).map(String)}
+                onChange={(vals) =>
+                  setSelected(new Set((vals as string[]).map((id) => Number(id))))
+                }
+                placeholder={t("bs:department.multiSelectRolesPlaceholder")}
+                searchPlaceholder={t("system.searchRoles")}
+              />
+            )}
           </div>
         </div>
         <DialogFooter>

@@ -22,26 +22,43 @@ from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+from bisheng.database.models.department import DepartmentDao
 from bisheng.user.domain.models.user import UserDao, User
+from bisheng.user.domain.services.auth import LoginUser
 
 
 # todo change to async or submit thread pool
 class AuditLogService:
 
     @classmethod
+    async def _user_has_log_web_menu(cls, user: UserPayload) -> bool:
+        """角色 / 部门管理员合并后的 web_menu 含 ``log``（审计页）时允许使用审计 API。"""
+        db_user = await UserDao.aget_user(user.user_id)
+        if not db_user:
+            return False
+        is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
+        _, web_menu = await LoginUser.get_roles_web_menu(
+            db_user, is_department_admin=is_department_admin
+        )
+        return 'log' in set(web_menu)
+
+    @classmethod
     async def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
                             system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
-            # Not an administrator of any user groups
-            if not groups:
-                return UnAuthorizedError.return_resp()
-            # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
-            if group_ids:
-                groups = list(set(groups) & set(group_ids))
+            if await cls._user_has_log_web_menu(login_user):
+                groups = group_ids
+            else:
+                groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+                # Not an administrator of any user groups
                 if not groups:
                     return UnAuthorizedError.return_resp()
+                # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
+                if group_ids:
+                    groups = list(set(groups) & set(group_ids))
+                    if not groups:
+                        return UnAuthorizedError.return_resp()
 
         data, total = await AuditLogDao.get_audit_logs(groups, operator_ids, start_time, end_time,
                                                        system_id,
@@ -50,13 +67,13 @@ class AuditLogService:
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
-    def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
-        groups = []
+    async def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
+        groups: List[int] = []
         if not login_user.is_admin():
-            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
-            # not any group admin
-            if not groups:
-                raise UnAuthorizedError()
+            if not await cls._user_has_log_web_menu(login_user):
+                groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+                if not groups:
+                    raise UnAuthorizedError()
 
         data = AuditLogDao.get_all_operators(groups)
         res = {}
@@ -610,11 +627,12 @@ class AuditLogService:
         flow_ids = [one for one in flow_ids]
         group_admins = []
         if not user.is_admin():
-            user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
-            # Not a user group administrator, no permissions
-            if not user_groups:
-                raise UnAuthorizedError.http_exception()
-            group_admins = [one.group_id for one in user_groups]
+            if not await cls._user_has_log_web_menu(user):
+                user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
+                # Not a user group administrator, no permissions
+                if not user_groups:
+                    raise UnAuthorizedError.http_exception()
+                group_admins = [one.group_id for one in user_groups]
         # GroupingidDoing Intersections
         if group_ids:
             if group_admins:
@@ -655,11 +673,11 @@ class AuditLogService:
                                feedback: str, sensitive_status: int, page: int, page_size: int) -> Tuple[
         List[AppChatList], int]:
 
-        if user.is_admin():
-            # Administrator: The frontend sends out what it needs to retrieve; if nothing is sent, it retrieves all (an empty list usually means there are no restrictions or the decision is made by the business logic in subsequent logic).
+        if user.is_admin() or await cls._user_has_log_web_menu(user):
+            # Administrator, or 角色中开启「审计」菜单：与超管同级的会话列表范围（可筛选用户组，不传则不过滤组）
             search_group_ids = group_ids or []
         else:
-            # Regular users: Administrative privileges must be verified
+            # Regular users: 用户组管理员，仅能看所管组内会话
             user_managed_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
             if not user_managed_groups:
                 raise UnAuthorizedError.http_exception()
