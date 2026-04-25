@@ -19,6 +19,8 @@ import {
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
+import { getGrantableRelationModels } from "~/api/permission";
+import type { RelationModel } from "~/api/permission";
 
 const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
@@ -55,6 +57,8 @@ export function KnowledgeSpaceShareDialog({
     const [grantDialogOpen, setGrantDialogOpen] = useState(false);
     const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department" | "user_group">("user");
     const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
+    const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
+    const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -63,6 +67,21 @@ export function KnowledgeSpaceShareDialog({
             setCurrentSubjectType("user");
         }
     }, [open, showMembersTab, showShareTab]);
+
+    useEffect(() => {
+        if (!open) return;
+
+        setGrantableModelsLoaded(false);
+        getGrantableRelationModels("knowledge_space", resourceId)
+            .then((res) => {
+                setGrantableModels(Array.isArray(res) ? res : []);
+                setGrantableModelsLoaded(true);
+            })
+            .catch(() => {
+                setGrantableModels([]);
+                setGrantableModelsLoaded(true);
+            });
+    }, [open, resourceId]);
 
     const shareLink = useMemo(() => {
         if (typeof window === "undefined") return "";
@@ -166,20 +185,20 @@ export function KnowledgeSpaceShareDialog({
                 </Button>
             </div>
 
-            {SUBJECT_TABS.map((tab) => (
-                <TabsContent
-                    key={tab.value}
-                    value={tab.value}
-                    className="mt-3 min-h-0 flex-1 p-0"
-                >
-                    <PermissionListTab
-                        resourceType="knowledge_space"
-                        resourceId={resourceId}
-                        refreshKey={refreshKey}
-                        fixedSubjectType={tab.value}
-                    />
-                </TabsContent>
-            ))}
+            <TabsContent
+                value={currentSubjectType}
+                className="mt-3 min-h-0 flex-1 p-0"
+            >
+                <PermissionListTab
+                    resourceType="knowledge_space"
+                    resourceId={resourceId}
+                    refreshKey={refreshKey}
+                    fixedSubjectType={currentSubjectType}
+                    prefetchedGrantableModels={grantableModels}
+                    prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                    skipGrantableModelsRequest
+                />
+            </TabsContent>
         </Tabs>
     );
 
@@ -251,6 +270,9 @@ export function KnowledgeSpaceShareDialog({
                                 resourceType="knowledge_space"
                                 resourceId={resourceId}
                                 onSuccess={handleGrantSuccess}
+                                prefetchedGrantableModels={grantableModels}
+                                prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                                skipGrantableModelsRequest
                                 fixedSubjectType={grantSubjectType}
                                 includeChildren={grantIncludeChildren}
                                 onIncludeChildrenChange={setGrantIncludeChildren}

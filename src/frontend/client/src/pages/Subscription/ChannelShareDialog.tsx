@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel, ChannelRole, getChannelDetailApi } from "~/api/channels";
-import { canOpenPermissionDialog } from "~/api/permission";
+import { canOpenPermissionDialog, getGrantableRelationModels } from "~/api/permission";
+import type { RelationModel } from "~/api/permission";
 import { ChannelMemberManagementPanel } from "~/components/ChannelMemberManagementPanel";
 import { PermissionGrantTab, PermissionListTab } from "~/components/permission";
 import {
@@ -44,6 +45,8 @@ export function ChannelShareDialog({
     const [activeTab, setActiveTab] = useState<ChannelShareTab>(initialTab);
     const [copied, setCopied] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
+    const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
 
     const { data: channelDetail } = useQuery({
         queryKey: ["channelShareDialogDetail", channel?.id],
@@ -93,6 +96,21 @@ export function ChannelShareDialog({
             setActiveTab(nextTab);
         }
     }, [activeTab, open, resolveVisibleTab]);
+
+    useEffect(() => {
+        if (!open || !channel?.id) return;
+
+        setGrantableModelsLoaded(false);
+        getGrantableRelationModels("channel", channel.id)
+            .then((res) => {
+                setGrantableModels(Array.isArray(res) ? res : []);
+                setGrantableModelsLoaded(true);
+            })
+            .catch(() => {
+                setGrantableModels([]);
+                setGrantableModelsLoaded(true);
+            });
+    }, [channel?.id, open]);
 
     const shareLink = useMemo(() => {
         if (!channel?.id || typeof window === "undefined") return "";
@@ -180,6 +198,9 @@ export function ChannelShareDialog({
                     resourceType="channel"
                     resourceId={channel.id}
                     refreshKey={refreshKey}
+                    prefetchedGrantableModels={grantableModels}
+                    prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                    skipGrantableModelsRequest
                 />
             </TabsContent>
             <TabsContent value="grant" className="p-0">
@@ -187,6 +208,9 @@ export function ChannelShareDialog({
                     resourceType="channel"
                     resourceId={channel.id}
                     onSuccess={handleGrantSuccess}
+                    prefetchedGrantableModels={grantableModels}
+                    prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                    skipGrantableModelsRequest
                 />
             </TabsContent>
         </>

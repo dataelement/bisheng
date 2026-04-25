@@ -37,15 +37,28 @@ interface PermissionListTabProps {
   resourceType: ResourceType;
   resourceId: string;
   refreshKey: number;
+  prefetchedGrantableModels?: RelationModel[];
+  prefetchedGrantableModelsLoaded?: boolean;
+  skipGrantableModelsRequest?: boolean;
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the list to the given subject type.
   fixedSubjectType?: ListSubjectType;
 }
 
+const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: "owner", name: "所有者", relation: "owner" },
+  { id: "manager", name: "可管理", relation: "manager" },
+  { id: "editor", name: "可编辑", relation: "editor" },
+  { id: "viewer", name: "可查看", relation: "viewer" },
+];
+
 export function PermissionListTab({
   resourceType,
   resourceId,
   refreshKey,
+  prefetchedGrantableModels,
+  prefetchedGrantableModelsLoaded = false,
+  skipGrantableModelsRequest = false,
   fixedSubjectType,
 }: PermissionListTabProps) {
   const localize = useLocalize();
@@ -55,32 +68,12 @@ export function PermissionListTab({
   const [listTab, setListTab] = useState<ListSubjectType>(fixedSubjectType ?? "user");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [models, setModels] = useState<RelationModelOption[]>([]);
+  const [grantableModels, setGrantableModels] = useState<RelationModel[]>(
+    prefetchedGrantableModels || [],
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [isListScrolling, setIsListScrolling] = useState(false);
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const mergeGrantableWithEntries = useCallback(
-    (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
-      const opts: RelationModelOption[] = (grantable || []).map((m) => ({
-        id: m.id,
-        name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
-        relation: m.relation as RelationLevel,
-      }));
-      const ids = new Set(opts.map((o) => o.id));
-      for (const entry of list) {
-        if (!entry.model_id || ids.has(entry.model_id)) continue;
-        ids.add(entry.model_id);
-        opts.push({
-          id: entry.model_id,
-          name: entry.model_name || entry.relation,
-          relation: entry.relation as RelationLevel,
-        });
-      }
-      return opts;
-    },
-    [localize],
-  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -111,13 +104,44 @@ export function PermissionListTab({
   }, []);
 
   useEffect(() => {
+    if (skipGrantableModelsRequest) {
+      if (!prefetchedGrantableModelsLoaded) return;
+      setGrantableModels(prefetchedGrantableModels || []);
+      return;
+    }
+
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        const merged = mergeGrantableWithEntries(res, entries);
-        if (merged.length) setModels(merged);
+        setGrantableModels(Array.isArray(res) ? res : []);
       })
       .catch(() => {});
-  }, [resourceType, resourceId, entries, mergeGrantableWithEntries, refreshKey]);
+  }, [
+    prefetchedGrantableModels,
+    prefetchedGrantableModelsLoaded,
+    refreshKey,
+    resourceId,
+    resourceType,
+    skipGrantableModelsRequest,
+  ]);
+
+  const models = useMemo<RelationModelOption[]>(() => {
+    const opts: RelationModelOption[] = (grantableModels || []).map((m) => ({
+      id: m.id,
+      name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
+      relation: m.relation as RelationLevel,
+    }));
+    const ids = new Set(opts.map((o) => o.id));
+    for (const entry of entries) {
+      if (!entry.model_id || ids.has(entry.model_id)) continue;
+      ids.add(entry.model_id);
+      opts.push({
+        id: entry.model_id,
+        name: entry.model_name || entry.relation,
+        relation: entry.relation as RelationLevel,
+      });
+    }
+    return opts.length ? opts : DEFAULT_MODELS;
+  }, [entries, grantableModels, localize]);
 
   const subjectEntries = useMemo(
     () => entries.filter((entry) => entry.subject_type === listTab),
