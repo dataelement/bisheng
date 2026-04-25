@@ -327,7 +327,7 @@ const AiChatInput = memo(
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
                         const accept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
-                        console.log('upload accept :>> ', accept);
+                        // console.log('upload accept :>> ', accept);
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}

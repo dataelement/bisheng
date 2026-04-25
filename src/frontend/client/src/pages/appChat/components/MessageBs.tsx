@@ -116,7 +116,7 @@ export default function MessageBs({
                             <p className="select-none font-semibold text-base mb-1">{title}</p>
                             {message || data.files.length ?
                                 <div ref={messageRef} className="">
-                                    {message && <div className="bs-mkdown text-base">
+                                    {message && <div className="bs-mkdown text-base break-words [word-break:break-all]">
                                         <Markdown
                                             content={message}
                                             isLatestMessage={false}
