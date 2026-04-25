@@ -1147,6 +1147,38 @@ class ChannelService:
                 for kb in (await session.exec(q)).all():
                     space_name_by_id[str(kb.id)] = kb.name
 
+        # Defensive filter: drop bindings whose target space or folder no longer
+        # exists. There is a race window between space/folder deletion and
+        # channel_knowledge_sync cleanup; this keeps the UI clean if a row leaks.
+        existing_space_ids = set(space_name_by_id.keys())
+        rows = [
+            r for r in rows
+            if r.knowledge_space_id
+            and str(r.knowledge_space_id).isdigit()
+            and str(r.knowledge_space_id) in existing_space_ids
+        ]
+        folder_ids_to_check = {
+            int(r.folder_id)
+            for r in rows
+            if r.folder_id is not None and str(r.folder_id).isdigit()
+        }
+        if folder_ids_to_check:
+            from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+            from bisheng.core.database import get_async_db_session
+            from sqlmodel import select as _select
+            existing_folder_ids: set = set()
+            async with get_async_db_session() as session:
+                q = _select(KnowledgeFile.id).where(
+                    KnowledgeFile.id.in_(list(folder_ids_to_check))
+                )
+                for row in (await session.exec(q)).all():
+                    fid = row[0] if isinstance(row, tuple) else row
+                    existing_folder_ids.add(int(fid))
+            rows = [
+                r for r in rows
+                if r.folder_id is None or int(r.folder_id) in existing_folder_ids
+            ]
+
         def _to_item(r: ChannelKnowledgeSync) -> KnowledgeSyncSpaceItem:
             return KnowledgeSyncSpaceItem(
                 knowledge_space_id=str(r.knowledge_space_id),

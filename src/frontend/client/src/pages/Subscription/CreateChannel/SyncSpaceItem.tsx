@@ -3,9 +3,10 @@
  * inside the channel ➜ knowledge space sync configuration list.
  *
  * Path rendering rules (per v2.5 Module D spec):
- *   • Knowledge-space-only binding: show just the space name.
- *   • Folder binding: show `parent / parent / …` in grey + final segment in
- *     bold black.
+ *   • Knowledge-space-only binding: show just the space name (bold).
+ *   • Folder binding: show `space / parent / parent / …` in grey + final
+ *     segment in bold black. The knowledge-space name is always the first
+ *     grey segment so users can see which space the folder belongs to.
  *
  * Deletion is immediate (no confirm dialog) per spec 3.1.4.
  */
@@ -28,7 +29,8 @@ export default function SyncSpaceItem({ space, onDelete }: Props) {
     if (hasFolder) {
         const parts = (space.folder_path || "").split("/").filter(Boolean);
         pathLeaf = parts.pop() || "";
-        pathParents = parts.join(" / ");
+        const parents = [space.knowledge_space_name || "", ...parts].filter(Boolean);
+        pathParents = parents.join(" / ");
     }
 
     return (

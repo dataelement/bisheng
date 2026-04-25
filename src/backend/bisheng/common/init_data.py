@@ -373,8 +373,11 @@ async def _migrate_rbac_to_rebac_if_needed():
     Uses SETNX lock (TTL=3600s) to prevent concurrent execution.
     """
     try:
-        from bisheng.core.openfga.manager import get_fga_client
-        fga = get_fga_client()
+        from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
+
+        fga = await aget_fga_client()
+        if fga is None:
+            fga = get_fga_client()
         if fga is None:
             return  # OpenFGA not enabled, skip
 

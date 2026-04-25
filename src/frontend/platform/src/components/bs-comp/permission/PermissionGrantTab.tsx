@@ -193,18 +193,30 @@ export function PermissionGrantTab({
 
       {/* Subject search based on type */}
       {subjectType === 'user' && (
-        <SubjectSearchUser value={selected} onChange={setSelected} />
+        <SubjectSearchUser
+          value={selected}
+          onChange={setSelected}
+          resourceType={resourceType}
+          resourceId={resourceId}
+        />
       )}
       {subjectType === 'department' && (
         <SubjectSearchDepartment
           value={selected}
           onChange={setSelected}
+          resourceType={resourceType}
+          resourceId={resourceId}
           includeChildren={includeChildren}
           onIncludeChildrenChange={setIncludeChildren}
         />
       )}
       {subjectType === 'user_group' && (
-        <SubjectSearchUserGroup value={selected} onChange={setSelected} />
+        <SubjectSearchUserGroup
+          value={selected}
+          onChange={setSelected}
+          resourceType={resourceType}
+          resourceId={resourceId}
+        />
       )}
 
       {/* Selected subjects preview */}

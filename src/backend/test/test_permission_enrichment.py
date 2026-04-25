@@ -41,8 +41,8 @@ class TestEnrichPermissionTuples:
         assert result[0].relation == 'owner'
 
     @pytest.mark.asyncio
-    async def test_filter_department_member_tuple(self):
-        """'department:5#member' should be filtered out (membership, not direct grant)."""
+    async def test_parse_department_member_tuple(self):
+        """'department:5#member' is the canonical department grant subject."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
         tuples = [
@@ -50,10 +50,14 @@ class TestEnrichPermissionTuples:
         ]
 
         with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve:
-            mock_resolve.return_value = {}
+            mock_resolve.return_value = {('department', 5): 'Engineering'}
             result = await PermissionService._enrich_permission_tuples(tuples)
 
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].subject_type == 'department'
+        assert result[0].subject_id == 5
+        assert result[0].subject_name == 'Engineering'
+        assert result[0].relation == 'viewer'
 
     @pytest.mark.asyncio
     async def test_parse_department_direct_tuple(self):
@@ -73,19 +77,26 @@ class TestEnrichPermissionTuples:
         assert result[0].relation == 'viewer'
 
     @pytest.mark.asyncio
-    async def test_filter_user_group_member_tuple(self):
-        """'user_group:3#member' should be filtered out."""
+    async def test_parse_user_group_member_tuple(self):
+        """'user_group:3#member' is the canonical user-group grant subject."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
         tuples = [
             {'user': 'user_group:3#member', 'relation': 'editor', 'object': 'workflow:1'},
         ]
 
-        with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve:
-            mock_resolve.return_value = {}
+        with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve, \
+             patch.object(PermissionService, '_resolve_user_group_member_names', new_callable=AsyncMock) as mock_member_names:
+            mock_resolve.return_value = {('user_group', 3): 'Alpha Team'}
+            mock_member_names.return_value = {3: ['Alice']}
             result = await PermissionService._enrich_permission_tuples(tuples)
 
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].subject_type == 'user_group'
+        assert result[0].subject_id == 3
+        assert result[0].subject_name == 'Alpha Team'
+        assert result[0].subject_member_names == ['Alice']
+        assert result[0].relation == 'editor'
 
     @pytest.mark.asyncio
     async def test_parse_user_group_direct_tuple(self):
@@ -94,14 +105,17 @@ class TestEnrichPermissionTuples:
 
         tuples = [{'user': 'user_group:3', 'relation': 'editor', 'object': 'workflow:1'}]
 
-        with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve:
+        with patch.object(PermissionService, '_resolve_subject_names', new_callable=AsyncMock) as mock_resolve, \
+             patch.object(PermissionService, '_resolve_user_group_member_names', new_callable=AsyncMock) as mock_member_names:
             mock_resolve.return_value = {('user_group', 3): 'Alpha Team'}
+            mock_member_names.return_value = {3: ['Alice', 'Bob']}
             result = await PermissionService._enrich_permission_tuples(tuples)
 
         assert len(result) == 1
         assert result[0].subject_type == 'user_group'
         assert result[0].subject_id == 3
         assert result[0].subject_name == 'Alpha Team'
+        assert result[0].subject_member_names == ['Alice', 'Bob']
         assert result[0].relation == 'editor'
 
     @pytest.mark.asyncio
@@ -251,6 +265,30 @@ class TestResolveSubjectNames:
 
         assert result[('user', 7)] == 'Alice'
         assert ('department', 5) not in result
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_group_member_names(self):
+        """User-group entries expose their member names for the permission UI."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.database.models.user_group import UserGroupDao
+
+        rows = [
+            type('UG', (), {'group_id': 3, 'user_id': 7})(),
+            type('UG', (), {'group_id': 3, 'user_id': 8})(),
+        ]
+        users = [
+            type('User', (), {'user_id': 7, 'user_name': 'Alice', 'delete': 0})(),
+            type('User', (), {'user_id': 8, 'user_name': 'Bob', 'delete': 0})(),
+        ]
+
+        with patch.object(
+            UserGroupDao, 'aget_group_users', new_callable=AsyncMock, return_value=rows,
+        ), patch.object(
+            UserDao, 'aget_user_by_ids', new_callable=AsyncMock, return_value=users,
+        ):
+            result = await PermissionService._resolve_user_group_member_names([3])
+
+        assert result == {3: ['Alice', 'Bob']}
 
 
 class TestGetResourcePermissionsIntegration:

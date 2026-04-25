@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { getGrantableRelationModels } from "~/api/permission";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
@@ -28,12 +28,21 @@ jest.mock("~/components/permission/PermissionListTab", () => ({
 }));
 
 jest.mock("~/components/permission/PermissionGrantTab", () => ({
-  PermissionGrantTab: ({ fixedSubjectType }: any) => <div>{`grant:${fixedSubjectType}`}</div>,
+  PermissionGrantTab: ({ fixedSubjectType, includeChildren }: any) => (
+    <div>{`grant:${fixedSubjectType}:${includeChildren ? "include" : "exclude"}`}</div>
+  ),
 }));
 
 jest.mock("~/components/ui", () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-  Checkbox: ({ ...props }: any) => <input type="checkbox" {...props} />,
+  Checkbox: ({ checked, onCheckedChange }: any) => (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked ? "true" : "false"}
+      onClick={() => onCheckedChange?.(!checked)}
+    />
+  ),
   Dialog: ({ children }: any) => <div>{children}</div>,
   DialogContent: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
@@ -80,5 +89,33 @@ describe("KnowledgeSpaceShareDialog", () => {
     expect(screen.getAllByText("list:user")).toHaveLength(1);
     expect(screen.queryByText("list:department")).not.toBeInTheDocument();
     expect(screen.queryByText("list:user_group")).not.toBeInTheDocument();
+  });
+
+  it("passes the include-children toggle state into the grant form", async () => {
+    render(
+      <KnowledgeSpaceShareDialog
+        open
+        onOpenChange={jest.fn()}
+        resourceId="space-59"
+        resourceName="Space 59"
+        showShareTab={false}
+        showMembersTab={false}
+        showPermissionTab
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetGrantableRelationModels).toHaveBeenCalledTimes(1);
+    });
+
+    const grantDepartmentTab = screen.getAllByRole("button", {
+      name: "com_permission.subject_department",
+    }).at(-1);
+    expect(grantDepartmentTab).toBeTruthy();
+    fireEvent.click(grantDepartmentTab!);
+    expect(await screen.findByText("grant:department:include")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(await screen.findByText("grant:department:exclude")).toBeInTheDocument();
   });
 });

@@ -1944,6 +1944,7 @@
     "empty_search": "No matching users",
     "empty_user_groups": "No user groups found",
     "error_grant_failed": "Failed to grant permissions. Please try again.",
+    "error_last_owner": "At least one owner must remain. You cannot remove the last owner.",
     "error_permission_denied": "Failed to load permission entries",
     "error_revoke_failed": "Operation failed. Please try again.",
     "include_children": "Include child departments",

@@ -153,9 +153,11 @@ class RBACToReBACMigrator:
 
     async def run(self) -> MigrationStats | VerifyReport:
         """Execute the migration pipeline."""
-        from bisheng.core.openfga.manager import get_fga_client
+        from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
 
-        self._fga = get_fga_client()
+        self._fga = await aget_fga_client()
+        if self._fga is None:
+            self._fga = get_fga_client()
         if self._fga is None and not self.dry_run:
             raise RuntimeError('OpenFGA client not available. Cannot execute migration.')
 

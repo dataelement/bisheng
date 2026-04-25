@@ -1859,6 +1859,7 @@
     "empty_search": "一致するユーザーがいません",
     "empty_user_groups": "ユーザーグループがありません",
     "error_grant_failed": "権限付与に失敗しました。再試行してください",
+    "error_last_owner": "少なくとも 1 人の所有者を残す必要があります。最後の所有者は削除できません。",
     "error_permission_denied": "権限一覧の読み込みに失敗しました",
     "error_revoke_failed": "操作に失敗しました。再試行してください",
     "include_children": "子部署を含む",

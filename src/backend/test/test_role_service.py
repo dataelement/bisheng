@@ -513,6 +513,43 @@ class TestCreatorResolution:
 
         assert result == {15: 5, 16: 7}
 
+    @pytest.mark.asyncio
+    async def test_get_creator_names_maps_system_admin_to_system_preset(self):
+        from bisheng.role.domain.services.role_service import (
+            RoleService,
+            SYSTEM_PRESET_CREATOR_NAME,
+        )
+
+        admin_user = MagicMock()
+        admin_user.user_id = 1
+        admin_user.user_name = 'admin'
+
+        with patch('bisheng.role.domain.services.role_service.UserDao') as mock_user_dao, \
+             patch.object(RoleService, '_get_system_admin_user_ids', new_callable=AsyncMock,
+                          return_value={1}):
+            mock_user_dao.aget_user_by_ids = AsyncMock(return_value=[admin_user])
+
+            result = await RoleService._get_creator_names({15: 1})
+
+        assert result == {15: SYSTEM_PRESET_CREATOR_NAME}
+
+    @pytest.mark.asyncio
+    async def test_get_creator_names_keeps_regular_username(self):
+        from bisheng.role.domain.services.role_service import RoleService
+
+        normal_user = MagicMock()
+        normal_user.user_id = 8
+        normal_user.user_name = 'alice'
+
+        with patch('bisheng.role.domain.services.role_service.UserDao') as mock_user_dao, \
+             patch.object(RoleService, '_get_system_admin_user_ids', new_callable=AsyncMock,
+                          return_value=set()):
+            mock_user_dao.aget_user_by_ids = AsyncMock(return_value=[normal_user])
+
+            result = await RoleService._get_creator_names({16: 8})
+
+        assert result == {16: 'alice'}
+
 
 class TestUpdateRole:
     """AC-05, AC-06."""

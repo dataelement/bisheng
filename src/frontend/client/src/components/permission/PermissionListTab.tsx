@@ -147,6 +147,10 @@ export function PermissionListTab({
     () => entries.filter((entry) => entry.subject_type === listTab),
     [entries, listTab],
   );
+  const ownerEntryCount = useMemo(
+    () => entries.filter((entry) => entry.subject_type === "user" && entry.relation === "owner").length,
+    [entries],
+  );
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
@@ -158,11 +162,12 @@ export function PermissionListTab({
     return subjectEntries.filter((entry) => {
       const name = entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
       const groupNames = entry.subject_group_names?.join(" ") ?? "";
+      const memberNames = entry.subject_member_names?.join(" ") ?? "";
       const includeChildrenText =
         entry.subject_type === "department" && entry.include_children
           ? localize("com_permission.include_children")
           : "";
-      return `${name} ${groupNames} ${includeChildrenText}`
+      return `${name} ${groupNames} ${memberNames} ${includeChildrenText}`
         .toLowerCase()
         .includes(normalizedSearchQuery);
     });
@@ -201,7 +206,12 @@ export function PermissionListTab({
       showToast({ message: localize("com_permission.success_modify"), status: "success" });
       loadData();
     } catch {
-      showToast({ message: localize("com_permission.error_revoke_failed"), status: "error" });
+      showToast({
+        message: entry.relation === "owner"
+          ? localize("com_permission.error_last_owner")
+          : localize("com_permission.error_revoke_failed"),
+        status: "error",
+      });
     }
   };
 
@@ -232,7 +242,12 @@ export function PermissionListTab({
       showToast({ message: localize("com_permission.success_revoke"), status: "success" });
       loadData();
     } catch {
-      showToast({ message: localize("com_permission.error_revoke_failed"), status: "error" });
+      showToast({
+        message: entry.relation === "owner"
+          ? localize("com_permission.error_last_owner")
+          : localize("com_permission.error_revoke_failed"),
+        status: "error",
+      });
     }
   };
 
@@ -279,7 +294,7 @@ export function PermissionListTab({
         : localize("com_permission.subject_department");
     }
 
-    return localize("com_permission.subject_user_group");
+    return entry.subject_member_names?.join("、") ?? localize("com_permission.subject_user_group");
   };
 
   const handleListScroll = () => {
@@ -371,6 +386,7 @@ export function PermissionListTab({
                 const Icon = SUBJECT_ICONS[entry.subject_type] || User;
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
+                const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
 
@@ -402,11 +418,7 @@ export function PermissionListTab({
                     </p>
 
                     <div className="flex w-[96px] shrink-0 justify-end">
-                      {isOwner ? (
-                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
-                          {getPermissionLabel(entry)}
-                        </span>
-                      ) : (
+                      {!isOwner || canManageOwnerEntry ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -451,6 +463,10 @@ export function PermissionListTab({
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      ) : (
+                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
+                          {getPermissionLabel(entry)}
+                        </span>
                       )}
                     </div>
                   </div>

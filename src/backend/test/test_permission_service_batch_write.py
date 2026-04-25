@@ -121,3 +121,35 @@ async def test_batch_write_tuples_strict_stops_before_revokes_after_failed_grant
         if call.kwargs.get('deletes') and not call.kwargs.get('writes')
     ]
     assert standalone_delete_calls == []
+
+
+@pytest.mark.asyncio
+async def test_batch_write_tuples_uses_async_fga_accessor_first():
+    fake_fga = SimpleNamespace(write_tuples=AsyncMock())
+    ops = [_op('write', 'assistant:2202')]
+
+    with patch(
+        'bisheng.core.openfga.manager.aget_fga_client',
+        new_callable=AsyncMock,
+        return_value=fake_fga,
+    ) as async_get_fga, patch.object(
+        PermissionService,
+        '_get_fga',
+        return_value=None,
+    ), patch.object(
+        PermissionService,
+        '_save_failed_tuples',
+        AsyncMock(),
+    ) as save_failed:
+        await PermissionService.batch_write_tuples(ops)
+
+    async_get_fga.assert_awaited_once()
+    fake_fga.write_tuples.assert_awaited_once_with(
+        writes=[{
+            'user': 'user:400',
+            'relation': 'owner',
+            'object': 'assistant:2202',
+        }],
+        deletes=None,
+    )
+    save_failed.assert_not_awaited()

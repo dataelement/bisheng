@@ -43,6 +43,7 @@
   "error": {
     "permissionDenied": "権限が不足しています",
     "grantFailed": "権限付与に失敗しました",
+    "lastOwner": "少なくとも 1 人の所有者を残す必要があります。最後の所有者は削除できません。",
     "revokeFailed": "権限取消に失敗しました"
   },
   "success": {

@@ -1,7 +1,7 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { getDepartmentTree } from "~/api/permission";
-import type { SelectedSubject } from "~/api/permission";
+import { getDepartmentTree, getKnowledgeSpaceGrantDepartments } from "~/api/permission";
+import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -18,6 +18,8 @@ interface DepartmentNode {
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
+  resourceType?: ResourceType;
+  resourceId?: string;
   includeChildren: boolean;
   onIncludeChildrenChange: (v: boolean) => void;
 }
@@ -25,6 +27,8 @@ interface SubjectSearchDepartmentProps {
 export function SubjectSearchDepartment({
   value,
   onChange,
+  resourceType,
+  resourceId,
   includeChildren,
   onIncludeChildrenChange,
 }: SubjectSearchDepartmentProps) {
@@ -35,11 +39,23 @@ export function SubjectSearchDepartment({
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
+    const controller = new AbortController();
+    const request =
+      resourceType === "knowledge_space" && resourceId
+        ? getKnowledgeSpaceGrantDepartments(resourceId, { signal: controller.signal })
+        : getDepartmentTree({ signal: controller.signal });
+
     setLoading(true);
-    getDepartmentTree()
-      .then((res) => { if (res) setTree(res); })
-      .finally(() => setLoading(false));
-  }, []);
+    request
+      .then((res) => {
+        if (!controller.signal.aborted && res) setTree(res);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [resourceId, resourceType]);
 
   const selectedIds = new Set(value.map((s) => s.id));
 

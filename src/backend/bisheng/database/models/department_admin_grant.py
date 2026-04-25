@@ -61,6 +61,18 @@ class DepartmentAdminGrantDao:
     """CRUD for ``department_admin_grant``."""
 
     @classmethod
+    async def aget_user_ids_by_department(
+        cls, department_id: int,
+    ) -> List[int]:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(DepartmentAdminGrant.user_id).where(
+                    DepartmentAdminGrant.department_id == department_id,
+                )
+            )
+            return [int(row[0] if isinstance(row, tuple) else row) for row in result.all()]
+
+    @classmethod
     async def aget_by_user_and_departments(
         cls, user_id: int, department_ids: List[int],
     ) -> List[DepartmentAdminGrant]:

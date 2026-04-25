@@ -387,7 +387,10 @@ export default function RolesAndPermissions() {
                 {t("system.relationModelCreateButton")}
               </Button>
               <div className="shrink-0 space-y-2">
-                <p className="text-sm">{t("system.relationModelSelectTemplate")}</p>
+                <div className="space-y-1">
+                  <p className="text-sm">{t("system.relationModelSelectTemplate")}</p>
+                  <p className="text-xs text-muted-foreground">{t("system.relationModelSelectTemplateHint")}</p>
+                </div>
                 <Select value={modelId} onValueChange={setModelId}>
                   <SelectTrigger className="w-[280px]">
                     <SelectValue />

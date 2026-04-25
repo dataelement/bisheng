@@ -1,6 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { authorizeResource, getDepartmentTree, getGrantableRelationModels } from "~/api/permission";
+import {
+  authorizeResource,
+  getDepartmentTree,
+  getGrantableRelationModels,
+  getKnowledgeSpaceGrantDepartments,
+  getKnowledgeSpaceGrantUserGroups,
+  getKnowledgeSpaceGrantUsers,
+} from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
 jest.mock("~/hooks", () => ({
@@ -15,11 +22,17 @@ jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getDepartmentTree: jest.fn(),
   getGrantableRelationModels: jest.fn(),
+  getKnowledgeSpaceGrantDepartments: jest.fn(),
+  getKnowledgeSpaceGrantUserGroups: jest.fn(),
+  getKnowledgeSpaceGrantUsers: jest.fn(),
 }));
 
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 const mockedGetDepartmentTree = jest.mocked(getDepartmentTree);
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
+const mockedGetKnowledgeSpaceGrantDepartments = jest.mocked(getKnowledgeSpaceGrantDepartments);
+const mockedGetKnowledgeSpaceGrantUserGroups = jest.mocked(getKnowledgeSpaceGrantUserGroups);
+const mockedGetKnowledgeSpaceGrantUsers = jest.mocked(getKnowledgeSpaceGrantUsers);
 
 describe("PermissionGrantTab", () => {
   beforeEach(() => {
@@ -43,6 +56,18 @@ describe("PermissionGrantTab", () => {
         children: [],
       },
     ]);
+    mockedGetKnowledgeSpaceGrantUsers.mockResolvedValue([]);
+    mockedGetKnowledgeSpaceGrantDepartments.mockResolvedValue([
+      {
+        id: 7,
+        dept_id: "dept-7",
+        name: "测试部门",
+        parent_id: null,
+        member_count: 3,
+        children: [],
+      },
+    ]);
+    mockedGetKnowledgeSpaceGrantUserGroups.mockResolvedValue([]);
   });
 
   it("submits the current include-children checkbox value for department grants", async () => {
@@ -75,5 +100,9 @@ describe("PermissionGrantTab", () => {
         [],
       );
     });
+    expect(mockedGetKnowledgeSpaceGrantDepartments).toHaveBeenCalledWith(
+      "space-1",
+      { signal: expect.any(AbortSignal) },
+    );
   });
 });

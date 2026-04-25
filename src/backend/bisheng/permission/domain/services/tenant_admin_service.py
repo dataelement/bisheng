@@ -23,10 +23,18 @@ from bisheng.common.errcode.tenant_fga import (
     OpenFGAConnectionError,
     RootTenantAdminNotAllowedError,
 )
-from bisheng.core.openfga.manager import aget_fga_client
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
 
 logger = logging.getLogger(__name__)
+
+
+async def _aget_fga_client_with_fallback():
+    from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
+
+    fga = await aget_fga_client()
+    if fga is not None:
+        return fga
+    return get_fga_client()
 
 
 class TenantAdminService:
@@ -40,7 +48,7 @@ class TenantAdminService:
         Raises OpenFGAConnectionError (19201) when the FGA client is missing.
         """
         await cls._guard_not_root(tenant_id)
-        fga = await aget_fga_client()
+        fga = await _aget_fga_client_with_fallback()
         if fga is None:
             raise OpenFGAConnectionError()
         await fga.write_tuples(writes=[{
@@ -54,7 +62,7 @@ class TenantAdminService:
     async def revoke_tenant_admin(cls, tenant_id: int, user_id: int) -> None:
         """Remove user from Child Admin of the given tenant."""
         await cls._guard_not_root(tenant_id)
-        fga = await aget_fga_client()
+        fga = await _aget_fga_client_with_fallback()
         if fga is None:
             raise OpenFGAConnectionError()
         await fga.write_tuples(deletes=[{
@@ -73,7 +81,7 @@ class TenantAdminService:
         """
         if tenant_id == ROOT_TENANT_ID:
             return []
-        fga = await aget_fga_client()
+        fga = await _aget_fga_client_with_fallback()
         if fga is None:
             return []
         tuples = await fga.read_tuples(

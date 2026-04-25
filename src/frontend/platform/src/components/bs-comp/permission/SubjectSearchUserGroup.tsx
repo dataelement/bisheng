@@ -1,11 +1,12 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
+import { getKnowledgeSpaceGrantUserGroupsApi } from "@/controllers/API/permission"
 import { getUserGroupsApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Users } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { SelectedSubject } from "./types"
+import { ResourceType, SelectedSubject } from "./types"
 
 interface UserGroup {
   id: number
@@ -15,9 +16,16 @@ interface UserGroup {
 interface SubjectSearchUserGroupProps {
   value: SelectedSubject[]
   onChange: (v: SelectedSubject[]) => void
+  resourceType?: ResourceType
+  resourceId?: string
 }
 
-export function SubjectSearchUserGroup({ value, onChange }: SubjectSearchUserGroupProps) {
+export function SubjectSearchUserGroup({
+  value,
+  onChange,
+  resourceType,
+  resourceId,
+}: SubjectSearchUserGroupProps) {
   const { t } = useTranslation('permission')
   const [groups, setGroups] = useState<UserGroup[]>([])
   const [loading, setLoading] = useState(false)
@@ -25,11 +33,14 @@ export function SubjectSearchUserGroup({ value, onChange }: SubjectSearchUserGro
 
   useEffect(() => {
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getUserGroupsApi({})).then((res) => {
+    const request = resourceType === "knowledge_space" && resourceId
+      ? getKnowledgeSpaceGrantUserGroupsApi(resourceId)
+      : getUserGroupsApi({})
+    captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setGroups(Array.isArray(res) ? res : [])
       setLoading(false)
     })
-  }, [])
+  }, [resourceId, resourceType])
 
   const filtered = useMemo(() => {
     if (!keyword) return groups
