@@ -274,6 +274,92 @@ class TestPermissionApiIntegration:
         assert body['status_code'] == 19000
         mock_has_permission.assert_awaited_once()
 
+    def test_knowledge_space_grant_subject_users_endpoint_returns_full_scope_candidates(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users',
+            new_callable=AsyncMock,
+            return_value=[{
+                'user_id': 8,
+                'user_name': 'Alice',
+                'primary_department_path': '总部/研发部',
+            }],
+        ) as mock_list_users:
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/resources/knowledge_space/1/grant-subjects/users',
+                    params={'keyword': 'Ali'},
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['user_name'] == 'Alice'
+        mock_list_users.assert_awaited_once_with(keyword='Ali', page=1, page_size=1000)
+
+    def test_knowledge_space_grant_subject_departments_endpoint_returns_full_tree(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_departments',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 10,
+                'dept_id': 'BS@10',
+                'name': '研发部',
+                'parent_id': None,
+                'path': '/10/',
+                'sort_order': 0,
+                'source': 'local',
+                'status': 'active',
+                'member_count': 0,
+                'children': [],
+            }],
+        ) as mock_list_departments:
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/resources/knowledge_space/1/grant-subjects/departments',
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['name'] == '研发部'
+        mock_list_departments.assert_awaited_once()
+
+    def test_knowledge_space_grant_subject_user_groups_endpoint_returns_full_scope_groups(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_user_groups',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 5,
+                'group_name': '产品组',
+            }],
+        ) as mock_list_groups:
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/resources/knowledge_space/1/grant-subjects/user-groups',
+                    params={'keyword': '产品'},
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['group_name'] == '产品组'
+        mock_list_groups.assert_awaited_once_with(keyword='产品')
+
     def test_permissions_list_reads_workflow_permissions_after_fine_grained_allow(self):
         app = _make_app(_ViewerUser)
 

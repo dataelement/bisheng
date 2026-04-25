@@ -338,6 +338,16 @@ export async function getGroupUsersApi(groupId: number): Promise<any> {
   return axios.get(`/api/v1/group/get_group_user`, { params: { group_id: groupId } });
 }
 
+export async function getUserMembershipGroupsApi(
+  userId: number,
+  config?: { signal?: AbortSignal },
+): Promise<any[]> {
+  return axios.get(`/api/v1/group/get_user_group`, {
+    params: { user_id: userId },
+    signal: config?.signal,
+  });
+}
+
 // Batch set group members (non-admin)
 export async function setGroupMembersApi(groupId: number, userIds: number[]) {
   return axios.post(`/api/v1/group/set_group_members`, {

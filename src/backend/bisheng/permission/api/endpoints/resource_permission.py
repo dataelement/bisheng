@@ -8,7 +8,7 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -444,6 +444,34 @@ def _management_permission_ids(resource_type: str) -> set[str]:
     return set(tier_map.values())
 
 
+async def _has_resource_permission_management_access(
+    *,
+    resource_type: str,
+    resource_id: str,
+    login_user: UserPayload,
+) -> bool:
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    management_permission_ids = _management_permission_ids(resource_type)
+    if management_permission_ids:
+        from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+
+        return await FineGrainedPermissionService.has_any_permission_async(
+            login_user,
+            resource_type,
+            resource_id,
+            management_permission_ids,
+        )
+
+    return await PermissionService.check(
+        user_id=login_user.user_id,
+        relation='can_edit',
+        object_type=resource_type,
+        object_id=resource_id,
+        login_user=login_user,
+    )
+
+
 def _grant_management_permission_id(resource_type: str, grant, model_map: dict) -> str | None:
     mid = getattr(grant, 'model_id', None)
     if mid and mid in model_map:
@@ -463,6 +491,132 @@ def _attach_default_model_metadata(item: ResourcePermissionItem, model_map: dict
 
 def _permission_subject_key(item: ResourcePermissionItem) -> tuple[str, int, str]:
     return item.subject_type, int(item.subject_id), item.relation
+
+
+async def _list_knowledge_space_grant_users(
+    *,
+    keyword: str,
+    page: int,
+    page_size: int,
+) -> list[dict]:
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.user.domain.models.user import UserDao
+
+    users = await UserDao.afilter_users([], keyword=keyword, page=page, limit=page_size)
+    active_users = [user for user in users if getattr(user, 'delete', 0) == 0]
+    if not active_users:
+        return []
+
+    user_ids = [
+        int(user.user_id) for user in active_users
+        if getattr(user, 'user_id', None) is not None
+    ]
+    dept_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
+    primary_rows = [
+        row for row in dept_rows
+        if int(getattr(row, 'is_primary', 0) or 0) == 1
+    ]
+    dept_ids = list({
+        int(row.department_id) for row in primary_rows
+        if getattr(row, 'department_id', None) is not None
+    })
+    departments = await DepartmentDao.aget_by_ids(dept_ids)
+    dept_map = {
+        int(dept.id): dept for dept in departments
+        if getattr(dept, 'id', None) is not None
+    }
+    primary_by_user = {
+        int(row.user_id): dept_map.get(int(row.department_id))
+        for row in primary_rows
+        if getattr(row, 'user_id', None) is not None and getattr(row, 'department_id', None) is not None
+    }
+
+    def _department_display_path(dept) -> str | None:
+        if dept is None:
+            return None
+        path_ids: list[int] = []
+        for part in str(getattr(dept, 'path', '') or '').split('/'):
+            part = part.strip()
+            if part.isdigit():
+                path_ids.append(int(part))
+        labels = [
+            getattr(dept_map.get(dept_id), 'name', f'#{dept_id}')
+            for dept_id in path_ids
+        ]
+        current_name = getattr(dept, 'name', None)
+        if current_name and current_name not in labels:
+            labels.append(current_name)
+        return '/'.join(labels) if labels else current_name
+
+    return [
+        {
+            'user_id': int(user.user_id),
+            'user_name': user.user_name,
+            'external_id': getattr(user, 'external_id', None),
+            'primary_department_path': _department_display_path(
+                primary_by_user.get(int(user.user_id)),
+            ),
+        }
+        for user in active_users
+    ]
+
+
+async def _list_knowledge_space_grant_departments() -> list[dict]:
+    from bisheng.database.models.department import DepartmentDao
+
+    departments = await DepartmentDao.aget_all_active()
+    if not departments:
+        return []
+
+    nodes = {
+        int(dept.id): {
+            'id': int(dept.id),
+            'dept_id': dept.dept_id,
+            'name': dept.name,
+            'parent_id': int(dept.parent_id) if getattr(dept, 'parent_id', None) is not None else None,
+            'path': dept.path,
+            'sort_order': int(getattr(dept, 'sort_order', 0) or 0),
+            'source': dept.source,
+            'status': dept.status,
+            'member_count': 0,
+            'children': [],
+        }
+        for dept in departments
+        if getattr(dept, 'id', None) is not None
+    }
+
+    roots: list[dict] = []
+    for node in nodes.values():
+        parent_id = node['parent_id']
+        if parent_id and parent_id in nodes:
+            nodes[parent_id]['children'].append(node)
+        else:
+            roots.append(node)
+
+    def _sort_tree(items: list[dict]) -> list[dict]:
+        items.sort(key=lambda item: (item['sort_order'], item['name']))
+        for item in items:
+            item['children'] = _sort_tree(item['children'])
+        return items
+
+    return _sort_tree(roots)
+
+
+async def _list_knowledge_space_grant_user_groups(
+    *,
+    keyword: str,
+) -> list[dict]:
+    from bisheng.database.models.group import GroupDao
+
+    groups, _ = await GroupDao.aget_all_groups(page=1, limit=2000, keyword=keyword)
+    return [
+        {
+            'id': int(group.id),
+            'group_name': group.group_name,
+        }
+        for group in groups
+        if getattr(group, 'id', None) is not None
+    ]
 
 
 def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
@@ -751,6 +905,65 @@ async def authorize_resource(
     return resp_200(None)
 
 
+@router.get('/resources/{resource_type}/{resource_id}/grant-subjects/users')
+async def get_grant_subject_users(
+    resource_type: str,
+    resource_id: str,
+    keyword: str = '',
+    page: int = Query(1, ge=1),
+    page_size: int = Query(1000, ge=1, le=2000),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    if resource_type != 'knowledge_space':
+        return PermissionInvalidResourceError.return_resp()
+    if not await _has_resource_permission_management_access(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    ):
+        return PermissionDeniedError.return_resp()
+    return resp_200(await _list_knowledge_space_grant_users(
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    ))
+
+
+@router.get('/resources/{resource_type}/{resource_id}/grant-subjects/departments')
+async def get_grant_subject_departments(
+    resource_type: str,
+    resource_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    if resource_type != 'knowledge_space':
+        return PermissionInvalidResourceError.return_resp()
+    if not await _has_resource_permission_management_access(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    ):
+        return PermissionDeniedError.return_resp()
+    return resp_200(await _list_knowledge_space_grant_departments())
+
+
+@router.get('/resources/{resource_type}/{resource_id}/grant-subjects/user-groups')
+async def get_grant_subject_user_groups(
+    resource_type: str,
+    resource_id: str,
+    keyword: str = '',
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    if resource_type != 'knowledge_space':
+        return PermissionInvalidResourceError.return_resp()
+    if not await _has_resource_permission_management_access(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    ):
+        return PermissionDeniedError.return_resp()
+    return resp_200(await _list_knowledge_space_grant_user_groups(keyword=keyword))
+
+
 @router.get('/resources/{resource_type}/{resource_id}/permissions')
 async def get_resource_permissions(
     resource_type: str,
@@ -766,24 +979,11 @@ async def get_resource_permissions(
 
     from bisheng.permission.domain.services.permission_service import PermissionService
 
-    management_permission_ids = _management_permission_ids(resource_type)
-    if management_permission_ids:
-        from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
-
-        allowed = await FineGrainedPermissionService.has_any_permission_async(
-            login_user,
-            resource_type,
-            resource_id,
-            management_permission_ids,
-        )
-    else:
-        allowed = await PermissionService.check(
-            user_id=login_user.user_id,
-            relation='can_edit',
-            object_type=resource_type,
-            object_id=resource_id,
-            login_user=login_user,
-        )
+    allowed = await _has_resource_permission_management_access(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
     if not allowed:
         return PermissionDeniedError.return_resp()
 
