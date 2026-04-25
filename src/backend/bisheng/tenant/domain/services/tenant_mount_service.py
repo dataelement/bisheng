@@ -64,6 +64,20 @@ def display_tenant_code(stored_code: str) -> str:
         return stored_code
     return stored_code.split(ARCHIVED_CODE_SEPARATOR, 1)[0]
 
+
+def default_tenant_code(dept_id: int) -> str:
+    """Default tenant_code derived from dept_id, e.g. ``t3``.
+
+    Used when callers don't supply an explicit code at mount time. dept_id
+    is the department PK so uniqueness is automatic; the leading ``t``
+    keeps the value letter-initial to satisfy the schema regex. On unmount
+    the row's code is rewritten via :func:`archived_tenant_code` so a
+    future remount of the same dept regenerates the same value without
+    colliding on the UNIQUE index.
+    """
+    return f't{dept_id}'
+
+
 logger = logging.getLogger(__name__)
 
 # Root-owned resources that may be sunk into a Child via AC-04d. The
@@ -115,7 +129,7 @@ class TenantMountService:
     async def mount_child(
         cls,
         dept_id: int,
-        tenant_code: str,
+        tenant_code: Optional[str],
         tenant_name: str,
         operator,
         auto_distribute: bool = True,
@@ -149,6 +163,13 @@ class TenantMountService:
         if ancestor is not None:
             # Any ancestor already a mount point → INV-T1 2-layer lock.
             raise TenantTreeNestingForbiddenError()
+
+        # UI hides the tenant_code input; non-UI API callers may still pass
+        # an explicit code, in which case the schema regex has already
+        # validated it. ``default_tenant_code`` derives a unique fallback
+        # from the dept_id when omitted.
+        if tenant_code is None:
+            tenant_code = default_tenant_code(dept_id)
 
         # Single-session transaction: INSERT tenant + UPDATE department happen
         # atomically. If the dept update fails (or anything in between raises)
