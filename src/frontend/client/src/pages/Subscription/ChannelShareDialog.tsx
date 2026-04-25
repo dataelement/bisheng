@@ -1,101 +1,48 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Channel, ChannelRole, getChannelDetailApi } from "~/api/channels";
-import { canOpenPermissionDialog, getGrantableRelationModels } from "~/api/permission";
+import { useCallback, useEffect, useState } from "react";
+import { Channel } from "~/api/channels";
+import { getGrantableRelationModels } from "~/api/permission";
 import type { RelationModel } from "~/api/permission";
-import { ChannelMemberManagementPanel } from "~/components/ChannelMemberManagementPanel";
-import { PermissionGrantTab, PermissionListTab } from "~/components/permission";
+import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
+import { PermissionListTab } from "~/components/permission/PermissionListTab";
 import {
     Button,
+    Checkbox,
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
-    Input,
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
 } from "~/components/ui";
-import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
-import { copyText } from "~/utils";
-
-const SHARE_TAB = "share";
-const MEMBERS_TAB = "members";
-const PERMISSION_TAB = "permission";
-
-type ChannelShareTab = typeof SHARE_TAB | typeof MEMBERS_TAB | typeof PERMISSION_TAB;
 
 interface ChannelShareDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     channel: Channel | null;
-    initialTab?: ChannelShareTab;
 }
 
 export function ChannelShareDialog({
     open,
     onOpenChange,
     channel,
-    initialTab = "share",
 }: ChannelShareDialogProps) {
     const localize = useLocalize();
-    const { showToast } = useToastContext();
-    const [activeTab, setActiveTab] = useState<ChannelShareTab>(initialTab);
-    const [copied, setCopied] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
+    const [grantDialogOpen, setGrantDialogOpen] = useState(false);
+    const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department" | "user_group">("user");
+    const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
 
-    const { data: channelDetail } = useQuery({
-        queryKey: ["channelShareDialogDetail", channel?.id],
-        queryFn: async () => {
-            if (!channel?.id) return null;
-            return await getChannelDetailApi(channel.id);
-        },
-        enabled: open && !!channel?.id,
-        staleTime: 60_000,
-    });
-
-    const canManageMembers =
-        channel?.role === ChannelRole.CREATOR || channel?.role === ChannelRole.ADMIN;
-    const { data: canManagePermission = canManageMembers } = useQuery({
-        queryKey: ["channelShareDialogPermission", channel?.id],
-        queryFn: async () => {
-            if (!channel?.id) return false;
-            return await canOpenPermissionDialog("channel", channel.id);
-        },
-        enabled: open && !!channel?.id,
-        staleTime: 60_000,
-    });
-    const showShareTab = channelDetail ? channelDetail.visibility !== "private" : canManageMembers;
-    const showMembersTab = canManageMembers;
-    const showPermissionTab = Boolean(channel?.id) && canManagePermission;
-
-    const resolveVisibleTab = useCallback((preferred: ChannelShareTab): ChannelShareTab => {
-        if (preferred === SHARE_TAB && showShareTab) return SHARE_TAB;
-        if (preferred === MEMBERS_TAB && showMembersTab) return MEMBERS_TAB;
-        if (preferred === PERMISSION_TAB && showPermissionTab) return PERMISSION_TAB;
-        if (showShareTab) return SHARE_TAB;
-        if (showMembersTab) return MEMBERS_TAB;
-        if (showPermissionTab) return PERMISSION_TAB;
-        return preferred;
-    }, [showMembersTab, showPermissionTab, showShareTab]);
-
     useEffect(() => {
-        if (!open) return;
-        setActiveTab(resolveVisibleTab(initialTab));
-        setCopied(false);
-    }, [channel?.id, initialTab, open, resolveVisibleTab]);
-
-    useEffect(() => {
-        if (!open) return;
-        const nextTab = resolveVisibleTab(activeTab);
-        if (nextTab !== activeTab) {
-            setActiveTab(nextTab);
+        if (open) {
+            setCurrentSubjectType("user");
         }
-    }, [activeTab, open, resolveVisibleTab]);
+    }, [open, channel?.id]);
 
     useEffect(() => {
         if (!open || !channel?.id) return;
@@ -112,163 +59,144 @@ export function ChannelShareDialog({
             });
     }, [channel?.id, open]);
 
-    const shareLink = useMemo(() => {
-        if (!channel?.id || typeof window === "undefined") return "";
-        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
-        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-        return `${normalizedBase}/channel/share/${channel.id}`;
-    }, [channel?.id]);
+    const handleGrantSuccess = useCallback(() => {
+        setRefreshKey((key) => key + 1);
+        setCurrentSubjectType(grantSubjectType);
+        setGrantDialogOpen(false);
+    }, [grantSubjectType]);
 
     if (!channel) return null;
 
-    const dialogTitle = `${
-        showShareTab
-            ? localize("com_subscription.share")
-            : showMembersTab
-                ? localize("com_subscription.management_member")
-                : localize("com_permission.dialog_title")
-    } - ${channel.name}`;
+    const resourceName = channel.name ? ` - ${channel.name}` : "";
+    const dialogTitle = `${localize("com_permission.dialog_title")}${resourceName}`;
 
-    const sharePanel = (
-        <div className="space-y-3 pt-2">
-            <div className="rounded-lg border border-[#EBECF0] bg-[#F7F8FA] p-3">
-                <div className="mb-2 text-sm font-medium text-[#1D2129]">
-                    {localize("com_ui_copy_link")}
-                </div>
-                <div className="flex items-center gap-2">
-                    <Input
-                        readOnly
-                        value={shareLink}
-                        className="flex-1 border-[#EBECF0] bg-white"
-                    />
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="shrink-0"
-                        onClick={async () => {
-                            try {
-                                await copyText(shareLink);
-                                setCopied(true);
-                                showToast({
-                                    message: localize("com_subscription.share_link_copied"),
-                                    status: "success",
-                                });
-                            } catch {
-                                showToast({
-                                    message: localize("com_knowledge.copy_failed_retry"),
-                                    status: "error",
-                                });
-                            }
-                        }}
-                    >
-                        {copied ? localize("com_ui_duplicated") : localize("com_ui_copy_link")}
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-
-    const memberPanel = (
-        <div className="flex min-h-0 flex-1 flex-col pt-2">
-            <ChannelMemberManagementPanel
-                channelId={channel.id}
-                currentUserRole={channel.role}
-                active={open && activeTab === MEMBERS_TAB}
-            />
-        </div>
-    );
-
-    const handleGrantSuccess = () => {
-        setRefreshKey((key) => key + 1);
-        setActiveTab(PERMISSION_TAB);
-    };
+    const SUBJECT_TABS: Array<{
+        value: "user" | "department" | "user_group";
+        labelKey: string;
+    }> = [
+        { value: "user", labelKey: "com_permission.subject_user" },
+        { value: "department", labelKey: "com_permission.subject_department" },
+        { value: "user_group", labelKey: "com_permission.subject_user_group" },
+    ];
 
     const permissionPanel = (
-        <>
-            <TabsList className="bg-surface-primary-alt p-1">
-                <TabsTrigger value="list">
-                    {localize("com_permission.tab_list")}
-                </TabsTrigger>
-                <TabsTrigger value="grant">
+        <Tabs
+            value={currentSubjectType}
+            onValueChange={(value) => setCurrentSubjectType(value as "user" | "department" | "user_group")}
+            className="flex min-h-0 flex-1 flex-col"
+        >
+            <div className="flex items-center justify-between gap-3">
+                <TabsList className="w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
+                    {SUBJECT_TABS.map((tab) => (
+                        <TabsTrigger
+                            key={tab.value}
+                            value={tab.value}
+                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-[rgba(51,92,255,0.15)] data-[state=active]:font-medium data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none"
+                        >
+                            {localize(tab.labelKey)}
+                        </TabsTrigger>
+                    ))}
+                </TabsList>
+
+                <Button
+                    type="button"
+                    className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
+                    onClick={() => {
+                        setGrantSubjectType(currentSubjectType);
+                        setGrantDialogOpen(true);
+                    }}
+                >
                     {localize("com_permission.tab_grant")}
-                </TabsTrigger>
-            </TabsList>
-            <TabsContent value="list" className="p-0">
+                </Button>
+            </div>
+
+            <TabsContent
+                value={currentSubjectType}
+                className="mt-3 min-h-0 flex-1 p-0"
+            >
                 <PermissionListTab
                     resourceType="channel"
                     resourceId={channel.id}
                     refreshKey={refreshKey}
+                    fixedSubjectType={currentSubjectType}
                     prefetchedGrantableModels={grantableModels}
                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                     skipGrantableModelsRequest
                 />
             </TabsContent>
-            <TabsContent value="grant" className="p-0">
-                <PermissionGrantTab
-                    resourceType="channel"
-                    resourceId={channel.id}
-                    onSuccess={handleGrantSuccess}
-                    prefetchedGrantableModels={grantableModels}
-                    prefetchedGrantableModelsLoaded={grantableModelsLoaded}
-                    skipGrantableModelsRequest
-                />
-            </TabsContent>
-        </>
+        </Tabs>
     );
 
-    const hasMultipleTabs = [showShareTab, showMembersTab, showPermissionTab].filter(Boolean).length > 1;
-
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[680px]">
-                <DialogHeader>
-                    <DialogTitle>{dialogTitle}</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle>{dialogTitle}</DialogTitle>
+                    </DialogHeader>
 
-                {hasMultipleTabs ? (
-                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ChannelShareTab)}>
-                        <TabsList className="bg-surface-primary-alt p-1">
-                            {showShareTab && (
-                                <TabsTrigger value={SHARE_TAB}>
-                                    {localize("com_subscription.share")}
-                                </TabsTrigger>
+                    <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        {permissionPanel}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
+                <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle>
+                            {localize("com_permission.tab_grant")}{resourceName}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="flex items-center gap-3">
+                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
+                                {SUBJECT_TABS.map((tab) => (
+                                    <button
+                                        key={tab.value}
+                                        type="button"
+                                        className={[
+                                            "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors",
+                                            grantSubjectType === tab.value
+                                                ? "bg-[rgba(51,92,255,0.15)] font-medium text-[#335CFF]"
+                                                : "font-normal text-[#818181]",
+                                        ].join(" ")}
+                                        onClick={() => setGrantSubjectType(tab.value)}
+                                    >
+                                        {localize(tab.labelKey)}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {grantSubjectType === "department" && (
+                                <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
+                                    <Checkbox
+                                        checked={grantIncludeChildren}
+                                        onCheckedChange={(value) => setGrantIncludeChildren(value === true)}
+                                    />
+                                    {localize("com_permission.include_children")}
+                                </label>
                             )}
-                            {showMembersTab && (
-                                <TabsTrigger value={MEMBERS_TAB}>
-                                    {localize("com_subscription.member_management")}
-                                </TabsTrigger>
-                            )}
-                            {showPermissionTab && (
-                                <TabsTrigger value={PERMISSION_TAB}>
-                                    {localize("com_permission.manage_permission")}
-                                </TabsTrigger>
-                            )}
-                        </TabsList>
-                        {showShareTab && (
-                            <TabsContent value={SHARE_TAB} className="p-0">
-                                {sharePanel}
-                            </TabsContent>
-                        )}
-                        {showMembersTab && (
-                            <TabsContent value={MEMBERS_TAB} className="flex min-h-0 flex-1 p-0">
-                                {memberPanel}
-                            </TabsContent>
-                        )}
-                        {showPermissionTab && (
-                            <TabsContent value={PERMISSION_TAB} className="p-0">
-                                <Tabs defaultValue="list">{permissionPanel}</Tabs>
-                            </TabsContent>
-                        )}
-                    </Tabs>
-                ) : showShareTab ? (
-                    sharePanel
-                ) : showMembersTab ? (
-                    memberPanel
-                ) : showPermissionTab ? (
-                    <Tabs defaultValue="list">{permissionPanel}</Tabs>
-                ) : null
-                }
-            </DialogContent>
-        </Dialog>
+                        </div>
+
+                        <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+                            <PermissionGrantTab
+                                resourceType="channel"
+                                resourceId={channel.id}
+                                onSuccess={handleGrantSuccess}
+                                prefetchedGrantableModels={grantableModels}
+                                prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                                skipGrantableModelsRequest
+                                fixedSubjectType={grantSubjectType}
+                                includeChildren={grantIncludeChildren}
+                                onIncludeChildrenChange={setGrantIncludeChildren}
+                                hideDepartmentIncludeChildrenControl
+                            />
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

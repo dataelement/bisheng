@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import ClassVar, List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, func, text, update
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, and_, func, or_, text, update
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -567,6 +567,43 @@ class UserDao(UserBase):
                 UserTenant, User.user_id == UserTenant.user_id,
             ).where(
                 User.source == source,
+                UserTenant.tenant_id == tenant_id,
+            )
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def aget_by_source_or_local_external_ids(
+        cls, source: str, tenant_id: int, external_ids: List[str],
+    ) -> List['User']:
+        """Get provider users plus local rows claimable by external_id.
+
+        Org sync can adopt local accounts when the upstream employee ID matches
+        ``user.external_id``. Loading only ``source == provider`` prevents the
+        reconciler's local-conflict branch from ever seeing those rows.
+        """
+        clean_external_ids = []
+        for ext in external_ids or []:
+            if ext is None:
+                continue
+            ext = str(ext).strip()
+            if ext:
+                clean_external_ids.append(ext)
+        clean_external_ids = list(dict.fromkeys(clean_external_ids))
+        source_clause = User.source == source
+        if clean_external_ids:
+            source_clause = or_(
+                source_clause,
+                and_(
+                    User.source == 'local',
+                    User.external_id.in_(clean_external_ids),
+                ),
+            )
+        async with get_async_db_session() as session:
+            statement = select(User).join(
+                UserTenant, User.user_id == UserTenant.user_id,
+            ).where(
+                source_clause,
                 UserTenant.tenant_id == tenant_id,
             )
             result = await session.exec(statement)

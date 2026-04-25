@@ -26,7 +26,8 @@ import pytest
 
 def _payload(
     external_user_id='u1', primary='D1', secondary=None,
-    ts=1000, name='Alice', email='a@x.com', tenant_mapping=None,
+    ts=1000, name='Alice', email='a@x.com', phone=None,
+    tenant_mapping=None,
 ):
     from bisheng.sso_sync.domain.schemas.payloads import (
         LoginSyncRequest, UserAttrsDTO,
@@ -35,7 +36,7 @@ def _payload(
         external_user_id=external_user_id,
         primary_dept_external_id=primary,
         secondary_dept_external_ids=secondary or [],
-        user_attrs=UserAttrsDTO(name=name, email=email),
+        user_attrs=UserAttrsDTO(name=name, email=email, phone=phone),
         ts=ts,
         tenant_mapping=tenant_mapping,
     )
@@ -517,3 +518,24 @@ class TestExistingUserAttrUpdate:
         updated_user = m.UserDao.aupdate_user.await_args.args[0]
         assert updated_user.user_name == 'NewName'
         assert updated_user.email == 'new@x.com'
+
+    async def test_successful_existing_user_sync_touches_update_time(self, patches):
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        existing = _user(user_id=7, user_name='Alice', email='a@x.com',
+                         phone_number='13800000000',
+                         source='sso', external_id='u1')
+        m.UserDao.aget_by_source_external_id = AsyncMock(return_value=existing)
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        await LoginSyncService.execute(
+            _payload(phone='13800000000'),
+            request_ip='1.2.3.4',
+        )
+
+        m.UserDao.aupdate_user.assert_awaited_once()
+        updated_user = m.UserDao.aupdate_user.await_args.args[0]
+        assert updated_user.update_time is not None

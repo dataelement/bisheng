@@ -17,7 +17,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
-def _payload(external_user_id='u1', name='Alice', email='alice@x.com'):
+def _payload(external_user_id='u1', name='Alice', email='alice@x.com',
+             phone=None):
     from bisheng.sso_sync.domain.schemas.payloads import (
         LoginSyncRequest, UserAttrsDTO,
     )
@@ -25,7 +26,7 @@ def _payload(external_user_id='u1', name='Alice', email='alice@x.com'):
         external_user_id=external_user_id,
         primary_dept_external_id='D1',
         secondary_dept_external_ids=[],
-        user_attrs=UserAttrsDTO(name=name, email=email),
+        user_attrs=UserAttrsDTO(name=name, email=email, phone=phone),
         ts=1000,
     )
 
@@ -140,6 +141,33 @@ class TestCrossSourceReuseAndMigrate:
         assert action == 'user.source_migrated'
         assert metadata.get('old_source') == 'feishu'
         assert metadata.get('new_source') == 'sso'
+
+    async def test_cross_source_reuse_syncs_user_attrs(self, patches):
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        local_user = _user(user_id=7, source='local', external_id='u1',
+                           user_name='Old', email='old@x.com',
+                           phone_number=None)
+        patches.UserDao.aget_by_source_external_id = AsyncMock(return_value=None)
+        patches.UserDao.aget_by_external_id = AsyncMock(return_value=local_user)
+        update = AsyncMock(return_value=None)
+        patches.UserDao.aupdate_user = update
+        patches.UserDao.add_user_and_default_role = AsyncMock()
+        patches.AuditLogDao.ainsert_v2 = AsyncMock(return_value=None)
+
+        await LoginSyncService.execute(
+            _payload(name='Alice', email='alice@x.com', phone='13800000000'),
+            request_ip='1.2.3.4',
+        )
+
+        update.assert_awaited_once()
+        updated_user = update.await_args.args[0]
+        assert updated_user.source == 'sso'
+        assert updated_user.user_name == 'Alice'
+        assert updated_user.email == 'alice@x.com'
+        assert updated_user.phone_number == '13800000000'
+        assert updated_user.update_time is not None
 
     async def test_new_sso_user_created_when_truly_missing(self, patches):
         from bisheng.sso_sync.domain.services.login_sync_service import (

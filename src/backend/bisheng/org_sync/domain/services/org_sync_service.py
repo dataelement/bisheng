@@ -139,8 +139,10 @@ class OrgSyncService:
             remote_members = await provider.fetch_members(dept_ext_ids)
 
             # Step 11: Load local users + batch load user departments
-            local_users = await UserDao.aget_by_source(
-                config.provider, config.tenant_id,
+            local_users = await UserDao.aget_by_source_or_local_external_ids(
+                config.provider,
+                config.tenant_id,
+                [m.external_id for m in remote_members],
             )
             user_ids = [u.user_id for u in local_users]
             all_user_depts = await UserDepartmentDao.aget_by_user_ids(user_ids)

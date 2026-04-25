@@ -319,6 +319,7 @@ class DepartmentService:
                 sort_order=data.sort_order,
                 default_role_ids=data.default_role_ids,
                 source='local',
+                external_id=dept_id,
                 status='active',
                 create_user=login_user.user_id,
             )
@@ -684,6 +685,7 @@ class DepartmentService:
                     tenant_id=tenant_id,
                     path='',
                     source='local',
+                    external_id=dept_id,
                     status='active',
                 )
                 session.add(dept)

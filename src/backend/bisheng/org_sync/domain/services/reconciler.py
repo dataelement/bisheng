@@ -275,7 +275,12 @@ def reconcile_members(
     local_by_ext: dict[str, object] = {}  # external_id → User
     for u in local_users:
         if u.external_id:
-            local_by_ext[u.external_id] = u
+            existing = local_by_ext.get(u.external_id)
+            if existing is None or (
+                getattr(existing, 'source', '') != source
+                and getattr(u, 'source', '') == source
+            ):
+                local_by_ext[u.external_id] = u
 
     creates: list[CreateMember] = []
     updates: list[UpdateMember] = []
