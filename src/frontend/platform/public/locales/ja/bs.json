@@ -488,6 +488,7 @@
     "saveSuccess": "保存に成功しました",
     "serviceProviderName": "サービスプロバイダ名",
     "serviceProviderNameTooltip": "このサービスプロバイダを識別しやすいように名前をつけてください",
+    "shareToChildren": "子テナントと共有",
     "silicon": "硅基流动",
     "tengXunYun": "Tencent Cloud",
     "timesPerDay": "回/日",

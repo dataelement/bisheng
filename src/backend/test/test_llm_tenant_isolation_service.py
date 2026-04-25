@@ -114,6 +114,57 @@ async def test_super_admin_with_scope_acts_as_child():
 
 
 @pytest.mark.asyncio
+async def test_child_user_llm_list_runs_own_query_under_strict_filter():
+    """Regression guard for the IN-list short-circuit. The Child branch
+    must wrap ``aget_all_server`` in ``strict_tenant_filter`` so the
+    auto-injected ``WHERE tenant_id IN (leaf, ROOT)`` collapses to
+    ``WHERE tenant_id = leaf`` and cannot silently return Root rows.
+    Without this, the FGA ``shared_with`` check below is architected
+    away (own already covers every Root server)."""
+    from bisheng.core.context.tenant import is_strict_tenant_filter
+
+    own = _mk_server(10, tenant_id=5, name='own')
+    seen_strict = {}
+
+    async def _capture():
+        seen_strict['flag'] = is_strict_tenant_filter()
+        return [own]
+
+    with patch(f'{CONTEXT}.get_current_tenant_id', return_value=5), \
+            patch(f'{DAO}.aget_all_server', new=AsyncMock(side_effect=_capture)), \
+            patch(f'{DAO}.aget_shared_server_ids_for_leaf',
+                  new=AsyncMock(return_value=[])), \
+            patch(f'{DAO}.aget_model_by_server_ids',
+                  new=AsyncMock(return_value=[])):
+        await LLMService.get_all_llm()
+
+    assert seen_strict.get('flag') is True
+
+
+@pytest.mark.asyncio
+async def test_child_user_unshared_root_server_excluded_from_list():
+    """The bug user reported: after ``disable_sharing`` revokes the FGA
+    tuple, the Root server must disappear from the Child's list. With
+    ``aget_all_server`` returning only the leaf's own rows (strict mode)
+    and ``shared_ids`` empty, the merged result must contain no Root
+    rows even if the table still holds them."""
+    own = _mk_server(10, tenant_id=5, name='own')
+
+    with patch(f'{CONTEXT}.get_current_tenant_id', return_value=5), \
+            patch(f'{DAO}.aget_all_server', new=AsyncMock(return_value=[own])), \
+            patch(f'{DAO}.aget_shared_server_ids_for_leaf',
+                  new=AsyncMock(return_value=[])), \
+            patch(f'{DAO}.aget_server_by_ids',
+                  new=AsyncMock(return_value=[])), \
+            patch(f'{DAO}.aget_model_by_server_ids',
+                  new=AsyncMock(return_value=[])):
+        result = await LLMService.get_all_llm()
+
+    assert [r.id for r in result] == [10]
+    assert not any(r.is_root_shared_readonly for r in result)
+
+
+@pytest.mark.asyncio
 async def test_get_all_llm_dedupes_leaf_vs_shared_overlap():
     """Root's own callers should not see duplicate entries when a Root
     row exists in both the leaf query (leaf==Root) and the shared list
@@ -130,6 +181,58 @@ async def test_get_all_llm_dedupes_leaf_vs_shared_overlap():
                   new=AsyncMock(return_value=[])):
         result = await LLMService.get_all_llm()
     assert [r.id for r in result] == [1]
+
+
+# --- get_one_llm child×Root visibility ----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_one_llm_child_root_unshared_raises_not_found():
+    """URL-direct GET must not leak a Root server whose share has been
+    revoked. Even though the IN-list ``visible_tenant_ids = {leaf, ROOT}``
+    lets ``aget_server_by_id`` return the row, the FGA cross-check below
+    enforces the same visibility contract as the list.
+
+    ``conftest.premock_import_chain`` swaps ``NotFoundError`` for a Mock
+    whose ``.http_exception()`` returns another Mock — which raises
+    ``TypeError`` when raised. Substitute a thin stub that yields a real
+    HTTPException so the assertion can target a real status code.
+    """
+    from fastapi import HTTPException
+
+    class _StubNotFound:
+        @classmethod
+        def http_exception(cls):
+            return HTTPException(status_code=404, detail='not found')
+
+    root = _mk_server(100, tenant_id=1, name='unshared-root')
+    with patch(f'{CONTEXT}.NotFoundError', _StubNotFound), \
+            patch(f'{CONTEXT}.get_current_tenant_id', return_value=5), \
+            patch(f'{DAO}.aget_server_by_id', new=AsyncMock(return_value=root)), \
+            patch(f'{DAO}.aget_shared_server_ids_for_leaf',
+                  new=AsyncMock(return_value=[])):
+        with pytest.raises(HTTPException) as excinfo:
+            await LLMService.get_one_llm(100)
+    assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_one_llm_child_root_shared_returns_readonly_info():
+    """Counterpart: when the Root server is in the Child's FGA shared
+    list, ``get_one_llm`` returns the row tagged
+    ``is_root_shared_readonly=True``. ``share_to_children`` must stay at
+    its default (False) for Child callers — only Root scope hydrates it."""
+    root = _mk_server(100, tenant_id=1, name='shared-root')
+    with patch(f'{CONTEXT}.get_current_tenant_id', return_value=5), \
+            patch(f'{DAO}.aget_server_by_id', new=AsyncMock(return_value=root)), \
+            patch(f'{DAO}.aget_shared_server_ids_for_leaf',
+                  new=AsyncMock(return_value=[100])), \
+            patch(f'{DAO}.aget_model_by_server_ids', new=AsyncMock(return_value=[])):
+        info = await LLMService.get_one_llm(100)
+
+    assert info.id == 100
+    assert info.is_root_shared_readonly is True
+    assert info.share_to_children is False
 
 
 # --- get_model_for_call -------------------------------------------------
@@ -185,22 +288,24 @@ async def test_get_model_for_call_cross_child_raises_19802():
 
 @pytest.mark.asyncio
 async def test_mount_child_preview_shared_llm_list():
-    """AC-17: super admin + only_shared=true → list Root servers whose
-    shared_with tuples appear in a single FGA read."""
-    r1 = _mk_server(1, tenant_id=1, name='shared-root')
+    """AC-17: super admin + only_shared=true → list Root servers that
+    have ≥1 Child via FGA shared_with. The implementation walks Root
+    servers and probes each with ``list_sharing_children`` because
+    OpenFGA's /read rejects relation-only queries."""
+    shared = _mk_server(1, tenant_id=1, name='shared-root')
+    unshared = _mk_server(2, tenant_id=1, name='unshared-root')
+    leaf = _mk_server(3, tenant_id=5, name='leaf')
 
-    fake_fga = MagicMock()
-    fake_fga.read_tuples = AsyncMock(return_value=[
-        {'user': 'tenant:5', 'relation': 'shared_with', 'object': 'llm_server:1'},
-        {'user': 'tenant:7', 'relation': 'shared_with', 'object': 'llm_server:1'},
-        {'user': 'tenant:5', 'relation': 'shared_with', 'object': 'knowledge_space:42'},
-    ])
+    async def _list_children(_type, oid):
+        return ['5', '7'] if oid == '1' else []
 
     operator = MagicMock(user_id=99)
-    with patch('bisheng.core.openfga.manager.aget_fga_client',
-               new=AsyncMock(return_value=fake_fga)), \
-            patch(f'{DAO}.aget_server_by_ids', new=AsyncMock(return_value=[r1])), \
-            patch(f'{DAO}.aget_model_by_server_ids', new=AsyncMock(return_value=[])), \
+    with patch(f'{DAO}.aget_all_server',
+               new=AsyncMock(return_value=[shared, unshared, leaf])), \
+            patch(f'{DAO}.aget_model_by_server_ids',
+                  new=AsyncMock(return_value=[])), \
+            patch('bisheng.llm.domain.services.llm.ResourceShareService.list_sharing_children',
+                  new=AsyncMock(side_effect=_list_children)), \
             patch('bisheng.llm.domain.services.llm._check_is_global_super',
                   new=AsyncMock(return_value=True)):
         result = await LLMService.get_all_llm(only_shared=True, operator=operator)

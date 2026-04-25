@@ -492,6 +492,7 @@
     "saveSuccess": "保存成功",
     "serviceProviderName": "服务提供商名称",
     "serviceProviderNameTooltip": "为这个服务提供商配置起一个名称，方便识别",
+    "shareToChildren": "共享给子租户",
     "silicon": "硅基流动",
     "tengXunYun": "腾讯云",
     "timesPerDay": "次/天",

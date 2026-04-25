@@ -169,19 +169,20 @@ class LLMDao:
             await session.refresh(server)
 
         if operator is not None and share_to_children and server.tenant_id == _ROOT_TENANT_ID:
-            from bisheng.database.models.tenant import TenantDao
             from bisheng.tenant.domain.services.resource_share_service import (
                 ResourceShareService,
             )
 
-            tenant = await TenantDao.aget_by_id(server.tenant_id)
-            if tenant is not None and getattr(tenant, 'share_default_to_children', False):
-                try:
-                    await ResourceShareService.enable_sharing(
-                        'llm_server', str(server.id),
-                    )
-                except Exception:  # noqa: BLE001 — FGA failure must not block local write
-                    _LOG.exception('enable_sharing llm_server=%s failed', server.id)
+            # ``tenant.share_default_to_children`` only governs other resource
+            # types (workflow / channel / mount). LLM is solely controlled by
+            # the per-request ``share_to_children`` flag — the ModelConfig UI
+            # is the source of truth for super admins.
+            try:
+                await ResourceShareService.enable_sharing(
+                    'llm_server', str(server.id),
+                )
+            except Exception:  # noqa: BLE001 — FGA failure must not block local write
+                _LOG.exception('enable_sharing llm_server=%s failed', server.id)
 
         return server
 

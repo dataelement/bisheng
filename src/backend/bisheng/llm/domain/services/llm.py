@@ -22,7 +22,11 @@ from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigD
     TtsModelConfigDeletedError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    get_current_tenant_id,
+    strict_tenant_filter,
+)
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
@@ -110,8 +114,19 @@ class LLMService:
         if leaf_id == ROOT_TENANT_ID:
             llm_servers = await LLMDao.aget_all_server()
         else:
+            # ``aget_all_server`` is otherwise filtered by the IN-list
+            # ``visible_tenant_ids = {leaf, ROOT}`` (CustomMiddleware), which
+            # would silently include every Root server here and short-circuit
+            # the FGA ``shared_with`` check below. Force strict equality
+            # ``tenant_id = leaf`` so ``own`` truly means "leaf's own", and
+            # the FGA-derived ``shared_ids`` is the single source of truth
+            # for which Root servers this Child sees.
+            async def _own_only():
+                with strict_tenant_filter():
+                    return await LLMDao.aget_all_server()
+
             own, shared_ids = await asyncio.gather(
-                LLMDao.aget_all_server(),
+                _own_only(),
                 LLMDao.aget_shared_server_ids_for_leaf(leaf_id),
             )
             existing_ids = {s.id for s in own}
@@ -123,6 +138,13 @@ class LLMService:
             else:
                 llm_servers = list(own)
 
+        # share_to_children is intentionally left at default False on list
+        # responses — OpenFGA's /read requires either ``user`` or ``object``
+        # to be set, so a single batch call by relation is impossible, and
+        # an N+1 per-server query would dominate this hot path. The list
+        # row only renders the Root-share readonly Badge (driven by
+        # is_root_shared_readonly); the truthful per-server share_to_children
+        # is hydrated by ``get_one_llm`` when the user opens the edit view.
         ret = []
         server_ids = []
         for one in llm_servers:
@@ -149,37 +171,33 @@ class LLMService:
 
     @classmethod
     async def _list_shared_root_servers(cls) -> List[LLMServerInfo]:
-        """Root servers currently shared to ≥1 Child. Single FGA read
-        (``read_tuples(relation=shared_with)``) filtered for the
-        llm_server type, then one DB round-trip to hydrate."""
-        from bisheng.core.openfga.manager import aget_fga_client
+        """Root servers currently shared to ≥1 Child. Hydrates
+        ``LLMServerInfo`` rows for the mount-Child preview dialog.
 
-        fga = await aget_fga_client()
-        if fga is None:
-            return []
-        try:
-            tuples = await fga.read_tuples(relation='shared_with')
-        except Exception:  # noqa: BLE001 — preview is best-effort
-            logger.exception('read_tuples(shared_with) failed')
+        OpenFGA's /read API rejects relation-only queries (must filter by
+        ``user`` or ``object``), so we walk Root servers and probe each
+        with ``list_sharing_children``. Root server count is small in
+        practice (single-digit to dozens), making this acceptable.
+        """
+        with bypass_tenant_filter():
+            root_servers = [
+                s for s in await LLMDao.aget_all_server()
+                if s.tenant_id == ROOT_TENANT_ID
+            ]
+        if not root_servers:
             return []
 
-        shared_ids = set()
-        for t in tuples:
-            obj = t.get('object', '')
-            if obj.startswith('llm_server:'):
-                tail = obj.split(':', 1)[1]
-                if tail.isdigit():
-                    shared_ids.add(int(tail))
-        if not shared_ids:
+        servers: List[LLMServer] = []
+        for s in root_servers:
+            children = await ResourceShareService.list_sharing_children(
+                'llm_server', str(s.id),
+            )
+            if children:
+                servers.append(s)
+        if not servers:
             return []
 
         with bypass_tenant_filter():
-            servers = [
-                s for s in await LLMDao.aget_server_by_ids(list(shared_ids))
-                if s.tenant_id == ROOT_TENANT_ID
-            ]
-            if not servers:
-                return []
             llm_models = await LLMDao.aget_model_by_server_ids([s.id for s in servers])
 
         by_server: Dict[int, List] = {}
@@ -217,13 +235,49 @@ class LLMService:
     @classmethod
     async def get_one_llm(cls, server_id: int) -> LLMServerInfo:
         """ Get a service provider's details Containskeyand other sensitive configuration information """
-        llm = await LLMDao.aget_server_by_id(server_id)
-        if not llm:
-            raise NotFoundError.http_exception()
+        leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
 
-        models = await LLMDao.aget_model_by_server_ids([server_id])
+        llm = await LLMDao.aget_server_by_id(server_id)
+        if llm is None and leaf_id != ROOT_TENANT_ID:
+            # Super admin under admin-scope=child (or genuine Child caller)
+            # cannot read Root rows through the event-injected
+            # ``WHERE tenant_id = leaf`` filter. Re-read under bypass and
+            # gate by FGA ``shared_with`` so unshared Root rows stay
+            # invisible — same contract as ``get_all_llm``.
+            with bypass_tenant_filter():
+                raw = await LLMDao.aget_server_by_id(server_id)
+            if raw is not None and raw.tenant_id == ROOT_TENANT_ID:
+                shared_ids = await LLMDao.aget_shared_server_ids_for_leaf(leaf_id)
+                if server_id in shared_ids:
+                    llm = raw
+        if llm is None:
+            raise NotFoundError.http_exception()
+        # Defence in depth: even if the IN-list let a Root row through
+        # here, gate it by FGA ``shared_with`` for Child-scoped callers.
+        if llm.tenant_id == ROOT_TENANT_ID and leaf_id != ROOT_TENANT_ID:
+            shared_ids = await LLMDao.aget_shared_server_ids_for_leaf(leaf_id)
+            if server_id not in shared_ids:
+                raise NotFoundError.http_exception()
+
+        with bypass_tenant_filter():
+            models = await LLMDao.aget_model_by_server_ids([server_id])
         models = [LLMModelInfo(**one.model_dump()) for one in models]
-        return LLMServerInfo(**llm.model_dump(), models=models)
+        info = LLMServerInfo(**llm.model_dump(), models=models)
+
+        # Hydrate share_to_children for Root-owned servers when the caller
+        # is in Root scope (super admin / root admin). Drives the
+        # ModelConfig "share with child tenants" toggle in edit mode.
+        # Per-object FGA query is necessary here — OpenFGA /read demands
+        # either user or object filter, so a relation-only call returns 0.
+        if llm.tenant_id == ROOT_TENANT_ID and leaf_id == ROOT_TENANT_ID:
+            shared_children = await ResourceShareService.list_sharing_children(
+                'llm_server', str(server_id),
+            )
+            info.share_to_children = bool(shared_children)
+        info.is_root_shared_readonly = (
+            llm.tenant_id == ROOT_TENANT_ID and leaf_id != ROOT_TENANT_ID
+        )
+        return info
 
     @classmethod
     async def add_llm_server(cls, request: Request, login_user: UserPayload,
@@ -469,10 +523,20 @@ class LLMService:
 
         # Route share_to_children flips through the dedicated DAO helper
         # so super-admin / Root-only invariants are enforced via FGA.
+        # Short-circuit when the requested state matches FGA truth — every
+        # PUT carries ``share_to_children`` (pydantic default=True), so
+        # without this guard a no-op edit would re-issue ``enable_sharing``
+        # and FGA's non-idempotent ``write_tuples`` raises 400 on the
+        # already-present tuples.
         if exist_server.tenant_id == ROOT_TENANT_ID and hasattr(server, 'share_to_children'):
-            await LLMDao.aupdate_server_share(
-                exist_server.id, server.share_to_children, login_user,
+            current_shared_ids = await ResourceShareService.list_sharing_children(
+                'llm_server', str(exist_server.id),
             )
+            currently_shared = bool(current_shared_ids)
+            if currently_shared != server.share_to_children:
+                await LLMDao.aupdate_server_share(
+                    exist_server.id, server.share_to_children, login_user,
+                )
 
         db_server = await LLMDao.update_server_with_models(
             exist_server, list(model_dict.values()), operator=login_user,
