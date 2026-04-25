@@ -3,6 +3,7 @@
  * Uses the stream-format SSE endpoint (shared with file/folder chat).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRecoilValue } from "recoil";
 import { v4 } from "uuid";
 import type { ChatMessage } from "~/api/chatApi";
 import {
@@ -13,12 +14,14 @@ import {
 import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
+import store from "~/store";
 
 /**
  * Hook for channel article AI chat.
  * @param articleDocId - ES article document ID; empty string disables the hook.
  */
 export default function useChannelChat(articleDocId: string) {
+    const chatModel = useRecoilValue(store.chatModel);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -125,7 +128,7 @@ export default function useChannelChat(articleDocId: string) {
             const responseMessageId = `${userMessageId}_`;
             const initialResponse: ChatMessage = {
                 text: "",
-                sender: "AI",
+                sender: chatModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId: userMessageId,
                 conversationId: "",
@@ -138,13 +141,14 @@ export default function useChannelChat(articleDocId: string) {
             const payload = {
                 article_doc_id: articleDocId,
                 text: text.trim(),
+                model_id: String(chatModel.id || ""),
             };
 
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
             setSseSubmission(buildSubmission(payload, responseMessageId));
         },
-        [articleDocId, isStreaming, buildSubmission]
+        [articleDocId, isStreaming, buildSubmission, chatModel.id, chatModel.name]
     );
 
     // --- Stop generating ---
@@ -178,7 +182,7 @@ export default function useChannelChat(articleDocId: string) {
             const newResponseId = v4();
             const newResponse: ChatMessage = {
                 text: "",
-                sender: "AI",
+                sender: chatModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId,
                 conversationId: "",
@@ -191,12 +195,13 @@ export default function useChannelChat(articleDocId: string) {
             const payload = {
                 article_doc_id: articleDocId,
                 text: parentMsg.text?.trim() || "",
+                model_id: String(chatModel.id || ""),
             };
 
             setIsStreaming(true);
             setSseSubmission(buildSubmission(payload, newResponseId));
         },
-        [articleDocId, isStreaming, buildSubmission]
+        [articleDocId, isStreaming, buildSubmission, chatModel.id, chatModel.name]
     );
 
     return {

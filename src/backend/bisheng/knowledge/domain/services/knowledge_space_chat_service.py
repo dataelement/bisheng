@@ -15,7 +15,6 @@ from bisheng.api.v1.schemas import ChatResponse, KnowledgeSpaceConfig
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.channel import KnowledgeSpaceLLMNotConfiguredError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
@@ -30,7 +29,6 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.llm.domain import LLMService
-from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.utils import generate_uuid
 
@@ -52,7 +50,8 @@ class KnowledgeSpaceChatService:
         """ Generate a unique flow_id representation for a folder chat """
         return f"space_{knowledge_id}_folder_{folder_id}"
 
-    async def chat_single_file(self, knowledge_id: int, file_id: int, query: str) \
+    async def chat_single_file(self, knowledge_id: int, file_id: int, query: str,
+                               model_id: int) \
             -> AsyncIterator[ChatResponse]:
         """ Single file RAG query """
         # Verify file exists and is a file
@@ -91,12 +90,12 @@ class KnowledgeSpaceChatService:
         es_retriever = es_vector.as_retriever(search_kwargs={
             "filter": [{"term": {"metadata.document_id": file_id}}]
         })
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query):
+        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
             yield one
 
-    async def space_rag(self, session, vector_retriever, es_retriever, query: str, tags: Any = None) \
+    async def space_rag(self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None) \
             -> AsyncIterator[ChatResponse]:
-        llm, space_conf = await self.get_space_llm_config()
+        llm, space_conf = await self.get_space_llm_config(model_id=model_id)
 
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=vector_retriever,
@@ -152,6 +151,7 @@ class KnowledgeSpaceChatService:
                 message=json.dumps({
                     "query": query,
                     "tags": tags,
+                    "model_id": model_id,
                 }, ensure_ascii=False),
                 chat_id=session.chat_id,
                 flow_id=session.flow_id,
@@ -292,7 +292,7 @@ class KnowledgeSpaceChatService:
         return True
 
     async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
-                          tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
+                          model_id: int, tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
         """ Folder RAG query """
         flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
         session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
@@ -356,27 +356,16 @@ class KnowledgeSpaceChatService:
             })
 
         # executeQuery(vector_retriever, es_retriever, query)
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query, tags):
+        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, tags):
             yield one
 
-    async def get_space_llm_config(self) -> Tuple[BaseChatModel, KnowledgeSpaceConfig]:
+    async def get_space_llm_config(self, model_id: int) -> Tuple[BaseChatModel, KnowledgeSpaceConfig]:
         """
         Get chat configuration (model and prompts)
 
         Returns:
             tuple: (model_id, subscription_config)
-
-        Raises: ，
-            KnowledgeSpaceLLMNotConfiguredError: If knowledge_space_llm not configured
         """
-        # Get workbench LLM configuration
-        workbench_llm: WorkbenchModelConfig = await LLMService.get_workbench_llm()
-
-        if not workbench_llm or not workbench_llm.knowledge_space_llm:
-            raise KnowledgeSpaceLLMNotConfiguredError()
-
-        model_id = int(workbench_llm.knowledge_space_llm.id)
-
         llm = await LLMService.get_bisheng_llm(model_id=model_id,
                                                app_id=ApplicationTypeEnum.KNOWLEDGE_SPACE.value,
                                                app_name=ApplicationTypeEnum.KNOWLEDGE_SPACE.value,

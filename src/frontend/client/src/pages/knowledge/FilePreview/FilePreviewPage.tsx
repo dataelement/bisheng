@@ -82,6 +82,7 @@ export default function FilePreviewPage() {
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);
+    const hasAutoOpenedAiAssistant = useRef(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
 
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
@@ -91,6 +92,12 @@ export default function FilePreviewPage() {
         minRightWidth: AI_MIN_RIGHT,
         containerRef: splitContainerRef,
     });
+
+    useEffect(() => {
+        if (loading || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
+        hasAutoOpenedAiAssistant.current = true;
+        setShowAiAssistant(true);
+    }, [loading, showAiAssistant]);
 
     // Toggle AI assistant
     const handleToggleAiAssistant = useCallback(() => {
@@ -171,7 +178,7 @@ export default function FilePreviewPage() {
             {showAiAssistant && (
                 <div className="flex-1 h-full min-w-[360px] bg-white">
                     <AiAssistantPanel
-                        features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                        features={{ tools: false, modelSelect: true, knowledgeBase: false, fileUpload: false }}
                         onClose={() => setShowAiAssistant(false)}
                         noBorder
                         fileChat={spaceId && fileId ? { spaceId, fileId } : undefined}
