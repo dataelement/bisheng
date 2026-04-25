@@ -28,6 +28,7 @@ from bisheng.permission.domain.schemas.permission_schema import (
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
     PermissionInvalidResourceError,
+    PermissionRelationModelNameExistsError,
     PermissionTupleWriteError,
 )
 from bisheng.common.models.config import ConfigDao
@@ -118,6 +119,17 @@ def _normalize_relation_model_name(name: str | None) -> str:
         if title and label and text == f'{title}{label}':
             return label
     return text
+
+
+def _relation_model_name_exists(models: list[dict], name: str | None, exclude_model_id: str | None = None) -> bool:
+    normalized_name = _normalize_relation_model_name(name)
+    if not normalized_name:
+        return False
+    return any(
+        m.get('id') != exclude_model_id
+        and _normalize_relation_model_name(m.get('name')) == normalized_name
+        for m in models
+    )
 
 
 def _normalize_model_dict(m: dict) -> dict:
@@ -1091,6 +1103,8 @@ async def create_relation_model(
     if request.relation not in _GRANT_RELATIONS:
         return PermissionDeniedError.return_resp()
     models = await _get_relation_models()
+    if _relation_model_name_exists(models, request.name):
+        return PermissionRelationModelNameExistsError.return_resp()
     model_id = f'custom_{uuid.uuid4().hex[:8]}'
     models.append({
         'id': model_id,
@@ -1114,6 +1128,8 @@ async def update_relation_model(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     models = await _get_relation_models()
+    if request.name is not None and _relation_model_name_exists(models, request.name, exclude_model_id=model_id):
+        return PermissionRelationModelNameExistsError.return_resp()
     updated = False
     for m in models:
         if m.get('id') != model_id:

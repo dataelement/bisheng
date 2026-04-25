@@ -66,6 +66,17 @@ const RELATION_LEVEL_I18N_KEY: Record<ModelRelation, string> = {
   viewer: "system.relationModelLevelViewer",
 }
 
+const normalizeRelationModelName = (name: string) => name.trim()
+
+const relationModelNameExists = (models: RelationModel[], name: string, excludeModelId?: string) => {
+  const normalizedName = normalizeRelationModelName(name)
+  if (!normalizedName) return false
+  return models.some((model) => (
+    model.id !== excludeModelId
+    && normalizeRelationModelName(model.name) === normalizedName
+  ))
+}
+
 const DEFAULT_RELATION_MODELS: RelationModel[] = [
   { id: "owner", name: "所有者", relation: "owner", grant_tier: "owner", permissions: [], permissions_explicit: false, is_system: true },
   { id: "manager", name: "可管理", relation: "manager", grant_tier: "manager", permissions: [], permissions_explicit: false, is_system: true },
@@ -267,6 +278,11 @@ export default function RolesAndPermissions() {
     () => relationModels.find((m) => m.id === modelId) || null,
     [relationModels, modelId],
   )
+  const normalizedNewModelName = useMemo(() => normalizeRelationModelName(newModelName), [newModelName])
+  const createNameExists = useMemo(
+    () => relationModelNameExists(relationModels, newModelName),
+    [relationModels, newModelName],
+  )
 
   useEffect(() => {
     if (!currentModel) return
@@ -305,10 +321,10 @@ export default function RolesAndPermissions() {
   }
 
   const handleCreateModel = async () => {
-    if (!newModelName.trim()) return
+    if (!normalizedNewModelName || createNameExists) return
     const res = await captureAndAlertRequestErrorHoc(
       createRelationModelApi({
-        name: newModelName.trim(),
+        name: normalizedNewModelName,
         relation: newCreateRelation,
         permissions: defaultPermissionIdsForRelation(newCreateRelation),
       }),
@@ -398,9 +414,7 @@ export default function RolesAndPermissions() {
                   <SelectContent>
                     {relationModels.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
-                        {item.is_system
-                          ? t(RELATION_LEVEL_I18N_KEY[item.relation])
-                          : `${item.name}（${t(RELATION_LEVEL_I18N_KEY[item.relation])}）`}
+                        {item.is_system ? t(RELATION_LEVEL_I18N_KEY[item.relation]) : item.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -493,6 +507,9 @@ export default function RolesAndPermissions() {
               onChange={(e) => setNewModelName(e.target.value)}
               placeholder={t("system.relationModelNamePlaceholder")}
             />
+            {createNameExists ? (
+              <p className="text-xs text-destructive">{t("system.relationModelNameExists")}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <p className="text-sm font-medium">{t("system.relationModelAuthLevelTitle")}</p>
@@ -515,7 +532,7 @@ export default function RolesAndPermissions() {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("cancel")}</Button>
-          <Button onClick={handleCreateModel} disabled={!newModelName.trim()}>{t("confirmButton")}</Button>
+          <Button onClick={handleCreateModel} disabled={!normalizedNewModelName || createNameExists}>{t("confirmButton")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
