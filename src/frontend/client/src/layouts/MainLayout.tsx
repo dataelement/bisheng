@@ -82,11 +82,11 @@ function Sidebar() {
       isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
     },
     {
-      section: 'apps',
-      to: appsSectionLinkTarget(),
-      icon: <GlobeIcon />,
-      label: localize('com_nav_app_center'),
-      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+      section: 'knowledge',
+      to: lastSectionPaths.knowledge || '/knowledge',
+      icon: <BookOpenIcon />,
+      label: localize('com_knowledge.knowledge_space'),
+      isActive: pathname.startsWith('/knowledge'),
     },
     {
       section: 'channel',
@@ -96,11 +96,11 @@ function Sidebar() {
       isActive: pathname.startsWith('/channel'),
     },
     {
-      section: 'knowledge',
-      to: lastSectionPaths.knowledge || '/knowledge',
-      icon: <BookOpenIcon />,
-      label: localize('com_knowledge.knowledge_space'),
-      isActive: pathname.startsWith('/knowledge'),
+      section: 'apps',
+      to: appsSectionLinkTarget(),
+      icon: <GlobeIcon />,
+      label: localize('com_nav_app_center'),
+      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
     },
   ].filter((l) => {
     if (l.section === 'channel') return showSubscriptionTab;
