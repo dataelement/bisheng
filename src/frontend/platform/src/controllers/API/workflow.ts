@@ -479,7 +479,7 @@ const workflowTemplate = [
                             2
                         ],
                         "step": 0.1,
-                        "value": 0.7
+                        "value": 1
                     }
                 ]
             },
@@ -589,7 +589,7 @@ const workflowTemplate = [
                             2
                         ],
                         "step": 0.1,
-                        "value": 0.7
+                        "value": 1
                     }
                 ]
             },
@@ -845,7 +845,7 @@ const workflowTemplate = [
                             2
                         ],
                         "step": 0.1,
-                        "value": 0.7
+                        "value": 1
                     }
                 ]
             },

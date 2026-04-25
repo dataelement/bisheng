@@ -841,7 +841,9 @@ class PermissionService:
 
         visible = await visible_tenants()
         if resource_tenant_id not in visible:
-            if not await cls._is_shared_to(user_id, resource_tenant_id):
+            if not await cls._is_shared_to(
+                user_id, resource_tenant_id, visible_tenant_ids=visible,
+            ):
                 return True, None
 
         from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
@@ -1200,7 +1202,8 @@ class PermissionService:
             if tenant_id not in visible
         })
         shared_checks = await asyncio.gather(*[
-            cls._is_shared_to(user_id, tenant_id) for tenant_id in shared_tenant_ids
+            cls._is_shared_to(user_id, tenant_id, visible_tenant_ids=visible)
+            for tenant_id in shared_tenant_ids
         ])
         shared_by_tenant = {
             tenant_id: allowed
@@ -1637,21 +1640,66 @@ class PermissionService:
         return None
 
     @classmethod
-    async def _is_shared_to(cls, user_id: int, target_tenant_id: int) -> bool:
-        """True iff user belongs to target_tenant#shared_to#member (Root → Child share).
+    async def _is_shared_to(
+        cls,
+        user_id: int,
+        target_tenant_id: int,
+        visible_tenant_ids: Optional[List[int]] = None,
+    ) -> bool:
+        """True iff any visible tenant of the user has ``shared_to`` on target tenant.
 
-        Used by L3 visibility gate when the resource tenant is not in the
-        user's visible set. Depends on F017 to write the shared_to tuples
-        at resource creation time. Returns False on any FGA error.
+        F017 writes tuples as ``tenant:{child}#shared_to -> tenant:{root}``.
+        OpenFGA ``object`` must stay in ``type:id`` form, so we must query
+        against ``object=tenant:{target}`` and use the visible tenant itself
+        as the tuple subject.
         """
         fga = await cls._aget_fga()
         if fga is None:
             return False
+
+        candidate_tenant_ids = [
+            int(one) for one in (visible_tenant_ids or []) if str(one).isdigit()
+        ]
+        if not candidate_tenant_ids:
+            try:
+                from bisheng.database.models.tenant import UserTenantDao, ROOT_TENANT_ID
+
+                active = await UserTenantDao.aget_active_user_tenant(user_id)
+                if active and active.tenant_id != ROOT_TENANT_ID:
+                    candidate_tenant_ids = [int(active.tenant_id), ROOT_TENANT_ID]
+                else:
+                    candidate_tenant_ids = [ROOT_TENANT_ID]
+            except Exception as e:
+                logger.warning(
+                    '[FGA shared_to check] fallback visible tenant lookup failed '
+                    'user_id=%s target_tenant_id=%s error=%s',
+                    user_id, target_tenant_id, e,
+                )
+                return False
+
+        fga_relation = 'shared_to'
+        fga_object = f'tenant:{target_tenant_id}'
         try:
-            return await fga.check(
-                user=f'user:{user_id}',
-                relation='member',
-                object=f'tenant:{target_tenant_id}#shared_to',
-            )
+            for tenant_id in candidate_tenant_ids:
+                fga_user = f'tenant:{tenant_id}'
+                logger.info(
+                    '[FGA shared_to check] user_id=%s target_tenant_id=%s '
+                    'candidate_tenant_id=%s user=%s relation=%s object=%s',
+                    user_id, target_tenant_id, tenant_id, fga_user, fga_relation, fga_object,
+                )
+                if await fga.check(
+                    user=fga_user,
+                    relation=fga_relation,
+                    object=fga_object,
+                ):
+                    return True
+            return False
         except FGAConnectionError:
+            return False
+        except Exception as e:
+            logger.error(
+                '[FGA shared_to check] failed user_id=%s target_tenant_id=%s '
+                'candidate_tenant_ids=%s relation=%s object=%s error=%s',
+                user_id, target_tenant_id, candidate_tenant_ids, fga_relation, fga_object, e,
+            )
             return False
