@@ -32,7 +32,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
-    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeFileTagLimitError
+    KnowledgeTagExistError, KnowledgeTagNotExistError
 )
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
@@ -1781,8 +1781,6 @@ class KnowledgeService(KnowledgeUtils):
     async def update_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_id: int, tag_ids: List[int]):
         """ 设置单文件的标签 (全量替换) """
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
-        if len(tag_ids) > 5:
-            raise KnowledgeFileTagLimitError()
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
 
@@ -1801,8 +1799,6 @@ class KnowledgeService(KnowledgeUtils):
                                   tag_ids: List[int]):
         """ 批量添加标签到文档 """
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
-        if len(tag_ids) > 5:
-            raise KnowledgeFileTagLimitError()
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
 
@@ -1817,14 +1813,7 @@ class KnowledgeService(KnowledgeUtils):
             return
 
         resource_type = ResourceTypeEnum.KNOWLEDGE_FILE
-        existing_tag_map = await TagDao.aget_resource_tag_ids_batch(
-            [str(file_id) for file_id in valid_file_ids],
-            resource_type,
-        )
         for file_id in valid_file_ids:
-            current_tag_ids = set(existing_tag_map.get(str(file_id), []))
-            if len(current_tag_ids.union(tag_ids)) > 5:
-                raise KnowledgeFileTagLimitError()
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, login_user.user_id)
 
     @classmethod

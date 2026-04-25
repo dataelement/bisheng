@@ -422,7 +422,7 @@
     "createTagWithName": "タグ「{{name}}」を作成",
     "deleteTag": "タグ削除",
     "confirmDeleteTag": "タグ「{{name}}」を削除しますか？",
-    "tagsCountLimitExceeded": "1 ファイルに関連付けできるタグは最大 5 個です",
+    "tagsCountLimitExceeded": "タグ数が上限を超えています",
     "tagNameMaxLength": "タグ名は {{count}} 文字以内で入力してください",
     "tagExists": "タグはすでに存在します",
     "tagAdded": "タグを追加しました",

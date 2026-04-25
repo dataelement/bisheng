@@ -440,7 +440,7 @@
     "createTagWithName": "创建标签“{{name}}”",
     "deleteTag": "删除标签",
     "confirmDeleteTag": "是否删除标签“{{name}}”？",
-    "tagsCountLimitExceeded": "每个文件最多只能关联 5 个标签",
+    "tagsCountLimitExceeded": "标签数量超出限制",
     "tagNameMaxLength": "标签名不能超过 {{count}} 个字符",
     "tagExists": "标签已存在",
     "tagAdded": "标签添加成功",
