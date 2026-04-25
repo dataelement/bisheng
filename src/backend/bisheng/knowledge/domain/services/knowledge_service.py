@@ -2,7 +2,6 @@ import asyncio
 import json
 import math
 import os
-import time
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
@@ -59,7 +58,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
-from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -342,24 +340,11 @@ class KnowledgeService(KnowledgeUtils):
                 vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
                                                                                     knowledge=db_knowledge,
                                                                                     metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-                # Init Milvus schema avoiding SchemaNotReady concurrently
-                # Need to provide non-nullable fields to satisfy Milvus schema constraints
-                init_ids = vector_client.add_texts(
-                    texts=["init_schema"],
-                    metadatas=[Metadata(document_id=0,
-                                        knowledge_id=db_knowledge.id,
-                                        abstract="",
-                                        chunk_index=1,
-                                        bbox="{}",
-                                        page=1,
-                                        upload_time=int(time.time()),
-                                        update_time=int(time.time()),
-                                        uploader="",
-                                        updater="",
-                                        user_metadata={}).model_dump()]
+                cls.ensure_milvus_schema_ready(
+                    invoke_user_id=login_user.user_id,
+                    knowledge=db_knowledge,
+                    vector_client=vector_client,
                 )
-                if init_ids:
-                    vector_client.delete(ids=init_ids)
 
                 es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
@@ -1071,7 +1056,7 @@ class KnowledgeService(KnowledgeUtils):
                 tag_ids = [one.id for one in all_tags]
                 extra_file_ids = await TagDao.aget_resources_by_tags(tag_ids,
                                                                      resource_type=ResourceTypeEnum.KNOWLEDGE_FILE)
-                extra_file_ids = [int(one.id) for one in extra_file_ids]
+                extra_file_ids = [int(one.resource_id) for one in extra_file_ids]
 
         res = await KnowledgeFileDao.aget_file_by_filters(
             knowledge_id,

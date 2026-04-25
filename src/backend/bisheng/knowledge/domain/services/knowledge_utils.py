@@ -1,8 +1,10 @@
 import json
 import os
+import time
 from typing import Optional, Tuple
 
 from langchain_core.language_models import BaseChatModel
+from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.base import BaseService
@@ -16,6 +18,9 @@ from bisheng.utils import md5_hash
 class KnowledgeUtils(BaseService):
     # Used to distinguishchunkand automated production summary content  Format e.g. Filename\nDocument Summary\n--------\n chunkContents
     chunk_split = "\n----------\n"
+    schema_ready_lock_ttl = 60
+    schema_ready_wait_seconds = 20
+    schema_ready_poll_interval = 0.5
 
     @classmethod
     def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
@@ -190,6 +195,137 @@ class KnowledgeUtils(BaseService):
             app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
             app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
             user_id=invoke_user_id), knowledge_llm
+
+    @classmethod
+    def _get_milvus_schema_ready_signature(cls) -> str:
+        from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+
+        field_names = ",".join([item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA])
+        return f"v1:{field_names}"
+
+    @classmethod
+    def _build_schema_ready_cache_key(cls, collection_name: str) -> str:
+        signature = cls._get_milvus_schema_ready_signature()
+        return f"milvus_schema_ready:{collection_name}:{signature}"
+
+    @classmethod
+    def _build_schema_ready_lock_key(cls, collection_name: str) -> str:
+        signature = cls._get_milvus_schema_ready_signature()
+        return f"milvus_schema_ready_lock:{collection_name}:{signature}"
+
+    @classmethod
+    def _build_schema_init_metadata(cls, knowledge_id: int) -> dict:
+        from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+
+        return Metadata(
+            document_id=0,
+            knowledge_id=knowledge_id,
+            document_name="",
+            abstract="",
+            chunk_index=1,
+            bbox="{}",
+            page=1,
+            upload_time=int(time.time()),
+            update_time=int(time.time()),
+            uploader="",
+            updater="",
+            user_metadata={},
+        ).model_dump()
+
+    @classmethod
+    def ensure_milvus_schema_ready(cls, invoke_user_id: int, knowledge, vector_client=None):
+        from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+        from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+
+        if not knowledge or not getattr(knowledge, "collection_name", None):
+            return vector_client
+
+        collection_name = knowledge.collection_name
+        ready_key = cls._build_schema_ready_cache_key(knowledge.collection_name)
+        lock_key = cls._build_schema_ready_lock_key(knowledge.collection_name)
+
+        redis_client = None
+        try:
+            redis_client = get_redis_client_sync()
+            if redis_client.get(ready_key):
+                logger.debug(
+                    "milvus_schema_ready cache_hit collection={} knowledge_id={}",
+                    collection_name,
+                    knowledge.id,
+                )
+                return vector_client
+        except Exception:
+            redis_client = None
+
+        acquired_lock = False
+        if redis_client:
+            try:
+                acquired_lock = redis_client.setNx(lock_key, "1", expiration=cls.schema_ready_lock_ttl)
+                if acquired_lock:
+                    logger.info(
+                        "milvus_schema_ready lock_acquired collection={} knowledge_id={} ttl={}",
+                        collection_name,
+                        knowledge.id,
+                        cls.schema_ready_lock_ttl,
+                    )
+            except Exception:
+                acquired_lock = False
+
+        if not acquired_lock and redis_client:
+            logger.info(
+                "milvus_schema_ready waiting collection={} knowledge_id={} wait_seconds={}",
+                collection_name,
+                knowledge.id,
+                cls.schema_ready_wait_seconds,
+            )
+            deadline = time.time() + cls.schema_ready_wait_seconds
+            while time.time() < deadline:
+                if redis_client.get(ready_key):
+                    logger.info(
+                        "milvus_schema_ready wait_finished collection={} knowledge_id={} source=peer_init",
+                        collection_name,
+                        knowledge.id,
+                    )
+                    return vector_client
+                time.sleep(cls.schema_ready_poll_interval)
+
+        try:
+            logger.info(
+                "milvus_schema_ready init_start collection={} knowledge_id={}",
+                collection_name,
+                knowledge.id,
+            )
+            vector_client = vector_client or KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                invoke_user_id,
+                knowledge=knowledge,
+                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+            )
+            init_ids = vector_client.add_texts(
+                texts=["init_schema"],
+                metadatas=[cls._build_schema_init_metadata(knowledge.id)],
+            )
+            if init_ids:
+                vector_client.delete(ids=init_ids)
+            if redis_client:
+                redis_client.set(ready_key, True, expiration=24 * 3600)
+            logger.info(
+                "milvus_schema_ready init_done collection={} knowledge_id={} cached={}",
+                collection_name,
+                knowledge.id,
+                bool(redis_client),
+            )
+            return vector_client
+        finally:
+            if acquired_lock and redis_client:
+                try:
+                    redis_client.delete(lock_key)
+                    logger.debug(
+                        "milvus_schema_ready lock_released collection={} knowledge_id={}",
+                        collection_name,
+                        knowledge.id,
+                    )
+                except Exception:
+                    pass
 
     @staticmethod
     async def update_folder_update_time(file_level_path: str) -> None:
