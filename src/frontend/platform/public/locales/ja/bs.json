@@ -1961,6 +1961,7 @@
   "department.adminSelectPlaceholder": "検索して部門管理者を選択",
   "department.searchUsersPlaceholder": "ユーザー名で検索…",
   "department.settingsLoadFailed": "部門設定の読み込みに失敗しました",
+  "department.confirmCancelSettings": "部門設定に未保存の変更があります。キャンセルして前回保存した内容に戻しますか？",
   "department.settings": "部門設定",
   "department.members": "メンバー一覧",
   "department.trafficControl": "トラフィック制御",

@@ -92,13 +92,13 @@ export function SubjectSearchDepartment({
   }, [tree, keyword, matchesKeyword])
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-col gap-2">
       <SearchInput
         placeholder={t('search.department')}
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
       />
-      <div className="max-h-[200px] overflow-y-auto border rounded-md">
+      <div className="min-h-[120px] max-h-[clamp(120px,calc(100vh-24rem),260px)] overflow-y-auto rounded-md border">
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
         )}
@@ -208,7 +208,7 @@ function TreeNode({
             <span className="shrink-0 text-xs text-muted-foreground">({node.member_count})</span>
           )}
           {isDisabled && disabledLabel && (
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{disabledLabel}</span>
+            <span className="ml-auto max-w-[8rem] shrink-0 truncate text-xs text-muted-foreground" title={disabledLabel}>{disabledLabel}</span>
           )}
         </div>
       </div>

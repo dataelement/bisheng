@@ -2001,6 +2001,7 @@
   "department.adminSelectPlaceholder": "Search and select department admins",
   "department.searchUsersPlaceholder": "Search by username…",
   "department.settingsLoadFailed": "Failed to load department settings",
+  "department.confirmCancelSettings": "This department has unsaved settings changes. Cancel and restore the last saved values?",
   "department.settings": "Department Settings",
   "department.members": "Members",
   "department.trafficControl": "Traffic Control",

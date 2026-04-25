@@ -35,6 +35,13 @@ function adminsToOptions(admins: DepartmentAdmin[]): DepartmentUserOption[] {
   return admins.map((a) => ({ value: Number(a.user_id), label: a.user_name }))
 }
 
+function sameIdSet(left: Array<number | string>, right: Array<number | string>): boolean {
+  if (left.length !== right.length) return false
+  const leftIds = left.map(String).sort()
+  const rightIds = right.map(String).sort()
+  return leftIds.every((id, idx) => id === rightIds[idx])
+}
+
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
 
@@ -167,8 +174,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
     }
   }, [buildParentTreeNodes, dept.dept_id, dept.name, dept.parent_id, t, tree])
 
-  const handleCancel = useCallback(() => {
-    const b = baselineRef.current
+  const restoreBaseline = useCallback((b = baselineRef.current) => {
     if (!b) return
     setName(b.name)
     setAdminSelectValue(b.admins)
@@ -176,6 +182,38 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
     setDefaultRoleIds(b.defaultRoleIds)
     setParentIdValue(b.parentId)
   }, [])
+
+  const hasUnsavedSettingsChanges = useCallback(() => {
+    const b = baselineRef.current
+    if (!b) return false
+    if (canEditName && name !== b.name) return true
+    if (canEditParent && parentIdValue !== b.parentId) return true
+    if (
+      !sameIdSet(
+        adminSelectValue.map((o) => o.value),
+        b.admins.map((o) => o.value)
+      )
+    ) return true
+    if (!sameIdSet(defaultRoleIds, b.defaultRoleIds)) return true
+    return false
+  }, [adminSelectValue, canEditName, canEditParent, defaultRoleIds, name, parentIdValue])
+
+  const handleCancel = useCallback(() => {
+    const b = baselineRef.current
+    if (!b) return
+    if (!hasUnsavedSettingsChanges()) {
+      restoreBaseline(b)
+      return
+    }
+    bsConfirm({
+      title: t("prompt"),
+      desc: t("department.confirmCancelSettings", { ns: "bs" }),
+      onOk: (next) => {
+        restoreBaseline(b)
+        next()
+      },
+    })
+  }, [hasUnsavedSettingsChanges, restoreBaseline, t])
 
   const handleGlobalSave = useCallback(async () => {
     if (!canEditPermissions) return

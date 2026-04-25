@@ -1958,6 +1958,7 @@
   "department.adminSelectPlaceholder": "搜索并选择部门管理员",
   "department.searchUsersPlaceholder": "搜索用户名…",
   "department.settingsLoadFailed": "加载部门设置失败",
+  "department.confirmCancelSettings": "当前部门设置有未保存的更改，确认取消并恢复到上次保存的内容？",
   "department.settings": "部门设置",
   "department.members": "成员列表",
   "department.trafficControl": "流量控制",
