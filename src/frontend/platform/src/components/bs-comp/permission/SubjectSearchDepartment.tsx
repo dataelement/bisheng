@@ -173,6 +173,7 @@ function TreeNode({
         className={`flex items-stretch gap-0 pr-2 ${
           isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent"
         }`}
+        onClick={() => onToggle(node, pathLabel)}
       >
         <div
           className="shrink-0"
@@ -196,6 +197,7 @@ function TreeNode({
           <Checkbox
             checked={selectedIds.has(node.id)}
             disabled={isDisabled}
+            onClick={(e) => e.stopPropagation()}
             onCheckedChange={() => onToggle(node, pathLabel)}
           />
           <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />

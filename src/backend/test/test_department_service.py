@@ -621,6 +621,146 @@ class TestPermission:
 class TestLocalMemberCreate:
 
     @pytest.mark.asyncio
+    async def test_assignable_roles_bypasses_tenant_filter_for_global_roles(self):
+        from bisheng.department.domain.services.department_service import DepartmentService
+
+        entered = {'value': False}
+        dept = MagicMock()
+        dept.id = 10
+        login_user = _MockLoginUser(user_id=1, user_role=[1], tenant_id=23)
+        role = MagicMock()
+        role.id = 2
+        role.role_name = '普通用户'
+        role.role_type = 'global'
+        role.department_id = None
+
+        class _Rows:
+            def all(self):
+                return [role]
+
+        class _Session:
+            async def exec(self, _stmt):
+                return _Rows()
+
+        @asynccontextmanager
+        async def fake_session():
+            yield _Session()
+
+        class _Bypass:
+            def __enter__(self):
+                entered['value'] = True
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class _Column:
+            def is_(self, _value):
+                return object()
+
+            def in_(self, _values):
+                return object()
+
+            def __eq__(self, _value):
+                return object()
+
+            def __gt__(self, _value):
+                return object()
+
+            def asc(self):
+                return object()
+
+        class _Role:
+            id = _Column()
+            role_name = _Column()
+            role_type = _Column()
+            tenant_id = _Column()
+            department_id = _Column()
+
+        class _Stmt:
+            def where(self, *_args):
+                return self
+
+            def order_by(self, *_args):
+                return self
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock,
+            return_value=dept,
+        ), patch.object(
+            DepartmentService,
+            '_aget_ancestor_chain_ids',
+            new_callable=AsyncMock,
+            return_value=[10],
+        ), patch(
+            'bisheng.core.context.tenant.bypass_tenant_filter',
+            return_value=_Bypass(),
+        ), patch.dict(
+            'sys.modules',
+            {'bisheng.database.models.role': SimpleNamespace(Role=_Role)},
+        ), patch(
+            'bisheng.department.domain.services.department_service.select',
+            return_value=_Stmt(),
+        ), patch(
+            'bisheng.department.domain.services.department_service.and_',
+            return_value=object(),
+        ), patch(
+            'bisheng.department.domain.services.department_service.or_',
+            return_value=object(),
+        ):
+            rows = await DepartmentService.aget_assignable_roles('BS@test', login_user)
+
+        assert entered['value'] is True
+        assert rows == [
+            {
+                'id': 2,
+                'role_name': '普通用户',
+                'role_type': 'global',
+                'department_id': None,
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_create_local_member_rejects_archived_department_before_user_create(self):
+        from bisheng.common.errcode.department import DepartmentArchivedReadonlyError
+        from bisheng.department.domain.schemas.department_schema import DepartmentLocalMemberCreate
+        from bisheng.department.domain.services.department_service import DepartmentService
+        from bisheng.user.domain.services import user as user_service_module
+
+        dept = MagicMock()
+        dept.status = 'archived'
+        login_user = _MockLoginUser(user_id=1, user_role=[1])
+        data = DepartmentLocalMemberCreate(
+            user_name='Alice',
+            person_id='person-001',
+            password='Aa123456!',
+            role_ids=[],
+        )
+
+        @asynccontextmanager
+        async def fake_session():
+            yield MagicMock()
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock,
+            return_value=dept,
+        ), patch.object(
+            user_service_module.UserService, 'decrypt_password_plain',
+            return_value='Aa123456!',
+        ) as decrypt:
+            with pytest.raises(DepartmentArchivedReadonlyError):
+                await DepartmentService.acreate_local_member('BS@test', data, login_user)
+
+        decrypt.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_create_local_member_rejects_deleted_person_id_with_restore_hint(self):
         from bisheng.common.errcode.department import DepartmentInvalidRolesError
         from bisheng.department.domain.schemas.department_schema import DepartmentLocalMemberCreate

@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/Button";
+import { Checkbox } from "~/components/ui/Checkbox";
 import { useToastContext } from "~/Providers";
 import {
   authorizeResource,
@@ -11,9 +12,9 @@ import type {
   SelectedSubject,
   SubjectType,
 } from "~/api/permission";
-import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
@@ -25,21 +26,33 @@ interface PermissionGrantTabProps {
   resourceType: ResourceType;
   resourceId: string;
   onSuccess: () => void;
+  // UI-only: when provided, hides the internal subject type switcher
+  // and locks the grant form to the given subject type.
+  fixedSubjectType?: SubjectType;
+  includeChildren?: boolean;
+  onIncludeChildrenChange?: (value: boolean) => void;
+  hideDepartmentIncludeChildrenControl?: boolean;
 }
 
 export function PermissionGrantTab({
   resourceType,
   resourceId,
   onSuccess,
+  fixedSubjectType,
+  includeChildren: includeChildrenProp,
+  onIncludeChildrenChange,
+  hideDepartmentIncludeChildrenControl = false,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const [subjectType, setSubjectType] = useState<SubjectType>("user");
+  const [subjectType, setSubjectType] = useState<SubjectType>(fixedSubjectType ?? "user");
   const [selected, setSelected] = useState<SelectedSubject[]>([]);
   const [models, setModels] = useState<RelationModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("viewer");
-  const [includeChildren, setIncludeChildren] = useState(true);
+  const [internalIncludeChildren, setInternalIncludeChildren] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const includeChildren = includeChildrenProp ?? internalIncludeChildren;
+  const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
 
   useEffect(() => {
     setSelected((prev) =>
@@ -52,9 +65,16 @@ export function PermissionGrantTab({
   }, [includeChildren]);
 
   useEffect(() => {
+    if (fixedSubjectType) {
+      setSubjectType(fixedSubjectType);
+      setSelected([]);
+    }
+  }, [fixedSubjectType]);
+
+  useEffect(() => {
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        const options: RelationModelOption[] = (res || []).map((m) => ({
+        const options: RelationModelOption[] = (Array.isArray(res) ? res : []).map((m) => ({
           id: m.id,
           name: m.is_system
             ? localize(`com_permission.level_${m.relation}`)
@@ -80,10 +100,6 @@ export function PermissionGrantTab({
     setSelected([]);
   };
 
-  const removeSelected = (id: number) => {
-    setSelected(selected.filter((s) => s.id !== id));
-  };
-
   const handleSubmit = async () => {
     if (selected.length === 0) return;
     const grants: GrantItem[] = selected.map((s) => ({
@@ -92,7 +108,7 @@ export function PermissionGrantTab({
       relation,
       model_id: selectedModelId,
       ...(s.type === "department"
-        ? { include_children: Boolean(s.include_children) }
+        ? { include_children: includeChildren }
         : {}),
     }));
 
@@ -124,69 +140,91 @@ export function PermissionGrantTab({
     return map[type];
   };
 
+  const showDepartmentIncludeChildrenControl =
+    subjectType === "department" && !hideDepartmentIncludeChildrenControl;
+  const selectedSummaryText = selected.map((subject) => subject.name).join("、");
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex gap-1 rounded-md bg-gray-100 p-1 w-fit">
-        {SUBJECT_TYPES.map((type) => (
-          <button
-            key={type}
-            className={`rounded px-3 py-1.5 text-sm transition-colors ${
-              subjectType === type
-                ? "bg-white text-gray-900 shadow"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-            onClick={() => handleSubjectTypeChange(type)}
-          >
-            {subjectLabel(type)}
-          </button>
-        ))}
-      </div>
-
-      {subjectType === "user" && (
-        <SubjectSearchUser value={selected} onChange={setSelected} />
-      )}
-      {subjectType === "department" && (
-        <SubjectSearchDepartment
-          value={selected}
-          onChange={setSelected}
-          includeChildren={includeChildren}
-          onIncludeChildrenChange={setIncludeChildren}
-        />
-      )}
-      {subjectType === "user_group" && (
-        <SubjectSearchUserGroup value={selected} onChange={setSelected} />
-      )}
-
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map((s) => (
-            <span
-              key={`${s.type}-${s.id}`}
-              className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs"
-            >
-              {s.name}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {!fixedSubjectType && (
+        <div className="flex items-center gap-3">
+          <div className="flex w-fit gap-1 rounded-md bg-gray-100 p-1">
+            {SUBJECT_TYPES.map((type) => (
               <button
-                className="hover:text-red-500"
-                onClick={() => removeSelected(s.id)}
+                key={type}
+                className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                  subjectType === type
+                    ? "bg-white text-gray-900 shadow"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => handleSubjectTypeChange(type)}
               >
-                <X className="h-3 w-3" />
+                {subjectLabel(type)}
               </button>
-            </span>
-          ))}
+            ))}
+          </div>
+
+          {showDepartmentIncludeChildrenControl && (
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-[#212121]">
+              <Checkbox
+                checked={includeChildren}
+                onCheckedChange={(value) => handleIncludeChildrenChange(value === true)}
+              />
+              {localize("com_permission.include_children")}
+            </label>
+          )}
         </div>
       )}
 
-      <div className="flex items-center gap-3 border-t pt-2">
-        <RelationSelect
-          value={selectedModelId}
-          onChange={setSelectedModelId}
-          options={models}
-          className="w-[160px]"
-        />
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-hidden",
+          !fixedSubjectType && "mt-4"
+        )}
+      >
+        {subjectType === "user" && (
+          <SubjectSearchUser value={selected} onChange={setSelected} />
+        )}
+        {subjectType === "department" && (
+          <SubjectSearchDepartment
+            value={selected}
+            onChange={setSelected}
+            includeChildren={includeChildren}
+            onIncludeChildrenChange={handleIncludeChildrenChange}
+          />
+        )}
+        {subjectType === "user_group" && (
+          <SubjectSearchUserGroup value={selected} onChange={setSelected} />
+        )}
+      </div>
+
+      <div className="mt-4 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
+        <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+            {`${localize("com_permission.selected_prefix")}${subjectLabel(subjectType)}:`}
+          </span>
+          <span className="truncate text-[14px] leading-[22px] text-[#4E5969]">
+            {selectedSummaryText}
+          </span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+            {localize("com_permission.uniform_grant")}
+          </span>
+          <RelationSelect
+            value={selectedModelId}
+            onChange={setSelectedModelId}
+            options={models}
+            className="w-[132px]"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
         <Button
           onClick={handleSubmit}
           disabled={selected.length === 0 || submitting}
-          className="ml-auto"
         >
           {submitting
             ? localize("com_permission.action_submit") + "..."

@@ -47,11 +47,13 @@ async def init_default_data():
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.WORKSTATION.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.HOME.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.APPS.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.BUILD.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE.value),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.CREATE_KNOWLEDGE.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
@@ -77,6 +79,13 @@ async def init_default_data():
                     await session.commit()
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
+                    from bisheng.permission.domain.services.legacy_rbac_sync_service import (
+                        LegacyRBACSyncService,
+                    )
+                    await LegacyRBACSyncService.sync_user_auth_created(
+                        user.user_id,
+                        [AdminRole],
+                    )
 
                 await _backfill_guest_department_membership(session)
 
@@ -197,14 +206,36 @@ async def _init_default_tenant(session):
                 user_id=uid,
                 tenant_id=DEFAULT_TENANT_ID,
                 is_default=1,
+                is_active=1,
+                status='active',
             ))
 
-        if users_without_tenant:
+        active_user_ids = set((await session.exec(
+            select(UserTenant.user_id).where(UserTenant.is_active == 1)
+        )).all())
+        inactive_default_rows = (await session.exec(
+            select(UserTenant).where(
+                UserTenant.tenant_id == DEFAULT_TENANT_ID,
+                UserTenant.is_default == 1,
+                UserTenant.status == 'active',
+                UserTenant.is_active.is_(None),
+            )
+        )).all()
+        activated_count = 0
+        for row in inactive_default_rows:
+            if row.user_id in active_user_ids:
+                continue
+            row.is_active = 1
+            session.add(row)
+            active_user_ids.add(row.user_id)
+            activated_count += 1
+
+        if users_without_tenant or activated_count:
             await session.commit()
 
     logger.info(
         f'Default tenant ready (id={DEFAULT_TENANT_ID}); '
-        f'user_tenant backfill rows={len(users_without_tenant)}',
+        f'user_tenant backfill rows={len(users_without_tenant)} active_backfill rows={activated_count}',
     )
 
 
@@ -312,6 +343,7 @@ async def _backfill_guest_department_membership(session):
     if not user_rows:
         return
 
+    added_user_ids = []
     for uid in user_rows:
         has_any = (await session.exec(
             select(UserDepartment.id).where(UserDepartment.user_id == uid)
@@ -324,7 +356,14 @@ async def _backfill_guest_department_membership(session):
             is_primary=1,
             source='local',
         ))
+        added_user_ids.append(int(uid))
     await session.commit()
+    if added_user_ids:
+        from bisheng.department.domain.services.department_change_handler import (
+            DepartmentChangeHandler,
+        )
+        ops = DepartmentChangeHandler.on_members_added(guest.id, added_user_ids)
+        await DepartmentChangeHandler.execute_async(ops)
 
 
 async def _migrate_rbac_to_rebac_if_needed():

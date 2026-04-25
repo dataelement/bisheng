@@ -3,6 +3,8 @@
  */
 import axios from "../request";
 
+const USER_GROUP_PAGE_SIZE = 20;
+
 export type UserGroupV2 = {
   id: number;
   group_name: string;
@@ -23,7 +25,7 @@ export async function listUserGroupsV2(params?: {
 }): Promise<{ data: UserGroupV2[]; total: number }> {
   // 尾部斜杠与 FastAPI 子路由 @router.get('/') 一致，避免 307 跳到 127.0.0.1:7860 触发跨域 + credentials 与 * 冲突
   return axios.get(`/api/v1/user-groups/`, {
-    params: { page: 1, limit: 500, ...params },
+    params: { page: 1, limit: USER_GROUP_PAGE_SIZE, ...params },
   });
 }
 
@@ -67,7 +69,7 @@ export async function getUserGroupMembersV2(
   params?: { page?: number; limit?: number; keyword?: string },
 ): Promise<{ data: UserGroupMemberRow[]; total: number }> {
   return axios.get(`/api/v1/user-groups/${groupId}/members`, {
-    params: { page: 1, limit: 500, ...params },
+    params: { page: 1, limit: USER_GROUP_PAGE_SIZE, ...params },
   });
 }
 
@@ -79,7 +81,7 @@ export async function paginateAllUserGroupMembers(
   ) => Promise<{ data: UserGroupMemberRow[]; total: number }>,
   params?: { limit?: number; keyword?: string },
 ): Promise<UserGroupMemberRow[]> {
-  const limit = Math.max(1, params?.limit ?? 500);
+  const limit = Math.max(1, params?.limit ?? USER_GROUP_PAGE_SIZE);
   const keyword = params?.keyword ?? "";
   const rows: UserGroupMemberRow[] = [];
   let page = 1;

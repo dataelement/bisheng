@@ -23,10 +23,20 @@ export default function DepartmentPage() {
     requestId: number
   } | null>(null)
 
-  const loadTree = useCallback(() => {
+  const selectFallbackDepartment = useCallback((nodes: DepartmentTreeNode[]) => {
+    const fallback = nodes[0] ?? null
+    setSelectedDeptId(fallback?.dept_id ?? null)
+    setSelectedDept(fallback)
+  }, [])
+
+  const loadTree = useCallback((removedDeptId?: string) => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
       if (res) {
         setTree(res)
+        if (removedDeptId && selectedDeptId === removedDeptId) {
+          selectFallbackDepartment(res)
+          return
+        }
         // Auto-select first root if nothing selected
         if (!selectedDeptId && res.length > 0) {
           setSelectedDeptId(res[0].dept_id)
@@ -34,7 +44,7 @@ export default function DepartmentPage() {
         }
       }
     })
-  }, [selectedDeptId])
+  }, [selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
     loadTree()
@@ -71,8 +81,13 @@ export default function DepartmentPage() {
     loadTree()
   }, [loadTree])
 
-  const handleTreeChange = useCallback(() => {
-    loadTree()
+  const handleTreeChange = useCallback((removedDeptId?: string) => {
+    loadTree(removedDeptId)
+  }, [loadTree])
+
+  const handleDepartmentSettingsChanged = useCallback((removedDeptId?: string) => {
+    loadTree(removedDeptId)
+    setMembersRefreshSignal((prev) => prev + 1)
   }, [loadTree])
 
   const handleLocateMemberFromGlobal = useCallback(
@@ -107,9 +122,17 @@ export default function DepartmentPage() {
   useEffect(() => {
     if (selectedDeptId && tree.length > 0) {
       const node = findNode(tree, selectedDeptId)
-      if (node) setSelectedDept(node)
+      if (node) {
+        setSelectedDept(node)
+      } else {
+        selectFallbackDepartment(tree)
+      }
     }
-  }, [tree, selectedDeptId, findNode])
+    if (selectedDeptId && tree.length === 0) {
+      setSelectedDeptId(null)
+      setSelectedDept(null)
+    }
+  }, [tree, selectedDeptId, findNode, selectFallbackDepartment])
 
   return (
     <div className="flex h-full w-full">
@@ -155,6 +178,9 @@ export default function DepartmentPage() {
               <MemberTable
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
+                dept={selectedDept}
+                tree={tree}
+                isArchived={selectedDept.status === "archived"}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
                 highlightUserId={memberHighlightUserId}
@@ -166,7 +192,7 @@ export default function DepartmentPage() {
               <DepartmentSettings
                 dept={selectedDept}
                 tree={tree}
-                onChanged={handleTreeChange}
+                onChanged={handleDepartmentSettingsChanged}
               />
             </TabsContent>
           </Tabs>

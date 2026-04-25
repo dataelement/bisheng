@@ -29,6 +29,21 @@ class InformationSourcePageError(BaseErrorCode):
     Msg: str = 'Single article or non-list page detected. Please provide a valid "Column List Page" URL (e.g., News or Policy list pages)'
 
 
+class InformationSourceCrawlLimitError(BaseErrorCode):
+    Code: int = 19006
+    Msg: str = '网站爬取数量超过当前 API key 限制'
+
+
+class InformationSourceSubscriptionLimitError(BaseErrorCode):
+    Code: int = 19007
+    Msg: str = '订阅信息源数量超过当前 API key 限制'
+
+
+class InformationSourceWechatSearchLimitError(BaseErrorCode):
+    Code: int = 19008
+    Msg: str = '公众号检索次数超过当前 API key 限制'
+
+
 # Channel Management error codes, module code: 190
 class ChannelNotFoundError(BaseErrorCode):
     Code: int = 19010

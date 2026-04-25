@@ -1,4 +1,5 @@
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
+import type { DepartmentUserOption } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
@@ -29,6 +30,13 @@ function uid(v: unknown): number {
     return Number.isFinite(n) ? n : 0
 }
 
+function formatMemberAddedTime(iso?: string | null): string {
+    if (!iso) return "—"
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return "—"
+    return d.toLocaleString()
+}
+
 export default function EditUserGroup({ data, onBeforeChange, onChange }: EditProps) {
     const { t } = useTranslation()
     const { toast } = useToast()
@@ -40,7 +48,9 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
     })
 
     const [members, setMembers] = useState<UserGroupMemberRow[]>([])
-    const [memberPick, setMemberPick] = useState<{ label: string; value: number }[]>([])
+    const [memberPick, setMemberPick] = useState<DepartmentUserOption[]>([])
+    /** 未落库前新选入成员，用于「添加时间」列（落库后以接口 create_time 为准） */
+    const [localJoinAt, setLocalJoinAt] = useState<Record<number, string>>({})
 
     const loadMembers = async (groupId: number, creatorUserId?: number | null) => {
         const rows = await getAllUserGroupMembersV2(groupId)
@@ -50,8 +60,29 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
             (r) => creator == null || uid(r.user_id) !== creator,
         )
         setMemberPick(
-            pickRows.map((r) => ({ label: r.user_name, value: uid(r.user_id) })),
+            pickRows.map((r) => ({
+                label: r.user_name,
+                value: uid(r.user_id),
+                department_path: (r.department_path || "").trim() || undefined,
+            })),
         )
+    }
+
+    const onMembersPickChange = (next: DepartmentUserOption[]) => {
+        setMemberPick(next)
+        setLocalJoinAt((prev) => {
+            const out = { ...prev }
+            const ids = new Set(next.map((x) => uid(x.value)))
+            for (const x of next) {
+                const id = uid(x.value)
+                if (!id) continue
+                if (out[id] == null) out[id] = new Date().toISOString()
+            }
+            for (const k of Object.keys(out)) {
+                if (!ids.has(Number(k))) delete out[Number(k)]
+            }
+            return out
+        })
     }
 
     const handleSave = async () => {
@@ -115,6 +146,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
             visibility: ug.visibility === 'private' ? 'private' : 'public',
         }))
         async function init() {
+            setLocalJoinAt({})
             if (ug.id) {
                 await loadMembers(ug.id, ug.create_user ?? null)
             } else {
@@ -125,25 +157,33 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
         init()
     }, [(data as UserGroupV2)?.id])
 
-    const gid = (data as UserGroupV2).id
-
     const memberDisplayRows = useMemo(() => {
         const pathById = new Map<number, string>()
+        const timeById = new Map<number, string>()
         for (const m of members) {
-            pathById.set(uid(m.user_id), (m.department_path || '').trim() || '—')
+            pathById.set(uid(m.user_id), (m.department_path || "").trim())
+            if (m.create_time) timeById.set(uid(m.user_id), m.create_time)
         }
-        const byId = new Map<number, { user_id: number; user_name: string; department_path: string }>()
+        const byId = new Map<
+            number,
+            { user_id: number; user_name: string; department_path: string; added_time: string }
+        >()
         for (const p of memberPick) {
             const id = uid(p.value)
             if (!id) continue
+            const fromApi = pathById.get(id) || ""
+            const fromPick = (p.department_path || "").trim()
+            const department_path = fromPick || fromApi || "—"
+            const addedIso = timeById.get(id) || localJoinAt[id] || ""
             byId.set(id, {
                 user_id: id,
                 user_name: p.label,
-                department_path: pathById.get(id) ?? '—',
+                department_path,
+                added_time: formatMemberAddedTime(addedIso || null),
             })
         }
         return [...byId.values()]
-    }, [memberPick, members])
+    }, [memberPick, members, localJoinAt])
 
     const removeMemberFromPick = (userId: number) => {
         if (!userId) return
@@ -172,7 +212,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.groupCreator')}</p>
             <p className="text-sm text-muted-foreground font-normal mb-2">{t('system.groupCreatorReadonlyHint')}</p>
-            <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+            <div className="rounded-md border bg-muted/50 px-4 py-3 text-sm text-muted-foreground cursor-not-allowed select-none">
                 {(data as UserGroupV2).id
                     ? ((data as UserGroupV2).create_user_name?.trim()
                         || (data as UserGroupV2).group_admins?.map((a) => a.user_name).filter(Boolean).join(", ")
@@ -189,15 +229,16 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                 multiple
                 lockedValues={[]}
                 value={memberPick}
-                onChange={setMemberPick}
+                onChange={onMembersPickChange}
             />
-            {!!gid && memberDisplayRows.length > 0 && (
+            {memberDisplayRows.length > 0 && (
                 <div className="mt-4 max-h-96 overflow-y-auto rounded-md border">
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>{t('system.memberName')}</TableHead>
                                 <TableHead>{t('system.departmentPath')}</TableHead>
+                                <TableHead>{t('system.memberAddedTime')}</TableHead>
                                 <TableHead className="w-[100px] text-right">{t('operations')}</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -207,6 +248,9 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                                     <TableCell>{m.user_name}</TableCell>
                                     <TableCell className="text-muted-foreground text-sm">
                                         {m.department_path}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground text-sm">
+                                        {m.added_time}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Button

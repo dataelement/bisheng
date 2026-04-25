@@ -67,6 +67,12 @@ class UserRoleDao(UserRoleBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_roles_user(cls, role_ids: List[int]) -> List[UserRole]:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(UserRole).where(UserRole.role_id.in_(role_ids)))
+            return result.all()
+
+    @classmethod
     def get_admins_user(cls) -> List[UserRole]:
         """
         Get all super-managed accounts

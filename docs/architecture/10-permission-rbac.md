@@ -129,13 +129,15 @@ erDiagram
 | 表 | 文件 | 记录数量级 | 用途 |
 |---|---|---|---|
 | `user` | `user/domain/models/user.py` | 百~万 | 用户主表 |
-| `user_role` | `user/domain/models/user_role.py` | 与用户 1:N | 用户-角色关联（多角色） |
+| `userrole` | `user/domain/models/user_role.py` | 与用户 1:N | 用户-角色关联（多角色，旧文档常写 `user_role`） |
 | `role` | `database/models/role.py` | 十~百 | 角色定义，按 Group 隔离 |
-| `role_access` | `database/models/role_access.py` | 百~万 | 角色-资源授权记录 |
+| `roleaccess` | `database/models/role_access.py` | 百~万 | 角色-资源授权记录（旧文档常写 `role_access`） |
 | `group` | `database/models/group.py` | 十~百 | 用户组 |
-| `user_group` | `database/models/user_group.py` | 与用户 1:N | 用户-组关联，含组管理员标记 |
-| `group_resource` | `database/models/group_resource.py` | 百~万 | 组-资源归属关系 |
+| `usergroup` | `database/models/user_group.py` | 与用户 1:N | 用户-组关联，含组管理员标记（旧文档常写 `user_group`） |
+| `groupresource` | `database/models/group_resource.py` | 百~万 | 组-资源归属关系（旧文档常写 `group_resource`） |
 | `space_channel_member` | `common/models/space_channel_member.py` | 百~万 | 知识空间/频道成员（协作模型） |
+
+> 注意：这里涉及的当前 SQL 表名分别是 `userrole`、`roleaccess`、`usergroup`、`groupresource`；`user_role`、`role_access`、`user_group`、`group_resource` 在本仓里更多是代码文件名、历史逻辑名或字段名，不是当前实际表名。
 
 ---
 

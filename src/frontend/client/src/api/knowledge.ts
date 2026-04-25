@@ -38,6 +38,9 @@ export enum FileType {
     HTML = "html",
     TXT = "txt",
     MD = "md",
+    WPS = "wps",
+    DPS = "dps",
+    ET = "et",
     OTHER = "other"
 }
 
@@ -275,7 +278,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",
         updatedAt: raw.update_time || "",
-        tags: raw.tags || [],
+        tags: Array.isArray(raw.tags) ? raw.tags : [],
         isReleased: raw.is_released ?? false,
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
@@ -288,6 +291,37 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         departmentId: (raw as any).department_id ?? undefined,
         departmentName: (raw as any).department_name ?? undefined,
     };
+}
+
+function asArray<T = any>(value: unknown): T[] {
+    return Array.isArray(value) ? value as T[] : [];
+}
+
+function extractList<T = any>(value: unknown): T[] {
+    const payload: any = value ?? {};
+    if (Array.isArray(payload)) return payload as T[];
+    return asArray<T>(payload?.data ?? payload?.list ?? payload?.records);
+}
+
+function extractKnowledgeSpaceList(response: unknown): RawKnowledgeSpace[] {
+    const wrapper: any = response ?? {};
+    const payload: any = wrapper?.data ?? wrapper;
+    const candidates = [
+        payload,
+        payload?.data,
+        payload?.list,
+        payload?.records,
+        wrapper?.list,
+        wrapper?.records,
+    ];
+
+    for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+            return candidate;
+        }
+    }
+
+    return [];
 }
 
 /** Derive explicit FileType enum value from a raw child item */
@@ -326,6 +360,12 @@ function deriveFileType(raw: any): FileType {
             return FileType.TXT;
         case "md":
             return FileType.MD;
+        case "wps":
+            return FileType.WPS;
+        case "dps":
+            return FileType.DPS;
+        case "et":
+            return FileType.ET;
         default:
             return FileType.OTHER;
     }
@@ -436,6 +476,9 @@ function deriveFileTypeFromName(fileName: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "wps": return FileType.WPS;
+        case "dps": return FileType.DPS;
+        case "et": return FileType.ET;
         default: return FileType.OTHER;
     }
 }
@@ -481,7 +524,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         type: isFolder ? FileType.FOLDER : deriveFileTypeFromName(raw.file_name),
         size: raw.file_size,
         status: isFolder ? undefined : mapFileStatus(raw.status),
-        tags: isFolder ? [] : (raw.tags || []),
+        tags: isFolder ? [] : asArray<FileTag>(raw.tags),
         path: raw.object_name || raw.file_name,
         parentId: undefined,
         spaceId: String(raw.knowledge_id),
@@ -509,7 +552,7 @@ export async function getMineSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return (res?.data || []).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map(mapSpace);
 }
 
 /**
@@ -523,7 +566,7 @@ export async function getJoinedSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return (res?.data || []).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map(mapSpace);
 }
 
 /**
@@ -537,7 +580,7 @@ export async function getManagedSpacesApi(params?: {
             order_by: params?.order_by ?? 'name',
         },
     });
-    return (res?.data || []).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map(mapSpace);
 }
 
 /**
@@ -551,7 +594,7 @@ export async function getDepartmentSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return (res?.data || []).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map(mapSpace);
 }
 
 /**
@@ -783,7 +826,7 @@ export async function getSpaceMembersApi(space_id: string): Promise<{ data: Spac
         user_name: String(m?.user_name ?? ""),
         user_avatar: m?.user_avatar ?? m?.avatar ?? null,
         role: String(m?.user_role ?? m?.role ?? "member") as SpaceMember["role"],
-        groups: (m?.user_groups ?? m?.groups ?? [])
+        groups: asArray(m?.user_groups ?? m?.groups)
             .map((g: any) => String(g?.name ?? g?.group_name ?? g))
             .filter(Boolean),
     }));
@@ -821,7 +864,7 @@ export async function removeSpaceMemberApi(space_id: string, user_id: number): P
  */
 export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
     const res = await request.get<ApiResponse<SpaceTag[]>>(`/api/v1/knowledge/space/${space_id}/tag`);
-    return res?.data ?? [];
+    return extractList<SpaceTag>(res?.data);
 }
 
 /**
@@ -912,13 +955,10 @@ export async function getFolderParentPathApi(
     );
     const data = res?.data;
     // Normalize: backend may return an array of objects with id/name or file_name
-    if (Array.isArray(data)) {
-        return data.map((item: any) => ({
-            id: String(item.id),
-            name: item.name || item.file_name || String(item.id),
-        }));
-    }
-    return [];
+    return extractList(data).map((item: any) => ({
+        id: String(item.id),
+        name: item.name || item.file_name || String(item.id),
+    }));
 }
 
 /**
@@ -959,9 +999,11 @@ export async function getSpaceChildrenApi(params: {
             paramsSerializer: request.paramsSerializer,
         }
     );
+    const payload: any = res?.data ?? {};
+    const list = extractList<RawSpaceChild>(payload);
     return {
-        data: (res?.data?.data || []).map(raw => mapChild(raw, space_id)),
-        total: res?.data?.total ?? 0,
+        data: list.map(raw => mapChild(raw, space_id)),
+        total: Number(payload?.total ?? list.length),
     };
 }
 
@@ -1000,9 +1042,11 @@ export async function searchSpaceChildrenApi(params: {
         }
     );
 
+    const payload: any = res?.data ?? {};
+    const list = extractList<RawSpaceChild>(payload);
     return {
-        data: (res?.data?.data || []).map(raw => mapChild(raw, space_id)),
-        total: res?.data?.total ?? 0,
+        data: list.map(raw => mapChild(raw, space_id)),
+        total: Number(payload?.total ?? list.length),
     };
 }
 
@@ -1075,7 +1119,9 @@ export async function addFilesApi(
         data,
         { showError: true }
     ) as ApiResponse<RawSpaceChild[]>;
-    return (res?.data || []).map(raw => {
+    const payload: any = res?.data ?? {};
+    const list = extractList<RawSpaceChild>(payload);
+    return list.map(raw => {
         const file = mapChild(raw, space_id);
         // Preserve raw object for status 3 (duplicate) so retry API can use it
         if (raw?.status === 3) {

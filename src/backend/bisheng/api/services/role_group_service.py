@@ -12,7 +12,7 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.user import UserGroupNotDeleteError, AdminUserUpdateForbiddenError
+from bisheng.common.errcode.user import AdminUserUpdateForbiddenError
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
@@ -22,15 +22,55 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.permission.domain.services.owner_service import OwnerService, _run_async_safe
 from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.user import UserService
+from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler, TupleOperation
 from bisheng.utils import get_request_ip
 
 
 class RoleGroupService():
+
+    @staticmethod
+    def _execute_group_change_ops(operations: List[TupleOperation]) -> None:
+        if not operations:
+            return
+        try:
+            _run_async_safe(GroupChangeHandler.execute_async(operations))
+        except Exception as exc:
+            logger.warning('Failed to sync legacy user_group change to OpenFGA: %s', exc)
+
+    @staticmethod
+    def _cleanup_group_fga(group_id: int) -> None:
+        OwnerService.delete_resource_tuples_sync('user_group', str(group_id))
+        try:
+            _run_async_safe(LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id))
+        except Exception as exc:
+            logger.warning('Failed to cleanup legacy user_group subject tuples group=%s: %s', group_id, exc)
+
+    @staticmethod
+    def _sync_group_resource_move(
+        old_group_id: int,
+        new_group_id: int,
+        resource_type: int,
+        resource_id: str,
+    ) -> None:
+        try:
+            _run_async_safe(LegacyRBACSyncService.sync_group_resource_move(
+                old_group_id,
+                new_group_id,
+                int(resource_type),
+                str(resource_id),
+            ))
+        except Exception as exc:
+            logger.warning(
+                'Failed to sync legacy groupresource move old_group=%s new_group=%s type=%s resource=%s: %s',
+                old_group_id, new_group_id, resource_type, resource_id, exc,
+            )
 
     def enrich_group_reads(self, groups: List[Group]) -> List[GroupRead]:
         """Attach admins to Group ORM rows and return GroupRead list."""
@@ -63,7 +103,7 @@ class RoleGroupService():
 
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
         """Add Usergroup"""
-        group_admin = group.group_admins
+        group_admin = group.group_admins or [login_user.user_id]
         group.create_user = login_user.user_id
         group.update_user = login_user.user_id
         group = GroupDao.insert_group(group)
@@ -107,10 +147,7 @@ class RoleGroupService():
         if not group_info:
             return resp_200()
 
-        # Determine if there are still users in the group
-        user_group_list = UserGroupDao.get_group_user(group_id)
-        if user_group_list:
-            return UserGroupNotDeleteError.return_resp()
+        self._cleanup_group_fga(group_id)
         GroupDao.delete_group(group_id)
         self.delete_group_hook(request, login_user, group_info)
         return resp_200()
@@ -122,6 +159,7 @@ class RoleGroupService():
         # Move resources that only belonged to this group to another existing group (if any)
         all_resource = GroupResourceDao.get_group_all_resource(group_info.id)
         need_move_resource = []
+        need_move_fga_sync = []
         fallback_gid = None
         for g in GroupDao.get_all_group():
             if g.id != group_info.id:
@@ -132,12 +170,20 @@ class RoleGroupService():
             if len(resource_groups) > 1:
                 continue
             if fallback_gid is not None:
+                need_move_fga_sync.append((one.type, one.third_id))
                 one.group_id = str(fallback_gid)
                 need_move_resource.append(one)
         if need_move_resource:
             GroupResourceDao.update_group_resource(need_move_resource)
+            for resource_type, third_id in need_move_fga_sync:
+                self._sync_group_resource_move(group_info.id, fallback_gid, resource_type, third_id)
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
         # Delete role list under user group
+        for role in RoleDao.get_role_by_groups([group_info.id], '', 0, 0):
+            try:
+                _run_async_safe(LegacyRBACSyncService.sync_role_deleted(role.id))
+            except Exception as exc:
+                logger.warning('Failed to sync legacy role deletion role=%s: %s', role.id, exc)
         RoleDao.delete_role_by_group_id(group_info.id)
         # Delete administrators of user groups
         UserGroupDao.delete_group_all_admin(group_info.id)
@@ -174,7 +220,14 @@ class RoleGroupService():
         if user_groups and user_group.group_id in [ug.group_id for ug in user_groups]:
             raise ValueError('Duplicate setup user group')
 
-        return UserGroupDao.insert_user_group(user_group)
+        row = UserGroupDao.insert_user_group(user_group)
+        ops = (
+            GroupChangeHandler.on_admin_set(row.group_id, [row.user_id])
+            if row.is_group_admin
+            else GroupChangeHandler.on_members_added(row.group_id, [row.user_id])
+        )
+        self._execute_group_change_ops(ops)
+        return row
 
     def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ Overwrite the user group the user belongs to """
@@ -208,6 +261,12 @@ class RoleGroupService():
             UserGroupDao.delete_user_groups(user_id, need_delete_group)
         if need_add_group:
             UserGroupDao.add_user_groups(user_id, need_add_group)
+        ops: List[TupleOperation] = []
+        for group_id in need_delete_group:
+            ops.extend(GroupChangeHandler.on_member_removed(group_id, user_id))
+        for group_id in need_add_group:
+            ops.extend(GroupChangeHandler.on_members_added(group_id, [user_id]))
+        self._execute_group_change_ops(ops)
 
         # Log Audit Logs
         group_infos = GroupDao.get_group_by_ids(old_group + group_ids)
@@ -253,6 +312,12 @@ class RoleGroupService():
                 res.append(UserGroupDao.insert_user_group_admin(user_id, group_id))
         if need_delete_admin:
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
+        ops: List[TupleOperation] = []
+        if need_add_admin:
+            ops.extend(GroupChangeHandler.on_admin_set(group_id, need_add_admin))
+        if need_delete_admin:
+            ops.extend(GroupChangeHandler.on_admin_removed(group_id, need_delete_admin))
+        self._execute_group_change_ops(ops)
         # Modified by the most recent modifier for the user group
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 
@@ -270,6 +335,12 @@ class RoleGroupService():
 
         UserGroupDao.batch_add_group_members(group_id, need_add)
         UserGroupDao.batch_delete_group_members(group_id, need_delete)
+        ops: List[TupleOperation] = []
+        if need_add:
+            ops.extend(GroupChangeHandler.on_members_added(group_id, need_add))
+        for user_id in need_delete:
+            ops.extend(GroupChangeHandler.on_member_removed(group_id, user_id))
+        self._execute_group_change_ops(ops)
 
         GroupDao.update_group_update_user(group_id, login_user.user_id)
         group_info = GroupDao.get_user_group(group_id)

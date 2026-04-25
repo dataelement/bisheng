@@ -63,9 +63,9 @@ def _patch_tenant_dao(parent_tenant_id):
 
 
 def test_ac_01_dsl_v2_structure():
-    """Authorization model carries v2.0.1 + 15 types + tenant.shared_to + shared_with."""
-    assert MODEL_VERSION == 'v2.0.1'
-    assert len(AUTHORIZATION_MODEL['type_definitions']) == 15
+    """Authorization model carries v2.0.2 + 16 types + tenant.shared_to + shared_with."""
+    assert MODEL_VERSION == 'v2.0.2'
+    assert len(AUTHORIZATION_MODEL['type_definitions']) == 16
 
     types_by_name = {t['type']: t for t in AUTHORIZATION_MODEL['type_definitions']}
     assert 'shared_to' in types_by_name['tenant']['relations']

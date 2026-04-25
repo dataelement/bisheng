@@ -6,7 +6,6 @@ import logging
 from typing import Any, Dict, List, Optional, Set
 
 from bisheng.common.errcode.user_group import (
-    UserGroupHasMembersError,
     UserGroupMemberNotFoundError,
     UserGroupNameDuplicateError,
     UserGroupNoSeparateAdminsError,
@@ -27,6 +26,47 @@ logger = logging.getLogger(__name__)
 
 # AdminRole constant (id=1), matches F002 pattern
 AdminRole = 1
+
+
+def _sync_user_group_delete_side_effects(group_id: int) -> list[tuple[int, int, str]]:
+    """与 RoleGroupService.delete_group_hook 对齐：资源授权迁移、组资源/组角色清理、网关 Redis 通知。"""
+    import json
+
+    from bisheng.core.cache.redis_manager import get_redis_client_sync
+    from bisheng.database.models.group import GroupDao
+    from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+    from bisheng.database.models.role import RoleDao
+    from bisheng.database.models.user_group import UserGroupDao
+
+    all_resource = GroupResourceDao.get_group_all_resource(group_id)
+    fallback_gid = None
+    for g in GroupDao.get_all_group():
+        if g.id != group_id:
+            fallback_gid = g.id
+            break
+    need_move_resource = []
+    moved_resources = []
+    for one in all_resource:
+        resource_groups = GroupResourceDao.get_resource_group(
+            ResourceTypeEnum(one.type), one.third_id,
+        )
+        if len(resource_groups) > 1:
+            continue
+        if fallback_gid is not None:
+            moved_resources.append((int(fallback_gid), int(one.type), str(one.third_id)))
+            one.group_id = str(fallback_gid)
+            need_move_resource.append(one)
+    if need_move_resource:
+        GroupResourceDao.update_group_resource(need_move_resource)
+    GroupResourceDao.delete_group_resource_by_group_id(group_id)
+    RoleDao.delete_role_by_group_id(group_id)
+    UserGroupDao.delete_group_all_admin(group_id)
+
+    delete_message = json.dumps({'id': group_id})
+    redis_client = get_redis_client_sync()
+    redis_client.rpush('delete_group', delete_message, expiration=86400)
+    redis_client.publish('delete_group', delete_message)
+    return moved_resources
 
 
 def _is_admin(login_user) -> bool:
@@ -94,7 +134,7 @@ async def _ensure_create_group(login_user) -> None:
 
 
 async def _ensure_delete_group(login_user, group: Group) -> None:
-    """超管可删任意空组；创建者可删自己创建的空组。"""
+    """超管可删任意组；创建者可删自己创建的组（可有成员，删除后成员关系与组权限一并清理）。"""
     if _is_admin(login_user):
         return
     if group.create_user == login_user.user_id:
@@ -209,10 +249,7 @@ class UserGroupService:
                 login_user.user_id, page, limit, keyword,
             )
 
-        items = []
-        for g in groups:
-            items.append(await cls._enrich_group(g))
-
+        items = await cls._enrich_groups(groups)
         return {'data': items, 'total': total}
 
     @classmethod
@@ -264,9 +301,24 @@ class UserGroupService:
 
         await _ensure_delete_group(login_user, group)
 
-        member_count = await UserGroupDao.aget_group_member_count(group_id)
-        if member_count > 0:
-            raise UserGroupHasMembersError()
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        from bisheng.permission.domain.services.legacy_rbac_sync_service import (
+            LegacyRBACSyncService,
+        )
+        from bisheng.database.models.role import RoleDao
+
+        await OwnerService.delete_resource_tuples('user_group', str(group_id))
+        await LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id)
+        for role in RoleDao.get_role_by_groups([group_id], '', 0, 0):
+            await LegacyRBACSyncService.sync_role_deleted(role.id)
+        moved_resources = _sync_user_group_delete_side_effects(group_id)
+        for fallback_gid, resource_type, third_id in moved_resources:
+            await LegacyRBACSyncService.sync_group_resource_move(
+                group_id,
+                fallback_gid,
+                resource_type,
+                third_id,
+            )
 
         await GroupDao.adelete(group_id)
 
@@ -426,3 +478,46 @@ class UserGroupService:
             'update_time': group.update_time,
             'group_admins': group_admins,
         }
+
+    @classmethod
+    async def _enrich_groups(cls, groups: List[Group]) -> List[Dict[str, Any]]:
+        """列表页批量补充成员数和创建者名称，避免逐条查询。"""
+        if not groups:
+            return []
+
+        group_ids = [int(group.id) for group in groups if group.id is not None]
+        member_counts = await UserGroupDao.aget_group_member_counts(group_ids)
+
+        creator_ids = sorted({
+            int(group.create_user) for group in groups if group.create_user
+        })
+        creator_name_map: Dict[int, str] = {}
+        if creator_ids:
+            creators = await UserDao.aget_user_by_ids(creator_ids)
+            creator_name_map = {
+                int(user.user_id): user.user_name
+                for user in creators
+                if user.user_id is not None
+            }
+
+        items: List[Dict[str, Any]] = []
+        for group in groups:
+            creator_name = ''
+            if group.create_user:
+                creator_name = creator_name_map.get(int(group.create_user), str(group.create_user))
+            items.append({
+                'id': group.id,
+                'group_name': group.group_name,
+                'visibility': group.visibility,
+                'remark': group.remark,
+                'member_count': member_counts.get(int(group.id), 0) if group.id is not None else 0,
+                'create_user': group.create_user,
+                'create_user_name': creator_name or None,
+                'create_time': group.create_time,
+                'update_time': group.update_time,
+                'group_admins': (
+                    [{'user_id': group.create_user, 'user_name': creator_name}]
+                    if group.create_user else []
+                ),
+            })
+        return items

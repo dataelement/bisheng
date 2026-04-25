@@ -91,6 +91,8 @@ class UserRead(UserBase):
     role: Optional[str] = None  # admin；非超管时由服务端序列化（见 /user/info）
     access_token: Optional[str] = None
     web_menu: Optional[List[str]] = None
+    # True if any assigned role sets quota_config.menu_approval_mode (需审批模式)
+    menu_approval_mode: Optional[bool] = None
     admin_groups: Optional[List[int]] = None  # Managed User GroupsIDVertical
     # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
     can_manage_user_groups: Optional[bool] = None
@@ -452,6 +454,14 @@ class UserDao(UserBase):
             statement = select(User).where(User.external_id == external_id)
             result = await session.exec(statement)
             return result.first()
+
+    @classmethod
+    async def aget_users_by_external_id(cls, external_id: str) -> List['User']:
+        """Get all users by external_id globally, including soft-deleted rows."""
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.external_id == external_id)
+            result = await session.exec(statement)
+            return list(result.all())
 
     # ---------------------------------------------------------------
     # v2.5.1 F012: token_version helpers

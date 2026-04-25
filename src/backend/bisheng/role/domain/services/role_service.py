@@ -10,10 +10,10 @@ Four-level permission check for role management:
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
 from typing import List, Optional
 
+from sqlalchemy import func
 from sqlmodel import delete, select
 
 from bisheng.common.errcode.role import (
@@ -148,6 +148,7 @@ class RoleService:
         page: int,
         limit: int,
         login_user,
+        include_global_for_binding: bool = False,
     ) -> dict:
         """List visible roles with pagination (AC-03, AC-04, AC-04b).
 
@@ -217,7 +218,7 @@ class RoleService:
                     is_tenant_admin = False
                 if is_tenant_admin:
                     permission_level = 'tenant_admin'
-                    tenant_custom_roles_only = True
+                    tenant_custom_roles_only = not include_global_for_binding
                 else:
                     permission_level = 'regular'
 
@@ -431,8 +432,9 @@ class RoleService:
                 db_role.remark = req.remark
             if 'department_id' in req.model_fields_set:
                 db_role.department_id = req.department_id
-            # Touch the role row so menu-only edits also refresh update_time.
-            db_role.update_time = datetime.now()
+            # Use database time so the role timestamp stays aligned with MySQL,
+            # even when the app host clock drifts.
+            db_role.update_time = func.now()
 
             session.add(db_role)
             await cls._replace_menu_access_in_session(session, role_id, menu_ids)
@@ -464,6 +466,9 @@ class RoleService:
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
 
+        from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+        await LegacyRBACSyncService.sync_role_deleted(role_id)
+
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
         await RoleDao.adelete_role(role_id)
         return role
@@ -494,8 +499,9 @@ class RoleService:
             db_role = result.first()
             if not db_role:
                 raise RoleNotFoundError()
-            # Touch the role row so pure menu edits bump update_time in the list.
-            db_role.update_time = datetime.now()
+            # Use database time so the role timestamp stays aligned with MySQL,
+            # even when the app host clock drifts.
+            db_role.update_time = func.now()
             session.add(db_role)
             await cls._replace_menu_access_in_session(session, role_id, normalized)
             await session.commit()
@@ -607,6 +613,13 @@ class RoleService:
             return False
         if role.role_type == 'global' and not login_user.is_admin():
             return False
+        if permission_level == 'tenant_admin':
+            role_tenant_id = getattr(role, 'tenant_id', None)
+            login_tenant_id = getattr(login_user, 'tenant_id', None)
+            if role_tenant_id is not None and login_tenant_id is not None:
+                if int(role_tenant_id) != int(login_tenant_id):
+                    return False
+            return role.role_type == 'tenant'
         if permission_level == 'dept_admin' and role.department_id is not None:
             if dept_subtree_ids is None or role.department_id not in dept_subtree_ids:
                 return False

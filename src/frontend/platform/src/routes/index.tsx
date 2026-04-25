@@ -5,6 +5,7 @@ import { LoginPage } from "../pages/LoginPage/login";
 import { ResetPwdPage } from "../pages/LoginPage/resetPwd";
 import Page403 from "../pages/Page403";
 import Page404 from "../pages/Page404";
+import MenuPermissionPlaceholder from "../pages/MenuPermissionPlaceholder";
 import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
 import EditorPage from "@/pages/Dashboard/editor";
@@ -106,12 +107,13 @@ const privateRouter = [
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },
-      { path: "label", element: <LabelPage /> },
-      { path: "label/:id", element: <TaskApps /> },
-      { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
+      { path: "label", element: <LabelPage />, permission: 'mark_task' },
+      { path: "label/:id", element: <TaskApps />, permission: 'mark_task' },
+      { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats />, permission: 'mark_task' },
       { path: "dashboard", element: <Dashboard /> },
       { path: "tenant", element: <TenantPage />, permission: 'sys' },
       { path: "department", element: <Navigate to="/sys" replace /> },
+      { path: "menu-pending", element: <MenuPermissionPlaceholder /> },
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },
@@ -165,7 +167,10 @@ function hasRoutePermission(permissions: string[], key: string) {
   return permissions.includes(key)
 }
 
-export const getPrivateRouter = (permissions) => {
+export const getPrivateRouter = (
+  permissions: string[],
+  opts?: { menuApprovalMode?: boolean },
+) => {
   const filterMenuItem = (_privateRouter) => {
     const result = _privateRouter.reduce((res, cur) => {
       // 递归
@@ -175,6 +180,9 @@ export const getPrivateRouter = (permissions) => {
 
       const { permission, ...other } = cur
       if (permission && !hasRoutePermission(permissions, permission)) {
+        if (opts?.menuApprovalMode) {
+          res.push({ ...other, element: <MenuPermissionPlaceholder /> })
+        }
         return res
       }
 

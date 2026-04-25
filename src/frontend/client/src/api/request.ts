@@ -134,6 +134,15 @@ customAxios.interceptors.response.use(
       console.warn('401 error, refreshing token');
       originalRequest._retry = true;
 
+      // Standalone guest chat links (/chat/flow/:flowId, /chat/assistant/:flowId)
+      // are passwordless — never redirect to the login page from here.
+      // Auth variants (/chat/flow/auth/..., /chat/assistant/auth/...) are excluded.
+      const isGuestStandaloneChat =
+        /\/chat\/(flow|assistant)\/(?!auth\/)[^/]+\/?$/.test(location.pathname);
+      if (isGuestStandaloneChat) {
+        return Promise.reject(error);
+      }
+
       const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
       if (thirdPartyLoginUrl) {
         window.location.href = thirdPartyLoginUrl;

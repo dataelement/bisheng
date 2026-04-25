@@ -275,7 +275,7 @@ function UserBubble({
     );
 
     return (
-        <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
+        <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Render uploaded files if any */}
                 {message.files && message.files.length > 0 && (
@@ -439,7 +439,7 @@ function AssistantBubble({
         !(Array.isArray(message.events) && message.events.length > 0);
 
     return (
-        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
+        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
                 {/* Avatar + name kept but hidden via style only */}
                 <div className="hidden gap-3">

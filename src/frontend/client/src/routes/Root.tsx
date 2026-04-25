@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
 import {
   AgentsMapContext,
   AssistantsMapContext,
@@ -19,6 +19,7 @@ export default function Root() {
   const [bannerHeight, setBannerHeight] = useState(0);
   const isSmallScreen = usePrefersMobileLayout();
   const [navVisible, setNavVisible] = useRecoilState(store.chatHistoryDrawerOpen);
+  const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
   const { pathname } = useLocation();
 
   const { isAuthenticated, isUserLoading, logout } = useAuthContext();
@@ -64,7 +65,7 @@ export default function Root() {
                   <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
                   {/* 会话消息面板区(路由) */}
                   <div className=" relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
-                    {showMobileNav && isSmallScreen ? (
+                    {showMobileNav && isSmallScreen && !mobileNavHidden ? (
                       <MobileNav
                         variant="chat"
                         navVisible={navVisible}

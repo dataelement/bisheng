@@ -42,6 +42,10 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         uds_module.UserTenantSyncService, 'sync_user', sync_mock,
     )
+    dept_execute = AsyncMock(name='DepartmentChangeHandler.execute_async')
+    monkeypatch.setattr(
+        uds_module.DepartmentChangeHandler, 'execute_async', dept_execute,
+    )
 
     # Fake async session — record every ``exec`` + ``add`` + ``commit``.
     session_calls = {
@@ -83,7 +87,10 @@ def patches(monkeypatch):
     monkeypatch.setattr(uds_module, 'get_async_db_session', _fake_get_session)
 
     return SimpleNamespace(
-        primary=primary_mock, sync=sync_mock, session_calls=session_calls,
+        primary=primary_mock,
+        sync=sync_mock,
+        dept_execute=dept_execute,
+        session_calls=session_calls,
     )
 
 
@@ -101,6 +108,7 @@ class TestNoOp:
         )
         assert result['changed'] is False
         patches.sync.assert_not_awaited()
+        patches.dept_execute.assert_not_awaited()
         assert patches.session_calls['commit'] == 0
 
 
@@ -129,6 +137,11 @@ class TestHappyPath:
 
         # DB writes happened (1 commit).
         assert patches.session_calls['commit'] == 1
+        patches.dept_execute.assert_awaited_once()
+        ops = patches.dept_execute.await_args.args[0]
+        assert [(op.action, op.user, op.relation, op.object) for op in ops] == [
+            ('write', 'user:100', 'member', 'department:12'),
+        ]
 
     def test_first_primary_no_demote(self, patches):
         """No existing primary → just insert a row and sync."""

@@ -1,8 +1,10 @@
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
 import { currentChatState } from '~/pages/appChat/store/atoms';
 import { cn } from '~/utils';
@@ -58,10 +60,12 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 
 interface StandaloneSideNavProps {
   sidebar: ReturnType<typeof useStandaloneSidebar>;
+  onCloseSidebar?: () => void;
 }
 
-export function StandaloneSideNav({ sidebar }: StandaloneSideNavProps) {
+export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNavProps) {
   const localize = useLocalize();
+  const { data: bsConfig } = useGetBsConfig();
   const { mode } = useStandaloneChatContext();
   const chatState = useRecoilValue(currentChatState);
   const isGuest = mode === 'guest';
@@ -87,53 +91,73 @@ export function StandaloneSideNav({ sidebar }: StandaloneSideNavProps) {
     '';
 
   return (
-    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden pl-3 pr-2 pt-3 pb-2 text-[#212121]">
+      {bsConfig?.sidebarIcon?.image ? (
+        <img
+          src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
+          alt="logo"
+          className="absolute left-3 top-3 z-20 hidden size-6 object-contain max-[768px]:block"
+        />
+      ) : null}
+      <button
+        type="button"
+        onClick={onCloseSidebar}
+        className={cn(
+          'absolute right-3 top-3 z-20 hidden shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors',
+          onCloseSidebar ? 'max-[768px]:flex' : '',
+        )}
+        aria-label={localize('com_nav_close_sidebar')}
+      >
+        <X size={16} className="text-[#4E5969]" />
+      </button>
       {/* App card */}
       <div className="shrink-0 pt-8">
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
-                style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)' }}
-              >
-                <div className="flex items-center gap-[8px]">
-                  <AppAvator
-                    className="size-[32px] min-w-[32px] rounded-[4px]"
-                    url={flowData?.logo}
-                    id={flowData?.id as any}
-                    flowType={String(flowData?.flow_type || 5)}
-                    iconClassName="w-5 h-5"
-                  />
-                  <div className="flex-1 flex flex-col min-w-0 justify-center">
-                    <h3 className="text-[14px] font-medium leading-[22px] truncate">
-                      {flowData?.name || ''}
-                    </h3>
-                    <TruncatedLineTooltip
-                      text={flowData?.description || ''}
-                      className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-center gap-[4px]">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      createNewChat();
-                    }}
-                    type="button"
-                    className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
-                  >
-                    {localize('com_knowledge_start_new_chat')}
-                  </button>
-                </div>
+        {isGuest ? (
+          <div
+            className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
+            style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)' }}
+          >
+            <div className="flex items-center gap-[8px]">
+              <AppAvator
+                className="size-[32px] min-w-[32px] rounded-[4px]"
+                url={flowData?.logo}
+                id={flowData?.id as any}
+                flowType={String(flowData?.flow_type || 5)}
+                iconClassName="w-5 h-5"
+              />
+              <div className="flex-1 flex flex-col min-w-0 justify-center">
+                <h3 className="text-[14px] font-medium leading-[22px] truncate">
+                  {flowData?.name || ''}
+                </h3>
+                <TruncatedLineTooltip
+                  text={flowData?.description || ''}
+                  className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate"
+                />
               </div>
-            </TooltipTrigger>
-            {(flowData?.name || flowData?.description || authorName) && (
-              <TooltipContent side="right" align="start" className="max-w-[320px] p-3">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
+            </div>
+
+            <div className="flex items-center justify-center gap-[4px]">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  createNewChat();
+                }}
+                type="button"
+                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+              >
+                {localize('com_knowledge_start_new_chat')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
+                  style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)' }}
+                >
+                  <div className="flex items-center gap-[8px]">
                     <AppAvator
                       className="size-[32px] min-w-[32px] rounded-[4px]"
                       url={flowData?.logo}
@@ -141,25 +165,62 @@ export function StandaloneSideNav({ sidebar }: StandaloneSideNavProps) {
                       flowType={String(flowData?.flow_type || 5)}
                       iconClassName="w-5 h-5"
                     />
-                    <h4 className="text-[14px] font-semibold leading-[20px] break-all">
-                      {flowData?.name || ''}
-                    </h4>
+                    <div className="flex-1 flex flex-col min-w-0 justify-center">
+                      <h3 className="text-[14px] font-medium leading-[22px] truncate">
+                        {flowData?.name || ''}
+                      </h3>
+                      <TruncatedLineTooltip
+                        text={flowData?.description || ''}
+                        className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate"
+                      />
+                    </div>
                   </div>
-                  {flowData?.description && (
-                    <p className="text-[12px] leading-[18px] text-[#4e5969] whitespace-pre-wrap break-words">
-                      {flowData.description}
-                    </p>
-                  )}
-                  {authorName && (
-                    <p className="text-[12px] leading-[18px] text-[#86909c]">
-                      {localize('com_app_chat_author')}: {authorName}
-                    </p>
-                  )}
+
+                  <div className="flex items-center justify-center gap-[4px]">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        createNewChat();
+                      }}
+                      type="button"
+                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                    >
+                      {localize('com_knowledge_start_new_chat')}
+                    </button>
+                  </div>
                 </div>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+              </TooltipTrigger>
+              {(flowData?.name || flowData?.description || authorName) && (
+                <TooltipContent side="right" align="start" className="max-w-[320px] p-3">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <AppAvator
+                        className="size-[32px] min-w-[32px] rounded-[4px]"
+                        url={flowData?.logo}
+                        id={flowData?.id as any}
+                        flowType={String(flowData?.flow_type || 5)}
+                        iconClassName="w-5 h-5"
+                      />
+                      <h4 className="text-[14px] font-semibold leading-[20px] break-all">
+                        {flowData?.name || ''}
+                      </h4>
+                    </div>
+                    {flowData?.description && (
+                      <p className="text-[12px] leading-[18px] text-[#4e5969] whitespace-pre-wrap break-words">
+                        {flowData.description}
+                      </p>
+                    )}
+                    {authorName && (
+                      <p className="text-[12px] leading-[18px] text-[#86909c]">
+                        {localize('com_app_chat_author')}: {authorName}
+                      </p>
+                    )}
+                  </div>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       {/* Conversation list */}

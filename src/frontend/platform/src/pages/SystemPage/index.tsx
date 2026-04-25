@@ -37,9 +37,9 @@ export default function index() {
       : "user"
 
   return (
-    <div className="h-full w-full px-2 pt-4">
-      <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="">
+    <div className="flex h-full w-full flex-col px-2 pt-4">
+      <Tabs defaultValue={defaultTab} className="flex min-h-0 w-full flex-1 flex-col">
+        <TabsList className="shrink-0 self-start">
           {showOrgTab && (
             <TabsTrigger value="organization">
               {t("system.orgAndMembers")}
@@ -65,35 +65,35 @@ export default function index() {
           )}
         </TabsList>
         {showOrgTab && (
-          <TabsContent value="organization">
+          <TabsContent value="organization" className="min-h-0 flex-1 overflow-hidden">
             <OrganizationAndMembers />
           </TabsContent>
         )}
         {showLegacyUserTab && (
-          <TabsContent value="user">
+          <TabsContent value="user" className="min-h-0 flex-1 overflow-hidden">
             <Users />
           </TabsContent>
         )}
         {showUserGroupTab && (
-          <TabsContent value="userGroup">
+          <TabsContent value="userGroup" className="min-h-0 flex-1 overflow-hidden">
             <UserGroups />
           </TabsContent>
         )}
-        <TabsContent value="role">
+        <TabsContent value="role" className="min-h-0 flex-1 overflow-hidden">
           <RolesAndPermissions />
         </TabsContent>
         {showOrgSyncTab && (
-          <TabsContent value="orgSync">
+          <TabsContent value="orgSync" className="min-h-0 flex-1 overflow-hidden">
             <OrgSync />
           </TabsContent>
         )}
         {canAccessSystemConfig && (
-          <TabsContent value="system">
+          <TabsContent value="system" className="min-h-0 flex-1 overflow-hidden">
             <Config />
           </TabsContent>
         )}
         {canAccessSystemConfig && (
-          <TabsContent value="theme">
+          <TabsContent value="theme" className="min-h-0 flex-1 overflow-hidden">
             <Theme />
           </TabsContent>
         )}

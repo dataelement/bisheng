@@ -66,6 +66,29 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
     return models.find((m) => m.id === selectedModelId)?.relation || 'viewer'
   }, [models, selectedModelId])
 
+  const availableModels = useMemo(() => {
+    if (subjectType === 'user') {
+      return models
+    }
+    return models.filter((model) => model.relation !== 'owner')
+  }, [models, subjectType])
+
+  useEffect(() => {
+    if (!availableModels.length) return
+    if (availableModels.some((model) => model.id === selectedModelId)) return
+    setSelectedModelId(availableModels[0].id)
+  }, [availableModels, selectedModelId])
+
+  useEffect(() => {
+    setSelected((prev) =>
+      prev.map((item) =>
+        item.type === 'department'
+          ? { ...item, include_children: includeChildren }
+          : item,
+      ),
+    )
+  }, [includeChildren])
+
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type)
     setSelected([])
@@ -143,6 +166,11 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
               className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-muted rounded-md"
             >
               {s.name}
+              {s.type === 'department' && s.include_children && (
+                <span className="text-muted-foreground">
+                  ({t('includeChildren')})
+                </span>
+              )}
               <button
                 className="hover:text-destructive"
                 onClick={() => removeSelected(s.id)}
@@ -159,7 +187,7 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
         <RelationSelect
           value={selectedModelId}
           onChange={setSelectedModelId}
-          options={models}
+          options={availableModels}
           className="w-[160px]"
         />
         <Button

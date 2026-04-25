@@ -27,7 +27,7 @@ import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 
@@ -359,15 +359,29 @@ export const ChatKnowledge = ({
     [allSpaces, debouncedSpaceKeyword]
   );
 
+  // Comma-separated ids of admin-configured org KBs. Passed to the backend so
+  // those ids are floated to the top of the global sort — otherwise a
+  // configured KB sitting on page 2+ of the alpha list could never be promoted
+  // by client-side reshuffle alone.
+  const preferredIds = useMemo(() => {
+    const configured = (config as any)?.orgKbs || [];
+    if (!configured.length) return '';
+    return configured.map((k: any) => String(k.id)).join(',');
+  }, [config]);
+
   // Org KB data fetching (paginated via react-query)
   const { data: orgData, isFetching: orgFetching } = useGetOrgToolList({
-    page: orgPage, page_size: PAGE_SIZE, name: debouncedOrgKeyword, sort_by: 'name',
+    page: orgPage,
+    page_size: PAGE_SIZE,
+    name: debouncedOrgKeyword,
+    sort_by: 'name',
+    preferred_ids: preferredIds,
   });
 
   useEffect(() => {
     setOrgPage(1);
     setAllOrgKbs([]);
-  }, [debouncedOrgKeyword]);
+  }, [debouncedOrgKeyword, preferredIds]);
 
   useEffect(() => {
     if (orgData) {
@@ -424,7 +438,8 @@ export const ChatKnowledge = ({
   const hasAnySelection = value.length > 0;
 
   const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
-  const isMobile = usePrefersMobileLayout();
+  // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）
+  const isMobile = useMediaQuery('(max-width: 576px)');
   const [mobilePanel, setMobilePanel] = useState<'root' | 'space' | 'org'>('root');
   const menuContentRef = useRef<HTMLDivElement>(null);
   const spaceLayout = useSubMenuLayout(menuContentRef, 'space', openSub === 'space');
@@ -681,7 +696,11 @@ export const ChatKnowledge = ({
               >
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <BookOpen className="size-[18px] text-slate-600" />
+                    <img
+                      src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg`}
+                      alt=""
+                      className="size-[18px] text-slate-600"
+                    />
                     {selectedKnowledgeSpaces.length > 0 && (
                       <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                     )}
@@ -742,7 +761,11 @@ export const ChatKnowledge = ({
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      <BooksIcon className="size-[18px] text-slate-600" strokeWidth={1.25} />
+                      <img
+                        src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
+                        alt=""
+                        className="size-[18px] text-slate-600"
+                      />
                       {selectedOrgKbs.length > 0 && (
                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                       )}

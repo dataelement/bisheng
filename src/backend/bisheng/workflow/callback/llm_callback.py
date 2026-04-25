@@ -1,3 +1,4 @@
+import threading
 from typing import Any, Dict, Optional, List, Union
 
 from bisheng.llm.domain.utils import extract_reasoning_content
@@ -10,6 +11,8 @@ from loguru import logger
 
 class LLMNodeCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
+
+    _thread_state = threading.local()
 
     def __init__(
             self,
@@ -35,6 +38,20 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.cancel_llm_end = cancel_llm_end
         self.reasoning_content = ''
         logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
+
+    @classmethod
+    def push_global_stream_suppression(cls) -> None:
+        current = getattr(cls._thread_state, 'suppression_count', 0)
+        cls._thread_state.suppression_count = current + 1
+
+    @classmethod
+    def pop_global_stream_suppression(cls) -> None:
+        current = getattr(cls._thread_state, 'suppression_count', 0)
+        cls._thread_state.suppression_count = max(current - 1, 0)
+
+    @classmethod
+    def is_global_stream_suppressed(cls) -> bool:
+        return getattr(cls._thread_state, 'suppression_count', 0) > 0
 
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
                             **kwargs: Any) -> Any:
@@ -84,6 +101,8 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         if token is None and chunk is None:
             return
         if not self.output or not self.stream:
+            return
+        if self.is_global_stream_suppressed():
             return
 
         self.output_len += len(token)  # Determine if the streaming output has been completed

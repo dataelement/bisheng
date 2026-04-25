@@ -35,6 +35,8 @@ from bisheng.database.models.department_admin_grant import (
     DepartmentAdminGrantDao,
 )
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.database.constants import DefaultRole
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     LoginSyncRequest,
@@ -214,6 +216,10 @@ class LoginSyncService:
                 )
                 try:
                     user = await UserDao.add_user_and_default_role(new_user)
+                    await LegacyRBACSyncService.sync_user_auth_created(
+                        user.user_id,
+                        [DefaultRole],
+                    )
                 except Exception as e:  # pragma: no cover — rare integrity race
                     logger.error(
                         'F014 could not create SSO user %s: %s', ext, e,
@@ -250,6 +256,7 @@ class LoginSyncService:
         previous primary to ``is_primary=0``. Idempotent."""
         current = await UserDepartmentDao.aget_user_primary_department(user_id)
         if current is not None and current.department_id == dept_id:
+            await cls._sync_department_member_tuples(user_id, [dept_id])
             return
         if current is not None:
             # Demote old primary in place instead of deleting to preserve
@@ -266,6 +273,28 @@ class LoginSyncService:
             await UserDepartmentDao.aadd_member(
                 user_id, dept_id, is_primary=1, source=cls.SOURCE,
             )
+        await cls._sync_department_member_tuples(user_id, [dept_id])
+
+    @classmethod
+    async def _sync_department_member_tuples(
+        cls, user_id: int, dept_ids: list[int],
+    ) -> None:
+        """Best-effort OpenFGA department membership repair for SSO login.
+
+        Some older paths wrote ``user_department`` rows without the matching
+        ``department#member`` tuple. Rewriting the member tuple during login is
+        idempotent and lets department-resource grants work immediately.
+        """
+        if not dept_ids:
+            return
+        from bisheng.department.domain.services.department_change_handler import (
+            DepartmentChangeHandler,
+        )
+
+        ops = []
+        for dept_id in dict.fromkeys(int(did) for did in dept_ids):
+            ops.extend(DepartmentChangeHandler.on_members_added(dept_id, [user_id]))
+        await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def _sync_department_admin_tuples(
@@ -380,6 +409,7 @@ class LoginSyncService:
             await UserDepartmentDao.aadd_member(
                 user_id, dept_id, is_primary=0, source=cls.SOURCE,
             )
+        await cls._sync_department_member_tuples(user_id, dept_ids)
 
 
 # -----------------------------------------------------------------------

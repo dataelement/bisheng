@@ -32,6 +32,10 @@ export interface ChatCitationItem {
     itemId?: string;
     chunkId?: string;
     chunkIndex?: number;
+    documentName?: string;
+    fileName?: string;
+    filename?: string;
+    file_name?: string;
     title?: string;
     snippet?: string;
     content?: string;

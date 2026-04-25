@@ -1,12 +1,12 @@
 """Unit tests for OpenFGA authorization model DSL (F013 T02).
 
 Verifies:
-- v2.0.1 model version bump (2026-04-19 shared_with redesign)
+- v2.0.2 model version bump (user_group admin/member compatibility)
 - tenant type carries shared_to relation; no parent relation
 - Every resource gets shared_with: [tenant] + viewer tupleToUserset(shared_with, member)
-- viewer's directly_related_user_types stays at 3 canonical sources (no #-nesting,
+- viewer's directly_related_user_types stays at bounded canonical sources (no #-nesting,
   which OpenFGA protobuf rejects)
-- manager/editor stay at the three standard sources
+- manager/editor stay at bounded direct subject sources
 - llm_server / llm_model types preallocated for F020
 """
 
@@ -29,8 +29,8 @@ def types_by_name() -> dict:
 
 
 def test_model_version_bumped_to_v2():
-    """F013 must bump MODEL_VERSION to v2.0.1 (shared_with DSL redesign)."""
-    assert MODEL_VERSION == 'v2.0.1'
+    """MODEL_VERSION must change when the static OpenFGA DSL changes."""
+    assert MODEL_VERSION == 'v2.0.2'
 
 
 def test_get_authorization_model_returns_deep_copy():
@@ -153,13 +153,27 @@ def test_resource_editor_excludes_tenant(types_by_name, resource_type):
         f'{resource_type}.editor unexpectedly carries tenant type: {editor_types}'
 
 
-def test_resource_viewer_three_standard_sources_preserved(types_by_name):
-    """Viewer must still keep user / department#member / user_group#member."""
+def test_resource_viewer_standard_sources_preserved(types_by_name):
+    """Viewer must keep direct user, department, and user-group subjects."""
     viewer_types = types_by_name['workflow']['metadata']['relations']['viewer'][
         'directly_related_user_types']
     assert {'type': 'user'} in viewer_types
     assert {'type': 'department', 'relation': 'member'} in viewer_types
     assert {'type': 'user_group', 'relation': 'member'} in viewer_types
+
+
+def test_user_group_admin_is_member(types_by_name):
+    """Group admins must satisfy user_group#member grants."""
+    user_group = types_by_name['user_group']
+    assert user_group['relations']['admin'] == {'this': {}}
+    assert {'computedUserset': {'relation': 'admin'}} in user_group['relations']['member']['union']['child']
+
+
+def test_resource_manager_accepts_user_group_admin(types_by_name):
+    """Legacy groupresource migration grants manager to user_group#admin."""
+    manager_types = types_by_name['workflow']['metadata']['relations']['manager'][
+        'directly_related_user_types']
+    assert {'type': 'user_group', 'relation': 'admin'} in manager_types
 
 
 def test_folder_parent_accepts_knowledge_library(types_by_name):

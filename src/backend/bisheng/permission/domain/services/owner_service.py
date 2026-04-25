@@ -21,7 +21,7 @@ def _close_coroutine(coro) -> None:
         close()
 
 
-def _run_async_safe(coro):
+def _run_async_safe(coro, *, timeout: float = 10):
     """Run an async coroutine from a sync context, handling event loop issues.
 
     In FastAPI threadpool threads, asyncio.run() creates a new event loop which
@@ -33,7 +33,7 @@ def _run_async_safe(coro):
         loop = asyncio.get_running_loop()
         # Thread has a running loop — dispatch safely
         future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result(timeout=10)
+        return future.result(timeout=timeout)
     except RuntimeError:
         pass
 

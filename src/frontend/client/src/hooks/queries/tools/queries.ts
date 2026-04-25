@@ -70,9 +70,11 @@ export const useGetPersonalToolList = () => {
 }
 
 // 获取组织知识库
-export const useGetOrgToolList = (query: { page, page_size?, name?, sort_by?}) => {
+export const useGetOrgToolList = (query: { page, page_size?, name?, sort_by?, preferred_ids?: string }) => {
   return useQuery({
-    queryKey: ['OrgTools', query.page, query.name],
+    // preferred_ids participates in the key so switching configured set (or
+    // loading bsConfig.orgKbs after the first render) invalidates the cache.
+    queryKey: ['OrgTools', query.page, query.name, query.preferred_ids || ''],
     queryFn: () => getKnowledgeInfo(query),
     select(data) {
       return data?.data.data;

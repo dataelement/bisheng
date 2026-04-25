@@ -22,7 +22,6 @@ premock_import_chain()
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.user_group import (
-    UserGroupHasMembersError,
     UserGroupMemberExistsError,
     UserGroupMemberNotFoundError,
     UserGroupNameDuplicateError,
@@ -171,14 +170,13 @@ class TestUserGroupCRUD:
                 resp = c.delete('/api/v1/user-groups/10')
                 assert resp.json()['status_code'] == 200
 
-    def test_delete_group_has_members(self):
-        """AC-11: Delete group with members returns 23003."""
+    def test_delete_group_with_members_allowed(self):
+        """有成员的用户组也可删除（级联清理成员关系与组权限）。"""
         app = _make_app(MockAdminUser)
-        with patch(f'{SERVICE_PATH}.adelete_group', new_callable=AsyncMock,
-                   side_effect=UserGroupHasMembersError()):
+        with patch(f'{SERVICE_PATH}.adelete_group', new_callable=AsyncMock):
             with TestClient(app) as c:
                 resp = c.delete('/api/v1/user-groups/10')
-                assert resp.json()['status_code'] == 23003
+                assert resp.json()['status_code'] == 200
 
 
 # =========================================================================

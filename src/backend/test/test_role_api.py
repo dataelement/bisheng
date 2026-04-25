@@ -7,6 +7,7 @@ Covers AC-01, AC-03, AC-04, AC-05, AC-07, AC-09, AC-10, AC-11, AC-15, AC-24~AC-2
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from pathlib import Path
 
 from bisheng.role.domain.schemas.role_schema import RoleListResponse, EffectiveQuotaItem
 
@@ -96,6 +97,40 @@ class TestRoleEndpoints:
                 keyword=None, page=1, limit=10, login_user=mock_admin_login,
             )
         assert result['total'] == 2
+
+    def test_group_roles_admin_uses_visible_role_catalog(self):
+        """Legacy user-role editor endpoint must include v2.5 roles with group_id=NULL."""
+        source = (
+            Path(__file__).resolve().parents[1]
+            / 'bisheng'
+            / 'api'
+            / 'v1'
+            / 'usergroup.py'
+        ).read_text(encoding='utf-8')
+
+        admin_branch = source.index('if await _can_use_v25_role_catalog(user):')
+        legacy_permission_check = source.index('if not user.check_groups_admin(group_id):')
+
+        assert 'RoleService.list_roles' in source
+        assert 'include_global_for_binding=True' in source
+        assert admin_branch < legacy_permission_check
+
+    def test_user_role_save_uses_v25_role_catalog(self):
+        """Saving user-role edits must accept v2.5 roles with group_id=NULL."""
+        source = (
+            Path(__file__).resolve().parents[1]
+            / 'bisheng'
+            / 'user'
+            / 'api'
+            / 'user.py'
+        ).read_text(encoding='utf-8')
+
+        catalog_lookup = source.index('visible_roles = await RoleService.list_roles')
+        permission_reject = source.index("raise HTTPException(status_code=500, detail=f'No permission to add roles")
+
+        assert 'include_global_for_binding=True' in source
+        assert 'admin_roles.update(one.id for one in visible_roles' in source
+        assert catalog_lookup < permission_reject
 
     @pytest.mark.asyncio
     async def test_delete_builtin_raises(self, mock_admin_login):

@@ -82,7 +82,12 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                 </div>
 
                 {models.map((model, index) => (
-                    <div key={model.key} className="grid items-center mb-4" style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}>
+                    <div
+                        key={model.key}
+                        ref={(el) => setItemRef(el, index)}
+                        className="grid items-center mb-4"
+                        style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}
+                    >
                         <div className="pr-2" id={model.id}>
                             {assistantLlmOptions.length > 0 ? (
                                 <ModelSelect

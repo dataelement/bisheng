@@ -107,15 +107,30 @@ export function CreateLocalMemberDialog({
         <div className="space-y-4 py-2">
           <div>
             <Label>{t("system.username")}</Label>
-            <Input value={userName} onChange={(e) => setUserName(e.target.value)} className="mt-1" />
+            <Input
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="mt-1"
+              placeholder={t("bs:department.createLocalUserNamePlaceholder")}
+            />
           </div>
           <div>
             <Label>{t("bs:department.personId")}</Label>
-            <Input value={personId} onChange={(e) => setPersonId(e.target.value)} className="mt-1" />
+            <Input
+              value={personId}
+              onChange={(e) => setPersonId(e.target.value)}
+              className="mt-1"
+              placeholder={t("bs:department.createLocalPersonIdPlaceholder")}
+            />
           </div>
           <div>
             <Label>{t("system.initialPassword")}</Label>
-            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
+            <PasswordInput
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1"
+              placeholder={t("bs:department.createLocalPasswordPlaceholder")}
+            />
           </div>
           <div>
             <Label>{t("bs:department.primaryDeptFixed")}</Label>

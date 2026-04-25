@@ -20,6 +20,7 @@ from bisheng.common.errcode.org_sync import (
     OrgSyncConfigDisabledError,
     OrgSyncConfigNotFoundError,
 )
+from bisheng.database.constants import DefaultRole
 from bisheng.database.models.department import (
     Department,
     DepartmentDao,
@@ -28,6 +29,7 @@ from bisheng.database.models.department import (
 )
 from bisheng.database.models.tenant import UserTenant, UserTenantDao
 from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
+from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncConfig,
     OrgSyncConfigDao,
@@ -433,6 +435,10 @@ class OrgSyncService:
             password=password_hash,
         )
         user = await UserDao.add_user_and_default_role(user)
+        await LegacyRBACSyncService.sync_user_auth_created(
+            user.user_id,
+            [DefaultRole],
+        )
 
         # Create UserTenant
         ut = UserTenant(user_id=user.user_id, tenant_id=config.tenant_id)

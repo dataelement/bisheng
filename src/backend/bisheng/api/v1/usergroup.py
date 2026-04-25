@@ -1,6 +1,8 @@
 # build router
+import logging
 from typing import Annotated, List, Optional
 
+import anyio
 from fastapi import APIRouter, Body, Depends, Query, Request
 
 from bisheng.api.services.role_group_service import RoleGroupService
@@ -12,8 +14,44 @@ from bisheng.database.models.group import Group, GroupCreate, GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.role.domain.services.role_service import RoleService
 
 router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(UserPayload.get_login_user)])
+logger = logging.getLogger(__name__)
+
+
+async def _can_use_v25_role_catalog(user: UserPayload) -> bool:
+    if user.is_admin():
+        return True
+
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    try:
+        admin_depts = await DepartmentDao.aget_user_admin_departments(user.user_id)
+    except Exception:
+        logger.exception(
+            'get_group_roles: department admin check failed user=%s',
+            getattr(user, 'user_id', None),
+        )
+        admin_depts = []
+    if admin_depts:
+        return True
+
+    try:
+        return await PermissionService.check(
+            user_id=user.user_id,
+            relation='admin',
+            object_type='tenant',
+            object_id=str(user.tenant_id),
+            login_user=user,
+        )
+    except Exception:
+        logger.exception(
+            'get_group_roles: tenant admin check failed user=%s',
+            getattr(user, 'user_id', None),
+        )
+        return False
 
 
 @router.get('/list')
@@ -35,7 +73,13 @@ async def create_group(request: Request, group: GroupCreate,
     """
     Add Usergroup
     """
-    return resp_200(RoleGroupService().create_group(request, login_user, group))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().create_group,
+        request,
+        login_user,
+        group,
+    )
+    return resp_200(data)
 
 
 @router.put('/create')
@@ -45,7 +89,13 @@ async def update_group(request: Request,
     """
     Can edit existing usergroups
     """
-    return resp_200(RoleGroupService().update_group(request, login_user, group))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().update_group,
+        request,
+        login_user,
+        group,
+    )
+    return resp_200(data)
 
 
 @router.delete('/create', status_code=200)
@@ -55,8 +105,12 @@ async def delete_group(request: Request,
     """
     Can delete existing usergroups
     """
-
-    return RoleGroupService().delete_group(request, login_user, group_id)
+    return await anyio.to_thread.run_sync(
+        RoleGroupService().delete_group,
+        request,
+        login_user,
+        group_id,
+    )
 
 
 @router.post('/set_user_group')
@@ -70,7 +124,14 @@ async def set_user_group(request: Request,
     """
     if not group_id:
         raise UserGroupEmptyError()
-    return resp_200(RoleGroupService().replace_user_groups(request, login_user, user_id, group_id))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().replace_user_groups,
+        request,
+        login_user,
+        user_id,
+        group_id,
+    )
+    return resp_200(data)
 
 
 @router.get('/get_user_group')
@@ -101,8 +162,14 @@ async def set_group_admin(
     """
     Get groupingadmin, batch setting interface, overriding the historicaladmin
     """
-
-    return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().set_group_admin,
+        request,
+        login_user,
+        user_ids,
+        group_id,
+    )
+    return resp_200(data)
 
 @router.post('/set_group_members')
 async def set_group_members(
@@ -113,7 +180,14 @@ async def set_group_members(
     """
     Batch set group members (non-admin), overriding the historical members
     """
-    return resp_200(RoleGroupService().set_group_members(request, login_user, user_ids, group_id))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().set_group_members,
+        request,
+        login_user,
+        user_ids,
+        group_id,
+    )
+    return resp_200(data)
 
 
 @router.post('/set_update_user', status_code=200)
@@ -161,6 +235,20 @@ async def get_group_roles(*,
     """
     Get a list of roles within a user group
     """
+    # v2.5 roles are tenant/department scoped and usually have group_id=NULL.
+    # The user-role editor still calls this legacy endpoint, so v2.5 admins
+    # must read from the visible role catalog instead of filtering by
+    # role.group_id, otherwise global/default roles disappear from the selector.
+    if await _can_use_v25_role_catalog(user):
+        result = await RoleService.list_roles(
+            keyword=keyword,
+            page=page or 1,
+            limit=limit or 0,
+            login_user=user,
+            include_global_for_binding=True,
+        )
+        return resp_200(data=result)
+
     # Determine if you are an administrator of a user group
     if not user.check_groups_admin(group_id):
         return UnAuthorizedError.return_resp()

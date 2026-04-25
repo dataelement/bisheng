@@ -557,9 +557,14 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         }));
     };
 
-    const validateForm = (): { isValid: boolean, firstErrorRef: React.RefObject<HTMLDivElement> | null } => {
+    const validateForm = (): {
+        isValid: boolean,
+        firstErrorRef: React.RefObject<HTMLDivElement> | null,
+        modelErrorMessages: string[],
+    } => {
         let isValid = true;
         let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
+        const modelErrorMessages: string[] = [];
         const newErrors: FormErrors = {
             sidebarSlogan: '',
             welcomeMessage: '',
@@ -644,6 +649,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                     ? { current: refs.modelManagementContainerRef.current }
                     : refs.sidebarSloganRef; // Keep default fallback
             }
+            modelErrorMessages.push(newErrors.model);
             isValid = false;
         }
 
@@ -689,6 +695,8 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
             if (error[0] || error[1]) {
                 modelNameErrors[model.key] = error;
+                if (error[0]) modelErrorMessages.push(error[0]);
+                if (error[1]) modelErrorMessages.push(error[1]);
                 isValid = false;
             }
         });
@@ -696,13 +704,17 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         newErrors.modelNames = modelNameErrors;
         setErrors(newErrors);
 
-        return { isValid, firstErrorRef };
+        return {
+            isValid,
+            firstErrorRef,
+            modelErrorMessages: Array.from(new Set(modelErrorMessages)),
+        };
     };
 
     const { toast } = useToast()
     const { reloadConfig } = useContext(locationContext)
     const handleSave = async () => {
-        const { isValid, firstErrorRef } = validateForm();
+        const { isValid, firstErrorRef, modelErrorMessages } = validateForm();
         if (!isValid) {
             const tabName = (formData.tabDisplayName || '').trim();
             if (!tabName) {
@@ -711,10 +723,16 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                     description: '日常模式展示名称不能为空',
                 });
             }
+            if (modelErrorMessages.length > 0) {
+                toast({
+                    variant: 'error',
+                    description: modelErrorMessages.join('; '),
+                });
+            }
             if (firstErrorRef?.current) {
                 firstErrorRef.current.scrollIntoView({
                     behavior: 'smooth',
-                    block: 'end',
+                    block: 'center',
                     inline: 'nearest'
                 });
 

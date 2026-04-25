@@ -30,6 +30,9 @@ export function AgentCard({
 }: AgentCardProps) {
   const localize = useLocalize();
   const isMobileCard = useMediaQuery('(max-width: 576px)');
+  const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
+  const shouldUseHoverActions = !isMobileCard && canHover;
+  const shouldUseHoverActionsInMobileCard = isMobileCard && canHover;
   return (
     <div
       className={cn(
@@ -50,7 +53,14 @@ export function AgentCard({
         </div>
 
         {isMobileCard ? (
-          <div className="flex items-center gap-1 shrink-0">
+          <div
+            className={cn(
+              "flex items-center gap-1 shrink-0 transition-opacity",
+              shouldUseHoverActionsInMobileCard
+                ? "opacity-0 pointer-events-none group-hover/card:opacity-100 group-hover/card:pointer-events-auto"
+                : "opacity-100 pointer-events-auto",
+            )}
+          >
             {isPinned ? (
               <span
                 className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C]"
@@ -107,7 +117,9 @@ export function AgentCard({
                     'border border-transparent hover:border-[#E5E6EB] hover:bg-[#f7f8fa]',
                     isPinned
                       ? 'opacity-100'
-                      : 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100 coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto',
+                      : shouldUseHoverActions
+                        ? 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100'
+                        : 'opacity-100 pointer-events-auto',
                   )}
                   aria-label={
                     isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
@@ -157,13 +169,23 @@ export function AgentCard({
               onStartChat(agent);
             }}
             variant="outline"
-            className="h-6 shrink-0 rounded-[6px] border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] hover:bg-[#F7F8FA]"
+            className={cn(
+              "h-6 shrink-0 rounded-[6px] border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] hover:bg-[#F7F8FA] transition-opacity",
+              shouldUseHoverActionsInMobileCard
+                ? "opacity-0 pointer-events-none group-hover/card:opacity-100 group-hover/card:pointer-events-auto"
+                : "opacity-100 pointer-events-auto",
+            )}
           >
             {localize('com_app_start_chat')}
           </Button>
         </div>
       ) : (
-        <div className="hidden h-[28px] w-full min-w-0 items-stretch justify-center gap-1 group-hover/card:flex coarse-pointer:flex">
+        <div
+          className={cn(
+            'h-[28px] w-full min-w-0 items-stretch justify-center gap-1',
+            shouldUseHoverActions ? 'hidden group-hover/card:flex' : 'flex',
+          )}
+        >
           {agent.can_share === true ? (
             <Button
               onClick={(e) => {

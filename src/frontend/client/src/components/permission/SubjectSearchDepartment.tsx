@@ -89,17 +89,17 @@ export function SubjectSearchDepartment({
   }, [tree, keyword, matchesKeyword]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="relative shrink-0">
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <Input
           placeholder={localize("com_permission.search_department")}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          className="pl-8"
+          className="h-8 pl-8"
         />
       </div>
-      <div className="max-h-[200px] overflow-y-auto rounded-md border">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">{localize("com_ui_loading")}</div>
         )}
@@ -122,13 +122,6 @@ export function SubjectSearchDepartment({
             />
           ))}
       </div>
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
-        <Checkbox
-          checked={includeChildren}
-          onCheckedChange={(v) => onIncludeChildrenChange(v === true)}
-        />
-        {localize("com_permission.include_children")}
-      </label>
     </div>
   );
 }
@@ -153,6 +146,7 @@ function TreeNode({
       <div
         className="flex cursor-pointer items-center gap-1 px-2 py-1.5 hover:bg-gray-50"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        onClick={() => onToggle(node)}
       >
         {hasChildren ? (
           <button
@@ -164,7 +158,11 @@ function TreeNode({
         ) : (
           <span className="w-5" />
         )}
-        <Checkbox checked={selectedIds.has(node.id)} onCheckedChange={() => onToggle(node)} />
+        <Checkbox
+          checked={selectedIds.has(node.id)}
+          onClick={(e) => e.stopPropagation()}
+          onCheckedChange={() => onToggle(node)}
+        />
         <Building2 className="h-4 w-4 text-gray-400" />
         <span className="truncate text-sm">{node.name}</span>
         {node.member_count != null && (

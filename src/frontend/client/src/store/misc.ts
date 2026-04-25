@@ -17,6 +17,12 @@ const chatMobileHeaderState = atom<ChatMobileHeaderState | null>({
   default: null,
 });
 
+/** Temporarily hide Root mobile top nav (e.g. fullscreen preview overlays) */
+const chatMobileNavHiddenState = atom<boolean>({
+  key: 'chatMobileNavHiddenState',
+  default: false,
+});
+
 const hideBannerHint = atomWithLocalStorage('hideBannerHint', [] as string[]);
 
 const messageAttachmentsMap = atom<Record<string, TAttachment[] | undefined>>({
@@ -38,4 +44,5 @@ export default {
   queriesEnabled,
   chatHistoryDrawerOpen,
   chatMobileHeaderState,
+  chatMobileNavHiddenState,
 };

@@ -487,7 +487,7 @@ export default function Subscription() {
                             </div>
                             <button
                                 type="button"
-                                className="min-w-0 flex-1 bg-transparent"
+                                className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
                                 aria-label={localize("com_nav_close_sidebar")}
                                 onClick={() => setChannelListDrawerOpen(false)}
                             />

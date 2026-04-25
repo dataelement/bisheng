@@ -304,8 +304,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           <img src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`} alt="" />
         </video>
 
-        <div 
-          ref={chatContainerRef} 
+        <div
+          ref={chatContainerRef}
           className={cn("relative z-10 h-full noscrollbar", !hasMessages && "overflow-y-auto")}
         >
           {/* Layout: treat "loading an existing conversation" the same as
@@ -338,14 +338,14 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
-                          contentWidthClassName="w-full max-w-[800px] mx-auto touch-mobile:max-w-full touch-mobile:px-3"
+                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={handleOpenCitationPanel}
                           activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
                           flatMode
                         />
                       </div>
-                      
+
                       {/* Input area — moved inside the left column to be independent of sidebar */}
                       {!shareToken && (
                         <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
@@ -475,7 +475,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         isNew={isNew}
                       />
                     </div>
-                    
+
                     {/* Input area for landing page */}
                     {!shareToken && (
                       <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
@@ -549,16 +549,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 };
 
 const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi: boolean }) => {
-  const [expanded, setExpanded] = useState(false)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const [showListFade, setShowListFade] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
   const isH5 = usePrefersMobileLayout()
-
-  // H5: 2 cols × 2 rows default (4), expand adds 2 rows → 8 total.
-  // PC: 4 cols × 2 rows default (8), expand adds 2 rows → 16 total.
-  const defaultCount = isH5 ? 4 : 8
-  const expandedCount = isH5 ? 8 : 16
 
   const { data: dailyApps = [] } = useQuery<any[]>(
     ['recommendedApps'],
@@ -570,6 +566,11 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
     const _chatId = generateUUID(32)
     const flowId = agent.id
     const flowType = agent.flow_type || agent.type
+    try {
+      sessionStorage.setItem(`app-chat-entry:${_chatId}`, 'home')
+    } catch {
+      // ignore storage failures
+    }
     queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
       if (!convoData) return convoData;
       return addConversation(convoData, {
@@ -586,73 +587,90 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
       } as any);
     });
     setConversation((prevState: any) => ({ ...prevState, conversationId: _chatId }))
-    navigate(`/chat/${_chatId}/${flowId}/${flowType}`)
+    navigate(`/app/${_chatId}/${flowId}/${flowType}?from=home-recommended&entry=home`)
   }
+  const displayApps = dailyApps
+
+  const updateFadeState = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollHeight > el.clientHeight + 1;
+    const hasMoreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+    setShowListFade(hasOverflow && hasMoreBelow);
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    updateFadeState();
+    const onScroll = () => updateFadeState();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(() => updateFadeState());
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, [displayApps, updateFadeState]);
 
   if (isLingsi || dailyApps.length === 0) return null
 
-  const displayApps = expanded
-    ? dailyApps.slice(0, expandedCount)
-    : dailyApps.slice(0, defaultCount)
-  // Show button only when collapsed AND there are hidden items — hide after expanding.
-  const canExpand = !expanded && dailyApps.length > defaultCount
 
   return (
-    <div className="relative w-full -mt-2 touch-desktop:-mt-40 pb-24 z-10">
+    <div className="relative z-10 w-full mt-4 pb-24">
       <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4 sm:px-0">
-        <h2 className="text-sm text-gray-400">平台推荐应用</h2>
+        <h2 className="text-sm text-gray-400">推荐应用</h2>
       </div>
-      <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3 max-w-[800px] mx-auto px-4 sm:px-0">
-        {displayApps.map((appItem) => (
-          <Card
-            key={appItem.id}
-            className="group flex flex-col py-0 rounded-[6px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-[#335cff] hover:shadow-[0_4px_14px_rgba(51,92,255,0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
-            style={{ background: 'linear-gradient(135deg, #f9fbfe 0%, #fff 50%, #f9fbfe 100%)' }}
-            onClick={() => handleCardClick(appItem)}
-          >
-            <CardContent className="h-full p-2 flex flex-col relative w-full">
-              <div className="flex items-center gap-2.5 mb-2 shrink-0">
-                <AppAvator
-                  id={appItem.name}
-                  url={appItem.logo}
-                  flowType={appItem.flow_type || appItem.type}
-                  className={`size-[32px] min-w-[32px] !rounded-[8px]`}
-                  iconClassName="w-5 h-5"
-                />
-                <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
-              </div>
-              <div className="text-[13px] text-[#86909C] line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
+      <div className="relative max-w-[800px] mx-auto px-4 sm:px-0">
+        <div
+          ref={listRef}
+          className="max-h-[320px] overflow-y-auto pr-1 scrollbar-on-hover"
+        >
+          <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3">
+            {displayApps.map((appItem) => (
+              <Card
+                key={appItem.id}
+                className="group flex flex-col py-0 rounded-[8px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-[#335cff] hover:shadow-[0_4px_14px_rgba(51,92,255,0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+                style={{ background: 'linear-gradient(135deg, #f9fbfe 0%, #fff 50%, #f9fbfe 100%)' }}
+                onClick={() => handleCardClick(appItem)}
+              >
+                <CardContent className="h-full p-2 flex flex-col relative w-full">
+                  <div className="flex items-center gap-2.5 mb-2 shrink-0">
+                    <AppAvator
+                      id={appItem.name}
+                      url={appItem.logo}
+                      flowType={appItem.flow_type || appItem.type}
+                      className={`size-[32px] min-w-[32px] !rounded-[8px]`}
+                      iconClassName="w-5 h-5"
+                    />
+                    <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
+                  </div>
+                  <div className="text-[13px] text-[#86909C] line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
 
-              <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
-                <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 group-hover:opacity-0 transition-opacity duration-200 pointer-events-none">
-                  {appItem.tags && appItem.tags.map((tag: any) => (
-                    <div
-                      key={tag.id || tag.name || tag}
-                      className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
-                    >
-                      {tag.name || tag}
+                  <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
+                    <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 group-hover:opacity-0 transition-opacity duration-200 pointer-events-none">
+                      {appItem.tags && appItem.tags.map((tag: any) => (
+                        <div
+                          key={tag.id || tag.name || tag}
+                          className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
+                        >
+                          {tag.name || tag}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-[#335cff] rounded-[6px] text-white text-[13px] font-medium opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                  开始对话
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      {canExpand && (
-        <div className="flex justify-center mt-2 pb-6">
-          <Button
-            variant="outline"
-            className="rounded-full text-xs h-8 text-blue-500 border-blue-200 bg-white shadow-sm"
-            onClick={() => setExpanded(true)}
-          >
-            展示更多
-          </Button>
+                    <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-[#335cff] rounded-[6px] text-white text-[13px] font-medium opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                      开始对话
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      )}
+        {showListFade && (
+          <div className="pointer-events-none absolute inset-x-4 sm:inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/95 to-white/0" />
+        )}
+      </div>
     </div>
   )
 }

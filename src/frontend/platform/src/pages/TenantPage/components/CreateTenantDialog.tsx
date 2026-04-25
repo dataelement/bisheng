@@ -93,6 +93,16 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
   };
 
   const handleSubmit = async () => {
+    if (!isEdit) {
+      toast({
+        title: t("tenant.createDeprecatedTitle", { defaultValue: "新建入口已停用" }),
+        description: t("tenant.createDeprecatedDesc", {
+          defaultValue: "请通过部门挂载流程创建子租户；Root Tenant 由系统自动初始化。",
+        }),
+        variant: "warning",
+      });
+      return;
+    }
     if (!form.tenant_name.trim()) return;
     if (!isEdit && !form.tenant_code.trim()) return;
     if (!isEdit && form.admin_user_ids.length === 0) return;
@@ -130,6 +140,14 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
         <h3 className="text-lg font-semibold mb-4">
           {isEdit ? t("tenant.edit") : t("tenant.create")}
         </h3>
+
+        {!isEdit && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950 dark:text-amber-100">
+            {t("tenant.createDeprecatedDesc", {
+              defaultValue: "请通过部门挂载流程创建子租户；Root Tenant 由系统自动初始化。",
+            })}
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* Tenant Name */}
@@ -280,6 +298,7 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
             onClick={handleSubmit}
             disabled={
               loading ||
+              !isEdit ||
               !form.tenant_name.trim() ||
               (!isEdit && (!codeValid || form.admin_user_ids.length === 0))
             }

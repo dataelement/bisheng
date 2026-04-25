@@ -27,10 +27,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../com
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
-import { getUserTenantsApi, switchTenantApi } from "../controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
-import { toast } from "@/components/bs-ui/toast/use-toast";
 import HeaderMenu from "./HeaderMenu";
 
 export default function MainLayout() {
@@ -72,6 +70,11 @@ export default function MainLayout() {
     const isDeptAdmin = Boolean(user.is_department_admin)
     // 侧栏：数据集 / 日志 / 系统管理 — 超管与部门管理员
     const isFullAdminShell = isSuperAdmin || isDeptAdmin
+    const menuApprovalMode = Boolean(user.menu_approval_mode)
+    const hasAdminEntry =
+        isSuperAdmin
+        || isDeptAdmin
+        || Boolean(user.web_menu?.includes("admin") || user.web_menu?.includes("backend"))
 
     const isMenu = (menu: string) => {
         if (menu === 'workstation') {
@@ -81,6 +84,9 @@ export default function MainLayout() {
         }
         return user.web_menu?.includes(menu) || isSuperAdmin
     }
+
+    /** 需审批模式：无显式权限时仍展示侧栏入口，路由落到空白占位页 */
+    const showAdminNav = (menu: string) => isMenu(menu) || (menuApprovalMode && hasAdminEntry)
 
     return <div className="flex">
         <div className="bg-background-main w-full h-screen">
@@ -147,26 +153,26 @@ export default function MainLayout() {
             </div>
             <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
                 <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
-                    <nav className="">
+                    <nav className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: "calc(100vh - 64px - 90px)" }}>
                         {/* <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink> */}
                         {
-                            isMenu('board') && <>
-                                <NavLink to='/dashboard ' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            showAdminNav('board') && <>
+                                <NavLink to={isMenu('board') ? '/dashboard ' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DashboardIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dashboard')}</span>
                                 </NavLink>
                             </>
                         }
                         {
-                            isMenu('build') &&
-                            <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
+                            showAdminNav('build') &&
+                            <NavLink to={isMenu('build') ? '/build' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
                                 <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                             </NavLink>
                         }
                         {
-                            isMenu('knowledge') &&
-                            <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            showAdminNav('knowledge') &&
+                            <NavLink to={isMenu('knowledge') ? '/filelib' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
                             </NavLink>
                         }
@@ -178,19 +184,20 @@ export default function MainLayout() {
                             </>
                         }
                         {
-                            isMenu('model') &&
-                            <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            showAdminNav('model') &&
+                            <NavLink to={isMenu('model') ? '/model' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                             </NavLink>
                         }
                         {
-                            isMenu('evaluation') &&
-                            <NavLink to='/evaluation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            showAdminNav('evaluation') &&
+                            <NavLink to={isMenu('evaluation') ? '/evaluation' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <EvaluatingIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.evaluation')}</span>
                             </NavLink>
                         }
                         {
-                            <NavLink to='/label' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            showAdminNav('mark_task') &&
+                            <NavLink to={isMenu('mark_task') ? '/label' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <LabelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.annotation')}</span>
                             </NavLink>
                         }
@@ -298,65 +305,33 @@ const useLanguage = (user: User) => {
     }
 }
 
-// Tenant switcher component for multi-tenant header
+// Multi-tenant header entry: v2.5.1 no longer exposes manual tenant switching.
 function TenantSwitcher({ user, isAdmin }: { user: User; isAdmin: boolean }) {
     const { t } = useTranslation("bs");
-    const [tenants, setTenants] = useState<any[]>([]);
-    const [loaded, setLoaded] = useState(false);
-    const currentTenant = user.tenant_name || user.tenant_code || '';
-
-    const loadTenants = () => {
-        if (loaded) return;
-        captureAndAlertRequestErrorHoc(
-            getUserTenantsApi().then((res: any) => {
-                setTenants(res || []);
-                setLoaded(true);
-            })
-        );
-    };
-
-    const handleSwitch = (tenantId: number) => {
-        if (tenantId === user.tenant_id) return;
-        bsConfirm({
-            title: t('tenant.management'),
-            desc: t('tenant.switchConfirm'),
-            onOk: (next: () => void) => {
-                captureAndAlertRequestErrorHoc(
-                    switchTenantApi(tenantId).then(() => {
-                        toast({ title: t('tenant.switchSuccess'), variant: 'success' });
-                        location.reload();
-                    })
-                );
-                next();
-            }
-        });
-    };
+    const currentTenant = user.leaf_tenant_name || user.tenant_name || user.tenant_code || '';
 
     return <>
-        <SelectHover
-            className={"-top-4"}
-            triagger={
-                <div
-                    className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center"
-                    onMouseEnter={loadTenants}
-                >
-                    <span className="text-sm leading-8 max-w-24 truncate">{currentTenant || t('tenant.management')}</span>
-                    <ChevronDown className="ml-1 w-4 h-4" />
-                </div>
-            }>
-            {tenants.map((tenant) => (
-                <SelectHoverItem key={tenant.tenant_id} onClick={() => handleSwitch(tenant.tenant_id)}>
-                    <span>{tenant.tenant_name}</span>
-                    {tenant.tenant_id === user.tenant_id && <Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2" />}
-                </SelectHoverItem>
-            ))}
-            {isAdmin && <>
-                <div className="border-t my-1" />
+        {isAdmin ? (
+            <SelectHover
+                className={"-top-4"}
+                triagger={
+                    <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
+                        <span className="text-sm leading-8 max-w-24 truncate">{currentTenant || t('tenant.management')}</span>
+                        <ChevronDown className="ml-1 w-4 h-4" />
+                    </div>
+                }>
                 <SelectHoverItem onClick={() => { location.href = '/tenant'; }}>
                     <SystemIcon className="w-4 h-4 mr-1" /><span>{t('tenant.management')}</span>
                 </SelectHoverItem>
-            </>}
-        </SelectHover>
+            </SelectHover>
+        ) : (
+                <div
+                    className="h-8 px-3 bg-header-icon rounded-lg my-4 flex items-center justify-center"
+                    title={currentTenant || t('tenant.management')}
+                >
+                    <span className="text-sm leading-8 max-w-24 truncate">{currentTenant || t('tenant.management')}</span>
+                </div>
+        )}
         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
     </>;
 }

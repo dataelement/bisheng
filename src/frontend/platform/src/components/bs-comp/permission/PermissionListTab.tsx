@@ -47,8 +47,10 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   const [listTab, setListTab] = useState<ListSubjectType>('user')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
-  const [models, setModels] = useState<RelationModelOption[]>([])
+  const [grantableModels, setGrantableModels] = useState<RelationModel[]>([])
+  const [useDefaultModels, setUseDefaultModels] = useState(false)
   const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map())
+  const [userSelectedTab, setUserSelectedTab] = useState(false)
 
   useEffect(() => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
@@ -57,28 +59,6 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
       }
     })
   }, [refreshKey])
-
-  const mergeGrantableWithEntries = useCallback(
-    (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
-      const opts: RelationModelOption[] = (grantable || []).map((m) => ({
-        id: m.id,
-        name: m.is_system ? t(`level.${m.relation}`) : m.name,
-        relation: m.relation as RelationLevel,
-      }))
-      const ids = new Set(opts.map((o) => o.id))
-      for (const e of list) {
-        if (!e.model_id || ids.has(e.model_id)) continue
-        ids.add(e.model_id)
-        opts.push({
-          id: e.model_id,
-          name: e.model_name || e.relation,
-          relation: e.relation as RelationLevel,
-        })
-      }
-      return opts
-    },
-    [t],
-  )
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -103,7 +83,16 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   /** 换资源时回到「用户」Tab；不在用户操作切换时强行改 tab（空 tab 也要能停留并展示空态） */
   useEffect(() => {
     setListTab('user')
+    setUserSelectedTab(false)
   }, [resourceId])
+
+  useEffect(() => {
+    if (userSelectedTab || entries.length === 0 || filteredEntries.length > 0) return
+    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((st) =>
+      entries.some((entry) => entry.subject_type === st),
+    )
+    if (firstNonEmptyTab) setListTab(firstNonEmptyTab)
+  }, [entries, filteredEntries.length, userSelectedTab])
 
   useEffect(() => {
     captureAndAlertRequestErrorHoc(
@@ -111,14 +100,35 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
       () => true,
     ).then((res) => {
       if (res === false) {
-        setModels(DEFAULT_MODELS)
+        setUseDefaultModels(true)
         return
       }
       if (!res) return
-      const merged = mergeGrantableWithEntries(res, entries)
-      setModels(merged.length ? merged : DEFAULT_MODELS)
+      setUseDefaultModels(false)
+      setGrantableModels(res)
     })
-  }, [resourceType, resourceId, entries, mergeGrantableWithEntries, refreshKey])
+  }, [resourceType, resourceId, refreshKey])
+
+  const models = useMemo<RelationModelOption[]>(() => {
+    if (useDefaultModels) return DEFAULT_MODELS
+
+    const opts: RelationModelOption[] = grantableModels.map((m) => ({
+      id: m.id,
+      name: m.is_system ? t(`level.${m.relation}`) : m.name,
+      relation: m.relation as RelationLevel,
+    }))
+    const ids = new Set(opts.map((o) => o.id))
+    for (const e of entries) {
+      if (!e.model_id || ids.has(e.model_id)) continue
+      ids.add(e.model_id)
+      opts.push({
+        id: e.model_id,
+        name: e.model_name || e.relation,
+        relation: e.relation as RelationLevel,
+      })
+    }
+    return opts.length ? opts : DEFAULT_MODELS
+  }, [entries, grantableModels, t, useDefaultModels])
 
   // Modify permission level inline
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
@@ -231,7 +241,10 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
                 ? 'bg-background shadow text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
-            onClick={() => setListTab(st)}
+            onClick={() => {
+              setUserSelectedTab(true)
+              setListTab(st)
+            }}
           >
             {t(`subject.${st === 'user_group' ? 'userGroup' : st}`)}
           </button>

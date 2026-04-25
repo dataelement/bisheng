@@ -45,7 +45,7 @@ import { useTranslation } from "react-i18next"
 
 const WORKBENCH_PARENT_ID = "workstation"
 const ADMIN_PARENT_ID = "admin"
-const WORKBENCH_CHILD_MENUS = ["subscription", "knowledge_space"] as const
+const WORKBENCH_CHILD_MENUS = ["home", "apps", "subscription", "knowledge_space"] as const
 const ADMIN_CHILD_MENUS = [
   "board",
   "model",
@@ -67,8 +67,10 @@ const ADMIN_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
 }
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
-  ADMIN_PARENT_ID,
+  "home",
+  "apps",
   "knowledge_space",
+  ADMIN_PARENT_ID,
   "knowledge",
   "build",
 ] as const
@@ -92,6 +94,7 @@ export default function Roles() {
   const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
   const [menuIds, setMenuIds] = useState<string[]>([])
+  const [menuApprovalMode, setMenuApprovalMode] = useState(false)
   const [isMenuLoading, setIsMenuLoading] = useState(false)
   const [menuLoadFailed, setMenuLoadFailed] = useState(false)
   const [initialEditSnapshot, setInitialEditSnapshot] = useState("")
@@ -99,6 +102,8 @@ export default function Roles() {
 
   const WORKBENCH_MENU_OPTIONS = useMemo(
     () => [
+      { id: "home", label: t("menu.workbenchHome") },
+      { id: "apps", label: t("menu.workbenchApps") },
       { id: "subscription", label: t("menu.workbench1") },
       { id: "knowledge_space", label: t("menu.workbench2") },
     ],
@@ -127,6 +132,8 @@ export default function Roles() {
     () => [
       { defaultWidth: 180, minWidth: 120 },
       { defaultWidth: 280, minWidth: 200 },
+      { defaultWidth: 140, minWidth: 100 },
+      { defaultWidth: 120, minWidth: 90 },
       { defaultWidth: 100, minWidth: 80 },
       { defaultWidth: 160, minWidth: 120 },
       { defaultWidth: 170, minWidth: 140 },
@@ -136,7 +143,8 @@ export default function Roles() {
     []
   )
   const rc = useResizableColumns(roleTableCols)
-  const roleLastCol = roleTableCols.length - 1
+  /** 最后一列（操作）不显示列宽拖拽把手，见 ColumnResizeHandle */
+  const roleLastResizeColIndex = roleTableCols.length - 2
 
   const buildEditSnapshot = (
     roleNameVal: string,
@@ -145,7 +153,8 @@ export default function Roles() {
     quotaFileGbVal: string,
     quotaChannelUnlimitedVal: boolean,
     quotaChannelCountVal: string,
-    menuIdsVal: string[]
+    menuIdsVal: string[],
+    menuApprovalModeVal: boolean,
   ) => JSON.stringify({
     roleNameVal,
     departmentIdVal,
@@ -154,6 +163,7 @@ export default function Roles() {
     quotaChannelUnlimitedVal,
     quotaChannelCountVal,
     menuIds: [...menuIdsVal].sort(),
+    menuApprovalModeVal,
   })
 
   const loadDepartments = async () => {
@@ -192,11 +202,12 @@ export default function Roles() {
     setQuotaFileGb("500")
     setQuotaChannelUnlimited(false)
     setQuotaChannelCount("10")
+    setMenuApprovalMode(false)
     setMenuIds(nextMenuIds)
     setIsMenuLoading(false)
     setMenuLoadFailed(false)
     setInitialEditSnapshot(
-      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", nextMenuIds)
+      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", nextMenuIds, false)
     )
     setEditOpen(true)
   }
@@ -220,16 +231,10 @@ export default function Roles() {
     Object.entries(ADMIN_CHILD_DEPENDENTS).forEach(([parent, deps]) => {
       if (!ids.includes(parent)) ids = ids.filter((id) => !deps.includes(id))
     })
-    if (ids.some((id) => (ADMIN_CHILD_MENUS as readonly string[]).includes(id)) && !ids.includes(ADMIN_PARENT_ID)) {
-      ids = [...ids, ADMIN_PARENT_ID]
-    }
-    if (
-      ids.some((id) => (WORKBENCH_CHILD_MENUS as readonly string[]).includes(id)) &&
-      !ids.includes(WORKBENCH_PARENT_ID)
-    ) {
-      ids = [...ids, WORKBENCH_PARENT_ID]
-    }
     setMenuIds(ids)
+    const qc = role.quota_config || {}
+    const approvalFromRole = Boolean((qc as Record<string, unknown>).menu_approval_mode)
+    setMenuApprovalMode(approvalFromRole)
     setInitialEditSnapshot(
       buildEditSnapshot(
         role.role_name || "",
@@ -238,7 +243,8 @@ export default function Roles() {
         fileLimit > 0 ? String(fileLimit) : "500",
         channelLimit === -1,
         channelLimit >= 0 ? String(channelLimit) : "10",
-        ids
+        ids,
+        approvalFromRole,
       )
     )
     setIsMenuLoading(false)
@@ -261,12 +267,13 @@ export default function Roles() {
     await loadRoleMenus(role, fileLimit, channelLimit)
   }
 
-  const buildQuotaConfig = (): Record<string, number> => {
-    const base: Record<string, number> = activeRole?.quota_config
-      ? { ...(activeRole.quota_config as Record<string, number>) }
+  const buildQuotaConfig = (): Record<string, unknown> => {
+    const base: Record<string, unknown> = activeRole?.quota_config
+      ? { ...(activeRole.quota_config as Record<string, unknown>) }
       : {}
     base.knowledge_space_file = quotaFileUnlimited ? -1 : Math.max(0, Number(quotaFileGb || 0))
     base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    base.menu_approval_mode = menuApprovalMode
     return base
   }
 
@@ -338,35 +345,29 @@ export default function Roles() {
   }
 
   const isMenuEnabled = (id: string) => menuIds.includes(id)
-  const isGroupAllEnabled = (children: readonly string[]) => children.every((id) => isMenuEnabled(id))
 
-  const toggleMenuGroup = (parentId: string, children: readonly string[], checked: boolean) => {
+  /** 一级开关：只增删父级 id，不改动二级（二级在父级关闭时置灰保留状态） */
+  const toggleMenuGroup = (parentId: string, _children: readonly string[], checked: boolean) => {
     setMenuIds((prev) => {
       const next = new Set(prev)
       if (checked) {
         next.add(parentId)
-        children.forEach((id) => next.add(id))
       } else {
         next.delete(parentId)
-        children.forEach((id) => next.delete(id))
       }
       return Array.from(next)
     })
   }
 
-  const toggleMenuItem = (parentId: string, children: readonly string[], id: string, checked: boolean) => {
+  const toggleMenuItem = (_parentId: string, _children: readonly string[], id: string, checked: boolean) => {
     setMenuIds((prev) => {
       const next = new Set(prev)
       if (checked) {
         next.add(id)
-        next.add(parentId)
       } else {
         next.delete(id)
-        // 关闭父级子菜单时，级联移除其依赖的子菜单（例如 build -> create_app）
         const dependents = ADMIN_CHILD_DEPENDENTS[id] || []
         dependents.forEach((dep) => next.delete(dep))
-        const hasAnyChild = children.some((child) => child !== id && next.has(child))
-        if (!hasAnyChild) next.delete(parentId)
       }
       return Array.from(next)
     })
@@ -384,6 +385,22 @@ export default function Roles() {
     return el.creator_name?.trim() || "-"
   }
 
+  const formatKnowledgeSpaceUploadQuota = (el: ROLE) => {
+    const qc = (el.quota_config || {}) as Record<string, unknown>
+    const v = Number(qc.knowledge_space_file ?? -1)
+    if (Number.isNaN(v)) return "-"
+    if (v === -1) return t("system.unlimited")
+    return `${v} GB`
+  }
+
+  const formatChannelCreationLimit = (el: ROLE) => {
+    const qc = (el.quota_config || {}) as Record<string, unknown>
+    const v = Number(qc.channel ?? 10)
+    if (Number.isNaN(v)) return "-"
+    if (v === -1) return t("system.unlimited")
+    return String(v)
+  }
+
   const hasUnsavedEditChanges = useMemo(() => {
     if (!editOpen || !initialEditSnapshot) return false
     const current = buildEditSnapshot(
@@ -393,7 +410,8 @@ export default function Roles() {
       quotaFileGb,
       quotaChannelUnlimited,
       quotaChannelCount,
-      menuIds
+      menuIds,
+      menuApprovalMode,
     )
     return current !== initialEditSnapshot
   }, [
@@ -406,6 +424,7 @@ export default function Roles() {
     quotaChannelUnlimited,
     quotaChannelCount,
     menuIds,
+    menuApprovalMode,
   ])
 
   const requestCloseEditDialog = () => {
@@ -415,8 +434,8 @@ export default function Roles() {
     }
     bsConfirm({
       title: t("prompt"),
-      desc: t("unsavedChangesConfirmation"),
-      okTxt: t("leave"),
+      desc: t("flow.unsavedChangesConfirmation"),
+      okTxt: t("flow.leave"),
       canelTxt: t("cancel"),
       onOk: (next) => {
         setEditOpen(false)
@@ -451,7 +470,7 @@ export default function Roles() {
                 {t("system.roleName")}
                 <ColumnResizeHandle
                   columnIndex={0}
-                  lastColumn={0 === roleLastCol}
+                  lastColumn={0 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
@@ -459,45 +478,61 @@ export default function Roles() {
                 {t("system.roleScope")}
                 <ColumnResizeHandle
                   columnIndex={1}
-                  lastColumn={1 === roleLastCol}
+                  lastColumn={1 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
               <TableHead {...rc.getThProps(2)}>
-                {t("system.userCount")}
+                {t("system.roleListKnowledgeSpaceUploadLimit")}
                 <ColumnResizeHandle
                   columnIndex={2}
-                  lastColumn={2 === roleLastCol}
+                  lastColumn={2 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
               <TableHead {...rc.getThProps(3)}>
-                {t("system.creator")}
+                {t("system.channelQuotaLimit")}
                 <ColumnResizeHandle
                   columnIndex={3}
-                  lastColumn={3 === roleLastCol}
+                  lastColumn={3 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
               <TableHead {...rc.getThProps(4)}>
-                {t("createTime")}
+                {t("system.userCount")}
                 <ColumnResizeHandle
                   columnIndex={4}
-                  lastColumn={4 === roleLastCol}
+                  lastColumn={4 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
               <TableHead {...rc.getThProps(5)}>
-                {t("system.changeTime")}
+                {t("system.creator")}
                 <ColumnResizeHandle
                   columnIndex={5}
-                  lastColumn={5 === roleLastCol}
+                  lastColumn={5 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(6)}>
+                {t("createTime")}
+                <ColumnResizeHandle
+                  columnIndex={6}
+                  lastColumn={6 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
+              <TableHead {...rc.getThProps(7)}>
+                {t("system.changeTime")}
+                <ColumnResizeHandle
+                  columnIndex={7}
+                  lastColumn={7 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
               <TableHead
-                style={rc.getThProps(6).style}
-                className={cname(rc.getThProps(6).className, "text-right")}
+                style={rc.getThProps(8).style}
+                className={cname(rc.getThProps(8).className, "text-right")}
               >
                 {t("operations")}
               </TableHead>
@@ -506,7 +541,7 @@ export default function Roles() {
           <TableBody>
             {roles.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-gray-400">
+                <TableCell colSpan={9} className="text-center text-gray-400">
                   {t("build.empty")}
                 </TableCell>
               </TableRow>
@@ -522,9 +557,15 @@ export default function Roles() {
                   >
                     {scopeLabel(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(2)}>{el.user_count ?? "-"}</TableCell>
+                  <TableCell {...rc.getTdProps(2)} className="whitespace-nowrap tabular-nums">
+                    {formatKnowledgeSpaceUploadQuota(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(3)} className="whitespace-nowrap tabular-nums">
+                    {formatChannelCreationLimit(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(4)}>{el.user_count ?? "-"}</TableCell>
                   <TableCell
-                    {...rc.getTdProps(3)}
+                    {...rc.getTdProps(5)}
                     className={cname(
                       "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground"
                     )}
@@ -532,13 +573,13 @@ export default function Roles() {
                   >
                     {creatorLabel(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(4)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(6)} className="whitespace-nowrap tabular-nums">
                     {fmtTime(el.create_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(5)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
                     {fmtTime(el.update_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(6)} className="text-right">
+                  <TableCell {...rc.getTdProps(8)} className="text-right">
                     {el.is_readonly ? (
                       <span className="text-sm text-muted-foreground">&mdash;</span>
                     ) : (
@@ -664,6 +705,17 @@ export default function Roles() {
             <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
+              <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
+                <Switch
+                  checked={menuApprovalMode}
+                  onCheckedChange={(v) => setMenuApprovalMode(Boolean(v))}
+                  disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
+                />
+                <div>
+                  <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
+                  <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeHint")}</div>
+                </div>
+              </label>
               {isMenuLoading && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t("system.roleMenuLoading")}
@@ -691,27 +743,6 @@ export default function Roles() {
                 <div className="rounded-md border bg-muted/20 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-xs font-medium text-muted-foreground">{t("system.workbenchMenuAuthorization")}</div>
-                    <div className="inline-flex items-center gap-2 text-xs">
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0"
-                        onClick={() => toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, true)}
-                        disabled={isGroupAllEnabled(WORKBENCH_CHILD_MENUS)}
-                      >
-                        {t("system.menuEnableAll")}
-                      </Button>
-                      <span className="text-muted-foreground">/</span>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0"
-                        onClick={() => toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, false)}
-                        disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
-                      >
-                        {t("system.menuDisableAll")}
-                      </Button>
-                    </div>
                   </div>
                   <label
                     className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
@@ -736,8 +767,10 @@ export default function Roles() {
                     {WORKBENCH_MENU_OPTIONS.map((m) => (
                       <label
                         key={m.id}
-                        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                          !isMenuEnabled(WORKBENCH_PARENT_ID) ? "opacity-50" : ""
+                        className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(WORKBENCH_PARENT_ID)
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
                         }`}
                         onClick={() =>
                           isMenuEnabled(WORKBENCH_PARENT_ID) &&
@@ -766,27 +799,6 @@ export default function Roles() {
                 <div className="rounded-md border bg-muted/20 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-xs font-medium text-muted-foreground">{t("system.adminMenuAuthorization")}</div>
-                    <div className="inline-flex items-center gap-2 text-xs">
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0"
-                        onClick={() => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, true)}
-                        disabled={isGroupAllEnabled(ADMIN_CHILD_MENUS)}
-                      >
-                        {t("system.menuEnableAll")}
-                      </Button>
-                      <span className="text-muted-foreground">/</span>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0"
-                        onClick={() => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, false)}
-                        disabled={!isMenuEnabled(ADMIN_PARENT_ID)}
-                      >
-                        {t("system.menuDisableAll")}
-                      </Button>
-                    </div>
                   </div>
                   <label
                     className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
@@ -807,8 +819,10 @@ export default function Roles() {
                     ).map((m) => (
                       <label
                         key={m.id}
-                        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                          !isMenuEnabled(ADMIN_PARENT_ID) ? "opacity-50" : ""
+                        className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(ADMIN_PARENT_ID)
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
                         }`}
                         onClick={() =>
                           isMenuEnabled(ADMIN_PARENT_ID) &&

@@ -100,7 +100,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   return (
     <StandaloneChatContext.Provider value={contextValue}>
-      <div className="flex bg-[#F9F9F9]" style={{ height: '100dvh' }}>
+      <div className={cn('flex', isGuestMode ? 'bg-white' : 'bg-[#F9F9F9]')} style={{ height: '100dvh' }}>
         <div className="relative z-0 flex h-full w-full overflow-hidden">
 
           {/* Desktop sidebar */}
@@ -118,8 +118,8 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           {/* Mobile overlay sidebar */}
           {isTabletOrMobile && sidebarVisible && (
             <div className="absolute inset-0 z-[55] flex">
-              <div className="h-full w-[240px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                <StandaloneSideNav sidebar={sidebar} />
+              <div className="h-full w-[280px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                <StandaloneSideNav sidebar={sidebar} onCloseSidebar={toggleSidebar} />
               </div>
               <button
                 type="button"
@@ -164,13 +164,15 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           <div
             className={cn(
               'relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden',
-              !isGuestMode && 'p-2',
+              'p-2',
             )}
           >
             <div
               className={cn(
                 'min-h-0 min-w-0 flex-1 overflow-hidden',
-                !isGuestMode && 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
+                isGuestMode
+                  ? 'rounded-xl bg-white'
+                  : 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
               )}
             >
               {activeChatId ? (
@@ -179,6 +181,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                   flowId={flowId}
                   flowType={numericFlowType}
                   apiVersion={apiVersion}
+                  isGuestMode={isGuestMode}
                 />
               ) : historyLoaded ? (
                 <ChatEmptyState onNewChat={createNewChat} />

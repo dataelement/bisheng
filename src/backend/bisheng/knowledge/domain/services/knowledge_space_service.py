@@ -177,6 +177,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         memberships: Optional[List[SpaceChannelMember]] = None,
         exclude_created: bool = False,
+        required_permission_id: Optional[str] = None,
     ) -> List[KnowledgeRead]:
         if not space_ids:
             return []
@@ -196,6 +197,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if space.user_id != self.login_user.user_id and space.id not in membership_map
         ]
         permission_levels = {}
+        permission_ids_map: Dict[int, set[str]] = {}
         if permission_space_ids:
             levels = await asyncio.gather(*[
                 PermissionService.get_permission_level(
@@ -209,6 +211,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             permission_levels = {
                 space_id: level for space_id, level in zip(permission_space_ids, levels)
             }
+            if required_permission_id:
+                permission_ids = await asyncio.gather(*[
+                    self._get_effective_permission_ids(
+                        'knowledge_space',
+                        space_id,
+                    )
+                    for space_id in permission_space_ids
+                ])
+                permission_ids_map = {
+                    space_id: ids for space_id, ids in zip(permission_space_ids, permission_ids)
+                }
 
         pinned_spaces = []
         normal_spaces = []
@@ -226,6 +239,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.user_role = member_conf.user_role
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_conf))
             else:
+                if (
+                    required_permission_id
+                    and required_permission_id not in permission_ids_map.get(space.id, set())
+                ):
+                    continue
                 result.user_role = self._permission_level_to_space_user_role(
                     permission_levels.get(space.id),
                 )
@@ -864,9 +882,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
-        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         if space.user_id == self.login_user.user_id:
             result.user_role = UserRoleEnum.CREATOR
+            self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
@@ -884,8 +902,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     login_user=self.login_user,
                 )
                 result.user_role = self._permission_level_to_space_user_role(level)
-                if result.user_role is not None:
-                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         result.follower_num = follower_num
         result.file_num = total_file_num
         await self._decorate_department_metadata([result])
@@ -1056,6 +1072,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             list(space_ids),
             order_by,
             memberships=members,
+            required_permission_id='manage_space_relation',
         )
 
     async def get_my_followed_spaces(
@@ -1084,6 +1101,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_by,
             memberships=members,
             exclude_created=True,
+            required_permission_id='view_space',
         )
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:

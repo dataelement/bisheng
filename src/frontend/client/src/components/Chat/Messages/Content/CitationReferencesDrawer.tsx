@@ -12,6 +12,7 @@ import {
   getCitationDocumentUrl,
   isRagCitation,
   normalizeCitationType,
+  resolveCitationDocumentUrl,
   toAbsolutePreviewUrl,
   type CitationPreview,
   type CitationReferenceItem,
@@ -428,13 +429,15 @@ export default function CitationReferencesDrawer({
 
     setDocumentPreview(nextPreview);
   };
-  const handleDownloadDocument = () => {
+  const handleDownloadDocument = async () => {
     if (!documentPreview) {
       return;
     }
 
     const fileName = getCitationDocumentName(documentPreview.detail);
-    const fileUrl = toAbsolutePreviewUrl(getCitationDocumentUrl(documentPreview.detail));
+    const fileUrl = toAbsolutePreviewUrl(
+      getCitationDocumentUrl(documentPreview.detail) || await resolveCitationDocumentUrl(documentPreview.detail),
+    );
     if (!fileUrl) {
       return;
     }
@@ -456,11 +459,11 @@ export default function CitationReferencesDrawer({
     : { name: '文档预览', extension: '' };
   // 非 expanded：侧栏内预览区横向铺满，避免 max-w + items-center 在侧栏中留出左右大空白
   const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-full';
-  const desktopHeaderPadding = useExpandedDesktopPreview ? 'px-0 py-0' : 'px-3 py-4';
-  const desktopHeaderHeight = useExpandedDesktopPreview ? 'h-10' : 'h-[22px]';
-  const desktopHeaderGap = useExpandedDesktopPreview ? 'gap-3' : 'gap-4';
-  const desktopButtonSize = useExpandedDesktopPreview ? 'size-10 rounded-[10px]' : 'size-4 rounded-[4px]';
-  const desktopButtonIconSize = useExpandedDesktopPreview ? 'size-5' : 'size-4';
+  const desktopHeaderPadding = 'px-3';
+  const desktopHeaderHeight = 'h-14';
+  const desktopHeaderGap = 'gap-2';
+  const desktopButtonSize = 'size-6 rounded-[6px]';
+  const desktopButtonIconSize = 'size-4';
   const desktopDownloadButtonClass = useExpandedDesktopPreview
     ? 'text-[#024DE3] hover:bg-[#F2F7FF]'
     : 'text-[#024DE3] hover:bg-[#F2F7FF]';
@@ -493,7 +496,7 @@ export default function CitationReferencesDrawer({
         <button
           type="button"
           onClick={() => setOpenState(false)}
-          className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+          className="inline-flex size-6 items-center justify-center rounded-[6px]  hover:bg-[#F2F3F5] hover:text-[#4E5969]"
           aria-label="关闭参考资料"
         >
           <X className="size-4" strokeWidth={1.5} />
@@ -608,6 +611,13 @@ export default function CitationReferencesDrawer({
   }
 
   if (!references.length) {
+    if (actionButtons) {
+      return (
+        <div className={cn('flex h-6 items-center gap-1', buttonClassName)}>
+          {actionButtons}
+        </div>
+      );
+    }
     return null;
   }
 
@@ -637,24 +647,17 @@ export default function CitationReferencesDrawer({
       </div>
 
       {!isDesktopInlinePanel && isOpen && (
-        <>
-          <div
-            className={cn('fixed inset-0 z-40', isPhoneViewport ? 'bg-black/30' : 'bg-transparent')}
-            aria-hidden="true"
-            onClick={() => setOpenState(false)}
-          />
-          <aside
-            className={cn(
-              'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
-              isPhoneViewport
-                ? 'inset-0'
-                : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
-            )}
-            aria-label="参考资料"
-          >
-            {panelContent}
-          </aside>
-        </>
+        <aside
+          className={cn(
+            'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
+            isPhoneViewport
+              ? 'inset-0'
+              : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
+          )}
+          aria-label="参考资料"
+        >
+          {panelContent}
+        </aside>
       )}
       {!isDesktopInlinePanel && (
         <CitationDocumentPreviewDrawer
