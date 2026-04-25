@@ -6,8 +6,8 @@
   "dailyFullName": "{{dailyFullNameZh}}",
   "prompt": "提示",
   "unsupportedFileType": "不支持文件类型: {{extensions}}",
-  "supportedFormatsWithImages": "支持的文件格式为 pdf（含扫描件）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp；每个文件最大支持{{maxSize}}mb；pdf支持溯源定位。",
-  "supportedFormatsWithoutImages": "支持的文件格式为 pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv，每个文件最大支持{{maxSize}}mb",
+  "supportedFormatsWithImages": "支持的文件格式为 pdf（含扫描件）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、et、dps；每个文件最大支持{{maxSize}}mb；pdf支持溯源定位。",
+  "supportedFormatsWithoutImages": "支持的文件格式为 pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv、wps、et、dps，每个文件最大支持{{maxSize}}mb",
   "pagination": {
     "totalRecords": "共 {{total}} 条记录",
     "totalWithPageSize": "共 {{total}} 条数据，每页 {{pageSize}} 条",

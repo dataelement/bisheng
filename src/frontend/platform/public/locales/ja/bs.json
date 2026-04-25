@@ -5,8 +5,8 @@
   "linsightFullName": "{{linsightName}}",
   "prompt": "ヒント",
   "unsupportedFileType": "サポートされていないファイル形式: {{extensions}}",
-  "supportedFormatsWithImages": "サポートされているファイル形式は pdf（スキャン含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp です。各ファイルの最大サイズは {{maxSize}}MB です。pdf はトレーサビリティ位置特定をサポートします。",
-  "supportedFormatsWithoutImages": "サポートされているファイル形式は pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv です。各ファイルの最大サイズは {{maxSize}}MB です。",
+  "supportedFormatsWithImages": "サポートされているファイル形式は pdf（スキャン含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、et、dps です。各ファイルの最大サイズは {{maxSize}}MB です。pdf はトレーサビリティ位置特定をサポートします。",
+  "supportedFormatsWithoutImages": "サポートされているファイル形式は pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv、wps、et、dps です。各ファイルの最大サイズは {{maxSize}}MB です。",
   "pagination": {
     "totalRecords": "合計 {{total}} 件の記録",
     "totalWithPageSize": "合計 {{total}} 件、1ページ {{pageSize}} 件",
