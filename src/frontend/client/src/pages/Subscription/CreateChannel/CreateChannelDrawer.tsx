@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, PlusSquare, XIcon } from "lucide-react";
+import { PlusSquare, XIcon } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -527,41 +527,13 @@ export function CreateChannelDrawer({
                                     />
                                 </div>
                                 {form.contentFilter && (
-                                    <div className="border border-t-[#E5E6EB] overflow-hidden">
-                                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-[#F7F8FA]">
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    form.setContentFilterCollapsed(
-                                                        (prev) => !prev
-                                                    )
-                                                }
-                                                className="p-1 text-[#86909C] hover:text-[#4E5969] flex-shrink-0"
-                                            >
-                                                {form.contentFilterCollapsed ? (
-                                                    <ChevronRight className="size-4" />
-                                                ) : (
-                                                    <ChevronDown className="size-4" />
-                                                )}
-                                            </button>
-                                            <span className="flex-1 text-[14px] text-[#1D2129]">
-                                                {localize("com_subscription.filter_criteria")}
-                                            </span>
-                                        </div>
-                                        {!form.contentFilterCollapsed && (
-                                            <div className="p-3 border-t border-[#E5E6EB]">
-                                                <FilterConditionEditor
-                                                    groups={form.filterGroups}
-                                                    topRelation={form.topFilterRelation}
-                                                    onGroupsChange={form.setFilterGroups}
-                                                    onTopRelationChange={
-                                                        form.setTopFilterRelation
-                                                    }
-                                                    disableFirstConditionDelete
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
+                                    <FilterConditionEditor
+                                        groups={form.filterGroups}
+                                        topRelation={form.topFilterRelation}
+                                        onGroupsChange={form.setFilterGroups}
+                                        onTopRelationChange={form.setTopFilterRelation}
+                                        disableFirstConditionDelete
+                                    />
                                 )}
                             </div>
 

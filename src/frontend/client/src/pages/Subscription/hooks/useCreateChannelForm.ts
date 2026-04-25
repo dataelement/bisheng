@@ -16,59 +16,50 @@ function nanoid() {
     return generateUUID(8);
 }
 
+/**
+ * Parse a single channel filter_rules entry into a single-layer FilterGroup.
+ * Multi-layer historical data is silently flattened — only the FIRST top-level rule
+ * is read; deeper groups are discarded. keywords are kept as string[].
+ */
 function parseRuleGroupsFromFilterRule(ruleEntry: any): { groups: FilterGroup[]; topRelation: FilterRelation } {
     const topRelation: FilterRelation = ruleEntry?.relation === "or" ? "or" : "and";
     const topRules = Array.isArray(ruleEntry?.rules) ? ruleEntry.rules : [];
 
-    // New shape: relation + rules(type=single|multi)
-    if (
-        ruleEntry?.relation ||
-        topRules.some((r: any) => r?.type === "single" || r?.type === "multi" || Array.isArray(r?.rules))
-    ) {
-        const groups: FilterGroup[] = topRules.flatMap((r: any) => {
-            // multi rule => one group with inner relation
-            if (r?.type === "multi" || Array.isArray(r?.rules)) {
-                const relation: FilterRelation = r?.relation === "or" ? "or" : "and";
-                const conditions = (r.rules || [])
-                    .filter((x: any) => x && typeof x === "object" && (x?.type === "single" || !Array.isArray(x?.rules)))
-                    .map((leaf: any) => ({
-                        id: nanoid(),
-                        include: leaf?.rule_type !== "exclude",
-                        keywords: Array.isArray(leaf?.keywords) ? leaf.keywords.join(";") : ""
-                    }));
-                return conditions.length
-                    ? [{ id: nanoid(), relation, conditions }]
-                    : [];
-            }
-
-            // single rule => one group with one condition (inherits top relation semantically)
-            if (r && typeof r === "object" && (r?.type === "single" || !Array.isArray(r?.rules))) {
-                return [{
-                    id: nanoid(),
-                    relation: topRelation,
-                    conditions: [{
-                        id: nanoid(),
-                        include: r?.rule_type !== "exclude",
-                        keywords: Array.isArray(r?.keywords) ? r.keywords.join(";") : ""
-                    }]
-                }];
-            }
-            return [];
-        });
-
-        return { groups, topRelation };
+    if (topRules.length === 0) {
+        return { groups: [], topRelation };
     }
 
-    // Old shape fallback: each entry itself is one group, relation stored on leaf items
-    const relation: FilterRelation = topRules[0]?.relation === "or" ? "or" : "and";
-    const conditions = topRules.map((r: any) => ({
-        id: nanoid(),
-        include: r?.rule_type !== "exclude",
-        keywords: Array.isArray(r?.keywords) ? r.keywords.join(";") : ""
-    }));
+    const firstTop = topRules[0];
+
+    let relation: FilterRelation = topRelation;
+    let conditions: FilterGroup["conditions"] = [];
+
+    if (firstTop?.type === "multi" || Array.isArray(firstTop?.rules)) {
+        // multi: take its inner singles as the single-layer conditions
+        relation = firstTop?.relation === "or" ? "or" : "and";
+        conditions = (firstTop.rules || [])
+            .filter((x: any) => x && typeof x === "object")
+            .map((leaf: any) => ({
+                id: nanoid(),
+                include: leaf?.rule_type !== "exclude",
+                keywords: Array.isArray(leaf?.keywords) ? leaf.keywords.slice() : [],
+            }));
+    } else if (firstTop && typeof firstTop === "object") {
+        // single rule (new shape) OR legacy flat leaf
+        conditions = [{
+            id: nanoid(),
+            include: firstTop?.rule_type !== "exclude",
+            keywords: Array.isArray(firstTop?.keywords) ? firstTop.keywords.slice() : [],
+        }];
+    }
+
+    if (conditions.length === 0) {
+        return { groups: [], topRelation };
+    }
+
     return {
-        groups: conditions.length ? [{ id: nanoid(), relation, conditions }] : [],
-        topRelation: relation
+        groups: [{ id: nanoid(), relation, conditions }],
+        topRelation: relation,
     };
 }
 
@@ -166,12 +157,18 @@ export function useCreateChannelForm() {
             : [];
 
         if (mainRules.length > 0) {
-            setContentFilter(true);
-            const parsedMain = mainRules.map((g: any) => parseRuleGroupsFromFilterRule(g));
-            const groups: FilterGroup[] = parsedMain.flatMap((x) => x.groups);
-            setFilterGroups(groups);
-            setTopFilterRelation(parsedMain[0]?.topRelation ?? "and");
-            setContentFilterCollapsed(false);
+            // 单层视图：只读取 mainRules 中第一条的第一组，丢弃多余结构。
+            const parsedMain = parseRuleGroupsFromFilterRule(mainRules[0]);
+            if (parsedMain.groups.length > 0) {
+                setContentFilter(true);
+                setFilterGroups(parsedMain.groups);
+                setTopFilterRelation(parsedMain.topRelation);
+                setContentFilterCollapsed(false);
+            } else {
+                setContentFilter(false);
+                setFilterGroups([]);
+                setTopFilterRelation("and");
+            }
         } else {
             setContentFilter(false);
             setFilterGroups([]);
@@ -198,15 +195,16 @@ export function useCreateChannelForm() {
 
             const nextSubChannels: SubChannelData[] = [];
             for (const [name, groupList] of groupedByName.entries()) {
-                const parsedSub = groupList.map((g: any) => parseRuleGroupsFromFilterRule(g));
-                const groups: FilterGroup[] = parsedSub.flatMap((x) => x.groups);
+                // 单层视图：每个子频道仅读取 groupList 中第一条的第一组。
+                const parsedSub = parseRuleGroupsFromFilterRule(groupList[0]);
+                if (parsedSub.groups.length === 0) continue;
 
                 nextSubChannels.push({
                     id: nanoid(),
                     name,
                     collapsed: false,
-                    groups,
-                    topRelation: parsedSub[0]?.topRelation ?? "and"
+                    groups: parsedSub.groups,
+                    topRelation: parsedSub.topRelation,
                 });
             }
 
@@ -258,7 +256,7 @@ export function useCreateChannelForm() {
                 id,
                 name: localize("com_subscription.sub_channel_name_default", { index }),
                 collapsed: false,
-                groups: [{ id: nanoid(), relation: "and", conditions: [{ id: nanoid(), include: true, keywords: "" }] }],
+                groups: [{ id: nanoid(), relation: "and", conditions: [{ id: nanoid(), include: true, keywords: [] }] }],
                 topRelation: "and"
             }
         ]);
@@ -312,7 +310,7 @@ export function useCreateChannelForm() {
             setFilterGroups([{
                 id: nanoid(),
                 relation: "and",
-                conditions: [{ id: nanoid(), include: true, keywords: "" }]
+                conditions: [{ id: nanoid(), include: true, keywords: [] }]
             }]);
         }
     };

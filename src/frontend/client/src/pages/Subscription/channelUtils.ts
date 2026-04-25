@@ -60,18 +60,16 @@ export function validateCreateChannelForm(
 export function buildFilterRules(data: CreateChannelFormData): ManagerChannelFilterRule[] {
     const rules: ManagerChannelFilterRule[] = [];
 
-    const toSingleRule = (cond: { include: boolean; keywords: string }): ManagerChannelSingleRule => ({
+    const toSingleRule = (cond: { include: boolean; keywords: string[] }): ManagerChannelSingleRule => ({
         type: "single",
         rule_type: cond.include ? "include" : "exclude",
-        keywords:
-            cond.keywords
-                ?.split(/[;；]/)
-                .map((k: string) => k.trim())
-                .filter(Boolean) || []
+        keywords: Array.isArray(cond.keywords)
+            ? cond.keywords.map((k) => k.trim()).filter(Boolean)
+            : [],
     });
 
     const toRuleNodes = (
-        groups: Array<{ relation: "and" | "or"; conditions: Array<{ include: boolean; keywords: string }> }>
+        groups: Array<{ relation: "and" | "or"; conditions: Array<{ include: boolean; keywords: string[] }> }>
     ): ManagerChannelRuleNode[] => {
         return groups.map((group) => {
             const singles = group.conditions.map(toSingleRule);
