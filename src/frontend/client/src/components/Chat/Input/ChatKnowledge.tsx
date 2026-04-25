@@ -459,7 +459,8 @@ export const ChatKnowledge = ({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
-        {/* 组织知识库 */}
+        {/* 组织知识库 — 仅在 bsConfig.knowledgeBase.enabled === true 时显示 */}
+        {config?.knowledgeBase?.enabled && (
         <DropdownMenuSub
           open={openSub === 'org'}
           onOpenChange={(o) => {
@@ -510,6 +511,7 @@ export const ChatKnowledge = ({
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        )}
 
       </DropdownMenuContent>
     </DropdownMenu>

@@ -567,8 +567,9 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                 }}
               />
             )}
-            {/* 知识库 */}
-            {!isLingsi && bsConfig?.knowledgeBase.enabled && (
+            {/* 知识库：知识空间常驻，"组织知识库" 子菜单由 bsConfig.knowledgeBase.enabled 在
+                ChatKnowledge 内部 gate */}
+            {!isLingsi && (
               <ChatKnowledge
                 config={bsConfig}
                 disabled={!!files.size || readOnly || isNetSearchOn}

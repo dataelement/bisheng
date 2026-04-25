@@ -415,10 +415,11 @@ const AiChatInput = memo(
                                 />
                             )}
 
-                            {/* Knowledge base — disabled when tools or files active */}
+                            {/* Knowledge base — disabled when tools or files active.
+                                The "组织知识库" sub-menu is gated by bsConfig.knowledgeBase.enabled
+                                inside ChatKnowledge itself; "知识空间" always shown. */}
                             {knowledgeBase &&
                                 !isLingsi &&
-                                bsConfig?.knowledgeBase?.enabled &&
                                 onSelectedOrgKbsChange && (
                                     <ChatKnowledge
                                         config={bsConfig}
