@@ -99,7 +99,8 @@
     "registrationSuccess": "Registration successful. Please enter your password to log in",
     "pleaseEnterCaptcha": "Please enter captcha",
     "passwordExpired": "Your password has expired, please change it promptly",
-    "otherMethods": "Other login methods"
+    "otherMethods": "Other login methods",
+    "bottomText": "Bisheng"
   },
   "menu": {
     "user": "User",
@@ -532,7 +533,8 @@
       "modelRequired": "Model cannot be empty",
       "modelDuplicate": "Model cannot be duplicated",
       "modelNameDuplicate": "Display name cannot be duplicated",
-      "required": "Cannot be empty"
+      "required": "Cannot be empty",
+      "voiceTypeRequired": "Voice type is required"
     },
     "systemPrompt2": "# Role Setting\n- You are the $t(bisheng) intelligent Q&A assistant, designed to provide users with **information queries, content creation, learning tutoring, programming help, life advice**, and other forms of assistance.\n- You should always maintain a friendly, professional, patient, and helpful attitude, communicating with users in clear, accurate, and understandable language.\n# Code of Conduct\n1. **Role Consistency:** Always interact with users as the $t(bisheng) intelligent Q&A assistant, without impersonating other unrelated roles or characters.\n2. **Information Accuracy:** Strive to provide accurate and reliable information. Clearly state when uncertain about content, avoiding misleading users.\n3. **Privacy Protection:** Do not proactively request or record users' personal information. Do not store or disclose any user privacy data or sensitive information.\n4. **Content Safety:** Comply with laws, regulations, and ethical standards. Do not generate or disseminate content involving politics, illegal activities, violence, pornography, discrimination, hatred, or other inappropriate material.\n5. **Neutrality and Objectivity:** Maintain neutrality on controversial topics, providing multiple perspectives without favoring any side.\n6. **Appropriate Guidance:** If users' questions are vague or incomplete, appropriately guide them to clarify, but do not force them or show impatience.\n# Language and Style:\n- Communicate based on the language type used by the user or their specific needs.\n- Language style should be **clear and concise, polite and friendly, easy to understand**, adjusting expression methods based on the user's background and query content.\n- **Emojis** (such as 😊, 👍) may be used appropriately to increase approachability, but avoid excessive use to maintain a professional image.\n# Time Information\nThe current time is {cur_date}.\n# ECharts Chart Rendering Support\nIf charts need to be rendered in responses, use code blocks starting with ```echarts and write the configuration within.\nExample:\n```echarts\n{{\n  \"title\": {{\n    \"text\": \"ECharts Getting Started Example\"\n  }},\n  \"tooltip\": {{}},\n  \"legend\": {{\n    \"data\": [\"Sales\"]\n  }},\n  \"xAxis\": {{\n    \"data\": [\"Shirts\", \"Wool Sweaters\", \"Chiffon Blouses\", \"Pants\", \"High Heels\", \"Socks\"]\n  }},\n  \"yAxis\": {{}},\n  \"series\": [{{\n    \"name\": \"Sales\",\n    \"type\": \"bar\",\n    \"data\": [5, 20, 36, 10, 10, 20]\n  }}]\n}}\n```",
     "webSearchPrompt": "# The following content is based on the search results of the message sent by the user:\n{search_results}\nIn the search results I provide you, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please cite the context at the end of sentences when appropriate. Use the citation number [citation:X] format in the corresponding part of the answer. If a sentence comes from multiple contexts, list all relevant citation numbers, for example: cite[3]:cite[5]. Remember not to concentrate citations at the end but list them in the corresponding parts of the answer.\nWhen answering, please note the following points:\n- Today is {cur_date}.\n- Not all content in the search results is closely related to the user's question. You need to combine the question and filter the search results.\n- For enumeration questions (such as listing all flight information), try to keep the answer within 10 key points and inform the user that they can check the source for complete information. Prioritize providing complete and most relevant items; do not proactively inform the user of content not provided in the search results unless necessary.\n- For creative questions (such as writing an essay), ensure that you cite the corresponding reference numbers in the body paragraphs, for example: cite[3]:cite[5]. Do not only cite at the end of the article. Interpret and summarize the user's requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are highly insightful, creative, and professional. Extend the length of your creation as much as possible, infer the user's intent for each key point, and provide multi-angle answers with substantial information and detailed explanations.\n- If the answer is long, try to structure it and summarize in paragraphs. If you need to answer in points, try to limit it to 5 points and merge related content.\n- For objective questions, if the answer is very short, you can add one or two additional pieces of relevant information to enrich the content.\n- Choose an appropriate and aesthetically pleasing answer format based on the user's requirements and content to ensure readability.\n- Your answer should be based on multiple relevant web pages and should not repeatedly cite the same page.\n- Unless the user requests otherwise, the language of your answer should match the language of the user's question.\n\n# User message is:\n{question}",
@@ -689,7 +691,8 @@
     "desc": "Description",
     "knowledgeBaseDescription": "Please enter knowledge base description",
     "creationComplete": "Creation complete",
-    "embeddingModelSelection": "Knowledge base embedding model selection"
+    "embeddingModelSelection": "Knowledge base embedding model selection",
+    "structuredData": "Structured Data"
   },
   "evaluation": {
     "id": "Task ID",
@@ -1186,6 +1189,9 @@
     "add_tool": "Create Tool",
     "update_tool": "Update Tool",
     "delete_tool": "Delete Tool",
+    "addTool": "Create Tool",
+    "updateTool": "Update Tool",
+    "deleteTool": "Delete Tool",
     "none": "None",
     "work_flow": "Work Flow",
     "flow": "Flow",
@@ -1633,5 +1639,9 @@
   "com_ui_upload_file_type_error": "This application does not support uploading this file type.",
   "more": "more",
   "chatTips": "1. Please comply with the Cybersecurity Law of the People's Republic of China, the Data Security Law of the People's Republic of China, the Personal Information Protection Law of the People's Republic of China, and the Basic Requirements for the Security of Generative Artificial Intelligence Services;\n2. It is forbidden to upload confidential data that falls within the scope of the company's confidentiality management regulations;\n3. It is forbidden to upload data containing personal privacy information;\n4. It is forbidden to upload files containing malicious programs or viruses;\n5. It is forbidden to use AI to generate offensive code;\n6. It is forbidden to ask AI questions involving but not limited to explosives, terrorism, pornography, and information that endangers national and public security;\n7. AI-generated content is subject to the company's confidentiality management regulations. Users should judge the reasonableness of the generated content based on the actual situation to avoid risks caused by AI hallucinations.",
-  "com_preview_type_unsupported": "This file type is not supported for preview"
+  "com_preview_type_unsupported": "This file type is not supported for preview",
+  "success": "Success",
+  "failed": "Failed",
+  "inProgress": "In Progress",
+  "createImport": "Create and Import"
 }
