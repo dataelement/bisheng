@@ -56,7 +56,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         setSavedInputParams(userSavedParams);
 
         const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding') || {};
-        const newPlaceholder = templateToJsonString(template) || '{"temperature": 0.7, "top_p": 0.9}';
+        const newPlaceholder = templateToJsonString(template) || '{"temperature": 1, "top_p": 0.9}';
         setAdvancedParams(newPlaceholder);
         setOriginalAdvancedParams(newPlaceholder);
 
