@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import Any, List, Dict, Union, Tuple
+from typing import Any, List, Dict, Optional, Union, Tuple
 
 from loguru import logger
 from sqlalchemy import func
@@ -11,6 +11,10 @@ from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.core.context.tenant import (
+    get_admin_scope_tenant_id,
+    get_current_tenant_id,
+)
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
@@ -43,6 +47,24 @@ class AuditLogService:
         return 'log' in set(web_menu)
 
     @classmethod
+    def _get_audit_tenant_scope(cls, user: UserPayload) -> Optional[int]:
+        """Tenant id to scope audit reads to, or None to skip scoping.
+
+        - Global super w/o F019 admin-scope     -> None  (sees all tenants)
+        - Global super WITH F019 admin-scope=X  -> X
+        - Tenant Admin / Dept admin / log-menu  -> their leaf tenant id
+
+        ``is_admin()`` is role-based and true for Child Tenant Admins too,
+        so we read the JWT-stamped ``is_global_super`` field (populated by
+        ``init_login_user`` from the same FGA check) instead.
+        ``get_current_tenant_id()`` already returns the F019 admin-scope
+        override when set, so it does the right thing for super-with-scope.
+        """
+        if user.is_global_super and get_admin_scope_tenant_id() is None:
+            return None
+        return get_current_tenant_id()
+
+    @classmethod
     async def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
                             system_id, event_type, page, limit) -> Any:
         groups = group_ids
@@ -60,10 +82,12 @@ class AuditLogService:
                     if not groups:
                         return UnAuthorizedError.return_resp()
 
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
         data, total = await AuditLogDao.get_audit_logs(groups, operator_ids, start_time, end_time,
                                                        system_id,
                                                        event_type,
-                                                       page, limit)
+                                                       page, limit,
+                                                       tenant_scope=tenant_scope)
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
@@ -75,7 +99,8 @@ class AuditLogService:
                 if not groups:
                     raise UnAuthorizedError()
 
-        data = AuditLogDao.get_all_operators(groups)
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        data = AuditLogDao.get_all_operators(groups, tenant_scope=tenant_scope)
         res = {}
         for one in data:
             if not one[1]:
@@ -694,7 +719,15 @@ class AuditLogService:
                 # Default: All managed groups
                 search_group_ids = list(managed_group_ids)
 
+        tenant_scope = cls._get_audit_tenant_scope(user)
+
         conditions = []
+
+        # v2.5.0 audit isolation: Tenant Admin (and anyone scoped) sees only
+        # sessions whose creator's leaf tenant matches their tenant. Without
+        # this the F012 IN-list lets Child users read Root sessions too.
+        if tenant_scope is not None:
+            conditions.append(MessageSession.tenant_id == tenant_scope)
 
         # Basic equality/range filtering
         if sensitive_status:

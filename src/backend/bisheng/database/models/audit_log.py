@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
@@ -159,12 +160,29 @@ class AuditLog(AuditLogBase, table=True):
 class AuditLogDao(AuditLogBase):
 
     @classmethod
+    def _visible_for_tenant(cls, tenant_id: int):
+        """Audit visibility predicate (spec §5.4): rows attributable to a
+        tenant, either as the resource side (``tenant_id``) or the operator
+        side (``operator_tenant_id`` — catches super-admin cross-child ops).
+        """
+        return or_(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.operator_tenant_id == tenant_id,
+        )
+
+    @classmethod
     async def get_audit_logs(cls, group_ids: List[int], operator_ids: List[int] = 0,
                              start_time: datetime = None,
                              end_time: datetime = None, system_id: str = None, event_type: str = None,
-                             page: int = 0, limit: int = 0) -> (List[AuditLog], int):
+                             page: int = 0, limit: int = 0,
+                             tenant_scope: Optional[int] = None) -> (List[AuditLog], int):
         """
-        Filter logs by user group
+        Filter logs by user group.
+
+        ``tenant_scope`` (v2.5.0 audit isolation): when set, only return rows
+        visible to the given tenant per ``_visible_for_tenant``. Wraps the
+        session in ``bypass_tenant_filter()`` so the auto IN-list filter
+        does not duplicate / conflict with the explicit OR predicate.
         """
         statement = select(AuditLog)
         count_statement = select(func.count(AuditLog.id))
@@ -190,9 +208,14 @@ class AuditLogDao(AuditLogBase):
         if event_type:
             statement = statement.where(AuditLog.event_type == event_type)
             count_statement = count_statement.where(AuditLog.event_type == event_type)
+        if tenant_scope is not None:
+            tenant_predicate = cls._visible_for_tenant(tenant_scope)
+            statement = statement.where(tenant_predicate)
+            count_statement = count_statement.where(tenant_predicate)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit).order_by(AuditLog.create_time.desc())
-        with get_sync_db_session() as session:
+        ctx = bypass_tenant_filter() if tenant_scope is not None else nullcontext()
+        with ctx, get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
@@ -208,15 +231,25 @@ class AuditLogDao(AuditLogBase):
             await session.commit()
 
     @classmethod
-    def get_all_operators(cls, group_ids: List[int]):
+    def get_all_operators(cls, group_ids: List[int], tenant_scope: Optional[int] = None):
+        """List distinct operators across audit log rows.
+
+        ``tenant_scope`` (v2.5.0 audit isolation): when set, only operators
+        from rows visible to the given tenant per ``_visible_for_tenant``.
+        Without this the dropdown leaks Root operator names into Child
+        Admin views.
+        """
         statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
         if group_ids:
             group_filters = []
             for one in group_ids:
                 group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
             statement = statement.where(or_(*group_filters))
+        if tenant_scope is not None:
+            statement = statement.where(cls._visible_for_tenant(tenant_scope))
 
-        with get_sync_db_session() as session:
+        ctx = bypass_tenant_filter() if tenant_scope is not None else nullcontext()
+        with ctx, get_sync_db_session() as session:
             return session.exec(statement).all()
 
     # -----------------------------------------------------------------------
@@ -314,10 +347,7 @@ class AuditLogDao(AuditLogBase):
             their tenant — catches global super ops that targeted this child).
         """
         offset = max(0, (page - 1) * limit)
-        predicate = or_(
-            AuditLog.tenant_id == tenant_id,
-            AuditLog.operator_tenant_id == tenant_id,
-        )
+        predicate = cls._visible_for_tenant(tenant_id)
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 stmt = select(AuditLog).where(predicate)
