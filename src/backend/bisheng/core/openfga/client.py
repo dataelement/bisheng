@@ -192,9 +192,18 @@ class FGAClient:
             tuple_key['relation'] = relation
         if object:
             tuple_key['object'] = object
-        body = {'tuple_key': tuple_key}
-        data = await self._post(f'/stores/{self._store_id}/read', body)
-        return [t['key'] for t in data.get('tuples', [])]
+        tuples: list[dict] = []
+        continuation_token: Optional[str] = None
+        while True:
+            body: dict[str, Any] = {'tuple_key': tuple_key, 'page_size': 100}
+            if continuation_token:
+                body['continuation_token'] = continuation_token
+            data = await self._post(f'/stores/{self._store_id}/read', body)
+            tuples.extend(t['key'] for t in data.get('tuples', []))
+            continuation_token = data.get('continuation_token') or data.get('continuationToken')
+            if not continuation_token:
+                break
+        return tuples
 
     # ── Store & model management ─────────────────────────────────
 

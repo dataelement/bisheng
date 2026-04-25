@@ -1,7 +1,7 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -24,6 +24,12 @@ const MANAGED_TOOLS = [
     'Firecrawl', 'Jina AI', 'SiliconFlow',
     '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
+
+const TOOL_MANAGE_PERMISSION_IDS = [
+    'manage_tool_owner',
+    'manage_tool_manager',
+    'manage_tool_viewer',
+]
 
 interface TabToolsProps {
     select?: any;
@@ -48,7 +54,9 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
     const toolIds = allData.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('tool', toolIds);
+    const { permissions: permIds } = usePermissionIds('tool', toolIds, TOOL_MANAGE_PERMISSION_IDS);
+    const canManageTool = (id: string | number) =>
+        TOOL_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, id, permissionId));
 
     const loadData = async (_type = "custom") => {
         await getToolsApi(_type).then((res) => {
@@ -184,7 +192,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                             type === 'mcp' ? mcpDialogRef.current.open(el) :
                                                 editRef.current.edit(el)
                                         }}
-                                        onPermission={canManageResource(permLevels, el.id)
+                                        onPermission={canManageTool(el.id)
                                             ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
                                             : null}
                                     ></ToolItem>

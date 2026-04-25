@@ -3,8 +3,7 @@ import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
-import { RelationLevel } from "@/components/bs-comp/permission/types";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
@@ -34,6 +33,21 @@ const enum KnowledgeBaseStatus {
     Rebuilding = 3,
     Failed = 4
 }
+
+const KB_PERMISSION_IDS = [
+    'view_kb',
+    'edit_kb',
+    'delete_kb',
+    'manage_kb_owner',
+    'manage_kb_manager',
+    'manage_kb_viewer',
+]
+
+const KB_MANAGE_PERMISSION_IDS = [
+    'manage_kb_owner',
+    'manage_kb_manager',
+    'manage_kb_viewer',
+]
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation('knowledge')
@@ -290,14 +304,13 @@ export default function KnowledgeQa(params) {
         (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1, permissionId: 'view_kb' })
     );
     const resourceIds = datalist.map((el: any) => String(el.id));
-    const { levels: permLevels } = usePermissionLevels('knowledge_library', resourceIds);
-    const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
+    const { permissions: permIds } = usePermissionIds('knowledge_library', resourceIds, KB_PERMISSION_IDS);
     const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     const visibleLibs = datalist;
     const canEdit = (el: any) =>
-        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor']);
+        user.role === 'admin' || isCreator(el) || hasPermissionId(permIds, el.id, 'edit_kb');
     const canDelete = (el: any) =>
-        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner']);
+        user.role === 'admin' || isCreator(el) || hasPermissionId(permIds, el.id, 'delete_kb');
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
@@ -305,8 +318,12 @@ export default function KnowledgeQa(params) {
     const canReadRow = (el: any) =>
         user.role === 'admin' ||
         isCreator(el) ||
-        hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor', 'viewer']);
+        hasPermissionId(permIds, el.id, 'view_kb');
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
+    const canManageKb = (el: any) =>
+        user.role === 'admin' ||
+        isCreator(el) ||
+        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
 
     useEffect(() => {
         const todos = datalist.filter(lib => lib.state === KnowledgeBaseStatus.Copying);
@@ -504,7 +521,7 @@ export default function KnowledgeQa(params) {
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="z-50 overflow-visible"
                                             >
-                                                {canManageResource(permLevels, el.id) && (
+                                                {canManageKb(el) && (
                                                     <SelectItem showIcon={false} value="permission">
                                                         <div className="flex gap-2 items-center">
                                                             <Shield className="w-4 h-4" />

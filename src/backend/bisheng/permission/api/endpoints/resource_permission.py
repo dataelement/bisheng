@@ -43,6 +43,33 @@ _GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
 # 该关系模型可被「资源上最高权限档位 <= 此下标」的授权人使用（与 _LEVEL_ORDER 对齐）
 _TIER_MAX_CALLER_INDEX = {'owner': 0, 'manager': 1, 'usage': 2}
 _RELATION_MAX_CALLER_INDEX = {'owner': 0, 'manager': 1, 'editor': 2, 'viewer': 2}
+_MANAGE_PERMISSION_BY_RESOURCE_TIER = {
+    'workflow': {
+        'owner': 'manage_app_owner',
+        'manager': 'manage_app_manager',
+        'usage': 'manage_app_viewer',
+    },
+    'assistant': {
+        'owner': 'manage_app_owner',
+        'manager': 'manage_app_manager',
+        'usage': 'manage_app_viewer',
+    },
+    'tool': {
+        'owner': 'manage_tool_owner',
+        'manager': 'manage_tool_manager',
+        'usage': 'manage_tool_viewer',
+    },
+    'knowledge_library': {
+        'owner': 'manage_kb_owner',
+        'manager': 'manage_kb_manager',
+        'usage': 'manage_kb_viewer',
+    },
+}
+_MANAGE_PERMISSION_BY_RESOURCE = {
+    'knowledge_space': 'manage_space_relation',
+    'folder': 'manage_folder_relation',
+    'knowledge_file': 'manage_file_relation',
+}
 # 无绑定信息的撤回：保持历史行为，需可管理及以上
 _LEGACY_REVOKE_MAX_CALLER_INDEX = 1
 _RELATION_MODELS_KEY = 'permission_relation_models_v1'
@@ -354,6 +381,35 @@ def _grant_ceiling_index(grant, model_map: dict):
     return _RELATION_MAX_CALLER_INDEX.get(grant.relation)
 
 
+def _management_permission_id(resource_type: str, grant_tier: str | None = None) -> str | None:
+    direct = _MANAGE_PERMISSION_BY_RESOURCE.get(resource_type)
+    if direct:
+        return direct
+    tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
+    if not tier_map:
+        return None
+    return tier_map.get(grant_tier or 'usage')
+
+
+def _management_permission_ids(resource_type: str) -> set[str]:
+    direct = _MANAGE_PERMISSION_BY_RESOURCE.get(resource_type)
+    if direct:
+        return {direct}
+    tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
+    if not tier_map:
+        return set()
+    return set(tier_map.values())
+
+
+def _grant_management_permission_id(resource_type: str, grant, model_map: dict) -> str | None:
+    mid = getattr(grant, 'model_id', None)
+    if mid and mid in model_map:
+        grant_tier = model_map[mid].get('grant_tier')
+    else:
+        grant_tier = _infer_grant_tier_from_relation(getattr(grant, 'relation', '') or '')
+    return _management_permission_id(resource_type, grant_tier)
+
+
 @router.post('/resources/{resource_type}/{resource_id}/authorize')
 async def authorize_resource(
     resource_type: str,
@@ -384,10 +440,23 @@ async def authorize_resource(
             object_id=resource_id,
             login_user=login_user,
         )
+        management_permission_ids = _management_permission_ids(resource_type)
+        caller_permission_ids = set()
+        if management_permission_ids:
+            from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+
+            caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                login_user,
+                resource_type,
+                resource_id,
+            )
 
         for grant in (request.grants or []):
             ceiling = _grant_ceiling_index(grant, model_map)
             if ceiling is None or not _caller_satisfies_ceiling(caller_level, ceiling):
+                return PermissionDeniedError.return_resp()
+            permission_id = _grant_management_permission_id(resource_type, grant, model_map)
+            if permission_id and permission_id not in caller_permission_ids:
                 return PermissionDeniedError.return_resp()
 
         for revoke in (request.revokes or []):
@@ -406,6 +475,9 @@ async def authorize_resource(
             else:
                 ceiling = _LEGACY_REVOKE_MAX_CALLER_INDEX
             if not _caller_satisfies_ceiling(caller_level, ceiling):
+                return PermissionDeniedError.return_resp()
+            permission_id = _grant_management_permission_id(resource_type, revoke, model_map)
+            if permission_id and permission_id not in caller_permission_ids:
                 return PermissionDeniedError.return_resp()
 
     grant_signatures = {_tuple_signature(g) for g in (request.grants or [])}
@@ -500,14 +572,26 @@ async def get_resource_permissions(
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
 
-    from bisheng.permission.domain.services.permission_service import PermissionService
-    allowed = await PermissionService.check(
-        user_id=login_user.user_id,
-        relation='can_edit',
-        object_type=resource_type,
-        object_id=resource_id,
-        login_user=login_user,
-    )
+    management_permission_ids = _management_permission_ids(resource_type)
+    if management_permission_ids:
+        from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+
+        allowed = await FineGrainedPermissionService.has_any_permission_async(
+            login_user,
+            resource_type,
+            resource_id,
+            management_permission_ids,
+        )
+    else:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        allowed = await PermissionService.check(
+            user_id=login_user.user_id,
+            relation='can_edit',
+            object_type=resource_type,
+            object_id=resource_id,
+            login_user=login_user,
+        )
     if not allowed:
         return PermissionDeniedError.return_resp()
 
@@ -570,12 +654,25 @@ async def get_grantable_relation_models(
         object_id=object_id,
         login_user=login_user,
     )
+    management_permission_ids = _management_permission_ids(object_type)
+    caller_permission_ids = set()
+    if management_permission_ids:
+        from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+
+        caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            login_user,
+            object_type,
+            object_id,
+        )
     out = []
     for m in raw:
         ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'))
         if ceiling is None:
             continue
         if _caller_satisfies_ceiling(caller_level, ceiling):
+            permission_id = _management_permission_id(object_type, m.get('grant_tier'))
+            if permission_id and permission_id not in caller_permission_ids:
+                continue
             out.append(RelationModelItem(**m))
     return resp_200(out)
 

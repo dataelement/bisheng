@@ -1,6 +1,6 @@
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
@@ -11,15 +11,26 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 
+const APP_HEADER_PERMISSION_IDS = [
+    'edit_app',
+    'manage_app_owner',
+    'manage_app_manager',
+    'manage_app_viewer',
+]
+
 export default function Header({ loca, onSave, onLine, onTabChange }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
-    const { levels } = usePermissionLevels('assistant', assistantState?.id ? [String(assistantState.id)] : [])
-    const currentLevel = assistantState?.id ? levels[String(assistantState.id)] : undefined
-    const canManage = currentLevel === 'owner' || currentLevel === 'manager'
-    const canEdit = canManage || currentLevel === 'editor'
+    const assistantId = assistantState?.id ? String(assistantState.id) : ''
+    const { permissions } = usePermissionIds('assistant', assistantId ? [assistantId] : [], APP_HEADER_PERMISSION_IDS)
+    const canManage = assistantId ? (
+        hasPermissionId(permissions, assistantId, 'manage_app_owner') ||
+        hasPermissionId(permissions, assistantId, 'manage_app_manager') ||
+        hasPermissionId(permissions, assistantId, 'manage_app_viewer')
+    ) : false
+    const canEdit = assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false
     {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
     const [permDialogOpen, setPermDialogOpen] = useState(false);
@@ -99,4 +110,3 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
         </div>
     </div>
 };
-

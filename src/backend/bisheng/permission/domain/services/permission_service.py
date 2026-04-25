@@ -25,8 +25,6 @@ from typing import List, Optional, Set
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
-    VALID_RELATIONS,
-    VALID_RESOURCE_TYPES,
     AuthorizeGrantItem,
     AuthorizeRevokeItem,
     PermissionLevel,
@@ -819,6 +817,13 @@ class PermissionService:
                 return PermissionLevel.owner.value
             if creator_id is not None and await cls._implicit_dept_admin_covers(user_id, creator_id):
                 return PermissionLevel.can_manage.value
+            department_space_level = await cls._implicit_department_space_member_level(
+                user_id,
+                object_type,
+                object_id,
+            )
+            if department_space_level is not None:
+                return department_space_level
             return None
         except Exception as e:
             logger.debug(
@@ -838,6 +843,10 @@ class PermissionService:
             return True
         if level == PermissionLevel.can_manage.value:
             return cls._relation_implicit_manager_ok(relation, object_type)
+        if level == PermissionLevel.can_edit.value:
+            return relation in ('can_edit', 'can_read', 'editor', 'viewer')
+        if level == PermissionLevel.can_read.value:
+            return relation in ('can_read', 'viewer')
         return False
 
     @classmethod
@@ -874,6 +883,29 @@ class PermissionService:
             if int(ud.department_id) in subtree:
                 return True
         return False
+
+    @classmethod
+    async def _implicit_department_space_member_level(
+        cls,
+        user_id: int,
+        object_type: str,
+        object_id: str,
+    ) -> Optional[str]:
+        if object_type != 'knowledge_space' or not str(object_id).isdigit():
+            return None
+
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.database.models.department import UserDepartmentDao
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
+
+        with bypass_tenant_filter():
+            binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(object_id))
+            if binding is None:
+                return None
+            user_departments = await UserDepartmentDao.aget_user_departments(user_id)
+        if any(int(row.department_id) == int(binding.department_id) for row in user_departments):
+            return PermissionLevel.can_read.value
+        return None
 
     @classmethod
     async def _distinct_user_ids_in_departments(cls, department_ids: Set[int]) -> Set[int]:

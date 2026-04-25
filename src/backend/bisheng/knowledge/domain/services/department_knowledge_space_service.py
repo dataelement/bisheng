@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Iterable, List, Sequence
 
 from fastapi import Request
@@ -16,6 +17,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import UserDepartmentDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -28,6 +30,11 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceInfoResp,
     KnowledgeSpaceService,
 )
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+from bisheng.permission.domain.services.permission_service import PermissionService
+
+
+_logger = logging.getLogger(__name__)
 
 
 class DepartmentKnowledgeSpaceService:
@@ -102,6 +109,34 @@ class DepartmentKnowledgeSpaceService:
             )
             await SpaceChannelMemberDao.async_insert_member(member)
             await svc._grant_space_membership_tuple(space_id, member)
+
+    @classmethod
+    async def _grant_department_members_viewer(
+        cls,
+        *,
+        space_id: int,
+        department_id: int,
+    ) -> None:
+        try:
+            await PermissionService.authorize(
+                object_type='knowledge_space',
+                object_id=str(space_id),
+                grants=[
+                    AuthorizeGrantItem(
+                        subject_type='department',
+                        subject_id=department_id,
+                        relation='viewer',
+                        include_children=False,
+                    ),
+                ],
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to write department viewer tuple for space %s department %s: %s',
+                space_id,
+                department_id,
+                e,
+            )
 
     @classmethod
     async def _sync_added_admin(
@@ -220,6 +255,10 @@ class DepartmentKnowledgeSpaceService:
                 space_id=space.id,
                 created_by=login_user.user_id,
             )
+            await cls._grant_department_members_viewer(
+                space_id=space.id,
+                department_id=dept.id,
+            )
             admin_rows = await DepartmentService.aget_admins(dept.dept_id, login_user)
             await cls._grant_default_department_admins(
                 request=request,
@@ -270,21 +309,34 @@ class DepartmentKnowledgeSpaceService:
         login_user: UserPayload,
         order_by: str = 'update_time',
     ) -> List[KnowledgeSpaceInfoResp]:
+        user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
+        department_ids = [
+            int(row.department_id)
+            for row in user_departments
+            if getattr(row, 'department_id', None) is not None
+        ]
+        department_bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(department_ids)
+        department_space_ids = {int(binding.space_id) for binding in department_bindings}
+
         members = await SpaceChannelMemberDao.async_get_user_space_members(login_user.user_id)
-        if not members:
-            return []
-        bound_space_ids = set(
-            (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(
-                [int(member.business_id) for member in members]
-            )).keys()
+        member_space_ids = [int(member.business_id) for member in members]
+        member_bound_space_ids = set(
+            (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(member_space_ids)).keys()
         )
-        if not bound_space_ids:
+
+        space_ids = department_space_ids | member_bound_space_ids
+        if not space_ids:
             return []
         filtered_members = [
-            member for member in members if int(member.business_id) in bound_space_ids
+            member for member in members if int(member.business_id) in space_ids
         ]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
-        return await svc._format_member_spaces(filtered_members, order_by)
+        return await svc._format_accessible_spaces(
+            list(space_ids),
+            order_by,
+            memberships=filtered_members,
+            required_permission_id='view_space',
+        )
 
     @classmethod
     async def get_all_department_spaces(

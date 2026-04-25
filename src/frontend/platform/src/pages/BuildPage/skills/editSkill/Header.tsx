@@ -1,6 +1,6 @@
 import AlertDropdown from "@/alerts/alertDropDown";
 import TipPng from "@/assets/tip.jpg";
-import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { DelIcon } from "@/components/bs-icons/del";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { SaveIcon } from "@/components/bs-icons/save";
@@ -28,13 +28,21 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker, useNavigate } from "react-router-dom";
 
+const APP_MANAGE_PERMISSION_IDS = [
+    'manage_app_owner',
+    'manage_app_manager',
+    'manage_app_viewer',
+]
+
 export default function Header({ flow, preFlow, onTabChange }) {
     const navgate = useNavigate()
     const { t } = useTranslation()
     const { message } = useToast()
-    const { levels } = usePermissionLevels('workflow', flow?.id ? [String(flow.id)] : [])
-    const currentLevel = flow?.id ? levels[String(flow.id)] : undefined
-    const canManage = currentLevel === 'owner' || currentLevel === 'manager'
+    const flowId = flow?.id ? String(flow.id) : ''
+    const { permissions } = usePermissionIds('workflow', flowId ? [flowId] : [], APP_MANAGE_PERMISSION_IDS)
+    const canManage = flowId
+        ? APP_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permissions, flowId, permissionId))
+        : false
     const [open, setOpen] = useState(false)
     const AlertWidth = 384;
     const { notificationCenter, setNotificationCenter } = useContext(alertContext);
