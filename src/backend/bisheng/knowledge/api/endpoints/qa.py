@@ -66,11 +66,11 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
         if file_access and file:
             # Preview filesurl
             original_url, preview_url = KnowledgeService.get_file_share_url(file.id)
-            chunk_res['source_url'] = preview_url
+            chunk_res['preview_url'] = preview_url
             chunk_res['original_url'] = original_url
             chunk_res['source'] = file.file_name
         else:
-            chunk_res['source_url'] = ''
+            chunk_res['preview_url'] = ''
             chunk_res['original_url'] = ''
             chunk_res['source'] = ''
 
