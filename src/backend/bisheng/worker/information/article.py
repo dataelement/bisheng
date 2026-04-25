@@ -72,6 +72,14 @@ def sync_information_article(information_id: str = None):
         logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
         _update_channels_by_source_id(need_update_informations)
 
+    # v2.5 Module D: push freshly-indexed articles into bound knowledge spaces.
+    # The hook short-circuits internally when indexed_by_source is empty.
+    _sync_new_articles_to_knowledge_spaces(
+        indexed_by_source,
+        information_id=information_id,
+        article_service=article_service,
+    )
+
 
 def _update_channels_by_source_id(source_ids: List[str]):
     """Update latest_article_update_time for channels that use the specified source_id."""
