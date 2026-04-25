@@ -4,6 +4,7 @@ import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDial
 import RolesAndPermissions from "@/pages/SystemPage/components/RolesAndPermissions";
 import {
   getApplicationPermissionTemplateApi,
+  getGrantableRelationModelsApi,
   getKnowledgeLibraryPermissionTemplateApi,
   getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
@@ -73,6 +74,7 @@ vi.mock("@/controllers/API/permission", () => ({
   createRelationModelApi: vi.fn(),
   deleteRelationModelApi: vi.fn(),
   getApplicationPermissionTemplateApi: vi.fn(),
+  getGrantableRelationModelsApi: vi.fn(),
   getKnowledgeLibraryPermissionTemplateApi: vi.fn(),
   getKnowledgeSpacePermissionTemplateApi: vi.fn(),
   getRebacSchemaApi: vi.fn(),
@@ -90,6 +92,7 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 }));
 
 const mockedGetApplicationPermissionTemplateApi = vi.mocked(getApplicationPermissionTemplateApi);
+const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetKnowledgeLibraryPermissionTemplateApi = vi.mocked(getKnowledgeLibraryPermissionTemplateApi);
 const mockedGetRebacSchemaApi = vi.mocked(getRebacSchemaApi);
 const mockedGetRelationModelsApi = vi.mocked(getRelationModelsApi);
@@ -146,6 +149,19 @@ async function openRebacTab() {
 }
 
 describe("Permission dialog regressions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedGetGrantableRelationModelsApi.mockResolvedValue([
+      {
+        id: "viewer",
+        name: "可查看",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+    ] as any);
+  });
+
   it("renders only list and grant tabs after removing the dead share tab", () => {
     renderAsAdmin(
       <PermissionDialog
@@ -160,6 +176,23 @@ describe("Permission dialog regressions", () => {
     expect(screen.getByText("dialog.tabList")).toBeInTheDocument();
     expect(screen.getByText("dialog.tabGrant")).toBeInTheDocument();
     expect(screen.queryByText("dialog.tabShare")).not.toBeInTheDocument();
+  });
+
+  it("loads grantable relation models once when the dialog opens", async () => {
+    renderAsAdmin(
+      <PermissionDialog
+        open
+        onOpenChange={() => {}}
+        resourceType="knowledge_space"
+        resourceId="1"
+        resourceName="KB"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetGrantableRelationModelsApi).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedGetGrantableRelationModelsApi).toHaveBeenCalledWith("knowledge_space", "1");
   });
 
   it("refreshes the permission list after a successful grant action", () => {

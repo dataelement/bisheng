@@ -28,6 +28,10 @@ interface PermissionListTabProps {
   resourceType: ResourceType
   resourceId: string
   refreshKey: number
+  prefetchedGrantableModels?: RelationModel[]
+  prefetchedGrantableModelsLoaded?: boolean
+  prefetchedUseDefaultModels?: boolean
+  skipGrantableModelsRequest?: boolean
 }
 
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -40,15 +44,23 @@ const DEFAULT_MODELS: RelationModelOption[] = [
 const LIST_SUBJECT_TYPES = ['user', 'department', 'user_group'] as const
 type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number]
 
-export function PermissionListTab({ resourceType, resourceId, refreshKey }: PermissionListTabProps) {
+export function PermissionListTab({
+  resourceType,
+  resourceId,
+  refreshKey,
+  prefetchedGrantableModels,
+  prefetchedGrantableModelsLoaded = false,
+  prefetchedUseDefaultModels = false,
+  skipGrantableModelsRequest = false,
+}: PermissionListTabProps) {
   const { t } = useTranslation('permission')
   const { message } = useToast()
   const [entries, setEntries] = useState<PermissionEntry[]>([])
   const [listTab, setListTab] = useState<ListSubjectType>('user')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
-  const [grantableModels, setGrantableModels] = useState<RelationModel[]>([])
-  const [useDefaultModels, setUseDefaultModels] = useState(false)
+  const [grantableModels, setGrantableModels] = useState<RelationModel[]>(prefetchedGrantableModels || [])
+  const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels)
   const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map())
   const [userSelectedTab, setUserSelectedTab] = useState(false)
 
@@ -95,6 +107,13 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   }, [entries, filteredEntries.length, userSelectedTab])
 
   useEffect(() => {
+    if (skipGrantableModelsRequest) {
+      if (!prefetchedGrantableModelsLoaded) return
+      setGrantableModels(prefetchedGrantableModels || [])
+      setUseDefaultModels(prefetchedUseDefaultModels)
+      return
+    }
+
     captureAndAlertRequestErrorHoc(
       getGrantableRelationModelsApi(resourceType, resourceId),
       () => true,
@@ -107,7 +126,15 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
       setUseDefaultModels(false)
       setGrantableModels(res)
     })
-  }, [resourceType, resourceId, refreshKey])
+  }, [
+    prefetchedGrantableModels,
+    prefetchedGrantableModelsLoaded,
+    prefetchedUseDefaultModels,
+    refreshKey,
+    resourceId,
+    resourceType,
+    skipGrantableModelsRequest,
+  ])
 
   const models = useMemo<RelationModelOption[]>(() => {
     if (useDefaultModels) return DEFAULT_MODELS

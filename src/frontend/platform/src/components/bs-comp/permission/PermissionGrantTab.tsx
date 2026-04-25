@@ -1,9 +1,13 @@
 import { Button } from "@/components/bs-ui/button"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { authorizeResource, getGrantableRelationModelsApi } from "@/controllers/API/permission"
+import {
+  authorizeResource,
+  getGrantableRelationModelsApi,
+  type RelationModel,
+} from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
@@ -23,9 +27,21 @@ interface PermissionGrantTabProps {
   resourceType: ResourceType
   resourceId: string
   onSuccess: () => void
+  prefetchedGrantableModels?: RelationModel[]
+  prefetchedGrantableModelsLoaded?: boolean
+  prefetchedUseDefaultModels?: boolean
+  skipGrantableModelsRequest?: boolean
 }
 
-export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: PermissionGrantTabProps) {
+export function PermissionGrantTab({
+  resourceType,
+  resourceId,
+  onSuccess,
+  prefetchedGrantableModels,
+  prefetchedGrantableModelsLoaded = false,
+  prefetchedUseDefaultModels = false,
+  skipGrantableModelsRequest = false,
+}: PermissionGrantTabProps) {
   const { t } = useTranslation('permission')
   const { message } = useToast()
   const [subjectType, setSubjectType] = useState<SubjectType>('user')
@@ -35,32 +51,60 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
   const [includeChildren, setIncludeChildren] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  const applyRelationModels = useCallback((relationModels: RelationModel[] | undefined, fallbackToDefault: boolean) => {
+    if (fallbackToDefault) {
+      setModels(DEFAULT_MODELS)
+      setSelectedModelId('viewer')
+      return
+    }
+
+    const options: RelationModelOption[] = (relationModels || [])
+      .map((m) => ({
+        id: m.id,
+        name: m.is_system ? t(`level.${m.relation}`) : m.name,
+        relation: m.relation as RelationLevel,
+      }))
+
+    if (options.length) {
+      setModels(options)
+      setSelectedModelId((current) => (
+        options.some((option) => option.id === current) ? current : options[0].id
+      ))
+      return
+    }
+
+    setModels(DEFAULT_MODELS)
+    setSelectedModelId('viewer')
+  }, [t])
+
   useEffect(() => {
+    if (skipGrantableModelsRequest) {
+      if (!prefetchedGrantableModelsLoaded) return
+      applyRelationModels(prefetchedGrantableModels, prefetchedUseDefaultModels)
+      return
+    }
+
     captureAndAlertRequestErrorHoc(
       getGrantableRelationModelsApi(resourceType, resourceId),
       () => true,
     ).then((res) => {
       if (res === false) {
-        setModels(DEFAULT_MODELS)
-        setSelectedModelId('viewer')
+        applyRelationModels(undefined, true)
         return
       }
       if (!res) return
-      const options: RelationModelOption[] = (res || [])
-        .map((m) => ({
-          id: m.id,
-          name: m.is_system ? t(`level.${m.relation}`) : m.name,
-          relation: m.relation as RelationLevel,
-        }))
-      if (options.length) {
-        setModels(options)
-        setSelectedModelId(options[0].id)
-      } else {
-        setModels(DEFAULT_MODELS)
-        setSelectedModelId('viewer')
-      }
+      applyRelationModels(res, false)
     })
-  }, [resourceType, resourceId])
+  }, [
+    prefetchedGrantableModels,
+    prefetchedGrantableModelsLoaded,
+    prefetchedUseDefaultModels,
+    resourceId,
+    resourceType,
+    skipGrantableModelsRequest,
+    applyRelationModels,
+    t,
+  ])
 
   const relation = useMemo<RelationLevel>(() => {
     return models.find((m) => m.id === selectedModelId)?.relation || 'viewer'
