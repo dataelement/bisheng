@@ -467,7 +467,7 @@ const AiChatInput = memo(
                         </div>
 
                         {/* Toolbar: model select + knowledge base + tools */}
-                        <div className="absolute bottom-0 left-3 flex gap-2 items-center">
+                        <div className="input-bottom-left absolute bottom-0 left-3 flex gap-2 items-center">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}

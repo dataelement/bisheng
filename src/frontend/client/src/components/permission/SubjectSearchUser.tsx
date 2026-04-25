@@ -67,17 +67,17 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="relative shrink-0">
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <Input
           placeholder={localize("com_permission.search_user")}
           value={keyword}
           onChange={handleInput}
-          className="pl-8"
+          className="h-8 pl-8"
         />
       </div>
-      <div className="max-h-[min(320px,50vh)] min-h-[120px] overflow-y-auto rounded-md border">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">
             {localize("com_ui_loading")}

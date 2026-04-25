@@ -368,7 +368,7 @@ export default function RolesAndPermissions() {
     <>
     {isSuperAdmin ? (
     <Tabs defaultValue="roles" className="flex h-full min-h-0 w-full flex-col">
-      <TabsList className="mb-2 shrink-0">
+      <TabsList className="mb-2 shrink-0 self-start">
         <TabsTrigger value="roles">{t("system.roleManagement")}</TabsTrigger>
         <TabsTrigger value="rebac">{t("system.rebacSchemaTab")}</TabsTrigger>
       </TabsList>

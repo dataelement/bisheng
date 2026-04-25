@@ -329,10 +329,28 @@ async def get_knowledge(*,
                         knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
                                                     alias='type'),
                         sort_by: Literal['create_time', 'update_time', 'name'] = Query(default='update_time'),
+                        preferred_ids: Optional[str] = Query(
+                            default=None,
+                            description=('Comma-separated knowledge ids to pin to the top of the global '
+                                         'sort (before sort_by). Used by workstation plus-menu so admin-'
+                                         'configured KBs surface on page 1 regardless of name.'),
+                        ),
                         page_size: Optional[int] = 10,
                         page_num: Optional[int] = 1):
     """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
+    pinned: Optional[List[int]] = None
+    if preferred_ids:
+        parsed: List[int] = []
+        for raw in preferred_ids.split(','):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                parsed.append(int(raw))
+            except ValueError:
+                continue
+        pinned = parsed or None
     res, total = await KnowledgeService.get_knowledge(
         request,
         login_user,
@@ -342,6 +360,7 @@ async def get_knowledge(*,
         page_num,
         page_size,
         permission_id=permission_id,
+        preferred_ids=pinned,
     )
     return resp_200(data={'data': res, 'total': total})
 

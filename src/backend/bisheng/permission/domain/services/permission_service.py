@@ -550,8 +550,11 @@ class PermissionService:
         dept_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'department']
         group_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'user_group']
 
-        # Step 3: Batch resolve names
-        name_map = await cls._resolve_subject_names(user_ids, dept_ids, group_ids)
+        # Step 3: Batch resolve names and user-group captions for the user list UI
+        name_map, user_group_names_map = await asyncio.gather(
+            cls._resolve_subject_names(user_ids, dept_ids, group_ids),
+            cls._resolve_user_group_names(user_ids),
+        )
 
         # Step 4: Build items and merge department entries
         dept_tracker: dict[tuple, ResourcePermissionItem] = {}
@@ -581,10 +584,40 @@ class PermissionService:
                     subject_type=p['subject_type'],
                     subject_id=p['subject_id'],
                     subject_name=name,
+                    subject_group_names=user_group_names_map.get(p['subject_id']) if p['subject_type'] == 'user' else None,
                     relation=p['relation'],
                 ))
 
         return items
+
+    @classmethod
+    async def _resolve_user_group_names(
+        cls,
+        user_ids: List[int],
+    ) -> dict[int, List[str]]:
+        """Batch-resolve user group names for user subjects in permission lists."""
+        if not user_ids:
+            return {}
+
+        try:
+            from bisheng.database.models.user_group import UserGroupDao
+
+            groups_map = await UserGroupDao.aget_user_groups_batch(list(set(user_ids)))
+        except Exception as e:
+            logger.warning('Failed to resolve user group names: %s', e)
+            return {}
+
+        resolved: dict[int, List[str]] = {}
+        for user_id, groups in groups_map.items():
+            names: List[str] = []
+            for group in groups or []:
+                group_name = getattr(group, 'group_name', None)
+                if group_name and group_name not in names:
+                    names.append(group_name)
+            if names:
+                resolved[int(user_id)] = names
+
+        return resolved
 
     @classmethod
     async def _resolve_subject_names(

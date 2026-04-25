@@ -29,6 +29,8 @@ def _load_flow_service_module():
         'bisheng.database.models.session',
         'bisheng.database.models.user_group',
         'bisheng.permission.domain.services.application_permission_service',
+        'bisheng.permission.domain.services.owner_service',
+        'bisheng.permission.domain.workflow_app_permission',
         'bisheng.share_link.domain.models.share_link',
         'bisheng.utils',
     ]
@@ -44,7 +46,7 @@ def _load_flow_service_module():
         sys.modules['bisheng.api.services'] = services_package
 
         audit_log_module = ModuleType('bisheng.api.services.audit_log')
-        audit_log_module.AuditLogService = SimpleNamespace()
+        audit_log_module.AuditLogService = SimpleNamespace(delete_build_workflow=lambda *args, **kwargs: None)
         sys.modules['bisheng.api.services.audit_log'] = audit_log_module
 
         schemas_module = ModuleType('bisheng.api.v1.schemas')
@@ -121,8 +123,10 @@ def _load_flow_service_module():
         sys.modules['bisheng.database.models.flow_version'] = flow_version_module
 
         group_resource_module = ModuleType('bisheng.database.models.group_resource')
-        group_resource_module.GroupResourceDao = SimpleNamespace()
-        group_resource_module.ResourceTypeEnum = SimpleNamespace()
+        group_resource_module.GroupResourceDao = SimpleNamespace(
+            delete_group_resource_by_third_id=MagicMock(),
+        )
+        group_resource_module.ResourceTypeEnum = SimpleNamespace(WORK_FLOW='WORK_FLOW')
         group_resource_module.GroupResource = SimpleNamespace
         sys.modules['bisheng.database.models.group_resource'] = group_resource_module
 
@@ -152,6 +156,14 @@ def _load_flow_service_module():
 
         app_permission_module.ApplicationPermissionService = _DummyApplicationPermissionService
         sys.modules['bisheng.permission.domain.services.application_permission_service'] = app_permission_module
+
+        owner_service_module = ModuleType('bisheng.permission.domain.services.owner_service')
+        owner_service_module.OwnerService = SimpleNamespace(delete_resource_tuples_sync=MagicMock())
+        sys.modules['bisheng.permission.domain.services.owner_service'] = owner_service_module
+
+        workflow_app_permission_module = ModuleType('bisheng.permission.domain.workflow_app_permission')
+        workflow_app_permission_module.user_may_share_app = AsyncMock(return_value=True)
+        sys.modules['bisheng.permission.domain.workflow_app_permission'] = workflow_app_permission_module
 
         share_link_module = ModuleType('bisheng.share_link.domain.models.share_link')
         share_link_module.ShareLink = SimpleNamespace
@@ -245,3 +257,19 @@ async def test_get_one_flow_uses_view_or_use_app_permissions():
         'wf-2',
         ['view_app', 'use_app'],
     )
+
+
+def test_delete_flow_hook_cleans_workflow_fga_tuples():
+    flow_module = _load_flow_service_module()
+    FlowService = flow_module.FlowService
+    request = SimpleNamespace()
+    login_user = SimpleNamespace(user_id=7)
+    flow_info = SimpleNamespace(id='wf-delete', name='Workflow', description='', logo='', flow_type=10)
+
+    FlowService.delete_flow_hook(request, login_user, flow_info)
+
+    flow_module.GroupResourceDao.delete_group_resource_by_third_id.assert_called_once_with(
+        'wf-delete',
+        flow_module.ResourceTypeEnum.WORK_FLOW,
+    )
+    flow_module.OwnerService.delete_resource_tuples_sync.assert_called_once_with('workflow', 'wf-delete')

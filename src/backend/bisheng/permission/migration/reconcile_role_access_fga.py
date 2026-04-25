@@ -58,7 +58,7 @@ class Stats:
     deleted: int = 0
 
 
-async def _role_user_ids() -> set[int]:
+async def _candidate_user_ids() -> set[int]:
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
     from bisheng.database.constants import AdminRole
@@ -69,7 +69,15 @@ async def _role_user_ids() -> set[int]:
                 sa_text('SELECT DISTINCT user_id FROM userrole WHERE role_id != :admin_rid'),
                 {'admin_rid': AdminRole},
             )
-            return {int(row[0]) for row in result.fetchall()}
+            user_ids = {int(row[0]) for row in result.fetchall()}
+            try:
+                users = await session.execute(
+                    sa_text('SELECT user_id FROM user WHERE `delete` = 0'),
+                )
+                user_ids.update(int(row[0]) for row in users.fetchall())
+            except Exception as e:
+                logger.warning('Failed to load all active users for stale tuple scan: %s', e)
+            return user_ids
 
 
 async def _build_desired_set() -> set[tuple[str, str, str, str]]:
@@ -212,8 +220,8 @@ async def reconcile(dry_run: bool = False) -> Stats:
     stats.desired = len(desired)
     logger.info('Desired tuples: %d', stats.desired)
 
-    role_user_ids = await _role_user_ids()
-    logger.info('Role users: %d', len(role_user_ids))
+    role_user_ids = await _candidate_user_ids()
+    logger.info('Candidate users for role_access FGA scan: %d', len(role_user_ids))
 
     logger.info('Building actual set from FGA ...')
     actual = await _build_actual_set(role_user_ids)
@@ -265,7 +273,7 @@ async def reconcile(dry_run: bool = False) -> Stats:
 
     if operations:
         logger.info('Executing %d FGA operations ...', len(operations))
-        await PermissionService.batch_write_tuples(operations)
+        await PermissionService.batch_write_tuples(operations, crash_safe=True)
         stats.written = stats.to_write
         stats.deleted = stats.to_delete
 

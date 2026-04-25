@@ -79,6 +79,13 @@ async def init_default_data():
                     await session.commit()
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
+                    from bisheng.permission.domain.services.legacy_rbac_sync_service import (
+                        LegacyRBACSyncService,
+                    )
+                    await LegacyRBACSyncService.sync_user_auth_created(
+                        user.user_id,
+                        [AdminRole],
+                    )
 
                 await _backfill_guest_department_membership(session)
 
@@ -199,14 +206,36 @@ async def _init_default_tenant(session):
                 user_id=uid,
                 tenant_id=DEFAULT_TENANT_ID,
                 is_default=1,
+                is_active=1,
+                status='active',
             ))
 
-        if users_without_tenant:
+        active_user_ids = set((await session.exec(
+            select(UserTenant.user_id).where(UserTenant.is_active == 1)
+        )).all())
+        inactive_default_rows = (await session.exec(
+            select(UserTenant).where(
+                UserTenant.tenant_id == DEFAULT_TENANT_ID,
+                UserTenant.is_default == 1,
+                UserTenant.status == 'active',
+                UserTenant.is_active.is_(None),
+            )
+        )).all()
+        activated_count = 0
+        for row in inactive_default_rows:
+            if row.user_id in active_user_ids:
+                continue
+            row.is_active = 1
+            session.add(row)
+            active_user_ids.add(row.user_id)
+            activated_count += 1
+
+        if users_without_tenant or activated_count:
             await session.commit()
 
     logger.info(
         f'Default tenant ready (id={DEFAULT_TENANT_ID}); '
-        f'user_tenant backfill rows={len(users_without_tenant)}',
+        f'user_tenant backfill rows={len(users_without_tenant)} active_backfill rows={activated_count}',
     )
 
 
