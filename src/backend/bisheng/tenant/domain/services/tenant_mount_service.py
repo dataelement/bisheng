@@ -57,10 +57,15 @@ _UNMOUNT_MIGRATE_TABLES: List[str] = [
 ]
 
 
-def _require_super(operator) -> None:
-    """Gate: raise 22010 if the operator is not a global super admin."""
-    check = getattr(operator, 'is_global_super', None)
-    if check is None or not check():
+async def _require_super(operator) -> None:
+    """Gate: raise 22010 if the operator is not a global super admin.
+
+    Reads the pre-resolved ``is_global_super`` field on LoginUser, which
+    ``init_login_user`` populates from ``_check_is_global_super`` (FGA
+    tuple + RBAC AdminRole fallback). Kept ``async`` so existing call
+    sites that ``await`` it stay unchanged.
+    """
+    if not getattr(operator, 'is_global_super', False):
         raise TenantTreeMigratePermissionError()
 
 
@@ -96,7 +101,7 @@ class TenantMountService:
         (and, on True, the list of distributed resource ids). F011 callers
         that do not care keep the default and observe the pre-F017 shape.
         """
-        _require_super(operator)
+        await _require_super(operator)
         dept = await DepartmentDao.aget_by_id(dept_id)
         if dept is None:
             raise TenantTreeMountConflictError()
@@ -169,6 +174,48 @@ class TenantMountService:
                 '[F017] distribute_to_child failed for child %s: %s',
                 new_child_id, e,
             )
+
+        # LLM uses resource-level shared_with (different mechanism from the
+        # tenant-level shared_to written above — see ResourceShareService
+        # docstring). distribute_to_child does NOT cover llm_server, so the
+        # new Child would otherwise see no Root LLMs. Fan out per-resource
+        # tuples here, only for this Child (already-mounted Children keep
+        # their existing tuples untouched).
+        #
+        # Gated by tenant.share_default_to_children to honour the
+        # "Root-only" intent: customers who turned the flag off in the
+        # admin UI expect new Children NOT to inherit Root LLMs.
+        try:
+            from sqlalchemy import text as sa_text
+
+            from bisheng.core.database import get_async_db_session
+            from bisheng.core.openfga.manager import get_fga_client
+            from bisheng.database.models.tenant import TenantDao
+
+            root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
+            share_default = bool(getattr(
+                root_tenant, 'share_default_to_children', True,
+            )) if root_tenant else True
+            fga = get_fga_client()
+            if share_default and fga is not None:
+                async with get_async_db_session() as session:
+                    res = await session.exec(sa_text(
+                        'SELECT id FROM llm_server WHERE tenant_id = :t'
+                    ).bindparams(t=ROOT_TENANT_ID))
+                    server_ids = [r[0] for r in res.all()]
+                if server_ids:
+                    writes = [{
+                        'user': f'tenant:{new_child_id}',
+                        'relation': 'shared_with',
+                        'object': f'llm_server:{sid}',
+                    } for sid in server_ids]
+                    await fga.write_tuples(writes=writes)
+        except Exception as e:  # pragma: no cover — compensator handles retry
+            logger.warning(
+                '[F029] llm_server fanout to child %s failed: %s',
+                new_child_id, e,
+            )
+
         try:
             return await cls._list_root_shared_resources()
         except Exception as e:  # pragma: no cover
@@ -295,7 +342,7 @@ class TenantMountService:
         operator,
     ) -> Dict[str, Any]:
         """Reverse a mount. ``policy`` drives resource handling (AC-04a/b/c)."""
-        _require_super(operator)
+        await _require_super(operator)
         dept = await DepartmentDao.aget_by_id(dept_id)
         if dept is None or not getattr(dept, 'mounted_tenant_id', None):
             raise TenantTreeMountConflictError()
@@ -387,7 +434,7 @@ class TenantMountService:
 
         Returns ``{migrated: N, failed: [{resource_id, reason}, ...]}``.
         """
-        _require_super(operator)
+        await _require_super(operator)
         if resource_type not in _MIGRATABLE_RESOURCE_TABLES:
             # 22006 distinguishes "unknown resource_type" from 22002 "mount conflict".
             raise TenantTreeMigrateConflictError()

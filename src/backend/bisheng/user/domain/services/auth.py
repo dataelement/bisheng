@@ -173,6 +173,14 @@ class LoginUser(BaseModel):
     token_version: int = Field(
         default=0, description='JWT invalidation counter (F012)',
     )
+    # Pre-resolved global-super flag, populated by ``init_login_user`` from
+    # ``_check_is_global_super`` (FGA tuple + RBAC AdminRole fallback). Kept
+    # as a plain field rather than a method so callers and pydantic
+    # serialisation share a single source of truth, and so test fixtures
+    # can set it directly without mocking helpers.
+    is_global_super: bool = Field(
+        default=False, description='True iff system:global#super_admin',
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -181,6 +189,7 @@ class LoginUser(BaseModel):
         self.user_role = kwargs.get('user_role')
         self.group_cache = kwargs.get('group_cache', {})
         self.tenant_id = kwargs.get('tenant_id', DEFAULT_TENANT_ID)
+        self.is_global_super = bool(kwargs.get('is_global_super', False))
         # token_version is validated by Pydantic Field(default=0) above.
 
         if not self.user_role:
@@ -494,12 +503,21 @@ class LoginUser(BaseModel):
         tenant_id: int = None,
         token_version: int = 0,
     ) -> Self:
-        user_roles = await UserRoleDao.aget_user_roles(user_id)
+        # Pre-resolve global-super so downstream gates (mount/unmount/
+        # migrate, also serialised to /user/info & login response) read
+        # one cached value instead of re-querying FGA per call. Helper
+        # already has Redis caching + RBAC fallback + fail-closed.
+        from bisheng.utils.http_middleware import _check_is_global_super
+        user_roles, is_global_super = await asyncio.gather(
+            UserRoleDao.aget_user_roles(user_id),
+            _check_is_global_super(user_id),
+        )
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
             user_id=user_id, user_name=user_name, user_role=role_ids,
             tenant_id=tenant_id or DEFAULT_TENANT_ID,
             token_version=token_version,
+            is_global_super=is_global_super,
         )
         return login_user
 

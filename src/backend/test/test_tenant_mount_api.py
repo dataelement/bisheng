@@ -28,7 +28,7 @@ def super_admin_payload():
     p.user_id = 1
     p.user_name = 'root'
     p.tenant_id = 1
-    p.is_global_super = MagicMock(return_value=True)
+    p.is_global_super = True
     p.is_admin = MagicMock(return_value=True)
     return p
 
@@ -39,7 +39,7 @@ def child_admin_payload():
     p.user_id = 55
     p.user_name = 'child_admin'
     p.tenant_id = 5
-    p.is_global_super = MagicMock(return_value=False)
+    p.is_global_super = False
     p.is_admin = MagicMock(return_value=True)
     return p
 

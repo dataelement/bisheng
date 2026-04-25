@@ -38,7 +38,7 @@ def super_admin():
     u.user_id = 1
     u.user_name = 'root_admin'
     u.tenant_id = 1
-    u.is_global_super = MagicMock(return_value=True)
+    u.is_global_super = True
     return u
 
 
@@ -49,7 +49,7 @@ def child_admin():
     u.user_id = 55
     u.user_name = 'child_admin'
     u.tenant_id = 5
-    u.is_global_super = MagicMock(return_value=False)
+    u.is_global_super = False
     return u
 
 
