@@ -10,7 +10,7 @@ import {
     Loader2,
     RefreshCwIcon
 } from "lucide-react";
-import { memo, useCallback, useMemo, useState, useRef } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
 import AgentThinkingHeader from "~/components/Chat/Messages/AgentThinkingHeader";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
@@ -21,8 +21,6 @@ import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext } from "~/hooks";
-import MessageSource from "~/pages/appChat/components/MessageSource";
-import ResouceModal from "~/pages/appChat/components/ResouceModal";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import Image from "~/components/Chat/Messages/Content/Image";
@@ -416,7 +414,6 @@ function AssistantBubble({
         return parseMessageText(message.text || "");
     }, [message.text, isAgentNative]);
     const { data: bsConfig } = useGetBsConfig()
-    const sourceRef = useRef<any>(null);
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
@@ -549,30 +546,12 @@ function AssistantBubble({
                                 </>
                             }
                         />
-                        {/* Reference Sources */}
-                        {message.source !== 0 && (
-                            <div className="mr-2 pt-0.5">
-                                <MessageSource
-                                    extra={null}
-                                    end={true}
-                                    source={message.source}
-                                    onSource={() => {
-                                        sourceRef.current?.openModal({
-                                            messageId: message.messageId || "",
-                                            message: regularContent,
-                                            chatId: message.conversationId,
-                                        });
-                                    }}
-                                />
-                            </div>
-                        )}
                         {/* Sibling paging */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
                         )}
                     </div>
                 )}
-                <ResouceModal ref={sourceRef} />
             </div>
         </div>
     );
