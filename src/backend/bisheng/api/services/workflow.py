@@ -337,9 +337,7 @@ class WorkFlowService(BaseService):
 
     @classmethod
     def handle_source(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent):
-        if chat_response.source == SourceType.FILE.value:
-            workflow_event.output_schema.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
-        elif chat_response.source in [SourceType.LINK.value, SourceType.QA.value]:
+        if chat_response.source in [SourceType.LINK.value, SourceType.QA.value]:
             workflow_event.output_schema.extra = chat_response.extra
 
     @classmethod

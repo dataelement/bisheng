@@ -35,7 +35,7 @@ import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
-import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
+import { KnowledgeSpaceShareDialog, type KnowledgeSpaceDialogTab } from "./SpaceDetail/KnowledgeSpaceShareDialog";
 
 export default function Knowledge() {
     const localize = useLocalize();
@@ -48,6 +48,7 @@ export default function Knowledge() {
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
     const [spaceShareOpen, setSpaceShareOpen] = useState(false);
     const [spaceShareTarget, setSpaceShareTarget] = useState<KnowledgeSpace | null>(null);
+    const [spaceShareInitialTab, setSpaceShareInitialTab] = useState<KnowledgeSpaceDialogTab>("members");
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -84,8 +85,9 @@ export default function Knowledge() {
         Record<string, "join" | "joined" | "pending" | "rejected">
     >({});
 
-    const openSpaceShareDialog = (space: KnowledgeSpace) => {
+    const openSpaceShareDialog = (space: KnowledgeSpace, initialTab: KnowledgeSpaceDialogTab = "members") => {
         setSpaceShareTarget(space);
+        setSpaceShareInitialTab(initialTab);
         setSpaceShareOpen(true);
     };
 
@@ -797,6 +799,7 @@ export default function Knowledge() {
                 resourceId={spaceShareTarget?.id || ""}
                 resourceName={spaceShareTarget?.name || ""}
                 currentUserRole={spaceShareTarget?.role || null}
+                initialTab={spaceShareInitialTab}
                 showShareTab={spaceShareTarget?.visibility !== VisibilityType.PRIVATE}
                 showMembersTab={
                     spaceShareTarget?.role === SpaceRole.CREATOR ||

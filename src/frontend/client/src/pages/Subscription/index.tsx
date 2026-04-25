@@ -69,7 +69,7 @@ export default function Subscription() {
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelShareOpen, setChannelShareOpen] = useState(false);
     const [channelShareChannel, setChannelShareChannel] = useState<Channel | null>(null);
-    const [channelShareInitialTab, setChannelShareInitialTab] = useState<"share" | "members" | "permission">("share");
+    const [channelShareInitialTab, setChannelShareInitialTab] = useState<"members" | "permission">("members");
     const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
@@ -79,7 +79,7 @@ export default function Subscription() {
 
     const openChannelShareDialog = (
         channel: Channel,
-        initialTab: "share" | "members" | "permission" = "share",
+        initialTab: "members" | "permission" = "members",
     ) => {
         setChannelShareChannel(channel);
         setChannelShareInitialTab(initialTab);
@@ -502,7 +502,6 @@ export default function Subscription() {
                                 onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
                                 onGoChannelSquare={isH5 ? handleChannelSquare : undefined}
                                 onCreateChannel={isH5 ? handleCreateChannel : undefined}
-                                onOpenChannelShare={(channel) => openChannelShareDialog(channel, "share")}
                                 onFullScreen={(article, ai) => {
                                     enteredFullscreenViaAiRef.current = !!ai;
                                     setFullScreenArticle(article);

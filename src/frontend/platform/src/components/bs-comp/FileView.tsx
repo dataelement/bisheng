@@ -261,6 +261,7 @@ export default function FileView({
     const listRef = useRef(null)
     const [boxSize, setBoxSize] = useState({ width: 0, height: 0 })
     const [loading, setLoading] = useState(false)
+    const [loadError, setLoadError] = useState(false)
 
     // 视口
     useEffect(() => {
@@ -294,6 +295,7 @@ export default function FileView({
     useEffect(() => {
         // loding
         setLoading(true)
+        setLoadError(false)
         // sass环境使用sass地址
         const pdfUrl = fileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL);  // '/doc.pdf';
 
@@ -313,6 +315,11 @@ export default function FileView({
             pageScale = Math.min(pageScale, viewport.width / viewport.height)
             setPdf(pdfDocument)
             setLoading(false)
+        }).catch((error) => {
+            console.error('Failed to load PDF preview:', error);
+            setPdf(null)
+            setLoading(false)
+            setLoadError(true)
         })
     }, [fileUrl])
 
@@ -389,6 +396,10 @@ export default function FileView({
                 ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />
                 </div>
+                : loadError
+                    ? <div className="flex h-full w-full items-center justify-center text-gray-400">
+                        {t('file.previewNotAvailable', { ns: 'knowledge' })}
+                    </div>
                 : <div id="warp-pdf" className="file-view relative h-full w-full overflow-hidden">
                     <List
                         ref={listRef}

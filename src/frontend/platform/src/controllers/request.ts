@@ -37,7 +37,9 @@ customAxios.interceptors.response.use(function (response) {
     const i18Msg = i18next.t(`errors.${statusCode}`, response.data.data)
 
     const statusMessageKeyMap: Record<string, string> = {
+        "person id is required": "errors.21013",
         "person id already exists": "errors.personIdAlreadyExists",
+        "person id already belongs to a deleted account. please restore the original account.": "errors.21020",
         "department name already exists at this level": "errors.21001",
         "department not found": "errors.21000",
         "cannot delete department with children": "errors.21002",
@@ -64,11 +66,9 @@ customAxios.interceptors.response.use(function (response) {
         : null
 
     const errorMessage =
-        i18Msg !== `errors.${statusCode}`
-            ? i18Msg
-            : (i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
-                ? i18MsgFromStatus
-                : statusMessage)
+        i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
+            ? i18MsgFromStatus
+            : (i18Msg !== `errors.${statusCode}` ? i18Msg : statusMessage)
 
     // 密码过期，标记后透传给业务层处理
     if (statusCode === 10601) {

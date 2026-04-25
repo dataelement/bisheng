@@ -4,15 +4,18 @@ import logging
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao as _UserDepartmentDao
 from bisheng.permission.api.endpoints.resource_permission import (
     _get_bindings,
     _get_relation_models,
     _normalize_model_dict,
 )
 from bisheng.permission.domain.knowledge_library_permission_template import default_permission_ids_for_relation
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.domain.services.permission_service import PermissionService
+
+UserDepartmentDao = _UserDepartmentDao
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +98,7 @@ class KnowledgePermissionService:
 
     @staticmethod
     async def _get_current_user_subject_strings(login_user: UserPayload) -> set[str]:
-        subject_strings = {f'user:{login_user.user_id}'}
-        user_group_ids = await login_user.get_user_group_ids(login_user.user_id)
-        subject_strings.update(f'user_group:{group_id}#member' for group_id in user_group_ids)
-
-        user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
-        subject_strings.update(f'department:{item.department_id}#member' for item in user_departments)
-        return subject_strings
+        return await FineGrainedPermissionService.get_current_user_subject_strings(login_user)
 
     @staticmethod
     async def _get_binding_department_paths(bindings: list[dict]) -> dict[int, str]:
@@ -198,47 +195,15 @@ class KnowledgePermissionService:
         if binding_department_paths is None:
             binding_department_paths = await cls._get_binding_department_paths(bindings)
 
-        effective_permissions: set[str] = set()
-        fga = PermissionService._get_fga()
-        if fga is not None:
-            tuples = await fga.read_tuples(object=f'knowledge_library:{knowledge_id}')
-            for legacy_type in await PermissionService._legacy_alias_object_types('knowledge_library', str(knowledge_id)):
-                tuples.extend(await fga.read_tuples(object=f'{legacy_type}:{knowledge_id}'))
-            for tuple_data in tuples:
-                tuple_user = tuple_data.get('user')
-                relation = tuple_data.get('relation')
-                if tuple_user not in user_subject_strings:
-                    continue
-                binding = await cls._resolve_binding_for_tuple(
-                    knowledge_id,
-                    tuple_user,
-                    relation,
-                    bindings,
-                    binding_department_paths,
-                    user_subject_strings,
-                )
-                model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
-                effective_permissions.update(cls._permission_ids_for_relation(relation, model))
-
-        implicit_level = await PermissionService.get_implicit_permission_level(
-            user_id=login_user.user_id,
-            object_type='knowledge_library',
-            object_id=str(knowledge_id),
-            login_user=login_user,
+        return await FineGrainedPermissionService.get_effective_permission_ids_async(
+            login_user,
+            'knowledge_library',
+            knowledge_id,
+            models=models,
+            bindings=bindings,
+            binding_department_paths=binding_department_paths,
+            user_subject_strings=user_subject_strings,
         )
-        implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
-        effective_permissions.update(cls._permission_ids_for_relation(implicit_relation or ''))
-        if effective_permissions:
-            return effective_permissions
-
-        level = await PermissionService.get_permission_level(
-            user_id=login_user.user_id,
-            object_type='knowledge_library',
-            object_id=str(knowledge_id),
-            login_user=login_user,
-        )
-        relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
-        return cls._permission_ids_for_relation(relation or '')
 
     async def filter_knowledge_ids_by_permission_async(
         self,

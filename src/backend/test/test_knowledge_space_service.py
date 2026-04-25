@@ -12,6 +12,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
+from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -455,6 +456,28 @@ class TestGetSpaceInfo:
         assert result.is_followed is False
 
 
+class TestCreateSpace:
+
+    @pytest.mark.asyncio
+    async def test_create_limit_count_excludes_department_spaces(self, service):
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+            new_callable=AsyncMock,
+            return_value=0,
+        ) as mock_count, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            with pytest.raises(WorkbenchEmbeddingError):
+                await service.create_knowledge_space(name='Space')
+
+        mock_count.assert_awaited_once_with(
+            service.login_user.user_id,
+            exclude_department_spaces=True,
+        )
+
+
 class TestDeleteSpace:
 
     @pytest.mark.asyncio
@@ -500,6 +523,36 @@ class TestDeleteSpace:
 
 
 class TestSpaceListings:
+
+    @pytest.mark.asyncio
+    async def test_get_my_created_spaces_excludes_department_bound_spaces(self, service):
+        department_member = _make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.CREATOR,
+            space_id=101,
+        )
+        normal_member = _make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.CREATOR,
+            space_id=102,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_created_members',
+            new_callable=AsyncMock,
+            return_value=[department_member, normal_member],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids',
+            new_callable=AsyncMock,
+            return_value={101: 10},
+        ), patch.object(
+            service, '_format_member_spaces',
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as mock_format:
+            await service.get_my_created_spaces()
+
+        mock_format.assert_awaited_once_with([normal_member], 'update_time')
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_includes_direct_read_grants_without_membership(self, service):
@@ -568,6 +621,33 @@ class TestSpaceListings:
             result = await service.get_my_followed_spaces()
 
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_format_accessible_spaces_excludes_membership_without_required_permission_id(self, service):
+        member_space = _make_space(space_id=2, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
+        member = _make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.MEMBER,
+            space_id=2,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock,
+            return_value=[member_space],
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value=set(),
+        ) as mock_permission_ids:
+            result = await service._format_accessible_spaces(
+                [2],
+                [member],
+                required_permission_id='view_space',
+            )
+
+        assert result == []
+        mock_permission_ids.assert_awaited_once_with('knowledge_space', 2)
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_excludes_spaces_created_by_current_user(self, service):

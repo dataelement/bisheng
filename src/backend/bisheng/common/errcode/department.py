@@ -70,6 +70,11 @@ class DepartmentOpenFGAUnavailableError(BaseErrorCode):
     )
 
 
+class DepartmentPersonIdRequiredError(BaseErrorCode):
+    Code: int = 21013
+    Msg: str = 'Person ID is required'
+
+
 class DepartmentMemberDeleteBlockedError(BaseErrorCode):
     Code: int = 21014
     Msg: str = 'Cannot delete user while data assets exist'
@@ -93,3 +98,13 @@ class DepartmentArchivedReadonlyError(BaseErrorCode):
 class DepartmentParentArchivedError(BaseErrorCode):
     Code: int = 21018
     Msg: str = 'Cannot restore department while parent department is archived'
+
+
+class DepartmentPersonIdDuplicateError(BaseErrorCode):
+    Code: int = 21019
+    Msg: str = 'Person ID already exists'
+
+
+class DepartmentPersonIdDeletedAccountError(BaseErrorCode):
+    Code: int = 21020
+    Msg: str = 'Person ID already belongs to a deleted account. Please restore the original account.'

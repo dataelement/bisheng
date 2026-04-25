@@ -2,8 +2,7 @@ import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
-import { RelationLevel } from "@/components/bs-comp/permission/types";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { MoveOneIcon } from "@/components/bs-icons/moveOne";
@@ -89,6 +88,18 @@ const TypeNames = {
     1: AppType.SKILL,
     10: AppType.FLOW
 }
+
+const APP_PERMISSION_IDS = [
+    'view_app',
+    'edit_app',
+    'publish_app',
+    'unpublish_app',
+    'delete_app',
+    'manage_app_owner',
+    'manage_app_manager',
+    'manage_app_viewer',
+]
+
 export default function apps() {
     const { t, i18n } = useTranslation()
     // useErrorPrompt();
@@ -113,15 +124,19 @@ export default function apps() {
     const assistantResourceIds = dataSource
         .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
         .map((item: any) => String(item.id));
-    const { levels: workflowPermLevels, loading: workflowPermLoading } = usePermissionLevels('workflow', workflowResourceIds);
-    const { levels: assistantPermLevels, loading: assistantPermLoading } = usePermissionLevels('assistant', assistantResourceIds);
-    const permLevels = { ...workflowPermLevels, ...assistantPermLevels };
+    const { permissions: workflowPermIds, loading: workflowPermLoading } = usePermissionIds('workflow', workflowResourceIds, APP_PERMISSION_IDS);
+    const { permissions: assistantPermIds, loading: assistantPermLoading } = usePermissionIds('assistant', assistantResourceIds, APP_PERMISSION_IDS);
+    const permIds = { ...workflowPermIds, ...assistantPermIds };
     const permLoading = workflowPermLoading || assistantPermLoading;
-    const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
-    const canRead = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
-    const canEdit = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
-    const canManage = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager']);
-    const canDelete = (id: string | number) => hasLevel(permLevels[String(id)], ['owner']);
+    const canRead = (id: string | number) => hasPermissionId(permIds, id, 'view_app');
+    const canEdit = (id: string | number) => hasPermissionId(permIds, id, 'edit_app');
+    const canPublish = (id: string | number) => hasPermissionId(permIds, id, 'publish_app');
+    const canUnpublish = (id: string | number) => hasPermissionId(permIds, id, 'unpublish_app');
+    const canManage = (id: string | number) =>
+        hasPermissionId(permIds, id, 'manage_app_owner') ||
+        hasPermissionId(permIds, id, 'manage_app_manager') ||
+        hasPermissionId(permIds, id, 'manage_app_viewer');
+    const canDelete = (id: string | number) => hasPermissionId(permIds, id, 'delete_app');
     const visibleApps = user.role === 'admin' || permLoading
         ? dataSource
         : dataSource.filter((item: any) => canRead(item.id));
@@ -215,6 +230,8 @@ export default function apps() {
 
     // on/off line
     const handleCheckedChange = (checked, data) => {
+        if (checked && !canPublish(data.id)) return;
+        if (!checked && !canUnpublish(data.id)) return;
         if (data.flow_type === 1) {
             return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
                 if (res) {
@@ -390,8 +407,7 @@ export default function apps() {
                                     onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
                                     onPermission={canManage(item.id) ? handleOpenPermission : undefined}
-                                    // PRD：「可编辑」含上线/下线；与 ReBAC can_edit 对齐（非仅 owner/manager）
-                                    showSwitch={canEdit(item.id)}
+                                    showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     showCopy={canCreateApp && canRead(item.id)}
                                     onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
                                     headSelecter={(

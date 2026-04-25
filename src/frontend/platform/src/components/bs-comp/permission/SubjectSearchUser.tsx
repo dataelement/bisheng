@@ -6,6 +6,15 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SelectedSubject } from "./types"
 
+type UserSearchResult = {
+  user_id: number
+  user_name: string
+  person_id?: string | null
+  external_id?: string | null
+  department_path?: string | null
+  primary_department_path?: string | null
+}
+
 interface SubjectSearchUserProps {
   value: SelectedSubject[]
   onChange: (v: SelectedSubject[]) => void
@@ -14,7 +23,7 @@ interface SubjectSearchUserProps {
 export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
   const { t } = useTranslation('permission')
   const [keyword, setKeyword] = useState('')
-  const [results, setResults] = useState<{ user_id: number; user_name: string }[]>([])
+  const [results, setResults] = useState<UserSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -61,7 +70,7 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
 
   const selectedIds = new Set(value.map((s) => s.id))
 
-  const toggle = (user: { user_id: number; user_name: string }) => {
+  const toggle = (user: UserSearchResult) => {
     if (selectedIds.has(user.user_id)) {
       onChange(value.filter((s) => s.id !== user.user_id))
     } else {
@@ -70,13 +79,13 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-col gap-2">
       <SearchInput
         placeholder={t('search.user')}
         value={keyword}
         onChange={handleInput}
       />
-      <div className="max-h-[min(320px,50vh)] min-h-[120px] overflow-y-auto overscroll-contain border rounded-md">
+      <div className="min-h-[120px] max-h-[clamp(120px,calc(100vh-24rem),320px)] overflow-y-auto overscroll-contain rounded-md border">
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
         )}
@@ -85,17 +94,31 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
             {t('empty.searchResults')}
           </div>
         )}
-        {!loading && results.map((user) => (
-          <div
-            key={user.user_id}
-            className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-accent"
-            onClick={() => toggle(user)}
-          >
-            <Checkbox checked={selectedIds.has(user.user_id)} />
-            <UserIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm truncate">{user.user_name}</span>
-          </div>
-        ))}
+        {!loading && results.map((user) => {
+          const personId = user.person_id || user.external_id
+          const departmentPath = user.department_path || user.primary_department_path
+          return (
+            <div
+              key={user.user_id}
+              className="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 hover:bg-accent"
+              onClick={() => toggle(user)}
+            >
+              <Checkbox checked={selectedIds.has(user.user_id)} />
+              <UserIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm" title={user.user_name}>{user.user_name}</div>
+                {(personId || departmentPath) && (
+                  <div
+                    className="truncate text-xs text-muted-foreground"
+                    title={[personId, departmentPath].filter(Boolean).join(" / ")}
+                  >
+                    {[personId, departmentPath].filter(Boolean).join(" / ")}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

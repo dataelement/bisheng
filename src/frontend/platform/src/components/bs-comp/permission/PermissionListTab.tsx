@@ -257,7 +257,7 @@ export function PermissionListTab({
         : t('subject.user')
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-col gap-3">
       <div className="flex gap-1 p-1 bg-muted rounded-md w-fit">
         {LIST_SUBJECT_TYPES.map((st) => (
           <button
@@ -277,7 +277,7 @@ export function PermissionListTab({
           </button>
         ))}
       </div>
-      <div className="max-h-[400px] overflow-y-auto">
+      <div className="min-h-0 max-h-[clamp(160px,calc(100vh-14rem),400px)] overflow-y-auto overflow-x-hidden">
         {filteredEntries.length === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
             {t('list.emptyForSubject')}

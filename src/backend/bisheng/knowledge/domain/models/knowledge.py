@@ -600,26 +600,36 @@ class KnowledgeDao(KnowledgeBase):
     # ─── Knowledge Space specific ────────────────────────────────────────────
 
     @classmethod
-    def count_spaces_by_user(cls, user_id: int) -> int:
-        """ Count how many Knowledge Spaces a user has created """
-        with get_sync_db_session() as session:
-            return session.scalar(
-                select(func.count(Knowledge.id)).where(
-                    Knowledge.user_id == user_id,
-                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
-                )
-            )
+    def _exclude_department_spaces(cls, statement):
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
+
+        return statement.where(
+            ~col(Knowledge.id).in_(select(DepartmentKnowledgeSpace.space_id))
+        )
 
     @classmethod
-    async def async_count_spaces_by_user(cls, user_id: int) -> int:
+    def count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
+        """ Count how many Knowledge Spaces a user has created """
+        statement = select(func.count(Knowledge.id)).where(
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        if exclude_department_spaces:
+            statement = cls._exclude_department_spaces(statement)
+        with get_sync_db_session() as session:
+            return session.scalar(statement)
+
+    @classmethod
+    async def async_count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
         """ Async: Count how many Knowledge Spaces a user has created """
+        statement = select(func.count(Knowledge.id)).where(
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        if exclude_department_spaces:
+            statement = cls._exclude_department_spaces(statement)
         async with get_async_db_session() as session:
-            return await session.scalar(
-                select(func.count(Knowledge.id)).where(
-                    Knowledge.user_id == user_id,
-                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
-                )
-            )
+            return await session.scalar(statement)
 
     @classmethod
     def get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
@@ -687,7 +697,7 @@ class KnowledgeDao(KnowledgeBase):
         """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
         statement = select(Knowledge).where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            Knowledge.is_released == True,
+            Knowledge.is_released.is_(True),
             Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
         )
         if keyword:
@@ -772,7 +782,7 @@ class KnowledgeDao(KnowledgeBase):
             )
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released == True,
+                Knowledge.is_released.is_(True),
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )
@@ -818,7 +828,7 @@ class KnowledgeDao(KnowledgeBase):
             .select_from(Knowledge)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released == True,
+                Knowledge.is_released.is_(True),
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )

@@ -27,7 +27,7 @@ from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
 )
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.department import UserDepartmentDao, DepartmentDao
+from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
@@ -51,6 +51,7 @@ from bisheng.permission.domain.knowledge_space_permission_template import defaul
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.permission.domain.services.owner_service import OwnerService, _get_scm_role_to_fga
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
@@ -196,6 +197,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for space in spaces
             if space.user_id != self.login_user.user_id and space.id not in membership_map
         ]
+        permission_id_space_ids = [
+            space.id
+            for space in spaces
+            if space.user_id != self.login_user.user_id
+        ]
         permission_levels = {}
         permission_ids_map: Dict[int, set[str]] = {}
         if permission_space_ids:
@@ -211,17 +217,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             permission_levels = {
                 space_id: level for space_id, level in zip(permission_space_ids, levels)
             }
-            if required_permission_id:
-                permission_ids = await asyncio.gather(*[
-                    self._get_effective_permission_ids(
-                        'knowledge_space',
-                        space_id,
-                    )
-                    for space_id in permission_space_ids
-                ])
-                permission_ids_map = {
-                    space_id: ids for space_id, ids in zip(permission_space_ids, permission_ids)
-                }
+        if required_permission_id and permission_id_space_ids:
+            permission_ids = await asyncio.gather(*[
+                self._get_effective_permission_ids(
+                    'knowledge_space',
+                    space_id,
+                )
+                for space_id in permission_id_space_ids
+            ])
+            permission_ids_map = {
+                space_id: ids for space_id, ids in zip(permission_id_space_ids, permission_ids)
+            }
 
         pinned_spaces = []
         normal_spaces = []
@@ -236,6 +242,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.user_role = UserRoleEnum.CREATOR
                 self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             elif member_conf:
+                if (
+                    required_permission_id
+                    and required_permission_id not in permission_ids_map.get(space.id, set())
+                ):
+                    continue
                 result.user_role = member_conf.user_role
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_conf))
             else:
@@ -515,15 +526,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if hasattr(self, '_current_user_subjects_cache'):
             return self._current_user_subjects_cache
 
-        subject_strings = {f'user:{self.login_user.user_id}'}
-        user_group_ids = await self.login_user.get_user_group_ids(self.login_user.user_id)
-        subject_strings.update(f'user_group:{group_id}#member' for group_id in user_group_ids)
-
-        user_departments = await UserDepartmentDao.aget_user_departments(self.login_user.user_id)
-        subject_strings.update(f'department:{item.department_id}#member' for item in user_departments)
-
-        self._current_user_subjects_cache = subject_strings
-        return subject_strings
+        self._current_user_subjects_cache = await FineGrainedPermissionService.get_current_user_subject_strings(
+            self.login_user,
+        )
+        return self._current_user_subjects_cache
 
     async def _get_binding_department_paths(self, bindings: List[dict]) -> Dict[int, str]:
         if hasattr(self, '_binding_department_paths_cache'):
@@ -674,51 +680,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         bindings = await self._get_relation_bindings()
         binding_department_paths = await self._get_binding_department_paths(bindings)
         models = await self._get_relation_models_map()
-        effective_permissions: set[str] = set()
-
-        fga = PermissionService._get_fga()
-        if fga is None:
-            level = await PermissionService.get_permission_level(
-                user_id=self.login_user.user_id,
-                object_type=object_type,
-                object_id=str(object_id),
-                login_user=self.login_user,
-            )
-            relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
-            return self._permission_ids_for_relation(relation or '')
-
-        for resource_type, resource_id in lineage:
-            tuples = await fga.read_tuples(object=f'{resource_type}:{resource_id}')
-            for tuple_data in tuples:
-                tuple_user = tuple_data.get('user')
-                relation = tuple_data.get('relation')
-                if tuple_user not in user_subject_strings:
-                    continue
-                binding = await self._resolve_binding_for_tuple(
-                    resource_type,
-                    resource_id,
-                    tuple_user,
-                    relation,
-                    bindings,
-                    binding_department_paths,
-                    user_subject_strings,
-                )
-                model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
-                effective_permissions.update(self._permission_ids_for_relation(relation, model))
-
-        if effective_permissions:
-            return effective_permissions
-
-        # Final legacy fallback: if the tuple has no model binding metadata, we
-        # derive the built-in defaults from the highest OpenFGA relation level.
-        level = await PermissionService.get_permission_level(
-            user_id=self.login_user.user_id,
-            object_type=object_type,
-            object_id=str(object_id),
-            login_user=self.login_user,
+        return await FineGrainedPermissionService.get_effective_permission_ids_async(
+            self.login_user,
+            object_type,
+            object_id,
+            models=models,
+            bindings=bindings,
+            binding_department_paths=binding_department_paths,
+            user_subject_strings=user_subject_strings,
+            lineage=lineage,
         )
-        relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
-        return self._permission_ids_for_relation(relation or '')
 
     async def _require_permission_id(
         self,
@@ -812,7 +783,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
 
         if not skip_user_limit:
-            count = await KnowledgeDao.async_count_spaces_by_user(self.login_user.user_id)
+            count = await KnowledgeDao.async_count_spaces_by_user(
+                self.login_user.user_id,
+                exclude_department_spaces=True,
+            )
             if count >= _MAX_SPACE_PER_USER:
                 raise SpaceLimitError()
 
@@ -1051,6 +1025,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self, order_by: str = 'update_time'
     ) -> List[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
+        if members:
+            department_space_ids = set(
+                (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(
+                    [int(member.business_id) for member in members]
+                )).keys()
+            )
+            members = [
+                member for member in members
+                if int(member.business_id) not in department_space_ids
+            ]
         return await self._format_member_spaces(members, order_by)
 
     async def get_my_managed_spaces(
@@ -1136,7 +1120,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # 2. Collect current page space IDs and creator IDs for enrichment
         space_ids_int = [row[0].id for row in rows]
-        space_ids_str = [str(sid) for sid in space_ids_int]
         creator_ids = list({row[0].user_id for row in rows if row[0].user_id})
 
         # 3. Batch fetch creator info and file counts for the current page only
@@ -1154,7 +1137,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_subscription_update_time = row[2]
             subscriber_count = row[3]
 
-            sid = str(space.id)
             creator = user_map.get(space.user_id)
 
             subscription_status = self._resolve_subscription_status_from_fields(
@@ -1287,7 +1269,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         # 6. Update role in SpaceChannelMember
-        old_role = target_membership.user_role
         target_membership.user_role = UserRoleEnum(req.role)
         await SpaceChannelMemberDao.update(target_membership)
 
@@ -1900,7 +1881,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: List[int]):
         """ 2：支持对单文件的标签管理: Overwrite tags for a single file. """
-        file_record = await self._require_file_relation(file_id, 'can_edit', space_id=space_id)
+        await self._require_file_relation(file_id, 'can_edit', space_id=space_id)
         await self._require_permission_id('knowledge_file', file_id, 'rename_file', space_id=space_id)
 
         resource_id = str(file_id)

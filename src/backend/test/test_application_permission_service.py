@@ -92,6 +92,72 @@ async def test_get_app_permission_map_async_honors_custom_model_permissions():
 
 
 @pytest.mark.asyncio
+async def test_get_effective_permission_ids_async_does_not_fallback_for_bound_empty_custom_model():
+    login_user = SimpleNamespace(
+        user_id=7,
+        get_user_group_ids=AsyncMock(return_value=[]),
+    )
+    fake_fga = SimpleNamespace(
+        read_tuples=AsyncMock(return_value=[
+            {'user': 'user:7', 'relation': 'viewer', 'object': 'workflow:wf-1'},
+        ]),
+    )
+
+    with patch(
+        'bisheng.permission.domain.services.application_permission_service._get_relation_models',
+        new_callable=AsyncMock,
+        return_value=[{
+            'id': 'custom_empty',
+            'name': '空权限模型',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': [],
+            'permissions_explicit': True,
+            'is_system': False,
+        }],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service._get_bindings',
+        new_callable=AsyncMock,
+        return_value=[{
+            'resource_type': 'workflow',
+            'resource_id': 'wf-1',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'custom_empty',
+        }],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.PermissionService._get_fga',
+        return_value=fake_fga,
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.PermissionService.get_implicit_permission_level',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.PermissionService.get_permission_level',
+        new_callable=AsyncMock,
+        return_value='can_read',
+    ) as mock_get_permission_level, patch(
+        'bisheng.permission.domain.services.application_permission_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.DepartmentDao.aget_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        permissions = await ApplicationPermissionService.get_effective_permission_ids_async(
+            login_user,
+            'workflow',
+            'wf-1',
+        )
+
+    assert permissions == set()
+    mock_get_permission_level.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_app_permission_map_async_uses_system_relation_defaults_when_permissions_not_explicit():
     login_user = SimpleNamespace(
         user_id=7,
