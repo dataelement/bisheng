@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useRecoilValue } from "recoil";
+import type { CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import { useLocalize } from "~/hooks";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
@@ -17,7 +18,25 @@ import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
-export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false, isGuestMode = false }) {
+export default function ChatMessages({
+    useName,
+    readOnly,
+    title,
+    logo,
+    disabledSearch = false,
+    isGuestMode = false,
+    onOpenCitationPanel,
+    activeCitationMessageId,
+}: {
+    useName?: string;
+    readOnly?: string;
+    title: string;
+    logo: React.ReactNode;
+    disabledSearch?: boolean;
+    isGuestMode?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+}) {
     const { messageScrollRef, chatId, messages } = useMessage(readOnly)
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
@@ -84,6 +103,8 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
                             logo={logo}
                             title={title}
                             isGuestMode={isGuestMode}
+                            onOpenCitationPanel={onOpenCitationPanel}
+                            activeCitationMessageId={activeCitationMessageId}
                             onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
                             onSource={isGuestMode ? undefined : (data) => { sourceRef.current?.openModal({ ...data, chatId }) }}
                         />;

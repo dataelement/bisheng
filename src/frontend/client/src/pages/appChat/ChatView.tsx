@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
+import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { useAuthContext, useLocalize } from "~/hooks";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
@@ -43,9 +44,11 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         const qs = location.search || '';
         const nextPath = `/app/${chatId}/${flowId}/${flowType}${qs}`;
         navigate(nextPath);
-    }, [flowId, flowType, location.search, navigate, setConversations]);
+    }, [flowId, flowType, localize, location.search, navigate, setConversations]);
 
     const messages = chatState?.messages || [];
+    const hasMessages = messages.length > 0;
+    const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
     const activeConversation = useMemo(
         () => conversations.find((item) => item.id === cid),
         [conversations, cid]
@@ -65,6 +68,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />
     }, [data]);
 
+
     return <div className="relative h-full flex flex-col">
         <HeaderTitle
             readOnly={readOnly}
@@ -76,15 +80,23 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                     <ChatEmptyState onNewChat={createNewChat} />
                 </div>
             ) : (
-                <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
-                    <ChatMessages
-                        useName={user?.username}
-                        title={data.name}
-                        logo={Logo}
-                        readOnly={readOnly}
-                        isGuestMode={isGuestMode}
-                        disabledSearch={data.flow_type === 10}
-                    />
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                    <div className="relative min-w-0 flex-1 min-h-0 overflow-hidden">
+                        <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
+                            <ChatMessages
+                                useName={user?.username}
+                                title={data.name}
+                                logo={Logo}
+                                readOnly={readOnly}
+                                isGuestMode={isGuestMode}
+                                disabledSearch={data.flow_type === 10}
+                                onOpenCitationPanel={onOpenCitationPanel}
+                                activeCitationMessageId={activeCitationMessageId}
+                            />
+                        </div>
+                    </div>
+
+                    {citationPanelElement}
                 </div>
             )}
             {!readOnly && <ChatInput v={v} readOnly={readOnly} />}

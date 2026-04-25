@@ -1,5 +1,4 @@
 import type { ChatCitation } from '~/api/chatApi';
-import { getFilePreviewApi } from '~/api/knowledge';
 
 export type CitationDisplayData = {
   label: number;
@@ -258,64 +257,17 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
   return String(fileType).toLowerCase();
 }
 
+export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
+  const payload = detail?.sourcePayload;
+  return payload?.downloadUrl || '';
+}
+
 export function getCitationDocumentUrl(detail?: ChatCitation | null) {
-  const payload = detail?.sourcePayload;
-  return payload?.previewUrl || payload?.downloadUrl || '';
+  return getCitationDocumentPreviewUrl(detail);
 }
-
-function parseOptionalId(value: unknown) {
-  if (value === null || value === undefined || value === '') {
-    return '';
-  }
-  const normalized = String(value).trim();
-  return normalized || '';
-}
-
-function getCitationKnowledgeId(detail?: ChatCitation | null) {
-  const payload = detail?.sourcePayload;
-  return parseOptionalId(
-    payload?.knowledgeId
-    ?? payload?.knowledge_id
-    ?? payload?.spaceId
-    ?? payload?.space_id,
-  );
-}
-
-function getCitationDocumentId(detail?: ChatCitation | null) {
-  const payload = detail?.sourcePayload;
-  return parseOptionalId(
-    payload?.documentId
-    ?? payload?.document_id
-    ?? payload?.fileId
-    ?? payload?.file_id,
-  );
-}
-
-const citationDocumentUrlRequestCache: Record<string, Promise<string>> = {};
 
 export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
-  const directUrl = getCitationDocumentUrl(detail);
-  if (directUrl) {
-    return directUrl;
-  }
-
-  const knowledgeId = getCitationKnowledgeId(detail);
-  const documentId = getCitationDocumentId(detail);
-  if (!knowledgeId || !documentId) {
-    return '';
-  }
-
-  const cacheKey = `${knowledgeId}:${documentId}`;
-  if (!citationDocumentUrlRequestCache[cacheKey]) {
-    citationDocumentUrlRequestCache[cacheKey] = getFilePreviewApi(knowledgeId, documentId)
-      .then((data) => data.preview_url || data.original_url || '')
-      .catch(() => '')
-      .finally(() => {
-        delete citationDocumentUrlRequestCache[cacheKey];
-      });
-  }
-
-  return citationDocumentUrlRequestCache[cacheKey];
+  return getCitationDocumentUrl(detail);
 }
 
 export function toAbsolutePreviewUrl(url?: string | null) {
@@ -426,7 +378,7 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
     snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
     sourceName: payload.knowledgeName || payload.fileType || '政策文件',
     sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : '',
-    link: payload.previewUrl || payload.downloadUrl,
+    link: payload.downloadUrl,
     type,
   };
 }
@@ -455,7 +407,7 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
     snippet: '',
     sourceName: payload.knowledgeName || payload.fileType || '政策文件',
     sourceMeta: payload.fileType || '',
-    link: payload.previewUrl || payload.downloadUrl,
+    link: payload.downloadUrl,
     type,
   };
 }

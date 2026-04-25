@@ -256,7 +256,7 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
 
 export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.previewUrl || payload?.downloadUrl || "";
+  return payload?.downloadUrl || "";
 }
 
 export function getCitationDocumentDownloadUrl(detail?: ChatCitation | null) {
