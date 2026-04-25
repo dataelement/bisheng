@@ -167,8 +167,10 @@ class TenantMountService:
         # UI hides the tenant_code input; non-UI API callers may still pass
         # an explicit code, in which case the schema regex has already
         # validated it. ``default_tenant_code`` derives a unique fallback
-        # from the dept_id when omitted.
-        if tenant_code is None:
+        # from the dept_id when omitted. ``not tenant_code`` covers both
+        # None and the empty string a misbehaving client might submit
+        # (the pattern check skips empty values for Optional fields).
+        if not tenant_code:
             tenant_code = default_tenant_code(dept_id)
 
         # Single-session transaction: INSERT tenant + UPDATE department happen

@@ -31,6 +31,37 @@ from bisheng.common.errcode.tenant_tree import (
 )
 
 
+class TestDefaultTenantCode:
+    """Pure-function checks for ``default_tenant_code`` + ``MountTenantRequest``
+    optional-code wiring (the path the UI now relies on after dropping the
+    operator-facing tenant_code field)."""
+
+    def test_default_tenant_code_format(self):
+        from bisheng.tenant.domain.services.tenant_mount_service import default_tenant_code
+        assert default_tenant_code(3) == 't3'
+        assert default_tenant_code(42) == 't42'
+        # Generated value must satisfy the schema regex so it round-trips
+        # through MountTenantRequest if a caller echoes it back.
+        import re
+        assert re.match(r'^[a-zA-Z][a-zA-Z0-9_-]{1,63}$', default_tenant_code(7))
+
+    def test_request_accepts_omitted_code(self):
+        from bisheng.tenant.domain.schemas.tenant_schema import MountTenantRequest
+        req = MountTenantRequest(tenant_name='Finance')
+        assert req.tenant_code is None
+        assert req.tenant_name == 'Finance'
+
+    def test_request_still_validates_explicit_code(self):
+        from bisheng.tenant.domain.schemas.tenant_schema import MountTenantRequest
+        from pydantic import ValidationError
+        # leading digit violates the pattern
+        with pytest.raises(ValidationError):
+            MountTenantRequest(tenant_code='1bad', tenant_name='X')
+        # but a well-formed code passes through unchanged
+        ok = MountTenantRequest(tenant_code='custom_x', tenant_name='X')
+        assert ok.tenant_code == 'custom_x'
+
+
 @pytest.fixture()
 def super_admin():
     """LoginUser representing a global super admin."""
