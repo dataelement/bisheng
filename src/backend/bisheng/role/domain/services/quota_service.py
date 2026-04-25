@@ -161,7 +161,7 @@ class QuotaService:
         role_quota: int,
         tenant_id: int,
         resource_type: str,
-    ) -> tuple[int, Optional[tuple[int, str]]]:
+    ) -> tuple[int, Optional[tuple[int, str, int, int, str]]]:
         """F016 T04 — Tenant-chain hard-limit check (leaf + Root if Child).
 
         Returns ``(effective_remaining, blocker)``:
@@ -169,11 +169,22 @@ class QuotaService:
             further min with ``role_quota``; ``-1`` means unlimited across
             chain + role.
           - ``blocker`` — ``None`` if chain passes; otherwise
-            ``(blocker_tenant_id, reason)`` where ``reason`` is one of:
+            ``(blocker_tenant_id, reason, used, limit, tenant_name)`` where
+            ``reason`` is one of:
               * ``'tenant_limit'`` — leaf (Child) tenant limit exhausted
               * ``'root_hardcap'`` — Root tenant hard-cap exhausted; for
                 Child users this means the group-wide ceiling is reached
                 (AC-08, msg variant must contain '集团总量已耗尽').
+            ``used`` and ``limit`` are tenant-level usage and cap (in the unit
+            the resource_type uses — GB for storage), surfaced so the caller
+            can format human-readable error messages.
+
+        Storage cap aliasing: when ``resource_type`` is ``'knowledge_space_file'``
+        or ``'storage_gb'``, the tenant-level cap is read from the canonical
+        ``'storage_gb'`` key on ``tenant.quota_config``. Tenant management UI
+        only writes ``storage_gb`` (see TenantQuotaDialog), so this alias keeps
+        the role-level decorator (``KNOWLEDGE_SPACE_FILE``) compatible with the
+        tenant-level field name.
 
         Implements INV-T9 (Root usage = self + Σ active Child) via
         ``_aggregate_root_usage``, and INV-T6 (shared-resource sibling
@@ -201,9 +212,17 @@ class QuotaService:
                 if root:
                     chain.append(root)
 
+        # Tenant config writes "storage_gb"; role config writes "knowledge_space_file".
+        # When checking storage from the role-level decorator, alias to storage_gb.
+        cap_key = (
+            'storage_gb'
+            if resource_type in ('knowledge_space_file', 'storage_gb')
+            else resource_type
+        )
+
         tenant_min_remaining: int = -1
         for t in chain:
-            limit = (t.quota_config or {}).get(resource_type, -1)
+            limit = (t.quota_config or {}).get(cap_key, -1)
             if limit == -1:
                 continue
             is_root = t.parent_tenant_id is None
@@ -215,7 +234,7 @@ class QuotaService:
             remaining = max(limit - used, 0)
             if remaining == 0:
                 reason = 'root_hardcap' if is_root else 'tenant_limit'
-                return 0, (t.id, reason)
+                return 0, (t.id, reason, used, limit, t.tenant_name or '')
             tenant_min_remaining = (
                 remaining if tenant_min_remaining == -1
                 else min(tenant_min_remaining, remaining)
@@ -267,13 +286,21 @@ class QuotaService:
         effective, blocker = await cls._apply_tenant_chain_cap(role_quota, tenant_id, resource_type)
 
         if blocker is not None:
-            blocker_tid, reason = blocker
+            blocker_tid, reason, used, limit, tenant_name = blocker
             if resource_type in ('storage_gb', 'knowledge_space_file'):
+                # kwargs are flattened into response.data by main.handle_http_exception;
+                # the platform i18n template `errors.19403` consumes used_gb / quota_gb
+                # to render "当前企业存储配额已耗尽（X/Y GB）".
                 raise TenantStorageQuotaExceededError(
                     msg=(
                         f'Storage quota exceeded at tenant {blocker_tid} ({reason}) '
-                        f'for {resource_type}'
+                        f'for {resource_type}: {used}/{limit} GB'
                     ),
+                    used_gb=used,
+                    quota_gb=limit,
+                    tenant_name=tenant_name,
+                    tenant_id=blocker_tid,
+                    reason=reason,
                 )
             if reason == 'root_hardcap':
                 raise TenantQuotaExceededError(
@@ -281,9 +308,19 @@ class QuotaService:
                         f'集团总量已耗尽 (Root tenant {blocker_tid} quota for '
                         f'{resource_type} reached)'
                     ),
+                    used=used,
+                    quota=limit,
+                    tenant_name=tenant_name,
+                    tenant_id=blocker_tid,
+                    reason=reason,
                 )
             raise TenantQuotaExceededError(
                 msg=f'Tenant {blocker_tid} quota exceeded for {resource_type}',
+                used=used,
+                quota=limit,
+                tenant_name=tenant_name,
+                tenant_id=blocker_tid,
+                reason=reason,
             )
 
         if effective == -1:

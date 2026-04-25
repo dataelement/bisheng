@@ -9,12 +9,14 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-def _make_tenant(tenant_id, parent_tenant_id=None, quota_config=None, status='active'):
+def _make_tenant(tenant_id, parent_tenant_id=None, quota_config=None, status='active',
+                 tenant_name=None):
     t = MagicMock()
     t.id = tenant_id
     t.parent_tenant_id = parent_tenant_id
     t.quota_config = quota_config or {}
     t.status = status
+    t.tenant_name = tenant_name if tenant_name is not None else f'tenant-{tenant_id}'
     return t
 
 
@@ -77,11 +79,13 @@ class TestApplyTenantChainCap:
             )
 
         assert effective == 0
-        assert blocker == (5, 'tenant_limit')
+        # blocker is (tid, reason, used, limit, tenant_name)
+        assert blocker[:2] == (5, 'tenant_limit')
+        assert blocker[2:4] == (2, 2)
 
     @pytest.mark.asyncio
     async def test_chain_cap_root_hardcap_blocks(self):
-        """AC-08: Root quota=5, Root aggregate used=5 → blocker=(1, 'root_hardcap')."""
+        """AC-08: Root quota=5, Root aggregate used=5 → blocker=(1, 'root_hardcap', ...)."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
         child = _make_tenant(5, parent_tenant_id=1, quota_config={'knowledge_space': 10})
@@ -99,7 +103,8 @@ class TestApplyTenantChainCap:
             )
 
         assert effective == 0
-        assert blocker == (1, 'root_hardcap')
+        assert blocker[:2] == (1, 'root_hardcap')
+        assert blocker[2:4] == (5, 5)
 
     @pytest.mark.asyncio
     async def test_chain_cap_root_only_chain_for_root_user(self):
@@ -142,6 +147,58 @@ class TestApplyTenantChainCap:
         assert effective == 8
         assert blocker is None
 
+    @pytest.mark.asyncio
+    async def test_chain_cap_storage_alias_reads_storage_gb_field(self):
+        """Storage cap aliasing: resource_type='knowledge_space_file' reads tenant.storage_gb.
+
+        Regression: tenant config writes 'storage_gb' but require_quota decorator
+        passes 'knowledge_space_file' — the alias must bridge the two so 1GB cap
+        actually blocks an upload that would push usage above 1GB.
+        """
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        # Tenant uses canonical 'storage_gb' key (matches TenantQuotaDialog)
+        child = _make_tenant(5, parent_tenant_id=1, quota_config={'storage_gb': 1},
+                             tenant_name='默认租户')
+        root = _make_tenant(1, parent_tenant_id=None, quota_config=None)
+        aget_map = {5: child, 1: root}
+
+        with patch('bisheng.database.models.tenant.TenantDao.aget_by_id',
+                   new=AsyncMock(side_effect=lambda tid: aget_map.get(tid))), \
+             patch.object(QuotaService, '_count_usage_strict',
+                          new=AsyncMock(return_value=1)):
+            effective, blocker = await QuotaService._apply_tenant_chain_cap(
+                role_quota=-1, tenant_id=5, resource_type='knowledge_space_file',
+            )
+
+        assert effective == 0
+        assert blocker is not None
+        tid, reason, used, limit, name = blocker
+        assert (tid, reason, used, limit, name) == (5, 'tenant_limit', 1, 1, '默认租户')
+
+    @pytest.mark.asyncio
+    async def test_chain_cap_storage_alias_does_not_apply_to_non_storage(self):
+        """Alias is storage-specific: workflow resource still reads workflow key."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        # storage_gb is set but irrelevant for workflow resource type.
+        child = _make_tenant(5, parent_tenant_id=1,
+                             quota_config={'storage_gb': 1, 'workflow': 50})
+        root = _make_tenant(1, parent_tenant_id=None, quota_config=None)
+        aget_map = {5: child, 1: root}
+
+        with patch('bisheng.database.models.tenant.TenantDao.aget_by_id',
+                   new=AsyncMock(side_effect=lambda tid: aget_map.get(tid))), \
+             patch.object(QuotaService, '_count_usage_strict',
+                          new=AsyncMock(return_value=10)):
+            effective, blocker = await QuotaService._apply_tenant_chain_cap(
+                role_quota=-1, tenant_id=5, resource_type='workflow',
+            )
+
+        # workflow cap=50 used=10 → remaining=40, not affected by storage_gb=1.
+        assert effective == 40
+        assert blocker is None
+
 
 class TestCheckQuotaExceptions:
     """AC-01, AC-04, AC-08: exception class + Msg variant branches."""
@@ -170,13 +227,16 @@ class TestCheckQuotaExceptions:
         with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
                    new=AsyncMock(return_value=[])), \
              patch.object(QuotaService, '_apply_tenant_chain_cap',
-                          new=AsyncMock(return_value=(0, (5, 'tenant_limit')))):
+                          new=AsyncMock(return_value=(0, (5, 'tenant_limit', 2, 2, 'child-tenant')))):
             with pytest.raises(TenantQuotaExceededError) as exc:
                 await QuotaService.check_quota(
                     user_id=10, resource_type='knowledge_space', tenant_id=5, login_user=user,
                 )
         assert exc.value.Code == 19401
         assert '5' in str(exc.value)
+        assert exc.value.kwargs.get('used') == 2
+        assert exc.value.kwargs.get('quota') == 2
+        assert exc.value.kwargs.get('tenant_name') == 'child-tenant'
 
     @pytest.mark.asyncio
     async def test_root_hardcap_msg_contains_group_exhausted(self):
@@ -188,13 +248,14 @@ class TestCheckQuotaExceptions:
         with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
                    new=AsyncMock(return_value=[])), \
              patch.object(QuotaService, '_apply_tenant_chain_cap',
-                          new=AsyncMock(return_value=(0, (1, 'root_hardcap')))):
+                          new=AsyncMock(return_value=(0, (1, 'root_hardcap', 5, 5, 'root-tenant')))):
             with pytest.raises(TenantQuotaExceededError) as exc:
                 await QuotaService.check_quota(
                     user_id=10, resource_type='knowledge_space', tenant_id=5, login_user=user,
                 )
         assert exc.value.Code == 19401
         assert '集团总量已耗尽' in str(exc.value)
+        assert exc.value.kwargs.get('reason') == 'root_hardcap'
 
     @pytest.mark.asyncio
     async def test_storage_gb_raises_19403(self):
@@ -206,12 +267,15 @@ class TestCheckQuotaExceptions:
         with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
                    new=AsyncMock(return_value=[])), \
              patch.object(QuotaService, '_apply_tenant_chain_cap',
-                          new=AsyncMock(return_value=(0, (5, 'tenant_limit')))):
+                          new=AsyncMock(return_value=(0, (5, 'tenant_limit', 1, 1, 'tenant-5')))):
             with pytest.raises(TenantStorageQuotaExceededError) as exc:
                 await QuotaService.check_quota(
                     user_id=10, resource_type='storage_gb', tenant_id=5, login_user=user,
                 )
         assert exc.value.Code == 19403
+        assert exc.value.kwargs.get('used_gb') == 1
+        assert exc.value.kwargs.get('quota_gb') == 1
+        assert exc.value.kwargs.get('tenant_name') == 'tenant-5'
 
     @pytest.mark.asyncio
     async def test_knowledge_space_file_raises_19403_not_19401(self):
@@ -223,12 +287,14 @@ class TestCheckQuotaExceptions:
         with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
                    new=AsyncMock(return_value=[])), \
              patch.object(QuotaService, '_apply_tenant_chain_cap',
-                          new=AsyncMock(return_value=(0, (5, 'tenant_limit')))):
+                          new=AsyncMock(return_value=(0, (5, 'tenant_limit', 3, 3, 'tenant-5')))):
             with pytest.raises(TenantStorageQuotaExceededError) as exc:
                 await QuotaService.check_quota(
                     user_id=10, resource_type='knowledge_space_file', tenant_id=5, login_user=user,
                 )
         assert exc.value.Code == 19403
+        assert exc.value.kwargs.get('used_gb') == 3
+        assert exc.value.kwargs.get('quota_gb') == 3
 
     @pytest.mark.asyncio
     async def test_role_quota_exhausted_raises_19402(self):

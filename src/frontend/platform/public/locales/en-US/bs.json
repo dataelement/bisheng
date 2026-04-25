@@ -1820,7 +1820,7 @@
     "19318": "Reserved for future reconcile error paths",
     "19401": "Tenant quota exceeded",
     "19402": "Role quota exceeded",
-    "19403": "Storage quota exceeded",
+    "19403": "Tenant storage quota exhausted ({{used_gb}}/{{quota_gb}} GB). Please contact the platform admin to expand the quota.",
     "19501": "Only Root Tenant can share resources",
     "19502": "Resource type does not support sharing",
     "19503": "Cross-tenant storage fallback failed",
