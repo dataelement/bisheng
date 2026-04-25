@@ -4,6 +4,7 @@ import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Switch } from "@/components/bs-ui/switch"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
+import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -106,6 +107,7 @@ export default function Management() {
 
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
+    const { appConfig } = useContext(locationContext)
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
@@ -128,9 +130,10 @@ export default function Management() {
     }, [searchParams, setSearchParams, data])
 
     const isSuper = !!user?.is_global_super
+    const multiTenantEnabled = !!appConfig?.multiTenantEnabled
     // Hook is always called; `enabled` gates network traffic so non-super
     // callers never produce a spurious 403 on the initial GET.
-    const scopeHook = useAdminScope({ enabled: isSuper })
+    const scopeHook = useAdminScope({ enabled: isSuper && multiTenantEnabled })
     // MVP: two fixed tabs (Root + caller leaf). A fuller tenant tree
     // requires a list API from TenantDao and is a separate iteration.
     const tenantOptions = useMemo<TenantOption[]>(() => {
@@ -201,7 +204,7 @@ export default function Management() {
             </div>
         )}
         <div className="h-full overflow-y-auto">
-            {isSuper && tenantOptions.length > 0 && (
+            {isSuper && multiTenantEnabled && tenantOptions.length > 0 && (
                 <div className="flex items-center justify-start gap-2 pb-2">
                     <span className="text-sm text-muted-foreground">
                         {t('model.scopeLabel', '管理视图：')}
