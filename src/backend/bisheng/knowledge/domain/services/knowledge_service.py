@@ -342,24 +342,11 @@ class KnowledgeService(KnowledgeUtils):
                 vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
                                                                                     knowledge=db_knowledge,
                                                                                     metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-                # Init Milvus schema avoiding SchemaNotReady concurrently
-                # Need to provide non-nullable fields to satisfy Milvus schema constraints
-                init_ids = vector_client.add_texts(
-                    texts=["init_schema"],
-                    metadatas=[Metadata(document_id=0,
-                                        knowledge_id=db_knowledge.id,
-                                        abstract="",
-                                        chunk_index=1,
-                                        bbox="{}",
-                                        page=1,
-                                        upload_time=int(time.time()),
-                                        update_time=int(time.time()),
-                                        uploader="",
-                                        updater="",
-                                        user_metadata={}).model_dump()]
+                cls.ensure_milvus_schema_ready(
+                    invoke_user_id=login_user.user_id,
+                    knowledge=db_knowledge,
+                    vector_client=vector_client,
                 )
-                if init_ids:
-                    vector_client.delete(ids=init_ids)
 
                 es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)

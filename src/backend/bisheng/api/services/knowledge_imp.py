@@ -253,6 +253,11 @@ def addEmbedding(
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_files[0].updater_id,
                                                                         knowledge=knowledge_info,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+    vector_client = KnowledgeUtils.ensure_milvus_schema_ready(
+        invoke_user_id=knowledge_files[0].updater_id,
+        knowledge=knowledge_info,
+        vector_client=vector_client,
+    )
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_info,
                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
