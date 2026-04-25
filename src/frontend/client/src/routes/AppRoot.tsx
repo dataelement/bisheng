@@ -29,6 +29,17 @@ export default function AppRoot() {
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
 
+    useEffect(() => {
+        const prevBodyOverflow = document.body.style.overflow;
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevBodyOverflow;
+            document.documentElement.style.overflow = prevHtmlOverflow;
+        };
+    }, []);
+
     if (!isAuthenticated) {
         return null;
     }
@@ -80,17 +91,6 @@ export default function AppRoot() {
         setSidebarVisible(false);
         navigate(`/app/${chatId}/${flowId}/${flowType}`);
     };
-
-    useEffect(() => {
-        const prevBodyOverflow = document.body.style.overflow;
-        const prevHtmlOverflow = document.documentElement.style.overflow;
-        document.body.style.overflow = 'hidden';
-        document.documentElement.style.overflow = 'hidden';
-        return () => {
-            document.body.style.overflow = prevBodyOverflow;
-            document.documentElement.style.overflow = prevHtmlOverflow;
-        };
-    }, []);
 
     return (
         <div className="h-[100dvh] w-full overflow-hidden">
