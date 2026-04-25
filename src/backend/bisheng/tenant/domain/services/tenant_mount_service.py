@@ -24,8 +24,11 @@ from bisheng.common.errcode.tenant_tree import (
     TenantTreeNestingForbiddenError,
     TenantTreeRootDeptMountError,
 )
+from sqlalchemy import update as sa_update
+
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao
 from bisheng.tenant.domain.constants import TenantAuditAction
 
@@ -115,14 +118,31 @@ class TenantMountService:
             # Any ancestor already a mount point → INV-T1 2-layer lock.
             raise TenantTreeNestingForbiddenError()
 
-        new_tenant = Tenant(
-            tenant_code=tenant_code,
-            tenant_name=tenant_name,
-            parent_tenant_id=ROOT_TENANT_ID,
-            status='active',
-        )
-        new_tenant = await TenantDao.acreate_tenant(new_tenant)
-        await DepartmentDao.aset_mount(dept_id, new_tenant.id)
+        # Single-session transaction: INSERT tenant + UPDATE department happen
+        # atomically. If the dept update fails (or anything in between raises)
+        # the session exits without commit and SQLAlchemy rolls the INSERT
+        # back, so we never leave a tenant_code-occupied orphan.
+        # Also writes ``tenant.root_dept_id`` so the bidirectional link
+        # (dept.mounted_tenant_id ↔ tenant.root_dept_id) is set in one shot —
+        # downstream readers (e.g. TenantUserDialog member-picker scope) rely
+        # on this column being populated.
+        async with get_async_db_session() as session:
+            new_tenant = Tenant(
+                tenant_code=tenant_code,
+                tenant_name=tenant_name,
+                parent_tenant_id=ROOT_TENANT_ID,
+                status='active',
+                root_dept_id=dept_id,
+            )
+            session.add(new_tenant)
+            await session.flush()  # populate new_tenant.id for the dept update
+            await session.execute(
+                sa_update(Department)
+                .where(Department.id == dept_id)
+                .values(is_tenant_root=1, mounted_tenant_id=new_tenant.id)
+            )
+            await session.commit()
+            await session.refresh(new_tenant)
 
         # F017 hook: fan out the Root ``shared_to`` relation + snapshot the
         # resources that are now reachable. Failures are swallowed to keep
