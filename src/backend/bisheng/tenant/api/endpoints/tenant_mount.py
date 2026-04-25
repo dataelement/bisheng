@@ -13,6 +13,8 @@ frontend / gateway can short-circuit on (403 for super-admin gate, 400
 for spec-level structural errors).
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
@@ -103,13 +105,17 @@ async def mount_tenant(
 @router.delete('/departments/{dept_id}/mount-tenant')
 async def unmount_tenant(
     dept_id: int,
-    data: UnmountTenantRequest,
+    data: Optional[UnmountTenantRequest] = None,
     login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
+    """v2.5.1 收窄到唯一路径：资源迁回 Root + Child 归档。
+
+    Body 字段保留以兼容旧客户端（任何 policy 值都走 migrate 行为）。
+    """
+    _ = data  # accepted for backwards compatibility, ignored
     try:
         result = await TenantMountService.unmount_child(
             dept_id=dept_id,
-            policy=data.policy,
             operator=login_user,
         )
         return resp_200(result)

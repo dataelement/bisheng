@@ -873,3 +873,77 @@ class TestChangeHandler:
         assert all(o.action == 'write' for o in ops)
         assert all(o.relation == 'member' for o in ops)
         assert {o.user for o in ops} == {'user:1', 'user:2', 'user:3'}
+
+
+class TestAdminDepartmentsBypassTenantFilter:
+    """Regression: ``aget_user_admin_departments`` is invoked from
+    tenant-exempt paths (login, SSO callbacks). It must bypass the
+    tenant_filter SQLAlchemy listener when fetching dept rows, otherwise
+    a non-empty FGA result raises ``NoTenantContextError`` and breaks
+    login for child-tenant admins.
+    """
+
+    @pytest.mark.asyncio
+    async def test_aget_user_admin_departments_bypasses_tenant_filter(self):
+        from bisheng.database.models.department import DepartmentDao
+
+        entered = {'value': False}
+
+        class _Bypass:
+            def __enter__(self):
+                entered['value'] = True
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fga = MagicMock()
+        fga.list_objects = AsyncMock(return_value=['department:4', 'department:7'])
+
+        async def _fake_aget_by_ids(dept_ids):
+            assert dept_ids == [4, 7]
+            return [SimpleNamespace(id=did) for did in dept_ids]
+
+        with patch(
+            'bisheng.core.openfga.manager.aget_fga_client',
+            new_callable=AsyncMock,
+            return_value=fga,
+        ), patch(
+            'bisheng.core.context.tenant.bypass_tenant_filter',
+            return_value=_Bypass(),
+        ), patch.object(
+            DepartmentDao, 'aget_by_ids', new=_fake_aget_by_ids,
+        ):
+            depts = await DepartmentDao.aget_user_admin_departments(user_id=90017)
+
+        assert entered['value'] is True
+        assert [d.id for d in depts] == [4, 7]
+
+    @pytest.mark.asyncio
+    async def test_aget_user_admin_departments_skips_bypass_when_fga_empty(self):
+        """No FGA result → no DB fetch → bypass not entered (cheap exit path)."""
+        from bisheng.database.models.department import DepartmentDao
+
+        entered = {'value': False}
+
+        class _Bypass:
+            def __enter__(self):
+                entered['value'] = True
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fga = MagicMock()
+        fga.list_objects = AsyncMock(return_value=[])
+
+        with patch(
+            'bisheng.core.openfga.manager.aget_fga_client',
+            new_callable=AsyncMock,
+            return_value=fga,
+        ), patch(
+            'bisheng.core.context.tenant.bypass_tenant_filter',
+            return_value=_Bypass(),
+        ):
+            depts = await DepartmentDao.aget_user_admin_departments(user_id=42)
+
+        assert entered['value'] is False
+        assert depts == []

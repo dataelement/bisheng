@@ -8,6 +8,10 @@ export interface DepartmentTreeNode {
   source: string
   status: string
   member_count: number
+  /** True iff the department is currently a Child Tenant mount point. */
+  is_tenant_root: boolean
+  /** Tenant.id this department mounts; null when is_tenant_root is false. */
+  mounted_tenant_id: number | null
   children: DepartmentTreeNode[]
 }
 

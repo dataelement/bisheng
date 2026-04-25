@@ -411,6 +411,8 @@ class DepartmentService:
                 source=d.source,
                 status=d.status,
                 member_count=count_map.get(d.id, 0),
+                is_tenant_root=bool(getattr(d, 'is_tenant_root', 0)),
+                mounted_tenant_id=getattr(d, 'mounted_tenant_id', None),
                 children=[],
             )
 

@@ -189,59 +189,6 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
             )}
           </div>
 
-          {/* Logo */}
-          <div>
-            <label className="text-sm font-medium block mb-1">
-              {t("tenant.logo")}
-            </label>
-            <input
-              className="w-full border rounded px-3 py-2 bg-background"
-              value={form.logo || ""}
-              onChange={(e) => setForm({ ...form, logo: e.target.value })}
-              placeholder="URL"
-            />
-          </div>
-
-          {/* Contact */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium block mb-1">
-                {t("tenant.contactName")}
-              </label>
-              <input
-                className="w-full border rounded px-3 py-2 bg-background"
-                value={form.contact_name || ""}
-                onChange={(e) =>
-                  setForm({ ...form, contact_name: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1">
-                {t("tenant.contactPhone")}
-              </label>
-              <input
-                className="w-full border rounded px-3 py-2 bg-background"
-                value={form.contact_phone || ""}
-                onChange={(e) =>
-                  setForm({ ...form, contact_phone: e.target.value })
-                }
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1">
-              {t("tenant.contactEmail")}
-            </label>
-            <input
-              className="w-full border rounded px-3 py-2 bg-background"
-              value={form.contact_email || ""}
-              onChange={(e) =>
-                setForm({ ...form, contact_email: e.target.value })
-              }
-            />
-          </div>
-
           {/* Admin Selection (create only) */}
           {!isEdit && (
             <div>

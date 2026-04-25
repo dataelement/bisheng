@@ -17,11 +17,13 @@ import {
   moveDepartmentApi,
   purgeDepartmentApi,
   restoreDepartmentApi,
+  unmountTenantApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentAdmin, DepartmentTreeNode } from "@/types/api/department"
+import { Building2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -29,6 +31,9 @@ interface DepartmentSettingsProps {
   dept: DepartmentTreeNode
   tree: DepartmentTreeNode[]
   onChanged: (removedDeptId?: string) => void
+  /** Open the "mark as Child Tenant" dialog for this department. When undefined
+   * (multi-tenant disabled or root dept), the action button is hidden. */
+  onMarkAsTenant?: (deptId: number, deptName: string) => void
 }
 
 function adminsToOptions(admins: DepartmentAdmin[]): DepartmentUserOption[] {
@@ -38,7 +43,7 @@ function adminsToOptions(admins: DepartmentAdmin[]): DepartmentUserOption[] {
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
 
-export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettingsProps) {
+export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: DepartmentSettingsProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(dept.name)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
@@ -408,9 +413,26 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
               placeholder={t("bs:department.adminSelectPlaceholder")}
               searchPlaceholder={t("bs:department.searchUsersPlaceholder")}
               className={FORM_CONTROL_WIDTH}
+              // Tenant-root depts: admin assignment writes the FGA
+              // ``admin tenant:X`` tuple, so we constrain the picker to the
+              // dept's own subtree. Plain depts keep the full org tree.
+              rootDeptId={dept.is_tenant_root ? dept.id : undefined}
+              emptyMessage={
+                dept.is_tenant_root
+                  ? t("bs:tenant.initialAdminEmptySubtree", {
+                      defaultValue:
+                        "该部门子树暂无成员，请先把目标管理员加入此部门后再挂载",
+                    })
+                  : undefined
+              }
             />
             <p className="mt-1 max-w-md text-xs leading-snug text-gray-500 dark:text-gray-400">
-              {t("bs:department.adminsHint")}
+              {dept.is_tenant_root
+                ? t("bs:tenant.initialAdminSubtreeHint", {
+                    defaultValue:
+                      "管理员必须来自该部门子树，不能选取子树外用户。",
+                  })
+                : t("bs:department.adminsHint")}
             </p>
           </div>
           <div className="space-y-1.5">
@@ -467,6 +489,51 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
               )}
             </div>
             <div className="min-w-[1rem] flex-1" />
+            {onMarkAsTenant && !isRootDept && !dept.is_tenant_root && (
+              <Button
+                variant="outline"
+                onClick={() => onMarkAsTenant(dept.id, dept.name)}
+                className="shrink-0"
+              >
+                <Building2 className="mr-1.5 h-4 w-4" />
+                {t("bs:tenant.markAsTenant", { defaultValue: "标记为子租户" })}
+              </Button>
+            )}
+            {onMarkAsTenant && !isRootDept && dept.is_tenant_root && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  bsConfirm({
+                    title: t("bs:tenant.unmountTitle", { defaultValue: "取消挂载子租户" }),
+                    desc: t("bs:tenant.unmountConfirm", {
+                      defaultValue:
+                        "解除挂载后，该子租户名下的所有资源（知识库、应用、会话等）将自动迁移到集团总部（Root），子租户本身归档保留供审计。子租户成员将作为总部成员继续使用，业务不中断。是否继续？",
+                    }),
+                    okTxt: t("bs:tenant.unmountOk", { defaultValue: "确认取消挂载" }),
+                    onOk(next) {
+                      captureAndAlertRequestErrorHoc(
+                        unmountTenantApi(dept.id)
+                      ).then((res) => {
+                        if (res) {
+                          toast({
+                            title: t("bs:tenant.unmountSuccess", {
+                              defaultValue: "已取消挂载",
+                            }),
+                            variant: "success",
+                          })
+                          onChanged()
+                        }
+                        next()
+                      })
+                    },
+                  })
+                }}
+                className="shrink-0"
+              >
+                <Building2 className="mr-1.5 h-4 w-4" />
+                {t("bs:tenant.unmount", { defaultValue: "取消挂载" })}
+              </Button>
+            )}
             {!isSynced && dept.parent_id !== null && (
               <Button variant="destructive" onClick={handleDelete} className="shrink-0">
                 {t("bs:department.delete")}

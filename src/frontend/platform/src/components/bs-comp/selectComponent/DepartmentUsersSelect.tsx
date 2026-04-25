@@ -26,6 +26,14 @@ interface DepartmentUsersSelectProps {
   placeholder?: string
   searchPlaceholder?: string
   className?: string
+  /** When set, the picker only renders the subtree rooted at this department's
+   * internal id. Search results outside the subtree are hidden. Used by Tenant
+   * admin/member pickers to enforce that selections stay within the Tenant's
+   * department subtree (write-side guard for the FGA `admin tenant:X` /
+   * tenant-membership relations). */
+  rootDeptId?: number | null
+  /** Optional message shown when the (sub)tree has no selectable members. */
+  emptyMessage?: string
 }
 
 type UserListItem = {
@@ -54,6 +62,18 @@ function resolveTreeDepartmentId(
 
 const TREE_INDENT_PER_LEVEL = 22
 
+function findSubtreeRoot(
+  nodes: DepartmentTreeNode[],
+  rootId: number,
+): DepartmentTreeNode | null {
+  for (const n of nodes) {
+    if (n.id === rootId) return n
+    const found = findSubtreeRoot(n.children || [], rootId)
+    if (found) return found
+  }
+  return null
+}
+
 export default function DepartmentUsersSelect({
   value,
   onChange,
@@ -63,6 +83,8 @@ export default function DepartmentUsersSelect({
   placeholder,
   searchPlaceholder,
   className = "",
+  rootDeptId,
+  emptyMessage,
 }: DepartmentUsersSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -91,15 +113,27 @@ export default function DepartmentUsersSelect({
     try {
       const res = await captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
       if (Array.isArray(res)) {
-        setTree(res.filter((n) => n.status !== "archived"))
+        const visible = res.filter((n) => n.status !== "archived")
+        // When a rootDeptId is supplied, narrow the tree to that subtree so
+        // every selectable user is structurally guaranteed to live inside it.
+        // Backend ``/departments/tree`` does not accept a root parameter, so
+        // we slice client-side.
+        const next =
+          rootDeptId != null
+            ? (() => {
+                const sub = findSubtreeRoot(visible, rootDeptId)
+                return sub ? [sub] : []
+              })()
+            : visible
+        setTree(next)
         const rootIds = new Set<number>()
-        for (const n of res) rootIds.add(n.id)
+        for (const n of next) rootIds.add(n.id)
         setExpanded(rootIds)
       }
     } finally {
       setLoadingTree(false)
     }
-  }, [])
+  }, [rootDeptId])
 
   const loadDeptUsers = useCallback(async (node: DepartmentTreeNode) => {
     const did = Number(node.id)
@@ -131,6 +165,14 @@ export default function DepartmentUsersSelect({
     if (!open) return
     if (tree.length === 0) void loadTree()
   }, [open, tree.length, loadTree])
+
+  // Reset cached tree + per-dept members when the subtree root changes so the
+  // next open re-fetches under the new scope.
+  useEffect(() => {
+    setTree([])
+    setDeptUsersMap({})
+    setExpanded(new Set())
+  }, [rootDeptId])
 
   useEffect(() => {
     return () => {
@@ -386,7 +428,9 @@ export default function DepartmentUsersSelect({
             {loadingTree ? (
               <div className="py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
             ) : tree.length === 0 ? (
-              <div className="py-4 text-center text-sm text-muted-foreground">{t("system.treeDepartmentSelectEmpty")}</div>
+              <div className="py-4 text-center text-sm text-muted-foreground">
+                {emptyMessage || t("system.treeDepartmentSelectEmpty")}
+              </div>
             ) : (
               <>
                 {searchingUsers && keywordTrim ? (

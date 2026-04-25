@@ -125,7 +125,12 @@ class MountTenantRequest(BaseModel):
 
 
 class UnmountTenantRequest(BaseModel):
-    policy: Literal['migrate', 'archive', 'manual']
+    """Body kept for backwards compatibility; ignored.
+
+    v2.5.1 收窄到唯一路径（资源迁回 Root + Child 归档）。旧客户端可能仍发
+    ``{"policy": ...}``，本字段保留以避免 422，但任何值都走 migrate 行为。
+    """
+    policy: Optional[Literal['migrate', 'archive', 'manual']] = None
 
 
 class MigrateFromRootRequest(BaseModel):

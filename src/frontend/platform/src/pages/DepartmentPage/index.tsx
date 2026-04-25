@@ -1,21 +1,26 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { locationContext } from "@/contexts/locationContext"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
 import { DepartmentTree } from "./components/DepartmentTree"
 import { MemberTable } from "./components/MemberTable"
 import { DepartmentSettings } from "./components/DepartmentSettings"
 import { CreateDepartmentDialog } from "./components/CreateDepartmentDialog"
+import { MountTenantDialog } from "./components/MountTenantDialog"
 
 export default function DepartmentPage() {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
+  const [mountTarget, setMountTarget] = useState<{ id: number; name: string } | null>(null)
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
   const [memberHighlightUserId, setMemberHighlightUserId] = useState<number | null>(null)
   const [treeScrollRequest, setTreeScrollRequest] = useState<{
@@ -78,6 +83,15 @@ export default function DepartmentPage() {
 
   const handleCreated = useCallback(() => {
     setCreateOpen(false)
+    loadTree()
+  }, [loadTree])
+
+  const handleMarkAsTenant = useCallback((deptId: number, deptName: string) => {
+    setMountTarget({ id: deptId, name: deptName })
+  }, [])
+
+  const handleMounted = useCallback(() => {
+    setMountTarget(null)
     loadTree()
   }, [loadTree])
 
@@ -193,6 +207,7 @@ export default function DepartmentPage() {
                 dept={selectedDept}
                 tree={tree}
                 onChanged={handleDepartmentSettingsChanged}
+                onMarkAsTenant={multiTenantEnabled ? handleMarkAsTenant : undefined}
               />
             </TabsContent>
           </Tabs>
@@ -210,6 +225,16 @@ export default function DepartmentPage() {
           defaultParentId={createParentId}
           onCreated={handleCreated}
           onClose={() => setCreateOpen(false)}
+        />
+      )}
+
+      {/* Mount as Child Tenant dialog */}
+      {mountTarget && (
+        <MountTenantDialog
+          deptId={mountTarget.id}
+          deptName={mountTarget.name}
+          onMounted={handleMounted}
+          onClose={() => setMountTarget(null)}
         />
       )}
     </div>

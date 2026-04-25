@@ -19,6 +19,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { locationContext } from "@/contexts/locationContext";
 import { useTable } from "@/util/hook";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate } from "react-router-dom";
@@ -126,18 +127,6 @@ export default function TenantPage() {
         </div>
       </div>
 
-      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-        <p className="font-medium">
-          {t("tenant.v251Title", { defaultValue: "v2.5.1 租户创建方式已调整" })}
-        </p>
-        <p className="mt-1 leading-6">
-          {t("tenant.v251Desc", {
-            defaultValue:
-              "Root Tenant 由系统自动初始化；新增子租户需通过部门挂载流程完成。当前页面仅保留现有 Tenant 的查看、编辑、配额和成员管理。",
-          })}
-        </p>
-      </div>
-
       <div className="h-[calc(100vh-200px)] overflow-y-auto">
         <Table>
           <TableHeader>
@@ -152,7 +141,9 @@ export default function TenantPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tenants.map((tenant: Tenant) => (
+            {tenants.map((tenant: Tenant) => {
+              const tenantLabel = displayTenantName(tenant.tenant_name);
+              return (
               <TableRow key={tenant.id}>
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
@@ -164,10 +155,10 @@ export default function TenantPage() {
                       />
                     ) : (
                       <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-xs font-bold">
-                        {tenant.tenant_name.charAt(0)}
+                        {tenantLabel.charAt(0)}
                       </div>
                     )}
-                    {tenant.tenant_name}
+                    {tenantLabel}
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
@@ -256,7 +247,8 @@ export default function TenantPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
