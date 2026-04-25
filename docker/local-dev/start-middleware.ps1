@@ -13,6 +13,8 @@ docker compose -f docker-compose.yml -p bisheng up -d mysql openfga-migrate open
 
 Write-Host "Initializing bisheng_gateway schema (idempotent)..."
 $sqlPath = Join-Path $PSScriptRoot "init-gateway-db.sql"
-Get-Content -Raw $sqlPath | docker exec -i bisheng-mysql mysql -uroot -p1234
+# PowerShell 管道会损坏 UTF-8/中文注释，用 docker cp 再执行
+docker cp $sqlPath bisheng-mysql:/tmp/init-gateway-db.sql
+docker exec bisheng-mysql sh -c "mysql -uroot -p1234 < /tmp/init-gateway-db.sql"
 
 Write-Host "Done. MySQL :3306, Redis :6379, OpenFGA :8080, ES :9200, MinIO :9100, Milvus :19530"

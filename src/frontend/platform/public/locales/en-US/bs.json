@@ -2015,6 +2015,8 @@
   "department.primaryDeptFixed": "Primary department (fixed)",
   "department.assignRoles": "Assign roles",
   "department.assignRolesOptionalHint": "Optional. If none are selected, only the department’s default roles (from Department settings) apply. The list includes global roles (no department scope) and roles whose scope is this department or any of its ancestors.",
+  "department.multiSelectUserGroupsPlaceholder": "Select user groups",
+  "department.multiSelectRolesPlaceholder": "Select roles",
   "department.localUserCreatedTip": "Created user {{name}}, person ID: {{person}}. Account and initial password were copied to the clipboard.",
   "department.personId": "Person ID",
   "department.updateTime": "Updated",

@@ -1972,6 +1972,8 @@
   "department.primaryDeptFixed": "主属部门（固定）",
   "department.assignRoles": "分配角色",
   "department.assignRolesOptionalHint": "可选；不选时仅应用部门设置中的「默认角色」。列表含无作用域的全局类角色，以及作用域为当前部门或其上级部门的角色。",
+  "department.multiSelectUserGroupsPlaceholder": "选择用户组",
+  "department.multiSelectRolesPlaceholder": "选择角色",
   "department.localUserCreatedTip": "已创建用户 {{name}}，人员 ID：{{person}}。账号与初始密码已复制到剪贴板。",
   "department.personId": "人员 ID",
   "department.updateTime": "修改时间",

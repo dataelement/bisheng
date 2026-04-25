@@ -1975,6 +1975,8 @@
   "department.primaryDeptFixed": "主所属部門（固定）",
   "department.assignRoles": "ロール割当",
   "department.assignRolesOptionalHint": "任意です。未選択の場合は部門設定の「デフォルトロール」のみ付与されます。一覧にはスコープなしのグローバルロールと、当該部門またはその上位部門をスコープとするロールが含まれます。",
+  "department.multiSelectUserGroupsPlaceholder": "ユーザーグループを選択",
+  "department.multiSelectRolesPlaceholder": "ロールを選択",
   "department.localUserCreatedTip": "ユーザー {{name}} を作成しました。個人 ID：{{person}}。アカウント情報と初期パスワードをクリップボードにコピーしました。",
   "department.personId": "個人 ID",
   "department.updateTime": "更新日時",

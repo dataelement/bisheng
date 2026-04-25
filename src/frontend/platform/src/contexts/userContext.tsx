@@ -190,11 +190,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     '/model/management': 'model',
                     '/evaluation': 'evaluation',
                     '/label': 'mark_task',
+                    '/log': 'log',
                 }
                 const normalizedPath = pathName.replace(/\/+$/, '') || '/'
                 let menuName = MENU_KEY_MAP[normalizedPath]
                 if (!menuName && normalizedPath.startsWith('/label')) {
                     menuName = 'mark_task'
+                }
+                if (!menuName && normalizedPath.startsWith('/log')) {
+                    menuName = 'log'
                 }
                 if (
                     menuName

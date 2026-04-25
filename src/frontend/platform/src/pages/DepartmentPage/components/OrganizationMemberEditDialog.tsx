@@ -1,7 +1,6 @@
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
   Dialog,
   DialogContent,
@@ -11,6 +10,7 @@ import {
 } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
+import MultiSelect from "@/components/bs-ui/select/multi"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   applyDepartmentMemberEditApi,
@@ -32,13 +32,6 @@ type Props = {
   member: DepartmentMember | null
   onClose: () => void
   onSaved: () => void
-}
-
-function toggleSet<T>(set: Set<T>, v: T, on: boolean): Set<T> {
-  const n = new Set(set)
-  if (on) n.add(v)
-  else n.delete(v)
-  return n
 }
 
 export function OrganizationMemberEditDialog({
@@ -271,10 +264,10 @@ export function OrganizationMemberEditDialog({
     }
   }
 
-  const renderRoleChecks = (
+  const renderRoleMultiSelect = (
     options: { id: number; role_name: string }[],
     selected: Set<number>,
-    onToggle: (id: number, on: boolean) => void
+    onSelectionChange: (next: Set<number>) => void
   ) => {
     if (!options.length) {
       return (
@@ -282,17 +275,15 @@ export function OrganizationMemberEditDialog({
       )
     }
     return (
-      <div className="max-h-48 space-y-2 overflow-y-auto rounded border p-2">
-        {options.map((r) => (
-          <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm">
-            <Checkbox
-              checked={selected.has(r.id)}
-              onCheckedChange={(c) => onToggle(r.id, Boolean(c))}
-            />
-            <span>{r.role_name}</span>
-          </label>
-        ))}
-      </div>
+      <MultiSelect
+        multiple
+        className="mt-1"
+        options={options.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+        value={Array.from(selected).map(String)}
+        onChange={(vals) => onSelectionChange(new Set((vals as string[]).map((id) => Number(id))))}
+        placeholder={t("bs:department.multiSelectRolesPlaceholder")}
+        searchPlaceholder={t("system.searchRoles")}
+      />
     )
   }
 
@@ -331,28 +322,26 @@ export function OrganizationMemberEditDialog({
               <>
                 <div>
                   <Label>{t("bs:department.userGroups")}</Label>
-                  <div className="max-h-40 space-y-2 overflow-y-auto rounded border p-2">
-                    {form.manageable_groups.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        {t("bs:department.memberEditUserGroupsEmpty")}
-                      </p>
-                    ) : (
-                      form.manageable_groups.map((g) => (
-                        <label
-                          key={g.id}
-                          className="flex cursor-pointer items-center gap-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={groupSel.has(g.id)}
-                            onCheckedChange={(c) =>
-                              setGroupSel((prev) => toggleSet(prev, g.id, Boolean(c)))
-                            }
-                          />
-                          <span>{g.group_name}</span>
-                        </label>
-                      ))
-                    )}
-                  </div>
+                  {form.manageable_groups.length === 0 ? (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("bs:department.memberEditUserGroupsEmpty")}
+                    </p>
+                  ) : (
+                    <MultiSelect
+                      multiple
+                      className="mt-1"
+                      options={form.manageable_groups.map((g) => ({
+                        label: g.group_name,
+                        value: String(g.id),
+                      }))}
+                      value={Array.from(groupSel).map(String)}
+                      onChange={(vals) =>
+                        setGroupSel(new Set((vals as string[]).map((id) => Number(id))))
+                      }
+                      placeholder={t("bs:department.multiSelectUserGroupsPlaceholder")}
+                      searchPlaceholder={t("system.searchUserGroups")}
+                    />
+                  )}
                 </div>
                 {form.primary_department && (
                   <div>
@@ -389,11 +378,7 @@ export function OrganizationMemberEditDialog({
                 {form.primary_department && (
                   <div>
                     <Label>{t("bs:department.roles")}</Label>
-                    {renderRoleChecks(
-                      primaryRoleOptions,
-                      primaryRoles,
-                      (id, on) => setPrimaryRoles((p) => toggleSet(p, id, on))
-                    )}
+                    {renderRoleMultiSelect(primaryRoleOptions, primaryRoles, setPrimaryRoles)}
                   </div>
                 )}
                 {form.affiliate_rows.length > 0 && (
@@ -402,17 +387,11 @@ export function OrganizationMemberEditDialog({
                     {form.affiliate_rows.map((row) => (
                       <div key={row.dept_id} className="rounded border p-3">
                         <div className="mb-2 text-sm font-medium">{row.name}</div>
-                        {renderRoleChecks(
+                        {renderRoleMultiSelect(
                           form.assignable_roles_catalog[row.dept_id] ?? [],
                           affRoleByDept[row.dept_id] ?? new Set(),
-                          (id, on) =>
-                            setAffRoleByDept((prev) => {
-                              const cur = new Set(prev[row.dept_id] ?? [])
-                              return {
-                                ...prev,
-                                [row.dept_id]: toggleSet(cur, id, on),
-                              }
-                            })
+                          (next) =>
+                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next }))
                         )}
                       </div>
                     ))}
@@ -424,10 +403,10 @@ export function OrganizationMemberEditDialog({
             {form.edit_mode === "affiliate" && (
               <div>
                 <Label>{t("bs:department.roles")}</Label>
-                {renderRoleChecks(
+                {renderRoleMultiSelect(
                   form.assignable_roles_catalog[form.context.dept_id] ?? [],
                   ctxRoles,
-                  (id, on) => setCtxRoles((p) => toggleSet(p, id, on))
+                  setCtxRoles
                 )}
               </div>
             )}
