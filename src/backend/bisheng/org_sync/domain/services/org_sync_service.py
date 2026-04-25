@@ -9,6 +9,7 @@ operating DAO + DepartmentChangeHandler for system-level sync.
 """
 
 import secrets
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -21,6 +22,8 @@ from bisheng.common.errcode.org_sync import (
     OrgSyncConfigNotFoundError,
 )
 from bisheng.database.constants import DefaultRole
+from bisheng.database.models.group import DefaultGroup, GroupDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.department import (
     Department,
     DepartmentDao,
@@ -30,6 +33,11 @@ from bisheng.database.models.department import (
 from bisheng.database.models.tenant import UserTenant, UserTenantDao
 from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.tenant.domain.constants import DeletionSource
+from bisheng.tenant.domain.services.department_deletion_handler import (
+    DepartmentDeletionHandler,
+)
+from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncConfig,
     OrgSyncConfigDao,
@@ -369,6 +377,8 @@ class OrgSyncService:
     @classmethod
     async def _archive_dept(cls, op: ArchiveDept) -> None:
         op.local.status = 'archived'
+        op.local.is_deleted = 1
+        op.local.last_sync_ts = int(time.time())
         await DepartmentDao.aupdate(op.local)
 
         # OpenFGA cleanup
@@ -377,6 +387,15 @@ class OrgSyncService:
                 op.local.id, op.local.parent_id,
             )
             await DepartmentChangeHandler.execute_async(tuple_ops)
+        try:
+            await DepartmentDeletionHandler.on_deleted(
+                op.local.id, DeletionSource.CELERY_RECONCILE,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f'DepartmentDeletionHandler.on_deleted failed for '
+                f'dept {op.local.id}: {exc}',
+            )
 
     # ------------------------------------------------------------------
     # Member operations
@@ -437,9 +456,13 @@ class OrgSyncService:
             password=password_hash,
         )
         user = await UserDao.add_user_and_default_role(user)
+        member_group_ids = await cls._ensure_default_user_group_membership(
+            user.user_id,
+        )
         await LegacyRBACSyncService.sync_user_auth_created(
             user.user_id,
             [DefaultRole],
+            member_group_ids=member_group_ids,
         )
 
         # Create UserTenant
@@ -469,6 +492,39 @@ class OrgSyncService:
                 dept_id, [user.user_id],
             )
             await DepartmentChangeHandler.execute_async(tuple_ops)
+
+    @classmethod
+    async def _ensure_default_user_group_membership(cls, user_id: int) -> list[int]:
+        """Mirror normal user creation: add synced users to the default group.
+
+        Some deployments still use the legacy default user group as the
+        management surface for automatically-created accounts. Treat it as
+        best-effort because fresh v2.5 installs may not have group id 2.
+        """
+        try:
+            group = await GroupDao.aget_by_id(DefaultGroup)
+            if group is None:
+                return []
+            existing = await UserGroupDao.acheck_members_exist(
+                DefaultGroup, [user_id],
+            )
+            existing_ids = {
+                int(row[0]) if isinstance(row, (tuple, list)) else int(row)
+                for row in existing
+            }
+            if user_id not in existing_ids:
+                await UserGroupDao.aadd_members_batch(DefaultGroup, [user_id])
+                tuple_ops = GroupChangeHandler.on_members_added(
+                    DefaultGroup, [user_id],
+                )
+                await GroupChangeHandler.execute_async(tuple_ops)
+            return [DefaultGroup]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f'Failed to attach synced user {user_id} '
+                f'to default group: {exc}',
+            )
+            return []
 
     @classmethod
     async def _update_member(

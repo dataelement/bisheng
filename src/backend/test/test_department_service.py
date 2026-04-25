@@ -11,7 +11,7 @@ import pytest
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-from sqlalchemy import create_engine, text
+from sqlalchemy import Column, Integer, Table, create_engine, text
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
@@ -20,6 +20,9 @@ from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
     TupleOperation,
 )
+
+if 'user' not in Department.metadata.tables:
+    Table('user', Department.metadata, Column('user_id', Integer, primary_key=True))
 
 
 # =========================================================================

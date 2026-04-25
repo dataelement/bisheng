@@ -563,11 +563,18 @@ class UserDao(UserBase):
     async def aget_by_source(cls, source: str, tenant_id: int) -> List['User']:
         """Get all users from a given source within a tenant (for reconcile)."""
         async with get_async_db_session() as session:
-            statement = select(User).join(
+            statement = select(User).distinct().outerjoin(
                 UserTenant, User.user_id == UserTenant.user_id,
+            ).outerjoin(
+                UserDepartment, User.user_id == UserDepartment.user_id,
+            ).outerjoin(
+                Department, UserDepartment.department_id == Department.id,
             ).where(
                 User.source == source,
-                UserTenant.tenant_id == tenant_id,
+                or_(
+                    UserTenant.tenant_id == tenant_id,
+                    Department.tenant_id == tenant_id,
+                ),
             )
             result = await session.exec(statement)
             return result.all()
@@ -590,21 +597,33 @@ class UserDao(UserBase):
             if ext:
                 clean_external_ids.append(ext)
         clean_external_ids = list(dict.fromkeys(clean_external_ids))
-        source_clause = User.source == source
+        tenant_scope = or_(
+            UserTenant.tenant_id == tenant_id,
+            Department.tenant_id == tenant_id,
+        )
+        source_clause = and_(User.source == source, tenant_scope)
         if clean_external_ids:
             source_clause = or_(
                 source_clause,
                 and_(
+                    User.source == source,
+                    User.external_id.in_(clean_external_ids),
+                ),
+                and_(
                     User.source == 'local',
                     User.external_id.in_(clean_external_ids),
+                    tenant_scope,
                 ),
             )
         async with get_async_db_session() as session:
-            statement = select(User).join(
+            statement = select(User).distinct().outerjoin(
                 UserTenant, User.user_id == UserTenant.user_id,
+            ).outerjoin(
+                UserDepartment, User.user_id == UserDepartment.user_id,
+            ).outerjoin(
+                Department, UserDepartment.department_id == Department.id,
             ).where(
                 source_clause,
-                UserTenant.tenant_id == tenant_id,
             )
             result = await session.exec(statement)
             return result.all()
