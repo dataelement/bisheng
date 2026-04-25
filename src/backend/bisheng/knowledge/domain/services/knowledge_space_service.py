@@ -1627,6 +1627,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
+
+        # Prune channel ➜ knowledge-folder sync bindings that target the deleted
+        # folders so the Celery sync worker stops referencing a tombstone.
+        from bisheng.channel.domain.models.channel_knowledge_sync import (
+            ChannelKnowledgeSyncDao,
+        )
+        try:
+            await ChannelKnowledgeSyncDao.adelete_by_folder_ids(floder_ids)
+        except Exception as e:
+            _logger.warning(
+                'Failed to cleanup channel knowledge sync bindings for folders %s: %s',
+                floder_ids, e,
+            )
+
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> List[Dict]:
@@ -1992,6 +2006,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             delete_knowledge_file_celery.delay(file_ids=direct_file_ids, knowledge_id=knowledge.id,
                                                clear_minio=True)
             await self._cleanup_resource_tuples([('knowledge_file', file_id) for file_id in direct_file_ids])
+
+        # Prune channel ➜ knowledge-folder sync bindings for the top-level
+        # folders deleted in this batch so the Celery sync worker stops
+        # referencing a tombstone. Per-folder cascades are pruned by
+        # delete_folder() above.
+        if folder_ids:
+            from bisheng.channel.domain.models.channel_knowledge_sync import (
+                ChannelKnowledgeSyncDao,
+            )
+            try:
+                await ChannelKnowledgeSyncDao.adelete_by_folder_ids(folder_ids)
+            except Exception as e:
+                _logger.warning(
+                    'Failed to cleanup channel knowledge sync bindings for folders %s: %s',
+                    folder_ids, e,
+                )
+
+        if file_ids:
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
 
     async def batch_download(
