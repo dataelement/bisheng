@@ -315,9 +315,9 @@ async def test_grant_default_department_admins_promotes_manual_member_consistent
         'bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.update',
         new_callable=AsyncMock,
     ) as mock_update, patch(
-        'bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService._grant_space_membership_tuple',
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.PermissionService.authorize',
         new_callable=AsyncMock,
-    ) as mock_grant_tuple:
+    ) as mock_authorize:
         await DepartmentKnowledgeSpaceService._grant_default_department_admins(
             request=SimpleNamespace(),
             login_user=_make_login_user(),
@@ -329,7 +329,10 @@ async def test_grant_default_department_admins_promotes_manual_member_consistent
     assert existing_member.membership_source == 'department_admin'
     assert existing_member.department_admin_promoted_from_role == UserRoleEnum.MEMBER.value
     mock_update.assert_awaited_once_with(existing_member)
-    mock_grant_tuple.assert_awaited_once_with(101, existing_member)
+    grant = mock_authorize.await_args.kwargs['grants'][0]
+    assert grant.subject_type == 'user'
+    assert grant.subject_id == 2
+    assert grant.relation == 'manager'
 
 
 @pytest.mark.asyncio
@@ -344,10 +347,7 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
         membership_source='department_admin',
         department_admin_promoted_from_role=UserRoleEnum.MEMBER.value,
     )
-    space_service = SimpleNamespace(
-        _revoke_space_membership_tuple=AsyncMock(),
-        _grant_space_membership_tuple=AsyncMock(),
-    )
+    space_service = SimpleNamespace()
 
     with patch(
         'bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_find_member',
@@ -356,7 +356,10 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
     ), patch(
         'bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.update',
         new_callable=AsyncMock,
-    ) as mock_update:
+    ) as mock_update, patch(
+        'bisheng.knowledge.domain.services.department_knowledge_space_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ) as mock_authorize:
         await DepartmentKnowledgeSpaceService._sync_removed_admin(
             space_service=space_service,
             space_id=101,
@@ -367,8 +370,10 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
     assert existing_member.membership_source == 'manual'
     assert existing_member.department_admin_promoted_from_role is None
     mock_update.assert_awaited_once_with(existing_member)
-    space_service._revoke_space_membership_tuple.assert_awaited_once_with(101, 2, UserRoleEnum.ADMIN)
-    space_service._grant_space_membership_tuple.assert_awaited_once_with(101, existing_member)
+    revoke = mock_authorize.await_args.kwargs['revokes'][0]
+    assert revoke.subject_type == 'user'
+    assert revoke.subject_id == 2
+    assert revoke.relation == 'manager'
 
 
 @pytest.mark.asyncio

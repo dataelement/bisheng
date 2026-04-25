@@ -73,6 +73,23 @@ class FineGrainedPermissionService:
         return cls.default_permission_ids_for_relation(object_type, relation)
 
     @staticmethod
+    def _is_legacy_subscription_viewer_tuple(
+        resource_type: str,
+        tuple_user: str | None,
+        relation: str | None,
+        binding: dict | None,
+    ) -> bool:
+        # Subscription/member rows are business state, not ReBAC grants. Older
+        # code mirrored active subscribers into unbound user viewer tuples; keep
+        # explicitly bound grants, but ignore those legacy mirrors at runtime.
+        return (
+            resource_type in {'knowledge_space', 'channel'}
+            and relation == 'viewer'
+            and bool(tuple_user and tuple_user.startswith('user:'))
+            and not (binding and binding.get('model_id'))
+        )
+
+    @staticmethod
     async def get_relation_models_map() -> dict[str, dict]:
         raw_models = await _get_relation_models()
         return {m['id']: _normalize_model_dict(m) for m in raw_models}
@@ -243,6 +260,7 @@ class FineGrainedPermissionService:
 
         effective_permissions: set[str] = set()
         saw_bound_model_tuple = False
+        saw_legacy_subscription_viewer_tuple = False
         fga = PermissionService._get_fga()
         if fga is not None:
             for resource_type, resource_id in lineage:
@@ -266,6 +284,14 @@ class FineGrainedPermissionService:
                             bindings,
                             binding_department_paths,
                         )
+                        if cls._is_legacy_subscription_viewer_tuple(
+                            tuple_resource_type,
+                            tuple_user,
+                            relation,
+                            binding,
+                        ):
+                            saw_legacy_subscription_viewer_tuple = True
+                            continue
                         model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
                         if binding and binding.get('model_id'):
                             saw_bound_model_tuple = True
@@ -283,7 +309,7 @@ class FineGrainedPermissionService:
         effective_permissions.update(
             cls.default_permission_ids_for_relation(object_type, implicit_relation or ''),
         )
-        if effective_permissions or saw_bound_model_tuple:
+        if effective_permissions or saw_bound_model_tuple or saw_legacy_subscription_viewer_tuple:
             return effective_permissions
 
         level = await PermissionService.get_permission_level(

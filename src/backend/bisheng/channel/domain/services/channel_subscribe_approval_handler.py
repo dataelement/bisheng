@@ -52,23 +52,6 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
 
         membership.status = MembershipStatusEnum.ACTIVE
         await self.space_channel_member_repository.update(membership)
-
-        # F008: Write FGA viewer tuple for the approved member
-        try:
-            from bisheng.permission.domain.services.permission_service import PermissionService
-            from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
-            await PermissionService.authorize(
-                object_type='channel', object_id=channel_id,
-                grants=[AuthorizeGrantItem(
-                    subject_type='user', subject_id=applicant_user_id,
-                    relation='viewer', include_children=False,
-                )],
-            )
-        except Exception as e:
-            logger.warning(
-                'Failed to write FGA viewer tuple for channel %s member %s: %s',
-                channel_id, applicant_user_id, e,
-            )
         operator_user_info = await UserDao.aget_user(operator_user_id)
         await self.notify_sender(
             operator_user_id,
