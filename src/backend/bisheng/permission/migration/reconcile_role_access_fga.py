@@ -286,18 +286,23 @@ async def reconcile(dry_run: bool = False) -> Stats:
 
 
 async def _main(dry_run: bool) -> None:
-    from bisheng.core.context.manager import ContextManager
-    await ContextManager.initialize()
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.context import close_app_context, initialize_app_context
 
-    t0 = time.time()
-    stats = await reconcile(dry_run=dry_run)
-    elapsed = time.time() - t0
+    await initialize_app_context(config=settings)
 
-    logger.info(
-        'Reconcile %s in %.1fs — desired=%d actual=%d write=%d delete=%d protected=%d',
-        'DRY-RUN' if dry_run else 'DONE',
-        elapsed, stats.desired, stats.actual, stats.to_write, stats.to_delete, stats.protected,
-    )
+    try:
+        t0 = time.time()
+        stats = await reconcile(dry_run=dry_run)
+        elapsed = time.time() - t0
+
+        logger.info(
+            'Reconcile %s in %.1fs — desired=%d actual=%d write=%d delete=%d protected=%d',
+            'DRY-RUN' if dry_run else 'DONE',
+            elapsed, stats.desired, stats.actual, stats.to_write, stats.to_delete, stats.protected,
+        )
+    finally:
+        await close_app_context()
 
 
 if __name__ == '__main__':
