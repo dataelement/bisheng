@@ -59,24 +59,34 @@ export function CitationDocumentPreviewContent({
   compactMode = false,
   className,
 }: CitationDocumentPreviewContentProps) {
-  if (!preview || !isRagCitation(preview.detail)) {
-    return null;
-  }
-
-  const { detail, itemId, locateChunk } = preview;
-  const fileName = getCitationDocumentName(detail);
-  const rawFileUrl = getCitationDocumentUrl(detail);
+  const detail = preview?.detail ?? null;
+  const canRenderPreview = !!detail && isRagCitation(detail);
+  const itemId = preview?.itemId;
+  const locateChunk = preview?.locateChunk;
+  const fileName = detail ? getCitationDocumentName(detail) : '';
+  const rawFileUrl = detail ? getCitationDocumentUrl(detail) : '';
   const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(rawFileUrl);
   const [isResolvingFileUrl, setIsResolvingFileUrl] = useState(false);
-  const fileType = resolveFileType(detail, resolvedRawFileUrl || rawFileUrl);
+  const fileType = canRenderPreview
+    ? resolveFileType(detail as ChatCitation, resolvedRawFileUrl || rawFileUrl)
+    : '';
   const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || rawFileUrl);
-  const shouldLocateChunk = locateChunk && fileType === 'pdf';
-  const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(detail, itemId) : [];
+  const shouldLocateChunk = !!locateChunk && fileType === 'pdf';
+  const bboxes: CitationPdfBBox[] = shouldLocateChunk
+    ? getCitationItemBBoxes(detail as ChatCitation, itemId)
+    : [];
   const targetBBox = bboxes[0] ?? null;
 
   useEffect(() => {
     let active = true;
     setResolvedRawFileUrl(rawFileUrl);
+
+    if (!canRenderPreview || !detail) {
+      setIsResolvingFileUrl(false);
+      return () => {
+        active = false;
+      };
+    }
 
     if (rawFileUrl) {
       setIsResolvingFileUrl(false);
@@ -86,7 +96,7 @@ export function CitationDocumentPreviewContent({
     }
 
     setIsResolvingFileUrl(true);
-    void resolveCitationDocumentUrl(detail).then((nextUrl) => {
+    void resolveCitationDocumentUrl(detail as ChatCitation).then((nextUrl) => {
       if (!active) return;
       setResolvedRawFileUrl(nextUrl || '');
       setIsResolvingFileUrl(false);
@@ -95,7 +105,11 @@ export function CitationDocumentPreviewContent({
     return () => {
       active = false;
     };
-  }, [detail, rawFileUrl]);
+  }, [canRenderPreview, detail, rawFileUrl]);
+
+  if (!canRenderPreview) {
+    return null;
+  }
 
   return (
     <div className={cn('min-h-0 flex-1', className)}>

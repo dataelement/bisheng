@@ -127,7 +127,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         <div ref={containerRef} data-expanded={isExpanded ? 'true' : 'false'} className={cn("relative w-full", className)}>
             <div
                 className={cn(
-                    "flex flex-nowrap items-center gap-1 w-full h-9 min-h-9 max-h-9 overflow-x-auto overflow-y-hidden",
+                    "flex flex-nowrap items-center gap-1 w-full h-8 min-h-8 max-h-8 overflow-x-auto overflow-y-hidden",
                     "bg-white border rounded-md transition-[border-color,box-shadow] px-2 sm:px-3",
                     isFocused ? "border-primary ring-1 ring-primary/20" : "border-[#e5e6eb] hover:border-primary/50"
                 )}

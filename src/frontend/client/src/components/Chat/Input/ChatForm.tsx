@@ -517,74 +517,81 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               />
             </>
           </FileFormWrapper>
-          {/* 发送和停止 */}
-          <div className="absolute bottom-2 right-3 flex gap-2 items-center">
-            {showVoice && (
-              <SpeechToTextComponent
-                disabled={readOnly || noModel}
-                onChange={(e) => {
-                  const text = textAreaRef.current.value + e;
-                  methods.setValue("text", text, { shouldValidate: true });
-                }}
-              />
-            )}
-            {(isSubmitting || isSubmittingAdded) &&
-              (showStopButton || showStopAdded) ? (
-              <StopButton
-                stop={handleStopGenerating}
-                setShowStopButton={setShowStopButton}
-              />
-            ) : (
-              <SendButton
-                ref={submitButtonRef}
-                isLingsi={isLingsi}
-                control={methods.control}
-                disabled={
-                  !!(
-                    filesLoading ||
-                    isSubmitting ||
-                    disableInputs ||
-                    isOutMaxToken
-                  ) || audioOpening
-                }
-              />
-            )}
-          </div>
-          {/* 深度思考 联网 */}
-          <div className="absolute bottom-2 left-3 flex gap-2">
-            {!isLingsi && (
-              <ModelSelect
-                disabled={readOnly}
-                value={chatModel.id}
-                options={bsConfig?.models}
-                onChange={(val) => {
-                  setChatModel({
-                    id: Number(val),
-                    name:
-                      bsConfig?.models?.find((item) => item.id === val)
-                        ?.displayName || "",
-                  });
-                }}
-              />
-            )}
-            {/* 知识库 */}
-            {!isLingsi && bsConfig?.knowledgeBase.enabled && (
-              <ChatKnowledge
-                config={bsConfig}
-                disabled={!!files.size || readOnly || isNetSearchOn}
-                value={selectedOrgKbs}
-                onChange={setSelectedOrgKbs}
-              />
-            )}
-            <ChatToolDown
-              tools={tools}
-              setTools={setTools}
-              linsi={isLingsi}
-              config={bsConfig}
-              searchType={searchType}
-              setSearchType={setSearchType}
-              disabled={!!files.size || readOnly}
-            />
+          <div className="absolute bottom-2 left-3 right-3 flex items-center gap-2">
+            {/* 深度思考 / 联网：左侧可收缩区域 */}
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {!isLingsi && (
+                <ModelSelect
+                  disabled={readOnly}
+                  value={chatModel.id}
+                  options={bsConfig?.models}
+                  onChange={(val) => {
+                    setChatModel({
+                      id: Number(val),
+                      name:
+                        bsConfig?.models?.find((item) => item.id === val)
+                          ?.displayName || "",
+                    });
+                  }}
+                />
+              )}
+              {/* 知识库 */}
+              {!isLingsi && bsConfig?.knowledgeBase.enabled && (
+                <div className="shrink-0">
+                  <ChatKnowledge
+                    config={bsConfig}
+                    disabled={!!files.size || readOnly || isNetSearchOn}
+                    value={selectedOrgKbs}
+                    onChange={setSelectedOrgKbs}
+                  />
+                </div>
+              )}
+              <div className="shrink-0">
+                <ChatToolDown
+                  tools={tools}
+                  setTools={setTools}
+                  linsi={isLingsi}
+                  config={bsConfig}
+                  searchType={searchType}
+                  setSearchType={setSearchType}
+                  disabled={!!files.size || readOnly}
+                />
+              </div>
+            </div>
+
+            {/* 发送和停止：右侧固定区域，不参与挤压 */}
+            <div className="flex shrink-0 items-center gap-2">
+              {showVoice && (
+                <SpeechToTextComponent
+                  disabled={readOnly || noModel}
+                  onChange={(e) => {
+                    const text = textAreaRef.current.value + e;
+                    methods.setValue("text", text, { shouldValidate: true });
+                  }}
+                />
+              )}
+              {(isSubmitting || isSubmittingAdded) &&
+                (showStopButton || showStopAdded) ? (
+                <StopButton
+                  stop={handleStopGenerating}
+                  setShowStopButton={setShowStopButton}
+                />
+              ) : (
+                <SendButton
+                  ref={submitButtonRef}
+                  isLingsi={isLingsi}
+                  control={methods.control}
+                  disabled={
+                    !!(
+                      filesLoading ||
+                      isSubmitting ||
+                      disableInputs ||
+                      isOutMaxToken
+                    ) || audioOpening
+                  }
+                />
+              )}
+            </div>
           </div>
         </div>
         {/* 气泡 */}
@@ -671,25 +678,27 @@ const ModelSelect = ({
   }, [options, value]);
 
   return (
-    <Select
-      value={useMemo(() => value + "", [value])}
-      disabled={disabled}
-      onValueChange={onChange}
-    >
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent touch-mobile:px-1.5 min-w-0 max-w-[min(52vw,200px)]">
-        <div className="flex min-w-0 gap-2">
-          <Rotate3DIcon size="16" className="shrink-0" />
-          <span className="text-xs font-normal truncate">{label}</span>
-        </div>
-      </SelectTrigger>
-      <SelectContent className="bg-white">
-        {options?.map((opt) => (
-          <SelectItem key={opt.key} value={opt.id + ""}>
-            {opt.displayName}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="min-w-0 max-w-[min(52vw,200px)] shrink">
+      <Select
+        value={useMemo(() => value + "", [value])}
+        disabled={disabled}
+        onValueChange={onChange}
+      >
+        <SelectTrigger className="h-7 w-full min-w-0 max-w-full rounded-full bg-white px-2 dark:bg-transparent touch-mobile:px-1.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Rotate3DIcon size="16" className="shrink-0" />
+            <span className="min-w-0 truncate text-xs font-normal">{label}</span>
+          </div>
+        </SelectTrigger>
+        <SelectContent className="bg-white">
+          {options?.map((opt) => (
+            <SelectItem key={opt.key} value={opt.id + ""}>
+              {opt.displayName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 };
 

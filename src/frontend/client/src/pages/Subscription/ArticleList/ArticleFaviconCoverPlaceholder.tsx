@@ -38,7 +38,7 @@ export function ArticleFaviconCoverPlaceholder({
             <img
                 src={iconUrl}
                 alt=""
-                className="absolute left-1/2 top-1/2 min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 scale-[1.35] object-cover blur-md transition-transform duration-300 ease-in-out group-hover:scale-[1.45]"
+                className="absolute left-1/2 top-1/2 min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 scale-[1.35] object-cover blur-md transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-[1.45]"
                 aria-hidden
                 decoding="async"
             />
@@ -48,7 +48,7 @@ export function ArticleFaviconCoverPlaceholder({
                     alt={alt}
                     width={40}
                     height={40}
-                    className="size-10 object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
+                    className="size-10 object-contain transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-105"
                     decoding="async"
                 />
             </div>

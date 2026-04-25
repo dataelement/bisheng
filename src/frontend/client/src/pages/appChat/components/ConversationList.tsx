@@ -38,7 +38,7 @@ export function ConversationList({ groups, activeId, onSelect, onNewChat, locali
                 'group flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all',
                 conv.id === activeId
                   ? 'bg-[#eef4ff] text-blue-600'
-                  : 'hover:bg-gray-100 text-gray-700',
+                  : 'fine-pointer:hover:bg-gray-100 text-gray-700',
               )}
             >
               <MessageSquare

@@ -120,23 +120,24 @@ export function KnowledgeSpaceHeader({
     const showShare = space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
     const showToolbarActions = isAdmin || selectedCount > selectedThreshold;
+    const showViewModeTabs = enableCardMode && !isNarrow576;
 
     const viewFilterSortCluster = (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
-            <div className="inline-flex h-8 shrink-0 items-stretch rounded-md border border-[#e5e6eb] bg-white p-[3px] text-sm">
-                <button
-                    type="button"
-                    onClick={() => setViewMode("list")}
-                    className={cn(
-                        "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
-                        viewMode === "list"
-                            ? "bg-[#E6EDFC] text-[#165DFF]"
-                            : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                    )}
-                >
-                    <List className="size-4 shrink-0" />
-                </button>
-                {enableCardMode && !isNarrow576 && (
+            {showViewModeTabs && (
+                <div className="inline-flex h-8 shrink-0 items-stretch rounded-md border border-[#e5e6eb] bg-white p-[3px] text-sm">
+                    <button
+                        type="button"
+                        onClick={() => setViewMode("list")}
+                        className={cn(
+                            "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
+                            viewMode === "list"
+                                ? "bg-[#E6EDFC] text-[#165DFF]"
+                                : "text-[#4e5969] hover:bg-[#f2f3f5]"
+                        )}
+                    >
+                        <List className="size-4 shrink-0" />
+                    </button>
                     <button
                         type="button"
                         onClick={() => setViewMode("card")}
@@ -149,8 +150,8 @@ export function KnowledgeSpaceHeader({
                     >
                         <LayoutGrid className="size-4 shrink-0" />
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
             {space.role !== SpaceRole.MEMBER && (
                 <DropdownMenu>
@@ -222,7 +223,7 @@ export function KnowledgeSpaceHeader({
                 </DropdownMenu>
             )}
 
-            {enableCardMode && viewMode === "card" && (
+            {showViewModeTabs && viewMode === "card" && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -325,39 +326,44 @@ export function KnowledgeSpaceHeader({
     return (
         <>
         <div className="space-y-4 pt-5 pb-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
-            {currentPath.length === 0 ? (
-                <div className="hidden touch-mobile:flex items-end gap-3">
-                    <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
-                        {localize("com_knowledge.knowledge_space")}
-                    </h1>
-                    {onGoKnowledgeSquare ? (
-                        <button
-                            type="button"
-                            onClick={onGoKnowledgeSquare}
-                            className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
-                        >
-                            <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
-                            <span className="text-[12px] leading-5 font-normal text-[#212121]">
-                                前往知识广场
-                            </span>
-                        </button>
-                    ) : null}
-                </div>
-            ) : null}
+            <div
+                className={cn(
+                    "hidden touch-mobile:flex items-end gap-3 min-h-8",
+                    currentPath.length !== 0 && "pointer-events-none opacity-0"
+                )}
+            >
+                <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
+                    {localize("com_knowledge.knowledge_space")}
+                </h1>
+                {onGoKnowledgeSquare ? (
+                    <button
+                        type="button"
+                        onClick={onGoKnowledgeSquare}
+                        className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
+                    >
+                        <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
+                        <span className="text-[12px] leading-5 font-normal text-[#212121]">
+                            前往知识广场
+                        </span>
+                    </button>
+                ) : null}
+            </div>
 
             {/* 面包屑 / 当前空间标题 */}
             <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
-                        <div className="flex items-center gap-1">
-                            <h1 className="text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">{space.name}</h1>
+                        <div className="flex min-w-0 flex-1 items-center gap-1">
+                            <h1 className="min-w-0 truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                                {space.name}
+                            </h1>
                             {space.spaceKind === "department" && (
-                                <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
+                                <span className="inline-flex shrink-0 items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
                                     {localize("com_knowledge.department_badge")}
                                 </span>
                             )}
                             <Tooltip>
-                                <TooltipTrigger className="cursor-pointer">
+                                <TooltipTrigger className="shrink-0 cursor-pointer">
                                     <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
                                 </TooltipTrigger>
                                 <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">

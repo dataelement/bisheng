@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
-import { useLocalize } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { UserPopMenu } from '~/layouts/UserPopMenu';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
@@ -92,6 +92,7 @@ export function SideNav() {
     };
 
     const localize = useLocalize();
+    const isTabletOrMobile = usePrefersMobileLayout();
     const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
     const { data: bsConfig } = useGetBsConfig();
 
@@ -116,7 +117,7 @@ export function SideNav() {
     const showShareApp = flowData?.can_share === true;
 
     return (
-        <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden pl-3 pr-2 pt-3 pb-2 text-[#212121]">
+        <div className="relative h-full w-[280px] overflow-hidden border-r border-[#ececec] bg-white p-2 text-[#212121] flex flex-col gap-4">
             {/* H5 brand icon */}
             {bsConfig?.sidebarIcon?.image ? (
                 <img
@@ -129,7 +130,7 @@ export function SideNav() {
             <button
                 type="button"
                 onClick={() => setSidebarVisible(false)}
-                className="absolute right-3 top-3 z-20 hidden shrink-0 touch-mobile:flex items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
+                className="absolute right-3 top-3 z-20 hidden size-[28px] shrink-0 items-center justify-center rounded-[6px] transition-colors fine-pointer:hover:bg-[#f7f8fa] touch-mobile:flex"
                 aria-label={localize('com_nav_close_sidebar')}
             >
                 <X size={16} className="text-[#4E5969]" />
@@ -140,7 +141,7 @@ export function SideNav() {
                 <button
                     type="button"
                     onClick={handleGoBack}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] transition-colors hover:bg-[#f7f8fa]"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
                     aria-label={localize('com_ui_go_back')}
                 >
                     <ChevronLeft size={16} className="shrink-0" />
@@ -191,7 +192,7 @@ export function SideNav() {
                             <button
                                 onClick={shareApp}
                                 type="button"
-                                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors touch-mobile:px-2"
+                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-[6px] border border-[#ececec] bg-white text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 touch-mobile:px-2"
                             >
                                 {localize('com_app_share_app')}
                             </button>
@@ -199,7 +200,7 @@ export function SideNav() {
                         <button
                             onClick={createNewChat}
                             type="button"
-                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
+                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
                         >
                             {localize('com_knowledge_start_new_chat')}
                         </button>
@@ -236,7 +237,12 @@ export function SideNav() {
                                             key={conv.id}
                                             conv={conv}
                                             isActive={isActive}
-                                            onClick={() => switchConversation(conv)}
+                                            onClick={() => {
+                                                switchConversation(conv);
+                                                if (isTabletOrMobile) {
+                                                    setSidebarVisible(false);
+                                                }
+                                            }}
                                             onRenameSuccess={() => fetchConversations()}
                                             onDeleteSuccess={async () => {
                                                 const list = await fetchConversations();

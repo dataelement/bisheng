@@ -17,6 +17,16 @@ import MessageUser from "./components/MessageUser";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
+type ChatMessagesProps = {
+    useName?: string;
+    readOnly: any;
+    title: string;
+    logo: React.ReactNode;
+    disabledSearch?: boolean;
+    isGuestMode?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+};
 export default function ChatMessages({
     useName,
     readOnly,
@@ -25,17 +35,8 @@ export default function ChatMessages({
     disabledSearch = false,
     isGuestMode = false,
     onOpenCitationPanel,
-    activeCitationMessageId,
-}: {
-    useName?: string;
-    readOnly?: string;
-    title: string;
-    logo: React.ReactNode;
-    disabledSearch?: boolean;
-    isGuestMode?: boolean;
-    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
-    activeCitationMessageId?: string | null;
-}) {
+    activeCitationMessageId = null,
+}: ChatMessagesProps) {
     const { messageScrollRef, messages } = useMessage(readOnly)
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)

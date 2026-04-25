@@ -151,7 +151,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
         <div
             className={cn(
                 "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors cursor-pointer",
-                isActive ? "bg-[#e6edfc]" : "hover:bg-[#f7f7f7]",
+                isActive ? "bg-[#e6edfc]" : "fine-pointer:hover:bg-[#f7f7f7] coarse-pointer:hover:bg-transparent",
                 renaming ? "bg-[#e6edfc]" : ""
             )}
             onClick={(e) => {
@@ -174,10 +174,10 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                     />
                     <div className="flex gap-1 shrink-0">
                         <button onClick={cancelRename}>
-                            <X className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#4e5969]" />
+                            <X className="h-4 w-4 text-[#4e5969] transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
                         </button>
                         <button onClick={submitRename}>
-                            <Check className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#165dff]" />
+                            <Check className="h-4 w-4 text-[#165dff] transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
                         </button>
                     </div>
                 </div>
@@ -220,7 +220,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                                 <Menu.MenuButton
                                     id={`app-conversation-menu-${conv.id}`}
                                     className={cn(
-                                        'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-[#86909c] hover:text-[#1d2129]',
+                                        'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium text-[#86909c] transition-all duration-200 ease-in-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 fine-pointer:hover:text-[#1d2129]',
                                         isActive
                                             ? 'opacity-100'
                                             : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100 coarse-pointer:opacity-100',

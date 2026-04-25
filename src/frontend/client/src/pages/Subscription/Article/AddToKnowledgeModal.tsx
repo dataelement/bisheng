@@ -194,7 +194,7 @@ function TreeNode({
         <div className="w-full min-w-0 max-w-full">
             <div
                 className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
-                    ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
+                    ${isSelected ? "bg-[#EEF2FF] text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
                 style={{
                     paddingLeft: `${indent + 8}px`,
                     transitionProperty: 'background-color',
@@ -237,7 +237,7 @@ function TreeNode({
                         onCancel={onCancelEdit}
                     />
                 ) : (
-                    <span className="min-w-0 flex-1 overflow-hidden pr-0 transition-[padding-right] duration-150 group-hover:pr-8">
+                    <span className="min-w-0 flex-1 overflow-hidden pr-0 transition-[padding-right] duration-150 fine-pointer:group-hover:pr-8 coarse-pointer:pr-8">
                         <span className="block truncate" title={node.name}>{node.name}</span>
                     </span>
                 )}
@@ -246,7 +246,7 @@ function TreeNode({
                 {!isEditing && (
                     <button
                         type="button"
-                        className="absolute right-2 top-1/2 z-[1] h-8 w-8 -translate-y-1/2 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 flex items-center justify-center rounded text-[#86909c] hover:text-primary transition-colors duration-150"
+                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[#86909c] opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
@@ -716,7 +716,7 @@ export function AddToKnowledgeModal({
                     <button
                         type="button"
                         onClick={goBackToChannelForm}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA]"
                         aria-label={localize("com_ui_go_back")}
                     >
                         <ChevronLeft className="size-5" />

@@ -28,7 +28,7 @@ export function AppSwitcherDropdown() {
   const trigger = (
     <button
       disabled={disabled}
-      className="p-1 text-gray-400 hover:text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      className="p-1 text-gray-400 transition-colors fine-pointer:hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
     >
       <ArrowLeftRight size={14} />
     </button>
@@ -88,7 +88,7 @@ export function AppSwitcherDropdown() {
                   key={app.id}
                   onClick={() => switchApp(app)}
                   className={cn(
-                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-[6px] hover:bg-[#f2f3f5] transition-colors group cursor-pointer text-left',
+                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-[6px] transition-colors group cursor-pointer text-left fine-pointer:hover:bg-[#f2f3f5]',
                     isActive && 'bg-[#f2f3f5]'
                   )}
                 >

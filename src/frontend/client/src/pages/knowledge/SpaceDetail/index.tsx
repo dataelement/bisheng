@@ -522,7 +522,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4"
+            className="flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 touch-mobile:h-auto touch-mobile:min-h-full touch-mobile:overflow-y-auto"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -569,8 +569,8 @@ export function KnowledgeSpaceContent({
             />
 
             {/* Content Container (Scrollable) */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col touch-mobile:flex-none">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white touch-mobile:flex-none touch-mobile:overflow-visible">
                     {displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
@@ -591,7 +591,7 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        <div className="flex-1 overflow-y-auto scrollbar-on-hover">
+                        <div className="flex-1 overflow-y-auto scrollbar-on-hover touch-mobile:flex-none touch-mobile:overflow-visible">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
@@ -631,8 +631,8 @@ export function KnowledgeSpaceContent({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-hover border-t border-[#e5e6eb]">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4 touch-mobile:flex-none">
+                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-hover border-t border-[#e5e6eb] touch-mobile:flex-none touch-mobile:overflow-visible">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
@@ -660,7 +660,7 @@ export function KnowledgeSpaceContent({
             </div>
 
             {/* Footer */}
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3 touch-mobile:mb-3">
                 {/* Left side: selection path (only in search mode with selections) */}
                 {isSearching && selectedFiles.size > 0 ? (
                     <SelectionPathBreadcrumb

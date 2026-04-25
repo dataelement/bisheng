@@ -1,7 +1,7 @@
 import React from 'react';
 import { useRecoilValue } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
-import { Menu, Plus, X } from 'lucide-react';
+import { ChevronLeft, Menu, Plus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { QueryKeys, Constants } from '~/types/chat';
 import type { TMessage } from '~/types/chat';
@@ -25,6 +25,8 @@ type MobileNavProps = {
   persistNavVisibleInLocalStorage?: boolean;
   navigateToNewChatPath?: string | false;
   onNewChat?: () => void;
+  preferBackButton?: boolean;
+  onBack?: () => void;
 };
 
 /**
@@ -38,6 +40,8 @@ export default function MobileNav({
   persistNavVisibleInLocalStorage = true,
   navigateToNewChatPath = '/c/new',
   onNewChat,
+  preferBackButton = false,
+  onBack,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
     'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]';
@@ -84,42 +88,73 @@ export default function MobileNav({
   return (
     <div
       className={cn(
-        'bg-token-main-surface-primary sticky top-0 z-10 flex w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white',
-        showWorkbenchMergedBar ? 'min-h-11 h-11' : 'h-10',
+        'bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[env(safe-area-inset-top,0px)] dark:bg-gray-800 dark:text-white',
       )}
     >
-      <button
-        type="button"
-        data-testid="mobile-header-toggle-sidebar"
-        aria-label={navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')}
-        aria-expanded={navVisible}
-        className={mobileHeadIconBtnClassName}
-        onClick={toggleSidebar}
-      >
-        {navVisible ? (
-          <X className="size-4" strokeWidth={2} />
-        ) : (
-          <Menu className="size-4" strokeWidth={2} />
+      <div
+        className={cn(
+          'flex w-full flex-row items-center justify-between px-2',
+          showWorkbenchMergedBar ? 'h-11 min-h-11' : 'h-10',
         )}
-      </button>
-      {showWorkbenchMergedBar && chatMobileHeader ? (
-        <>
-          <div className="min-w-0 flex-1 px-1 flex justify-center">
-            <span
-              id="app-title"
-              className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"
-              title={chatMobileHeader.title}
-            >
-              {chatMobileHeader.title}
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            {!chatMobileHeader.readOnly && !chatMobileHeader.hideShare && shareType && (
-              <ShareChat
-                type={shareType}
-                flowId={chatMobileHeader.flowId || undefined}
-                chatId={chatMobileHeader.conversationId}
-              />
+      >
+        <button
+          type="button"
+          data-testid="mobile-header-left-action"
+          aria-label={preferBackButton ? localize('com_ui_go_back') : (navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar'))}
+          aria-expanded={preferBackButton ? undefined : navVisible}
+          className={mobileHeadIconBtnClassName}
+          onClick={preferBackButton ? (onBack ?? toggleSidebar) : toggleSidebar}
+        >
+          {preferBackButton ? (
+            <ChevronLeft className="size-4" strokeWidth={2} />
+          ) : navVisible ? (
+            <X className="size-4" strokeWidth={2} />
+          ) : (
+            <Menu className="size-4" strokeWidth={2} />
+          )}
+        </button>
+        {showWorkbenchMergedBar && chatMobileHeader ? (
+          <>
+            <div className="min-w-0 flex-1 px-1 flex justify-center">
+              <span
+                id="app-title"
+                className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"
+                title={chatMobileHeader.title}
+              >
+                {chatMobileHeader.title}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-0.5">
+              {!chatMobileHeader.readOnly && !chatMobileHeader.hideShare && shareType && (
+                <ShareChat
+                  type={shareType}
+                  flowId={chatMobileHeader.flowId || undefined}
+                  chatId={chatMobileHeader.conversationId}
+                />
+              )}
+              <button
+                type="button"
+                data-testid="mobile-header-new-chat-button"
+                aria-label={localize('com_ui_new_chat')}
+                className={mobileHeadIconBtnClassName}
+                onClick={handleNewChat}
+              >
+                <Plus className="size-4" strokeWidth={2} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {variant === 'app' ? (
+              <>
+                <div className="min-w-0 flex-1" aria-hidden />
+                <span className="sr-only">{localize('com_ui_new_chat')}</span>
+              </>
+            ) : (
+              <>
+                <div className="min-w-0 flex-1" aria-hidden />
+                <span className="sr-only">{title ?? localize('com_ui_new_chat')}</span>
+              </>
             )}
             <button
               type="button"
@@ -130,32 +165,9 @@ export default function MobileNav({
             >
               <Plus className="size-4" strokeWidth={2} />
             </button>
-          </div>
-        </>
-      ) : (
-        <>
-          {variant === 'app' ? (
-            <>
-              <div className="min-w-0 flex-1" aria-hidden />
-              <span className="sr-only">{localize('com_ui_new_chat')}</span>
-            </>
-          ) : (
-            <>
-              <div className="min-w-0 flex-1" aria-hidden />
-              <span className="sr-only">{title ?? localize('com_ui_new_chat')}</span>
-            </>
-          )}
-          <button
-            type="button"
-            data-testid="mobile-header-new-chat-button"
-            aria-label={localize('com_ui_new_chat')}
-            className={mobileHeadIconBtnClassName}
-            onClick={handleNewChat}
-          >
-            <Plus className="size-4" strokeWidth={2} />
-          </button>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

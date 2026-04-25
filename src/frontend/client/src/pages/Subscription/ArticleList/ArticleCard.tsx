@@ -82,7 +82,7 @@ export function ArticleCard({
                     <img
                         src={article.coverImage}
                         alt={article.title}
-                        className="h-full w-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+                        className="h-full w-full object-cover transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-105"
                     />
                 </div>
             ) : (
@@ -98,7 +98,7 @@ export function ArticleCard({
                     {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
                     <h3 className={cn(
                         "font-medium line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
-                        isSelected ? "text-primary" : "group-hover:text-primary",
+                        isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
                         article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
                     )}
                     >
@@ -153,7 +153,7 @@ export function ArticleCard({
                                         e.stopPropagation();
                                         setShowKnowledgeModal(true);
                                     }}
-                                    className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                                    className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
                                     title={localize("com_subscription.add_to_knowledge_space")}
                                 >
                                     <BookPlusIcon className="size-3.5" />
@@ -181,7 +181,7 @@ export function ArticleCard({
                                             });
                                         });
                                 }}
-                                className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                                className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
                                 title={localize("com_subscription.share")}
                             >
                                 <ShareOutlineIcon className="size-3.5" />

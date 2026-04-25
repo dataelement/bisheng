@@ -23,7 +23,7 @@ import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { getSpaceTagsApi } from "~/api/knowledge";
 
 interface KnowledgeAiPanelProps {
@@ -40,6 +40,7 @@ export function KnowledgeAiPanel({
     onClose,
 }: KnowledgeAiPanelProps) {
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
 
     // Fetch space tags via react-query (cache shared with other consumers)
     const { data: availableTags = [] } = useQuery({
@@ -99,7 +100,37 @@ export function KnowledgeAiPanel({
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
             <div className="relative flex items-center justify-between px-4 py-3 shrink-0">
-                <div className="w-7 h-7 shrink-0" aria-hidden />
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
+                                onClick={onClose}
+                            >
+                                <svg
+                                    className="size-4"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    aria-hidden
+                                >
+                                    <path
+                                        d="M15 18L9 12L15 6"
+                                        stroke="#4E5969"
+                                        strokeWidth="2.25"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
+                                </svg>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{localize("com_knowledge.close")}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-[#1d2129]">
                     {localize("com_knowledge.ai_assistant")}
                 </h3>
@@ -144,37 +175,6 @@ export function KnowledgeAiPanel({
                         </Tooltip>
                     </TooltipProvider>
 
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
-                                    onClick={onClose}
-                                >
-                                    <svg
-                                        className="size-4"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        aria-hidden
-                                    >
-                                        <path
-                                            d="M15 18L9 12L15 6"
-                                            stroke="#4E5969"
-                                            strokeWidth="2.25"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
-                                    </svg>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{localize("com_knowledge.close")}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
                 </div>
             </div>
 
@@ -201,6 +201,7 @@ export function KnowledgeAiPanel({
                     hideHeaderTitle
                     flatMode
                     knowledgeChatLayout
+                    contentWidthClassName={isH5 ? "max-w-none px-4" : undefined}
                     emptyStateHint={folderQaHint}
                     onPresetClick={() => { }}
                     onRegenerate={regenerate}

@@ -41,7 +41,16 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-
+type MessageBsProps = {
+    logo: React.ReactNode;
+    title: string;
+    data: ChatMessageType;
+    onUnlike?: any;
+    isGuestMode?: boolean;
+    readOnly?: any;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+};
 export default function MessageBs({
     logo,
     title,
@@ -51,16 +60,7 @@ export default function MessageBs({
     isGuestMode = false,
     onOpenCitationPanel,
     activeCitationMessageId,
-}: {
-    logo: React.ReactNode;
-    title: string;
-    data: ChatMessageType;
-    onUnlike?: any;
-    readOnly?: string;
-    isGuestMode?: boolean;
-    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
-    activeCitationMessageId?: string | null;
-}) {
+}: MessageBsProps) {
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
@@ -145,17 +145,6 @@ export default function MessageBs({
                         messageId={String(data.id)}
                         desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
                         open={onOpenCitationPanel ? activeCitationMessageId === String(data.id) : undefined}
-                        onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
-                            if (!nextOpen && activeCitationMessageId === String(data.id)) {
-                                onOpenCitationPanel({
-                                    messageId: String(data.id),
-                                    content: referenceContent,
-                                    webContent: referenceWebContent,
-                                    citations: (data as any).citations,
-                                    referenceItems: [],
-                                });
-                            }
-                        }) : undefined}
                         onDesktopOpen={onOpenCitationPanel}
                         buttonClassName="ml-4"
                     />

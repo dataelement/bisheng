@@ -401,7 +401,7 @@ function CitationPreviewCard({
 }
 
 const Citation = ({
-  data,
+  data: rawData,
   children,
   initialDetail,
   webContent,
@@ -415,7 +415,8 @@ const Citation = ({
   loadCitationDetail: CitationDetailLoader;
   onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
 }) => {
-  if (!data) return null;
+  const data = rawData ?? ({} as Partial<CitationDisplayData>);
+  const hasData = !!rawData;
 
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
@@ -520,6 +521,10 @@ const Citation = ({
       setOpen(false);
     }, 120);
   };
+
+  if (!hasData) {
+    return null;
+  }
 
   return (
     <Popover.Root open={open} onOpenChange={handleOpenChange}>

@@ -200,6 +200,7 @@ export function AiAssistantPanel({
                 hideHeaderTitle
                 flatMode={isSimpleMode}
                 knowledgeChatLayout
+                contentWidthClassName={isH5 ? "max-w-none px-4" : undefined}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
             />
