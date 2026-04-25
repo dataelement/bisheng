@@ -6,21 +6,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from "~/components/ui/Dialog";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "~/components/ui/AlertDialog";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useLocalize } from "~/hooks";
-import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
+import { addWebsiteSourceApi, crawlTempSourceApi } from "~/api/channels";
+import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
 import type { InformationSource } from "~/api/channels";
+import type { CrawlPreview } from "../hooks/useCrawlQueue";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
 import { extractApiStatusCode } from "../errorUtils";
@@ -32,6 +25,9 @@ interface CrawlPreviewDialogProps {
     url: string;
     onAddSource: (source: InformationSource) => void;
     onCancel?: () => void;
+    /** "add" 默认走原 fetch+add 流程；"view" 跳过 fetch，渲染 initialPreview，仅查看 */
+    mode?: "add" | "view";
+    initialPreview?: CrawlPreview;
 }
 
 type CrawlStatus = "loading" | "success" | "error";
@@ -41,14 +37,15 @@ export function CrawlPreviewDialog({
     onOpenChange,
     url,
     onAddSource,
-    onCancel
+    onCancel,
+    mode = "add",
+    initialPreview,
 }: CrawlPreviewDialogProps) {
     const localize = useLocalize();
     const [status, setStatus] = useState<CrawlStatus>("loading");
     const [adding, setAdding] = useState(false);
-    const [previewData, setPreviewData] = useState<{ name: string; icon?: string; articles?: { title: string; url: string }[] } | null>(null);
+    const [previewData, setPreviewData] = useState<CrawlPreview | null>(null);
     const [errorCode, setErrorCode] = useState<number | null>(null);
-    const [feedbackTips, setFeedbackTips] = useState<string>(localize("com_subscription.send_crawl_requirement_to_email"));
     const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
     const [isArticlesScrolling, setIsArticlesScrolling] = useState(false);
     const articlesScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,6 +53,12 @@ export function CrawlPreviewDialog({
 
     useEffect(() => {
         if (!open || !url) return;
+        if (mode === "view") {
+            setStatus("success");
+            setPreviewData(initialPreview ?? null);
+            setErrorCode(null);
+            return;
+        }
         setStatus("loading");
         setPreviewData(null);
         setErrorCode(null);
@@ -126,23 +129,7 @@ export function CrawlPreviewDialog({
                 setErrorCode(code === 19006 ? 19006 : 19003);
             }
         })();
-    }, [open, url]);
-
-    // 加载订阅配置中的 feedback_tips
-    useEffect(() => {
-        if (!open) return;
-        (async () => {
-            try {
-                const resp = await getFeedbackTips();
-                const data = resp?.data ?? resp ?? {};
-                const tips = data.feedback_tips ?? data.feedbackTips;
-                if (typeof tips === "string" && tips.trim()) {
-                    setFeedbackTips(tips);
-                }
-            } catch {
-            }
-        })();
-    }, [open]);
+    }, [open, url, mode, initialPreview]);
 
     const handleCancel = () => {
         // 标记当前请求为失效，后续响应不再更新 UI
@@ -215,7 +202,9 @@ export function CrawlPreviewDialog({
             >
                 <DialogHeader>
                     <DialogTitle className="text-[16px] font-medium">
-                        {localize("com_subscription.confirm_crawled_content")}
+                        {mode === "view"
+                            ? localize("com_subscription.crawled_content_preview")
+                            : localize("com_subscription.confirm_crawled_content")}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -330,14 +319,16 @@ export function CrawlPreviewDialog({
                             <span />
                         )}
                         <div className="flex">
-                            <Button
-                                variant="secondary"
-                                onClick={handleCancel}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
-                            >
-                                {localize("cancel")}
-                            </Button>
-                            {(status === "loading" || status === "success") && (
+                            {mode === "add" && (
+                                <Button
+                                    variant="secondary"
+                                    onClick={handleCancel}
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                >
+                                    {localize("cancel")}
+                                </Button>
+                            )}
+                            {mode === "add" && (status === "loading" || status === "success") && (
                                 <Button
                                     onClick={handleAddSource}
                                     disabled={status !== "success" || adding}
@@ -347,26 +338,21 @@ export function CrawlPreviewDialog({
                                     {localize("com_subscription.add_source")}
                                 </Button>
                             )}
+                            {mode === "view" && (
+                                <Button
+                                    onClick={() => onOpenChange(false)}
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-[#165DFF] hover:bg-[#4080FF] text-white"
+                                >
+                                    {localize("com_subscription.ok")}
+                                </Button>
+                            )}
                         </div>
 
                     </div>
                 )}
             </DialogContent>
 
-            {/* 人工爬取需求提示弹窗 */}
-            <AlertDialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
-                <AlertDialogContent className="sm:max-w-[480px]">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>{localize("com_subscription.submit_manual_crawl_request")}</AlertDialogTitle>
-                        <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-[#4E5969]">
-                            {feedbackTips}
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogAction className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF]">{localize("com_subscription.ok")}</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <CrawlFeedbackDialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen} />
         </Dialog>
     );
 }
