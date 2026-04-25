@@ -9,14 +9,13 @@ import {
     type ArticleSearchResultItem
 } from "~/api/channels";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
-import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useDebounce } from "~/hooks";
 import { ArticleCard } from "./ArticleCard";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
-import { ShareOutlineIcon } from "~/components/icons/ShareOutlineIcon";
+import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -29,7 +28,6 @@ interface ArticleListProps {
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
     onCreateChannel?: () => void;
-    onOpenChannelShare?: (channel: Channel) => void;
 }
 
 /** Strip HTML tags from a string, extracting body content first */
@@ -74,7 +72,6 @@ export function ArticleList({
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
-    onOpenChannelShare,
 }: ArticleListProps) {
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
     const localize = useLocalize();
@@ -365,14 +362,12 @@ export function ArticleList({
 
                     <div className="flex shrink-0 items-center gap-3">
                         {canOpenChannelShare ? (
-                            <Button
-                                onClick={() => onOpenChannelShare?.(channel)}
-                                variant="ghost"
-                                className="h-8 gap-1 px-4 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:px-4 touch-mobile:text-[#212121] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white"
-                            >
-                                <ShareOutlineIcon className="size-4 shrink-0 text-gray-800" />
-                                {localize("com_subscription.share")}
-                            </Button>
+                            <CopyShareLinkButton
+                                sharePath={`/channel/share/${channel.id}`}
+                                label={localize("com_subscription.share")}
+                                successMessage={localize("com_subscription.share_link_copied")}
+                                errorMessage={localize("com_subscription.copy_failed_retry")}
+                            />
                         ) : null}
                     </div>
                 </div>
