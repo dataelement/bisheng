@@ -36,7 +36,7 @@ export interface AdvancedParams {
   export const llmTemplates: Record<string, AdvancedParams> = {
     // 基础模板
     'ollama-llm': {
-      "temperature": 0.8,
+      "temperature": 1,
       "top_p": 0.9,
       "seed": null,
       "reasoning": null
@@ -48,7 +48,7 @@ export interface AdvancedParams {
       "request_timeout": null,
       "seed": null,
       "streaming": false,
-      "temperature": 0.7,
+      "temperature": 1,
       "top_p": 1
     },
   
@@ -60,7 +60,7 @@ export interface AdvancedParams {
       "request_timeout": null,
       "seed": null,
       "streaming": false,
-      "temperature": 0.7,
+      "temperature": 1,
       "top_p": 1
     },
   
@@ -72,7 +72,7 @@ export interface AdvancedParams {
       "request_timeout": null,
       "seed": null,
       "streaming": false,
-      "temperature": 0.7,
+      "temperature": 1,
       "top_p": 1
     },
 
@@ -84,7 +84,7 @@ export interface AdvancedParams {
       "request_timeout": null,
       "seed": null,
       "streaming": false,
-      "temperature": 0.7,
+      "temperature": 1,
       "top_p": 1
     },
   
@@ -105,12 +105,12 @@ export interface AdvancedParams {
       "request_timeout": null,
       "seed": null,
       "streaming": false,
-      "temperature": 0.7,
+      "temperature": 1,
       "top_p": 1
   },
   
     'zhipu-llm': {
-      "temperature": 0.95,
+      "temperature": 1,
       "top_p": 0.7,
       "cache": null,
       "disable_streaming": false,
@@ -121,7 +121,7 @@ export interface AdvancedParams {
     'minimax-llm': {
       "cache": null,
       "disable_streaming": false,
-      "temperature": 0.7,
+      "temperature": 1,
       "top_p": 0.95,
       "streaming": false
     },
@@ -159,7 +159,7 @@ export interface AdvancedParams {
       "n": 1,
       "streaming": false,
       "tags": null,
-      "temperature": 0.3,
+      "temperature": 1,
       "tiktoken_model_name": null
   }
     

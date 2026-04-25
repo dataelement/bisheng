@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Download, Loader2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Loader2, X } from 'lucide-react';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import { useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
@@ -483,7 +483,7 @@ export default function CitationReferencesDrawer({
     <>
       <div className={cn(
         'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
-        'h-14 px-3',
+        isPhoneViewport ? 'h-11 px-2' : 'h-14 px-3',
       )}>
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
@@ -496,7 +496,10 @@ export default function CitationReferencesDrawer({
         <button
           type="button"
           onClick={() => setOpenState(false)}
-          className="inline-flex size-6 items-center justify-center rounded-[6px]  hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+          className={cn(
+            'inline-flex items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
+            isPhoneViewport ? 'size-8 rounded-md' : 'size-6 rounded-[6px]',
+          )}
           aria-label="关闭参考资料"
         >
           <X className="size-4" strokeWidth={1.5} />
@@ -547,6 +550,17 @@ export default function CitationReferencesDrawer({
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDesktopView('list');
+                setDocumentPreview(null);
+              }}
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#4E5969] hover:bg-[#F2F3F5]"
+              aria-label="返回参考资料列表"
+            >
+              <ChevronLeft className="size-4" strokeWidth={1.75} />
+            </button>
             <div className="flex min-w-0 items-center">
               <h2
                 className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]"
@@ -649,10 +663,10 @@ export default function CitationReferencesDrawer({
       {!isDesktopInlinePanel && isOpen && (
         <aside
           className={cn(
-            'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
+            'fixed flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
             isPhoneViewport
-              ? 'inset-0'
-              : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
+              ? 'z-50 inset-0'
+              : 'z-[9] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
           )}
           aria-label="参考资料"
         >

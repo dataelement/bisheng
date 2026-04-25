@@ -24,6 +24,7 @@ type MobileNavProps = {
   setNavVisible: Dispatch<SetStateAction<boolean>>;
   persistNavVisibleInLocalStorage?: boolean;
   navigateToNewChatPath?: string | false;
+  onNewChat?: () => void;
 };
 
 /**
@@ -36,6 +37,7 @@ export default function MobileNav({
   setNavVisible,
   persistNavVisibleInLocalStorage = true,
   navigateToNewChatPath = '/c/new',
+  onNewChat,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
     'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]';
@@ -57,6 +59,21 @@ export default function MobileNav({
       }
       return next;
     });
+  };
+
+  const handleNewChat = () => {
+    if (onNewChat) {
+      onNewChat();
+      return;
+    }
+    queryClient.setQueryData<TMessage[]>(
+      [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
+      [],
+    );
+    newConversation();
+    if (navigateToNewChatPath !== false) {
+      navigate(navigateToNewChatPath);
+    }
   };
 
   const shareType =
@@ -109,16 +126,7 @@ export default function MobileNav({
               data-testid="mobile-header-new-chat-button"
               aria-label={localize('com_ui_new_chat')}
               className={mobileHeadIconBtnClassName}
-              onClick={() => {
-                queryClient.setQueryData<TMessage[]>(
-                  [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
-                  [],
-                );
-                newConversation();
-                if (navigateToNewChatPath !== false) {
-                  navigate(navigateToNewChatPath);
-                }
-              }}
+              onClick={handleNewChat}
             >
               <Plus className="size-4" strokeWidth={2} />
             </button>
@@ -142,16 +150,7 @@ export default function MobileNav({
             data-testid="mobile-header-new-chat-button"
             aria-label={localize('com_ui_new_chat')}
             className={mobileHeadIconBtnClassName}
-            onClick={() => {
-              queryClient.setQueryData<TMessage[]>(
-                [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
-                [],
-              );
-              newConversation();
-              if (navigateToNewChatPath !== false) {
-                navigate(navigateToNewChatPath);
-              }
-            }}
+            onClick={handleNewChat}
           >
             <Plus className="size-4" strokeWidth={2} />
           </button>

@@ -36,6 +36,7 @@ import {
     type FilterGroup,
 } from "./FilterConditionEditor";
 import { validateCreateChannelForm } from "../channelUtils";
+import { extractApiStatusCode } from "../errorUtils";
 import type { Channel, InformationSource } from "~/api/channels";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { useLocalize } from "~/hooks";
@@ -747,11 +748,16 @@ export function CreateChannelDrawer({
                                             form.resetForm();
                                             onOpenChange(false);
                                         }
-                                    } catch {
-                                        showToast({
-                                            message: localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry"),
-                                            severity: NotificationSeverity.ERROR
-                                        });
+                                    } catch (error) {
+                                        const statusCode = extractApiStatusCode(error);
+                                        if (!statusCode) {
+                                            showToast({
+                                                message: isEditMode
+                                                    ? (localize("com_subscription.update_failed_retry") || localize("com_subscription.save_failed"))
+                                                    : (localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry")),
+                                                severity: NotificationSeverity.ERROR
+                                            });
+                                        }
                                     } finally {
                                         form.setSubmitting(false);
                                     }

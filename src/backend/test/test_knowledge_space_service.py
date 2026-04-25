@@ -12,6 +12,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
+from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -294,18 +295,18 @@ class TestGetSpaceInfo:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=private_space,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+        ), patch.object(
+            service, '_get_effective_permission_ids',
             new_callable=AsyncMock,
-            return_value=False,
-        ) as mock_check:
+            return_value=set(),
+        ) as mock_effective:
             with pytest.raises(SpacePermissionDeniedError):
                 await service.get_space_info(1)
 
-        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+        mock_effective.assert_awaited_once_with('knowledge_space', 1)
 
     @pytest.mark.asyncio
-    async def test_released_approval_space_still_requires_read_permission(self, service):
+    async def test_released_approval_space_allows_square_preview_without_rebac(self, service):
         approval_space = _make_space(
             auth_type=AuthTypeEnum.APPROVAL,
             is_released=True,
@@ -315,18 +316,42 @@ class TestGetSpaceInfo:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=approval_space,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+        ), patch.object(
+            service, '_get_effective_permission_ids',
             new_callable=AsyncMock,
-            return_value=False,
-        ) as mock_check:
-            with pytest.raises(SpacePermissionDeniedError):
-                await service.get_space_info(1)
+            return_value=set(),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members',
+            new_callable=AsyncMock,
+            return_value=3,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            new_callable=AsyncMock,
+            return_value=5,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(user_name='owner'),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await service.get_space_info(1)
 
-        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        assert result.is_followed is False
 
     @pytest.mark.asyncio
-    async def test_released_public_space_still_requires_read_permission(self, service):
+    async def test_released_public_space_allows_square_preview_without_rebac(self, service):
         public_space = _make_space(
             auth_type=AuthTypeEnum.PUBLIC,
             is_released=True,
@@ -336,36 +361,114 @@ class TestGetSpaceInfo:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=public_space,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+        ), patch.object(
+            service, '_get_effective_permission_ids',
             new_callable=AsyncMock,
-            return_value=False,
-        ) as mock_check:
-            with pytest.raises(SpacePermissionDeniedError):
-                await service.get_space_info(1)
+            return_value=set(),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members',
+            new_callable=AsyncMock,
+            return_value=3,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            new_callable=AsyncMock,
+            return_value=5,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(user_name='owner'),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await service.get_space_info(1)
 
-        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        assert result.is_followed is False
 
     @pytest.mark.asyncio
-    async def test_released_public_space_still_requires_view_space_permission(self, service):
-        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, is_released=True)
+    async def test_minimal_view_space_bound_model_allows_space_info_without_membership(self, service):
+        private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE, user_id=99)
+        fake_fga = _FakeReadTuplesFGA({
+            'knowledge_space:1': [
+                {'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_space:1'},
+            ],
+        })
 
         with patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
-            return_value=public_space,
+            return_value=private_space,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[{
+                'resource_type': 'knowledge_space',
+                'resource_id': '1',
+                'subject_type': 'user',
+                'subject_id': 7,
+                'relation': 'viewer',
+                'model_id': 'custom_view_space',
+                'include_children': None,
+            }],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={
+                'custom_view_space': {
+                    'id': 'custom_view_space',
+                    'relation': 'viewer',
+                    'permissions': ['view_space'],
+                    'is_system': False,
+                },
+            },
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members',
             new_callable=AsyncMock,
-            return_value=True,
-        ) as mock_check, patch.object(
-            service, '_get_effective_permission_ids', new_callable=AsyncMock,
-            return_value=set(),
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(user_name='space-owner'),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_read',
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock,
+            return_value=[],
         ):
-            with pytest.raises(SpacePermissionDeniedError):
-                await service.get_space_info(1)
+            result = await service.get_space_info(1)
 
-        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+        assert result.id == 1
+        assert result.user_role == UserRoleEnum.MEMBER
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        assert result.is_followed is False
 
     @pytest.mark.asyncio
     async def test_maps_direct_owner_grant_to_admin_without_marking_subscribed(self, service):
@@ -375,16 +478,14 @@ class TestGetSpaceInfo:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=private_space,
-        ), patch.object(
-            service, '_require_permission_id', new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
-            new_callable=AsyncMock,
-            return_value=True,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members',
             new_callable=AsyncMock,
             return_value=3,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
             new_callable=AsyncMock,
@@ -422,7 +523,9 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value=public_space,
         ), patch.object(
-            service, '_require_permission_id', new_callable=AsyncMock,
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members',
             new_callable=AsyncMock,
@@ -453,6 +556,28 @@ class TestGetSpaceInfo:
         assert result.user_role == UserRoleEnum.ADMIN
         assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
         assert result.is_followed is False
+
+
+class TestCreateSpace:
+
+    @pytest.mark.asyncio
+    async def test_create_limit_count_excludes_department_spaces(self, service):
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+            new_callable=AsyncMock,
+            return_value=0,
+        ) as mock_count, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            with pytest.raises(WorkbenchEmbeddingError):
+                await service.create_knowledge_space(name='Space')
+
+        mock_count.assert_awaited_once_with(
+            service.login_user.user_id,
+            exclude_department_spaces=True,
+        )
 
 
 class TestDeleteSpace:
@@ -500,6 +625,36 @@ class TestDeleteSpace:
 
 
 class TestSpaceListings:
+
+    @pytest.mark.asyncio
+    async def test_get_my_created_spaces_excludes_department_bound_spaces(self, service):
+        department_member = _make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.CREATOR,
+            space_id=101,
+        )
+        normal_member = _make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.CREATOR,
+            space_id=102,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_created_members',
+            new_callable=AsyncMock,
+            return_value=[department_member, normal_member],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids',
+            new_callable=AsyncMock,
+            return_value={101: 10},
+        ), patch.object(
+            service, '_format_member_spaces',
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as mock_format:
+            await service.get_my_created_spaces()
+
+        mock_format.assert_awaited_once_with([normal_member], 'update_time')
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_includes_direct_read_grants_without_membership(self, service):
@@ -568,6 +723,33 @@ class TestSpaceListings:
             result = await service.get_my_followed_spaces()
 
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_format_accessible_spaces_excludes_membership_without_required_permission_id(self, service):
+        member_space = _make_space(space_id=2, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
+        member = _make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.MEMBER,
+            space_id=2,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock,
+            return_value=[member_space],
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value=set(),
+        ) as mock_permission_ids:
+            result = await service._format_accessible_spaces(
+                [2],
+                [member],
+                required_permission_id='view_space',
+            )
+
+        assert result == []
+        mock_permission_ids.assert_awaited_once_with('knowledge_space', 2)
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_excludes_spaces_created_by_current_user(self, service):
@@ -734,6 +916,10 @@ class TestSpaceOwnershipValidation:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
             new_callable=AsyncMock,
@@ -756,6 +942,10 @@ class TestSpaceOwnershipValidation:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
@@ -777,6 +967,10 @@ class TestSpaceOwnershipValidation:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
@@ -803,6 +997,10 @@ class TestSpaceOwnershipValidation:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
@@ -829,6 +1027,10 @@ class TestSpaceOwnershipValidation:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
@@ -1105,6 +1307,10 @@ class TestTupleLifecycle:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             check_mock,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name',
             new_callable=AsyncMock,
@@ -1142,7 +1348,11 @@ class TestTupleLifecycle:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
             new_callable=AsyncMock,
             return_value=True,
-        ) as mock_check, patch(
+        ) as mock_check, patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
             new_callable=AsyncMock,
         ), patch(
@@ -1172,24 +1382,22 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=file_record,
         ), patch.object(
-            service, '_require_permission_id', new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            service, '_get_effective_permission_ids',
             new_callable=AsyncMock,
-            return_value=True,
-        ) as mock_check, patch(
+            return_value={'view_space', 'view_file'},
+        ) as mock_effective, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
             return_value=('original', 'preview'),
         ):
             result = await service.get_file_preview(96)
 
         assert result['original_url'] == 'original'
-        assert mock_check.await_args.kwargs['relation'] == 'can_read'
-        assert mock_check.await_args.kwargs['object_type'] == 'knowledge_file'
-        assert mock_check.await_args.kwargs['object_id'] == '96'
+        assert ('knowledge_file', 96) in [
+            (call.args[0], call.args[1]) for call in mock_effective.await_args_list
+        ]
 
     @pytest.mark.asyncio
-    async def test_public_subscribe_writes_viewer_tuple(self, service):
+    async def test_public_subscribe_updates_membership_without_rebac_tuple(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
 
         with patch(
@@ -1214,15 +1422,12 @@ class TestTupleLifecycle:
             result = await service.subscribe_space(1)
 
         assert result['status'] == 'subscribed'
-        grant = mock_authorize.await_args.kwargs['grants'][0]
-        assert grant.relation == 'viewer'
-        assert grant.subject_id == service.login_user.user_id
+        mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_public_to_approval_syncs_active_member_tuples(self, service):
+    async def test_public_to_approval_does_not_sync_member_tuples(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         approval_space = _make_space(auth_type=AuthTypeEnum.APPROVAL)
-        active_member = _make_member(user_id=9)
 
         with patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
@@ -1236,28 +1441,19 @@ class TestTupleLifecycle:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
             return_value=approval_space,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
-            new_callable=AsyncMock,
-            return_value=[active_member],
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
             new_callable=AsyncMock,
         ) as mock_authorize:
             await service.update_knowledge_space(1, auth_type=AuthTypeEnum.APPROVAL)
 
-        grant = mock_authorize.await_args.kwargs['grants'][0]
-        assert grant.relation == 'viewer'
-        assert grant.subject_id == 9
+        mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_approval_to_public_activates_pending_members_and_syncs_tuples(self, service):
+    async def test_approval_to_public_activates_pending_members_without_rebac_tuple(self, service):
         approval_space = _make_space(auth_type=AuthTypeEnum.APPROVAL)
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         pending_member = _make_member(user_id=12, status=MembershipStatusEnum.PENDING)
-        active_member = _make_member(user_id=12)
-
-        get_members_mock = AsyncMock(side_effect=[[pending_member], [active_member]])
 
         with patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
@@ -1274,7 +1470,7 @@ class TestTupleLifecycle:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
             new_callable=AsyncMock,
-            side_effect=get_members_mock.side_effect,
+            return_value=[pending_member],
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.update',
             new_callable=AsyncMock,
@@ -1290,9 +1486,7 @@ class TestTupleLifecycle:
         assert pending_member.status == MembershipStatusEnum.ACTIVE
         mock_update_member.assert_awaited_once()
         mock_delete_rejected.assert_awaited_once_with(1)
-        grant = mock_authorize.await_args.kwargs['grants'][0]
-        assert grant.relation == 'viewer'
-        assert grant.subject_id == 12
+        mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_unsubscribe_space_blocks_creator(self, service):
@@ -1316,7 +1510,7 @@ class TestTupleLifecycle:
         mock_delete_member.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_space_revokes_active_member_tuple(self, service):
+    async def test_unsubscribe_space_only_removes_membership(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99)
         active_member = _make_member(user_id=service.login_user.user_id)
 
@@ -1333,22 +1527,16 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=True,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._revoke_user_child_resource_tuples',
-            new_callable=AsyncMock,
-        ) as mock_revoke_child, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
             new_callable=AsyncMock,
         ) as mock_authorize:
             result = await service.unsubscribe_space(1)
 
         assert result is True
-        revoke = mock_authorize.await_args.kwargs['revokes'][0]
-        assert revoke.relation == 'viewer'
-        assert revoke.subject_id == service.login_user.user_id
-        mock_revoke_child.assert_awaited_once_with(1, service.login_user.user_id)
+        mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_remove_member_revokes_child_resource_tuples(self, service):
+    async def test_remove_member_only_removes_membership(self, service):
         target_member = _make_member(user_id=88)
 
         with patch.object(
@@ -1366,17 +1554,15 @@ class TestTupleLifecycle:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member',
             new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._revoke_user_child_resource_tuples',
-            new_callable=AsyncMock,
-        ) as mock_revoke_child, patch(
+        ) as mock_delete_member, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
             new_callable=AsyncMock,
-        ):
+        ) as mock_authorize:
             result = await service.remove_member(SimpleNamespace(space_id=1, user_id=88))
 
         assert result is True
-        mock_revoke_child.assert_awaited_once_with(1, 88)
+        mock_delete_member.assert_awaited_once_with(space_id=1, user_id=88)
+        mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_add_space_tag_uses_edit_space_permission(self, service):
@@ -1494,6 +1680,10 @@ class TestFineGrainedPermissionRuntime:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
             return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
         ):
             permission_ids = await service._get_effective_permission_ids(
                 'knowledge_file',
@@ -1531,6 +1721,10 @@ class TestFineGrainedPermissionRuntime:
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
             new_callable=AsyncMock,
             return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
         ):
             permission_ids = await service._get_effective_permission_ids(
                 'knowledge_space',
@@ -1538,6 +1732,101 @@ class TestFineGrainedPermissionRuntime:
             )
 
         assert permission_ids == set()
+
+    @pytest.mark.asyncio
+    async def test_unbound_user_viewer_tuple_is_ignored_as_legacy_subscription(self, service):
+        private_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PRIVATE)
+        fake_fga = _FakeReadTuplesFGA({
+            'knowledge_space:1': [
+                {'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_space:1'},
+            ],
+        })
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=private_space,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_read',
+        ) as mock_get_level, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            permission_ids = await service._get_effective_permission_ids(
+                'knowledge_space',
+                1,
+            )
+
+        assert permission_ids == set()
+        mock_get_level.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_active_member_gets_viewer_permissions_without_rebac_tuple(self, service):
+        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
+        fake_fga = _FakeReadTuplesFGA({'knowledge_space:1': []})
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=_make_member(user_id=service.login_user.user_id),
+        ):
+            permission_ids = await service._get_effective_permission_ids(
+                'knowledge_space',
+                1,
+            )
+
+        assert 'view_space' in permission_ids
+        assert 'view_file' in permission_ids
+        assert 'edit_space' not in permission_ids
 
     @pytest.mark.asyncio
     async def test_batch_download_denied_without_download_file_permission(self, service):

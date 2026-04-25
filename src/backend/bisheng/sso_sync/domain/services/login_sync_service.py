@@ -10,6 +10,7 @@ derivation → leaf status check → JWT signing.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import AsyncIterator, List, Optional
 
 from loguru import logger
@@ -174,6 +175,7 @@ class LoginSyncService:
         cls, payload: LoginSyncRequest, request_ip: str,
     ) -> User:
         ext = payload.external_user_id
+        attrs = payload.user_attrs
         user = await UserDao.aget_by_source_external_id(cls.SOURCE, ext)
         if user is None:
             legacy = await UserDao.aget_by_external_id(ext)
@@ -182,13 +184,19 @@ class LoginSyncService:
                     # Disabled accounts must not be re-adopted silently.
                     raise UserForbiddenError.http_exception()
                 old_source = legacy.source
+                write_migration_audit = False
                 if old_source == cls.SOURCE:
                     # Race: another writer flipped the row between our two
                     # lookups. Adopt it as-is, no migration audit needed.
                     user = legacy
                 else:
                     legacy.source = cls.SOURCE
-                    await UserDao.aupdate_user(legacy)
+                    write_migration_audit = True
+                    user = legacy
+                cls._apply_user_attrs(user, attrs)
+                cls._touch_user_sync_time(user)
+                await UserDao.aupdate_user(user)
+                if write_migration_audit:
                     await AuditLogDao.ainsert_v2(
                         tenant_id=ROOT_TENANT_ID,
                         operator_id=0,
@@ -204,12 +212,11 @@ class LoginSyncService:
                         },
                         ip_address=request_ip,
                     )
-                    user = legacy
             else:
                 new_user = User(
-                    user_name=payload.user_attrs.name or ext,
-                    email=payload.user_attrs.email,
-                    phone_number=payload.user_attrs.phone,
+                    user_name=attrs.name or ext,
+                    email=attrs.email,
+                    phone_number=attrs.phone,
                     external_id=ext,
                     source=cls.SOURCE,
                     password='',
@@ -228,23 +235,30 @@ class LoginSyncService:
                         f'failed to create user for external_id={ext}: {e}'
                     )
         else:
-            dirty = False
-            attrs = payload.user_attrs
-            if attrs.name and user.user_name != attrs.name:
-                user.user_name = attrs.name
-                dirty = True
-            if attrs.email and user.email != attrs.email:
-                user.email = attrs.email
-                dirty = True
-            if attrs.phone and user.phone_number != attrs.phone:
-                user.phone_number = attrs.phone
-                dirty = True
-            if dirty:
-                await UserDao.aupdate_user(user)
+            if int(getattr(user, 'delete', 0) or 0) == 1:
+                raise UserForbiddenError.http_exception()
+            cls._apply_user_attrs(user, attrs)
+            cls._touch_user_sync_time(user)
+            await UserDao.aupdate_user(user)
 
         if int(getattr(user, 'delete', 0) or 0) == 1:
             raise UserForbiddenError.http_exception()
         return user
+
+    @classmethod
+    def _apply_user_attrs(cls, user: User, attrs) -> None:
+        """Apply present HR attributes without clearing omitted fields."""
+        if attrs.name and user.user_name != attrs.name:
+            user.user_name = attrs.name
+        if attrs.email is not None and user.email != attrs.email:
+            user.email = attrs.email
+        if attrs.phone is not None and user.phone_number != attrs.phone:
+            user.phone_number = attrs.phone
+
+    @classmethod
+    def _touch_user_sync_time(cls, user: User) -> None:
+        """Mark a successful existing-user sync even when attrs are unchanged."""
+        user.update_time = datetime.now()
 
     # -----------------------------------------------------------------------
     # Helper: UserDepartment primary + secondary management.

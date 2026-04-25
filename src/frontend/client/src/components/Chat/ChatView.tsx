@@ -7,14 +7,12 @@ import { getRecommendedAppsApi } from '~/api/apps';
 import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
-import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from '~/components/Chat/Messages/Content/CitationReferencesDrawer';
+import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
-import useMediaQuery from '~/hooks/useMediaQuery';
-import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
 import { Button } from '../ui';
@@ -27,8 +25,6 @@ import Presentation from './Presentation';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import AppAvator from '../Avator';
 
-const CITATION_BROWSER_SMALL_BREAKPOINT = 768;
-
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
   const { conversationId: cid } = useParams();
@@ -37,13 +33,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [showCode, setShowCode] = useState(false);
   const [isLingsi, setIsLingsi] = useState(false);
   const [inputText, setInputText] = useState('');
-  const isH5 = usePrefersMobileLayout();
-  const isCitationMobile = isH5;
-  const useInlineCitationPanel = useMediaQuery(`(min-width: ${CITATION_BROWSER_SMALL_BREAKPOINT + 1}px)`);
-  const useExpandedCitationPanel = useInlineCitationPanel;
-  const [citationPanelPayload, setCitationPanelPayload] = useState<CitationReferencesDesktopPayload | null>(null);
-  const [citationPanelOpen, setCitationPanelOpen] = useState(false);
-  const citationPanelRef = useRef<HTMLDivElement>(null);
 
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
@@ -130,27 +119,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     memoReadyRef.current = true;
   }, [bsConfig, user?.id, setChatModel, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
 
-  const handleOpenCitationPanel = useCallback((payload: CitationReferencesDesktopPayload) => {
-    if (isCitationMobile) {
-      return;
-    }
-
-    if (
-      citationPanelOpen
-      && citationPanelPayload?.messageId === payload.messageId
-      && !payload.initialDocumentPreview
-    ) {
-      setCitationPanelOpen(false);
-      return;
-    }
-
-    setCitationPanelPayload(payload);
-    setCitationPanelOpen(true);
-  }, [isCitationMobile, citationPanelOpen, citationPanelPayload?.messageId]);
-
-  const handleCloseCitationPanel = useCallback(() => {
-    setCitationPanelOpen(false);
-  }, []);
 
   // Persist on change (after initial hydrate completes).
   useEffect(() => {
@@ -245,44 +213,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
-
-  useEffect(() => {
-    if (isH5 || !hasMessages) {
-      setCitationPanelOpen(false);
-    }
-  }, [hasMessages, isH5]);
-
-  useEffect(() => {
-    if (isH5 || !citationPanelOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) {
-        return;
-      }
-
-      if (citationPanelRef.current?.contains(target)) {
-        return;
-      }
-
-      if (target.closest('[data-citation-popover-surface]')) {
-        return;
-      }
-
-      if (target.closest('[data-citation-references-trigger="true"]')) {
-        return;
-      }
-
-      handleCloseCitationPanel();
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [citationPanelOpen, handleCloseCitationPanel, isH5]);
+  const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
 
   return (
     <Presentation isLingsi={isLingsi}>
@@ -338,17 +269,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
-                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3"
+                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
-                          onOpenCitationPanel={handleOpenCitationPanel}
-                          activeCitationMessageId={citationPanelOpen ? citationPanelPayload?.messageId ?? null : null}
+                          onOpenCitationPanel={onOpenCitationPanel}
+                          activeCitationMessageId={activeCitationMessageId}
                           flatMode
                         />
                       </div>
 
                       {/* Input area — moved inside the left column to be independent of sidebar */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
+                        <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-4">
                           {isLingsi ? (
                             <LinsightChatInput
                               disabled={!!shareToken}
@@ -397,72 +328,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       )}
                     </div>
 
-                    {/* Right: Citation Sidebar (Independent) */}
-                    {!isCitationMobile && useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
-                      <div
-                        ref={citationPanelRef}
-                        data-citation-popover-surface
-                        className={cn(
-                          'flex h-full min-w-0 shrink-0 border-l border-[#ECECEC] bg-white touch-mobile:hidden animate-in slide-in-from-right duration-300',
-                          useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
-                        )}
-                      >
-                        <CitationReferencesDrawer
-                          panelOnly
-                          desktopMode="inline-panel"
-                          open={citationPanelOpen}
-                          onOpenChange={(nextOpen) => {
-                            if (!nextOpen) {
-                              handleCloseCitationPanel();
-                            }
-                          }}
-                          panelClassName="w-full"
-                          messageId={citationPanelPayload.messageId}
-                          content={citationPanelPayload.content}
-                          webContent={citationPanelPayload.webContent}
-                          citations={citationPanelPayload.citations}
-                          referenceItems={citationPanelPayload.referenceItems}
-                          initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
-                        />
-                      </div>
-                    )}
-                    {!isCitationMobile && !useInlineCitationPanel && citationPanelOpen && citationPanelPayload && (
-                      <div className="pointer-events-none fixed inset-0 z-30 flex justify-end">
-                        {/* z-0 + 面板的 z-10：避免全屏透明按钮在堆叠中盖住右栏，使点击被误判为点遮罩而直接关闭 */}
-                        <button
-                          type="button"
-                          aria-label="关闭参考资料浮层"
-                          className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
-                          onClick={handleCloseCitationPanel}
-                        />
-                        <div
-                          ref={citationPanelRef}
-                          data-citation-popover-surface
-                          className="relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          <CitationReferencesDrawer
-                            panelOnly
-                            desktopMode="inline-panel"
-                            open={citationPanelOpen}
-                            onOpenChange={(nextOpen) => {
-                              if (!nextOpen) {
-                                handleCloseCitationPanel();
-                              }
-                            }}
-                            panelClassName="h-full w-full max-w-none bg-white"
-                            messageId={citationPanelPayload.messageId}
-                            content={citationPanelPayload.content}
-                            webContent={citationPanelPayload.webContent}
-                            citations={citationPanelPayload.citations}
-                            referenceItems={citationPanelPayload.referenceItems}
-                            initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
-                            desktopPreviewVariant="standard"
-                          />
-                        </div>
-                      </div>
-                    )}
+                    {citationPanelElement}
                   </div>
                 ) : (
                   /* Landing page branch */
@@ -478,7 +344,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                     {/* Input area for landing page */}
                     {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto touch-mobile:mt-10 touch-mobile:max-w-full touch-mobile:px-3 shrink-0 py-4">
+                      <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-4">
                         {isLingsi ? (
                           <LinsightChatInput
                             disabled={!!shareToken}
@@ -549,12 +415,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 };
 
 const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi: boolean }) => {
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const [showListFade, setShowListFade] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
-  const isH5 = usePrefersMobileLayout()
 
   const { data: dailyApps = [] } = useQuery<any[]>(
     ['recommendedApps'],
@@ -591,41 +454,16 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   }
   const displayApps = dailyApps
 
-  const updateFadeState = useCallback(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const hasOverflow = el.scrollHeight > el.clientHeight + 1;
-    const hasMoreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
-    setShowListFade(hasOverflow && hasMoreBelow);
-  }, []);
-
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    updateFadeState();
-    const onScroll = () => updateFadeState();
-    el.addEventListener('scroll', onScroll, { passive: true });
-    const ro = new ResizeObserver(() => updateFadeState());
-    ro.observe(el);
-    return () => {
-      el.removeEventListener('scroll', onScroll);
-      ro.disconnect();
-    };
-  }, [displayApps, updateFadeState]);
-
   if (isLingsi || dailyApps.length === 0) return null
 
 
   return (
     <div className="relative z-10 w-full mt-4 pb-24">
-      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4 sm:px-0">
+      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
         <h2 className="text-sm text-gray-400">推荐应用</h2>
       </div>
-      <div className="relative max-w-[800px] mx-auto px-4 sm:px-0">
-        <div
-          ref={listRef}
-          className="max-h-[320px] overflow-y-auto pr-1 scrollbar-on-hover"
-        >
+      <div className="relative max-w-[800px] mx-auto px-4">
+        <div className="pr-1">
           <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3">
             {displayApps.map((appItem) => (
               <Card
@@ -667,9 +505,6 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
             ))}
           </div>
         </div>
-        {showListFade && (
-          <div className="pointer-events-none absolute inset-x-4 sm:inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/95 to-white/0" />
-        )}
       </div>
     </div>
   )

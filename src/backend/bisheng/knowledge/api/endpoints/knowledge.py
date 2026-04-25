@@ -10,6 +10,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
+from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
@@ -196,10 +197,10 @@ async def update_preview_file_chunk(*,
 
 
 @router.delete('/preview')
-async def delete_preview_file_chunk(*,
-                                    request: Request,
-                                    login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                    req_data: UpdatePreviewFileChunk):
+def delete_preview_file_chunk(*,
+                              request: Request,
+                              login_user: UserPayload = Depends(UserPayload.get_login_user),
+                              req_data: UpdatePreviewFileChunk):
     """ Delete a chunked preview of a file """
 
     res = KnowledgeService.delete_preview_file_chunk(request, login_user, req_data)
@@ -238,7 +239,12 @@ async def create_knowledge(*,
     """ Create Knowledge Base. """
     await UserPayload.assert_effective_web_menu_contains(
         login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
-    db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
+    db_knowledge = await run_in_threadpool(
+        KnowledgeService.create_knowledge,
+        request,
+        login_user,
+        knowledge,
+    )
     return resp_200(db_knowledge)
 
 
@@ -376,10 +382,10 @@ def get_knowledge_info(*,
 
 
 @router.put('/', status_code=200)
-async def update_knowledge(*,
-                           request: Request,
-                           login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           knowledge: KnowledgeUpdate):
+def update_knowledge(*,
+                     request: Request,
+                     login_user: UserPayload = Depends(UserPayload.get_login_user),
+                     knowledge: KnowledgeUpdate):
     res = KnowledgeService.update_knowledge(request, login_user, knowledge)
     return resp_200(data=res)
 
@@ -452,7 +458,7 @@ async def get_QA_list(*,
                       status: Optional[int] = None,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Get knowledge base file information. """
-    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
+    db_knowledge = await KnowledgeService.ajudge_qa_knowledge_write(login_user, qa_knowledge_id)
 
     qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                        page_num, question, answer,
@@ -501,14 +507,14 @@ def delete_knowledge_file(*,
 
 
 @router.get('/chunk', status_code=200)
-async def get_knowledge_chunk(request: Request,
-                              login_user: UserPayload = Depends(UserPayload.get_login_user),
-                              knowledge_id: int = Query(..., description='The knowledge base uponID'),
-                              file_ids: List[int] = Query(default=[], description='Doc.ID'),
-                              keyword: str = Query(default='', description='Keywords'),
-                              page: int = Query(default=1, description='Page'),
-                              limit: int = Query(default=10,
-                                                 description='Number of bars per page Number of bars per page')):
+def get_knowledge_chunk(request: Request,
+                        login_user: UserPayload = Depends(UserPayload.get_login_user),
+                        knowledge_id: int = Query(..., description='The knowledge base uponID'),
+                        file_ids: List[int] = Query(default=[], description='Doc.ID'),
+                        keyword: str = Query(default='', description='Keywords'),
+                        page: int = Query(default=1, description='Page'),
+                        limit: int = Query(default=10,
+                                           description='Number of bars per page Number of bars per page')):
     """ Get Knowledge Base Block Content """
     # In order to resolvekeywordParameters are sometimes not carried outurldecoderight of privacybug
     if keyword.startswith('%'):
@@ -519,13 +525,13 @@ async def get_knowledge_chunk(request: Request,
 
 
 @router.put('/chunk', status_code=200)
-async def update_knowledge_chunk(request: Request,
-                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
-                                 file_id: int = Body(..., embed=True, description='Doc.ID'),
-                                 chunk_index: int = Body(..., embed=True, description='Chunked index number'),
-                                 text: str = Body(..., embed=True, description='Chunked content'),
-                                 bbox: str = Body(default='', embed=True, description='Block box selection position')):
+def update_knowledge_chunk(request: Request,
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
+                           knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
+                           file_id: int = Body(..., embed=True, description='Doc.ID'),
+                           chunk_index: int = Body(..., embed=True, description='Chunked index number'),
+                           text: str = Body(..., embed=True, description='Chunked content'),
+                           bbox: str = Body(default='', embed=True, description='Block box selection position')):
     """ Update Knowledge Base Chunk Content """
     KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id,
                                             chunk_index, text, bbox)
@@ -533,11 +539,11 @@ async def update_knowledge_chunk(request: Request,
 
 
 @router.delete('/chunk', status_code=200)
-async def delete_knowledge_chunk(request: Request,
-                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
-                                 file_id: int = Body(..., embed=True, description='Doc.ID'),
-                                 chunk_index: int = Body(..., embed=True, description='Chunked index number')):
+def delete_knowledge_chunk(request: Request,
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
+                           knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
+                           file_id: int = Body(..., embed=True, description='Doc.ID'),
+                           chunk_index: int = Body(..., embed=True, description='Chunked index number')):
     """ Delete Knowledge Base Chunk Content """
     KnowledgeService.delete_knowledge_chunk(request, login_user, knowledge_id, file_id,
                                             chunk_index)
@@ -548,7 +554,7 @@ async def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(UserPayload.get_login_user),
                              file_id: int = Query(description='File UniqueID')):
-    original_url, preview_url = KnowledgeService.get_file_share_with_auth(login_user, file_id)
+    original_url, preview_url = await KnowledgeService.aget_file_share_with_auth(login_user, file_id)
     return resp_200(data={
         'original_url': original_url,
         'preview_url': preview_url
@@ -556,16 +562,16 @@ async def get_file_share_url(request: Request,
 
 
 @router.get('/file_bbox')
-async def get_file_bbox(request: Request,
-                        login_user: UserPayload = Depends(UserPayload.get_login_user),
-                        file_id: int = Query(description='File UniqueID')):
+def get_file_bbox(request: Request,
+                  login_user: UserPayload = Depends(UserPayload.get_login_user),
+                  file_id: int = Query(description='File UniqueID')):
     res = KnowledgeService.get_file_bbox(request, login_user, file_id)
     return resp_200(data=res)
 
 
 @router.post('/qa/add', status_code=200)
-async def qa_add(*, QACreate: QAKnowledgeUpsert,
-                 login_user: UserPayload = Depends(UserPayload.get_login_user)):
+def qa_add(*, QACreate: QAKnowledgeUpsert,
+           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Add knowledge base information. """
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, QACreate.knowledge_id)
@@ -682,7 +688,7 @@ async def get_export_url(*,
                          max_lines: Optional[int] = 10000,
                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # Query the current knowledge base, whether there are write permissions
-    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
+    await KnowledgeService.ajudge_qa_knowledge_write(login_user, qa_knowledge_id)
 
     if keyword:
         question = keyword

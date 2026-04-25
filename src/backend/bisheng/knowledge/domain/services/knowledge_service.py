@@ -2,7 +2,6 @@ import asyncio
 import json
 import math
 import os
-import time
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
@@ -10,6 +9,7 @@ from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
+from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
@@ -31,19 +31,16 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
-    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeFileTagLimitError
+    KnowledgeTagExistError, KnowledgeTagNotExistError
 )
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
-    GroupResource,
-    GroupResourceDao,
     ResourceTypeEnum,
 )
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
@@ -61,7 +58,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
-from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -70,7 +66,6 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import Knowl
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 
 
@@ -173,16 +168,16 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def get_knowledge(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_type: KnowledgeTypeEnum,
-            name: str = None,
-            sort_by: str = "update_time",
-            page: int = 1,
-            limit: int = 10,
-            permission_id: str = 'use_kb',
-            preferred_ids: Optional[List[int]] = None,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_type: KnowledgeTypeEnum,
+        name: str = None,
+        sort_by: str = "update_time",
+        page: int = 1,
+        limit: int = 10,
+        permission_id: str = 'use_kb',
+        preferred_ids: Optional[List[int]] = None,
     ) -> Tuple[List[KnowledgeRead], int]:
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
         # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
@@ -222,7 +217,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def aconvert_knowledge_read(
-            cls, login_user: UserPayload, knowledge_list: List[Knowledge]
+        cls, login_user: UserPayload, knowledge_list: List[Knowledge]
     ) -> List[KnowledgeRead]:
         """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
         if not knowledge_list:
@@ -251,7 +246,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def convert_knowledge_read(
-            cls, login_user: UserPayload, knowledge_list: List[Knowledge]
+        cls, login_user: UserPayload, knowledge_list: List[Knowledge]
     ) -> List[KnowledgeRead]:
         db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
@@ -279,7 +274,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_knowledge_info(
-            cls, request: Request, login_user: UserPayload, knowledge_id: List[int]
+        cls, request: Request, login_user: UserPayload, knowledge_id: List[int]
     ) -> List[KnowledgeRead]:
         db_knowledge = KnowledgeDao.get_list_by_ids(knowledge_id)
         filter_knowledge = db_knowledge
@@ -287,10 +282,10 @@ class KnowledgeService(KnowledgeUtils):
             filter_knowledge = []
             for one in db_knowledge:
                 if cls.permission_service.check_access_sync(
-                        login_user=login_user,
-                        owner_user_id=one.user_id,
-                        knowledge_id=one.id,
-                        access_type=AccessType.KNOWLEDGE,
+                    login_user=login_user,
+                    owner_user_id=one.user_id,
+                    knowledge_id=one.id,
+                    access_type=AccessType.KNOWLEDGE,
                 ):
                     filter_knowledge.append(one)
         if not filter_knowledge:
@@ -300,7 +295,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def create_knowledge(
-            cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
+        cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
     ) -> Knowledge:
 
         # Determine if the Knowledge Base is Renamed
@@ -345,24 +340,11 @@ class KnowledgeService(KnowledgeUtils):
                 vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
                                                                                     knowledge=db_knowledge,
                                                                                     metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-                # Init Milvus schema avoiding SchemaNotReady concurrently
-                # Need to provide non-nullable fields to satisfy Milvus schema constraints
-                init_ids = vector_client.add_texts(
-                    texts=["init_schema"],
-                    metadatas=[Metadata(document_id=0,
-                                        knowledge_id=db_knowledge.id,
-                                        abstract="",
-                                        chunk_index=1,
-                                        bbox="{}",
-                                        page=1,
-                                        upload_time=int(time.time()),
-                                        update_time=int(time.time()),
-                                        uploader="",
-                                        updater="",
-                                        user_metadata={}).model_dump()]
+                cls.ensure_milvus_schema_ready(
+                    invoke_user_id=login_user.user_id,
+                    knowledge=db_knowledge,
+                    vector_client=vector_client,
                 )
-                if init_ids:
-                    vector_client.delete(ids=init_ids)
 
                 es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
@@ -377,7 +359,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def create_knowledge_hook(
-            cls, request: Request, login_user: UserPayload, knowledge: Knowledge
+        cls, request: Request, login_user: UserPayload, knowledge: Knowledge
     ):
         # F008: Write owner tuple to OpenFGA (INV-2)
         from bisheng.permission.domain.services.owner_service import OwnerService
@@ -390,7 +372,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def update_knowledge(
-            cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate
+        cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate
     ) -> KnowledgeRead:
         db_knowledge = KnowledgeDao.query_by_id(knowledge.knowledge_id)
         if not db_knowledge:
@@ -423,11 +405,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            only_clear: bool = False,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        only_clear: bool = False,
     ):
         knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not knowledge:
@@ -479,7 +461,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_hook(
-            cls, request: Request, login_user: UserPayload, knowledge: Knowledge
+        cls, request: Request, login_user: UserPayload, knowledge: Knowledge
     ):
         logger.info(
             f"delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}"
@@ -541,7 +523,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def get_preview_file_chunk(
-            cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
+        cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
         """
         0Parse Mode: uns or local
@@ -651,7 +633,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def update_preview_file_chunk(
-            cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
+        cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
         await cls.permission_service.ensure_knowledge_write_async(
@@ -672,7 +654,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_preview_file_chunk(
-            cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
+        cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         try:
@@ -689,7 +671,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def save_knowledge_file(
-            cls, login_user: UserPayload, req_data: KnowledgeFileProcess
+        cls, login_user: UserPayload, req_data: KnowledgeFileProcess
     ):
         """Process uploaded files, Uploaded to onlyminioAndmysql"""
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
@@ -727,11 +709,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def process_knowledge_file(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            background_tasks: BackgroundTasks,
-            req_data: KnowledgeFileProcess,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        background_tasks: BackgroundTasks,
+        req_data: KnowledgeFileProcess,
     ) -> List[KnowledgeFile]:
         from bisheng.worker.knowledge import file_worker
 
@@ -749,7 +731,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def sync_process_knowledge_file(
-            cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
+        cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> List[KnowledgeFile]:
         """Sync uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = (
@@ -784,7 +766,7 @@ class KnowledgeService(KnowledgeUtils):
         if not knowledge:
             raise NotFoundError.http_exception()
         try:
-            cls.permission_service.ensure_knowledge_write_sync(
+            await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
                 owner_user_id=knowledge.user_id,
                 knowledge_id=knowledge.id,
@@ -803,10 +785,10 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def retry_files(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            req_data: dict,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        req_data: dict,
     ):
 
         db_file_retry = req_data.get("file_objs")
@@ -837,11 +819,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def upload_knowledge_file_hook(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge: Knowledge,
-            file_list: List[KnowledgeFile],
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        file_list: List[KnowledgeFile],
     ):
         logger.info(
             f"act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge.id}"
@@ -856,12 +838,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def process_one_file(
-            cls,
-            login_user: UserPayload,
-            knowledge: Knowledge,
-            file_info: KnowledgeFileOne,
-            split_rule: Dict,
-            file_kwargs: Dict = None,
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        file_info: KnowledgeFileOne,
+        split_rule: Dict,
+        file_kwargs: Dict = None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         # download original file
@@ -980,15 +962,15 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_knowledge_files(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_name: str = None,
-            status: List[int] = None,
-            page: int = 1,
-            page_size: int = 10,
-            file_ids: List[int] = None,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_name: str = None,
+        status: List[int] = None,
+        page: int = 1,
+        page_size: int = 10,
+        file_ids: List[int] = None,
     ) -> (List[KnowledgeFileResp], int, bool):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
@@ -1020,7 +1002,7 @@ class KnowledgeService(KnowledgeUtils):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             # Parsing more than one day, setting status to failed
             if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
-                    datetime.now() - one.update_time).total_seconds() > 86400:
+                datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
@@ -1043,15 +1025,15 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def aget_knowledge_files(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_name: str = None,
-            status: List[int] = None,
-            page: int = 1,
-            page_size: int = 10,
-            file_ids: List[int] = None,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_name: str = None,
+        status: List[int] = None,
+        page: int = 1,
+        page_size: int = 10,
+        file_ids: List[int] = None,
     ) -> (List[KnowledgeFileResp], int, bool):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -1066,6 +1048,16 @@ class KnowledgeService(KnowledgeUtils):
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
+        extra_file_ids = None
+        if file_name:
+            all_tags = await TagDao.asearch_tags(file_name, business_type=TagBusinessTypeEnum.KNOWLEDGE,
+                                                 business_id=str(knowledge_id))
+            if all_tags:
+                tag_ids = [one.id for one in all_tags]
+                extra_file_ids = await TagDao.aget_resources_by_tags(tag_ids,
+                                                                     resource_type=ResourceTypeEnum.KNOWLEDGE_FILE)
+                extra_file_ids = [int(one.resource_id) for one in extra_file_ids]
+
         res = await KnowledgeFileDao.aget_file_by_filters(
             knowledge_id,
             file_name,
@@ -1073,12 +1065,14 @@ class KnowledgeService(KnowledgeUtils):
             page=page,
             page_size=page_size,
             file_ids=file_ids,
+            extra_file_ids=extra_file_ids,
         )
         total = await KnowledgeFileDao.acount_file_by_filters(
             knowledge_id,
             file_name,
             status,
             file_ids=file_ids,
+            extra_file_ids=extra_file_ids,
         )
 
         file_title_map = await asyncio.to_thread(
@@ -1097,7 +1091,7 @@ class KnowledgeService(KnowledgeUtils):
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
-                    datetime.now() - one.update_time).total_seconds() > 86400:
+                datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
@@ -1121,7 +1115,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file(
-            cls, request: Request, login_user: UserPayload, file_ids: List[int]
+        cls, request: Request, login_user: UserPayload, file_ids: List[int]
     ):
         from bisheng.worker.knowledge import file_worker
 
@@ -1156,11 +1150,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file_hook(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_list: List[KnowledgeFile],
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_list: List[KnowledgeFile],
     ):
         logger.info(
             f"act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}"
@@ -1185,15 +1179,34 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
+    async def ajudge_knowledge_access(
+        cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType
+    ) -> Knowledge:
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        try:
+            await cls.permission_service.ensure_access_async(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+                access_type=access_type,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+        return db_knowledge
+
+    @classmethod
     def get_knowledge_chunks(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_ids: List[int] = None,
-            keyword: str = None,
-            page: int = None,
-            limit: int = None,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_ids: List[int] = None,
+        keyword: str = None,
+        page: int = None,
+        limit: int = None,
     ) -> (List[FileChunk], int):
         db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE)
 
@@ -1294,14 +1307,14 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def update_knowledge_chunk(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_id: int,
-            chunk_index: int,
-            text: str,
-            bbox: str,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_id: int,
+        chunk_index: int,
+        text: str,
+        bbox: str,
     ):
         db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
@@ -1364,12 +1377,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_chunk(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_id: int,
-            chunk_index: int,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_id: int,
+        chunk_index: int,
     ):
         db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
@@ -1422,6 +1435,22 @@ class KnowledgeService(KnowledgeUtils):
         return cls.get_file_share_url(file=file)
 
     @classmethod
+    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> Tuple[str, str]:
+        """Async permission-safe variant of ``get_file_share_with_auth``."""
+        file = await KnowledgeFileDao.query_by_id(file_id)
+        if not file:
+            raise NotFoundError(msg="file not found")
+        knowledge_info = await KnowledgeDao.aquery_by_id(file.knowledge_id)
+        if not knowledge_info:
+            raise NotFoundError(msg="knowledge not found")
+        await cls.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=knowledge_info.user_id,
+            knowledge_id=knowledge_info.id,
+        )
+        return await run_in_threadpool(cls.get_file_share_url, file=file)
+
+    @classmethod
     def get_file_share_url(cls, file_id: int = None, file: KnowledgeFile = None) -> Tuple[str, str]:
         """ Get the original download address of the file And Corresponding preview file download address """
         if file is None:
@@ -1464,7 +1493,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_file_bbox(
-            cls, request: Request, login_user: UserPayload, file_id: int
+        cls, request: Request, login_user: UserPayload, file_id: int
     ) -> Any:
         file_info = KnowledgeFileDao.select_list([file_id])
         file_info = file_info[0]
@@ -1479,12 +1508,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def copy_knowledge(
-            cls,
-            request,
-            background_tasks: BackgroundTasks,
-            login_user: UserPayload,
-            knowledge: Knowledge,
-            knowledge_name: str = None,
+        cls,
+        request,
+        background_tasks: BackgroundTasks,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        knowledge_name: str = None,
     ) -> Any:
         from bisheng.worker.knowledge import file_worker
 
@@ -1500,7 +1529,12 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
 
-        target_knowlege = cls.create_knowledge_base(request, login_user, knowledge_new)
+        target_knowlege = await run_in_threadpool(
+            cls.create_knowledge_base,
+            request,
+            login_user,
+            knowledge_new,
+        )
 
         params = {
             "source_knowledge_id": knowledge.id,
@@ -1512,11 +1546,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def copy_qa_knowledge(
-            cls,
-            request,
-            login_user: UserPayload,
-            qa_knowledge: Knowledge,
-            knowledge_name: str = None,
+        cls,
+        request,
+        login_user: UserPayload,
+        qa_knowledge: Knowledge,
+        knowledge_name: str = None,
     ) -> Any:
         await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
                                               update_time=qa_knowledge.update_time)
@@ -1532,7 +1566,12 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowledge_new = Knowledge(**qa_knowldge_dict)
         target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
 
-        cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
+        await run_in_threadpool(
+            cls.create_knowledge_hook,
+            request,
+            login_user,
+            target_qa_knowlege,
+        )
 
         from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
         copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
@@ -1542,7 +1581,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def judge_qa_knowledge_write(
-            cls, login_user: UserPayload, qa_knowledge_id: int
+        cls, login_user: UserPayload, qa_knowledge_id: int
     ) -> Knowledge:
         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
         # Query the current knowledge base, whether there are write permissions
@@ -1562,11 +1601,31 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
+    async def ajudge_qa_knowledge_write(
+        cls, login_user: UserPayload, qa_knowledge_id: int
+    ) -> Knowledge:
+        db_knowledge = await KnowledgeDao.aquery_by_id(qa_knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError()
+        try:
+            await cls.permission_service.ensure_knowledge_write_async(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=qa_knowledge_id,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
+        return db_knowledge
+
+    @classmethod
     async def batch_download_files(
-            cls,
-            login_user: UserPayload,
-            knowledge_id: int,
-            file_ids: List[int],
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_ids: List[int],
     ) -> str:
         """Batch download knowledge-base files.
 
@@ -1583,14 +1642,7 @@ class KnowledgeService(KnowledgeUtils):
         from pathlib import Path
 
         # ── 1. Permission check ──────────────────────────────────────────────────
-        knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge:
-            raise NotFoundError(msg="knowledge not found")
-        cls.permission_service.ensure_knowledge_read_sync(
-            login_user=login_user,
-            owner_user_id=knowledge.user_id,
-            knowledge_id=knowledge.id,
-        )
+        knowledge = await cls._get_readable_knowledge(login_user, knowledge_id)
 
         if not file_ids:
             raise NotFoundError(msg="file_ids must not be empty")
@@ -1655,12 +1707,12 @@ class KnowledgeService(KnowledgeUtils):
     # ──────────────────────────── Tags ───────────────────────────────────
     @classmethod
     async def get_knowledge_tags(
-            cls,
-            login_user: UserPayload,
-            knowledge_id: int,
-            keyword: Optional[str] = None,
-            page: int = 1,
-            limit: int = 10,
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        keyword: Optional[str] = None,
+        page: int = 1,
+        limit: int = 10,
     ) -> Tuple[List[Tag], int]:
         await cls._get_readable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
         keyword = keyword.strip() if keyword else None
@@ -1715,8 +1767,6 @@ class KnowledgeService(KnowledgeUtils):
     async def update_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_id: int, tag_ids: List[int]):
         """ 设置单文件的标签 (全量替换) """
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
-        if len(tag_ids) > 5:
-            raise KnowledgeFileTagLimitError()
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
 
@@ -1731,11 +1781,10 @@ class KnowledgeService(KnowledgeUtils):
         await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, login_user.user_id)
 
     @classmethod
-    async def batch_add_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_ids: List[int], tag_ids: List[int]):
+    async def batch_add_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_ids: List[int],
+                                  tag_ids: List[int]):
         """ 批量添加标签到文档 """
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
-        if len(tag_ids) > 5:
-            raise KnowledgeFileTagLimitError()
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
 
@@ -1750,14 +1799,7 @@ class KnowledgeService(KnowledgeUtils):
             return
 
         resource_type = ResourceTypeEnum.KNOWLEDGE_FILE
-        existing_tag_map = await TagDao.aget_resource_tag_ids_batch(
-            [str(file_id) for file_id in valid_file_ids],
-            resource_type,
-        )
         for file_id in valid_file_ids:
-            current_tag_ids = set(existing_tag_map.get(str(file_id), []))
-            if len(current_tag_ids.union(tag_ids)) > 5:
-                raise KnowledgeFileTagLimitError()
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, login_user.user_id)
 
     @classmethod

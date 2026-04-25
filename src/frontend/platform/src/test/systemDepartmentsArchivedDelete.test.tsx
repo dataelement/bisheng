@@ -21,13 +21,22 @@ vi.mock("@/pages/DepartmentPage/components/MemberTable", () => ({
   MemberTable: ({
     deptName,
     isArchived,
+    dept,
+    tree,
   }: {
     deptName: string;
     isArchived?: boolean;
+    dept?: DepartmentTreeNode | null;
+    tree?: DepartmentTreeNode[];
   }) => (
-    <button type="button" disabled={isArchived} data-testid="create-local-user">
-      {deptName}: bs:department.createLocalUser
-    </button>
+    <div>
+      <button type="button" disabled={isArchived} data-testid="create-local-user">
+        {deptName}: bs:department.createLocalUser
+      </button>
+      <div data-testid="member-table-context">
+        {dept?.dept_id ?? "none"}:{tree?.length ?? 0}
+      </div>
+    </div>
   ),
 }));
 
@@ -94,6 +103,14 @@ describe("System departments archived and deleted states", () => {
     render(<Departments />);
 
     expect(await screen.findByTestId("create-local-user")).toBeDisabled();
+  });
+
+  it("passes the selected department context into the member table", async () => {
+    render(<Departments />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("member-table-context")).toHaveTextContent("BS@archived:1");
+    });
   });
 
   it("switches away from a permanently deleted selected department", async () => {

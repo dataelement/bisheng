@@ -23,6 +23,7 @@ from bisheng.common.errcode.role import (
     RolePermissionDeniedError,
 )
 from bisheng.core.database import get_async_db_session
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.role import Role, RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.role.domain.schemas.role_schema import (
@@ -32,11 +33,13 @@ from bisheng.role.domain.schemas.role_schema import (
 )
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRole
 
 logger = logging.getLogger(__name__)
 
 # Built-in roles that cannot be deleted (AdminRole=1, DefaultRole=2)
 BUILTIN_ROLE_IDS = {1, 2}
+SYSTEM_PRESET_CREATOR_NAME = '系统预设'
 
 
 class RoleService:
@@ -924,15 +927,38 @@ class RoleService:
 
     @classmethod
     async def _get_creator_names(cls, creator_ids: dict[int, int]) -> dict[int, str]:
-        """Resolve creator_name for roles from role.create_user -> user.user_name."""
+        """Resolve creator_name for roles from role.create_user -> display label."""
         user_ids = sorted({uid for uid in creator_ids.values() if uid})
         if not user_ids:
             return {}
 
         users = await UserDao.aget_user_by_ids(user_ids) or []
         user_name_map = {u.user_id: u.user_name for u in users}
+        system_admin_ids = await cls._get_system_admin_user_ids(user_ids)
         return {
-            rid: user_name_map.get(uid)
+            rid: (
+                SYSTEM_PRESET_CREATOR_NAME
+                if uid in system_admin_ids
+                else user_name_map.get(uid)
+            )
             for rid, uid in creator_ids.items()
-            if user_name_map.get(uid)
+            if uid in system_admin_ids or user_name_map.get(uid)
         }
+
+    @classmethod
+    async def _get_system_admin_user_ids(cls, user_ids: list[int]) -> set[int]:
+        """Return user ids that carry the system admin role."""
+        if not user_ids:
+            return set()
+        try:
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(UserRole.user_id).where(
+                        UserRole.role_id == AdminRole,
+                        UserRole.user_id.in_(user_ids),
+                    ),
+                )
+                return {int(uid) for uid in result.all() if uid is not None}
+        except Exception as e:
+            logger.debug('Skip system admin creator lookup: %s', e)
+            return set()

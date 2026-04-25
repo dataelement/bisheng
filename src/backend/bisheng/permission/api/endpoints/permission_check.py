@@ -4,8 +4,6 @@ POST /api/v1/permissions/check — Check if current user has a relation on a res
 GET  /api/v1/permissions/objects — List accessible resource IDs.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -34,18 +32,14 @@ async def check_permission(
     if request.relation not in VALID_RELATIONS:
         return PermissionInvalidRelationError.return_resp()
 
-    if request.permission_id and request.object_type == 'knowledge_library':
-        from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+    if request.permission_id:
+        from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
-        try:
-            knowledge_id = int(request.object_id)
-        except (TypeError, ValueError):
-            return resp_200({'allowed': False})
-
-        allowed = await KnowledgePermissionService.check_permission_id_async(
+        allowed = await FineGrainedPermissionService.has_any_permission_async(
             login_user=login_user,
-            knowledge_id=knowledge_id,
-            permission_id=request.permission_id,
+            object_type=request.object_type,
+            object_id=request.object_id,
+            permission_ids=[request.permission_id],
         )
         return resp_200({'allowed': allowed})
 

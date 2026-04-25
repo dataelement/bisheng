@@ -1,7 +1,7 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { getUserGroups } from "~/api/permission";
-import type { SelectedSubject } from "~/api/permission";
+import { getKnowledgeSpaceGrantUserGroups, getUserGroups } from "~/api/permission";
+import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { Users, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -14,11 +14,15 @@ interface UserGroup {
 interface SubjectSearchUserGroupProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
+  resourceType?: ResourceType;
+  resourceId?: string;
 }
 
 export function SubjectSearchUserGroup({
   value,
   onChange,
+  resourceType,
+  resourceId,
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -26,11 +30,25 @@ export function SubjectSearchUserGroup({
   const [keyword, setKeyword] = useState("");
 
   useEffect(() => {
+    const controller = new AbortController();
+    const request =
+      resourceType === "knowledge_space" && resourceId
+        ? getKnowledgeSpaceGrantUserGroups(resourceId, undefined, { signal: controller.signal })
+        : getUserGroups({ signal: controller.signal });
+
     setLoading(true);
-    getUserGroups()
-      .then((res) => setGroups(Array.isArray(res) ? res : []))
-      .finally(() => setLoading(false));
-  }, []);
+    request
+      .then((res) => {
+        if (!controller.signal.aborted) {
+          setGroups(Array.isArray(res) ? res : []);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [resourceId, resourceType]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;

@@ -18,6 +18,7 @@ import RouteErrorBoundary from './RouteErrorBoundary';
 import Sop from '@/components/Sop';
 import MainLayout from '@/layouts/MainLayout';
 import Page404 from '@/pages/Page404';
+import Page403 from '@/pages/Page403';
 import { AliveScope } from 'react-activation';
 import Subscription from '~/pages/Subscription';
 import AppRoot from './AppRoot';
@@ -137,5 +138,6 @@ export const router = createBrowserRouter([
   { path: '/html', element: <WebView /> },
   { path: '/__dev/login', element: <DevLogin /> },
   { path: '/404', element: <Page404 /> },
+  { path: '/403', element: <Page403 /> },
   { path: "*", element: <Navigate to="/404" replace /> }
 ], baseConfig);

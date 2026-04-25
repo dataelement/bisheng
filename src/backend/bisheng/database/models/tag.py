@@ -202,13 +202,13 @@ class TagDao(Tag):
 
     @classmethod
     async def asearch_tags(
-            cls,
-            keyword: str = None,
-            page: int = 1,
-            limit: int = 10,
-            *,
-            business_type: TagBusinessTypeEnum,
-            business_id: str,
+        cls,
+        keyword: str = None,
+        page: int = 1,
+        limit: int = 10,
+        *,
+        business_type: TagBusinessTypeEnum,
+        business_id: str,
     ) -> List[Tag]:
         """Search tags by business scope asynchronously."""
         statement = select(Tag).where(
@@ -227,11 +227,11 @@ class TagDao(Tag):
 
     @classmethod
     async def acount_tags(
-            cls,
-            keyword: str = None,
-            *,
-            business_type: TagBusinessTypeEnum,
-            business_id: str,
+        cls,
+        keyword: str = None,
+        *,
+        business_type: TagBusinessTypeEnum,
+        business_id: str,
     ) -> int:
         """Count tags by business scope asynchronously."""
         statement = select(func.count(Tag.id)).where(
@@ -304,7 +304,7 @@ class TagDao(Tag):
 
     @classmethod
     async def aget_resource_tag_ids_batch(
-            cls, resource_ids: List[str], resource_type: ResourceTypeEnum
+        cls, resource_ids: List[str], resource_type: ResourceTypeEnum
     ) -> Dict[str, List[int]]:
         """Query tag ids grouped by resource id asynchronously."""
         if not resource_ids:

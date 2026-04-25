@@ -123,7 +123,20 @@ vi.mock("@/components/bs-comp/permission/PermissionDialog", () => ({
 
 vi.mock("@/components/bs-comp/permission/usePermissionLevels", () => ({
   canManageResource: () => true,
+  hasPermissionId: () => true,
   usePermissionLevels: () => ({ levels: { "1": "owner" } }),
+  usePermissionIds: () => ({
+    permissions: {
+      "1": [
+        "view_kb",
+        "edit_kb",
+        "delete_kb",
+        "manage_kb_owner",
+        "manage_kb_manager",
+        "manage_kb_viewer",
+      ],
+    },
+  }),
 }));
 
 vi.mock("@/util/hook", () => ({

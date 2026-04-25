@@ -230,15 +230,16 @@ async def test_copy_qa_knowledge_uses_permission_service_read_async_bridge():
 
 
 @pytest.mark.asyncio
-async def test_get_QA_list_uses_permission_service_sync_bridge_for_writeable():
+async def test_get_QA_list_uses_async_qa_permission_bridge():
     module = _load_endpoint_module()
     login_user = SimpleNamespace(user_id=7)
     db_knowledge = SimpleNamespace(id=13, user_id=10)
 
     with patch(
-        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.judge_qa_knowledge_write',
+        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.ajudge_qa_knowledge_write',
+        new_callable=AsyncMock,
         return_value=db_knowledge,
-    ), patch(
+    ) as mock_judge, patch(
         'bisheng.knowledge.api.endpoints.knowledge.knowledge_imp.list_qa_by_knowledge_id',
         new_callable=AsyncMock,
         return_value=([], 0),
@@ -247,7 +248,8 @@ async def test_get_QA_list_uses_permission_service_sync_bridge_for_writeable():
         return_value=[],
     ), patch.object(
         module.KnowledgeService.permission_service,
-        'check_access_sync',
+        'check_access_async',
+        new_callable=AsyncMock,
         return_value=True,
     ) as mock_check_access:
         await module.get_QA_list(
@@ -261,7 +263,8 @@ async def test_get_QA_list_uses_permission_service_sync_bridge_for_writeable():
             login_user=login_user,
         )
 
-    mock_check_access.assert_called_once_with(
+    mock_judge.assert_awaited_once_with(login_user, 13)
+    mock_check_access.assert_awaited_once_with(
         login_user=login_user,
         owner_user_id=10,
         knowledge_id=13,
@@ -309,8 +312,7 @@ async def test_get_filelist_uses_async_knowledge_files_service_bridge():
     assert result.data['total'] == 0
 
 
-@pytest.mark.asyncio
-async def test_qa_add_uses_judge_qa_knowledge_write():
+def test_qa_add_uses_judge_qa_knowledge_write():
     module = _load_endpoint_module()
     login_user = SimpleNamespace(user_id=7)
     payload = SimpleNamespace(knowledge_id=14, id=None, questions=['q'], user_id=None)
@@ -325,7 +327,7 @@ async def test_qa_add_uses_judge_qa_knowledge_write():
     ), patch(
         'bisheng.knowledge.api.endpoints.knowledge.add_qa',
     ):
-        await module.qa_add(QACreate=payload, login_user=login_user)
+        module.qa_add(QACreate=payload, login_user=login_user)
 
     mock_judge.assert_called_once_with(login_user, 14)
 

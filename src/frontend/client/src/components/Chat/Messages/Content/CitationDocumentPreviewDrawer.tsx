@@ -205,17 +205,17 @@ export default function CitationDocumentPreviewDrawer({
   return (
     <aside
       className={cn(
-        'fixed z-[89] flex flex-col bg-white',
-        isFullBleedMobile && 'inset-0 overflow-hidden overscroll-contain touch-pan-y',
+        'fixed flex flex-col bg-white',
+        isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
-        'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        'z-[9] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
       aria-label="文档预览"
     >
       <div
         className={cn(
           'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
-          isFullBleedMobile && 'h-14 px-3 pt-[env(safe-area-inset-top,0px)]',
+          isFullBleedMobile && 'h-11 px-2 pt-[env(safe-area-inset-top,0px)]',
           !isFullBleedMobile && 'h-14 px-3',
         )}
       >
@@ -235,7 +235,12 @@ export default function CitationDocumentPreviewDrawer({
               type="button"
               onClick={handleDownload}
               disabled={!fileUrl}
-              className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
+              className={cn(
+                'shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]',
+                isFullBleedMobile
+                  ? 'inline-flex size-8 rounded-md'
+                  : 'inline-flex size-6 rounded-[6px]',
+              )}
               aria-label={localize("com_knowledge.download_file")}
             >
               <Download className="size-4" />
@@ -245,7 +250,12 @@ export default function CitationDocumentPreviewDrawer({
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
+          className={cn(
+            'items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]',
+            isFullBleedMobile
+              ? 'inline-flex size-8 rounded-md'
+              : 'inline-flex size-6 rounded-[6px]',
+          )}
           aria-label="关闭文档预览"
         >
           <X className="size-4" strokeWidth={1.5} />
@@ -254,7 +264,7 @@ export default function CitationDocumentPreviewDrawer({
 
       <div
         className={cn(
-          'min-h-0 flex-1 overflow-auto overscroll-contain',
+          'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]',
         )}
       >
         <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />

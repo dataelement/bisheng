@@ -4,14 +4,16 @@ import { useRecoilState } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
+import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
-import { useAuthContext, usePrefersMobileLayout } from '~/hooks';
+import { useAuthContext, useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { SideNav } from '~/pages/appChat/SideNav';
-import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
-import { cn } from '~/utils';
+import { appConversationsState, sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
+import { cn, generateUUID } from '~/utils';
 
 export default function AppRoot() {
     const location = useLocation();
+    const localize = useLocalize();
     const [bannerHeight, setBannerHeight] = useState(0);
     const [navVisible, setNavVisible] = useState(() => {
         const savedNavVisible = localStorage.getItem('navVisible');
@@ -21,9 +23,22 @@ export default function AppRoot() {
 
     const navigate = useNavigate();
     const { isAuthenticated } = useAuthContext();
+    const [, setAppConversations] = useRecoilState(appConversationsState);
     const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
     const isTabletOrMobile = usePrefersMobileLayout();
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
+    const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
+
+    useEffect(() => {
+        const prevBodyOverflow = document.body.style.overflow;
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevBodyOverflow;
+            document.documentElement.style.overflow = prevHtmlOverflow;
+        };
+    }, []);
 
     if (!isAuthenticated) {
         return null;
@@ -51,23 +66,37 @@ export default function AppRoot() {
         }
         navigate('/apps');
     };
-
-    useEffect(() => {
-        const prevBodyOverflow = document.body.style.overflow;
-        const prevHtmlOverflow = document.documentElement.style.overflow;
-        document.body.style.overflow = 'hidden';
-        document.documentElement.style.overflow = 'hidden';
-        return () => {
-            document.body.style.overflow = prevBodyOverflow;
-            document.documentElement.style.overflow = prevHtmlOverflow;
-        };
-    }, []);
+    const handleCreateNewAppChat = () => {
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const flowId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] : '';
+        const flowType = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 3] : '';
+        if (!flowId || !flowType) {
+            navigate('/apps');
+            return;
+        }
+        const chatId = generateUUID(32);
+        const now = new Date().toISOString();
+        setAppConversations((prev) => [
+            {
+                id: chatId,
+                title: localize('com_ui_new_chat'),
+                flowId,
+                flowType: Number(flowType),
+                updatedAt: now,
+                createdAt: now,
+            },
+            ...prev,
+        ]);
+        setSidebarVisible(false);
+        navigate(`/app/${chatId}/${flowId}/${flowType}`);
+    };
 
     return (
         <div className="h-[100dvh] w-full overflow-hidden">
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
-            <div className="flex w-full overflow-hidden bg-[#F9F9F9]" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
+            <div className="flex w-full overflow-hidden bg-[#F9F9F9] p-4" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
                 <div className="relative z-0 flex h-full w-full overflow-hidden">
 
                     {/* Desktop/Tablet sidebar */}
@@ -112,8 +141,10 @@ export default function AppRoot() {
                     {/* Floating actions - visible when sidebar is collapsed */}
                     <div
                         className={cn(
-                            'absolute top-3 left-[12px] z-[40] flex items-center gap-[8px] transition-all duration-300',
-                            sidebarVisible ? 'opacity-0 pointer-events-none' : 'opacity-100',
+                            'absolute top-4 left-4 z-[40] flex items-center gap-[8px] transition-all duration-300',
+                            sidebarVisible || (isTabletOrMobile && isAppConversationRoute)
+                                ? 'opacity-0 pointer-events-none'
+                                : 'opacity-100',
                         )}
                     >
                         {isTabletOrMobile && (
@@ -135,6 +166,16 @@ export default function AppRoot() {
 
                     {/* Chat panel (routed) */}
                     <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
+                        {isTabletOrMobile && isAppConversationRoute && (
+                            <MobileNav
+                                variant="chat"
+                                navVisible={sidebarVisible}
+                                setNavVisible={setSidebarVisible}
+                                persistNavVisibleInLocalStorage={false}
+                                navigateToNewChatPath={false}
+                                onNewChat={handleCreateNewAppChat}
+                            />
+                        )}
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
                             <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
                         </div>

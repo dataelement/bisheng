@@ -9,7 +9,7 @@ reads enabled rows for each channel after its articles are indexed, then calls
 """
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from sqlalchemy import (
     CHAR,
@@ -221,6 +221,29 @@ class ChannelKnowledgeSyncDao:
         async with get_async_db_session() as session:
             stmt = select(ChannelKnowledgeSync).where(
                 ChannelKnowledgeSync.knowledge_space_id == str(space_id),
+            )
+            rows = list((await session.exec(stmt)).all())
+            for r in rows:
+                await session.delete(r)
+            await session.commit()
+            return len(rows)
+
+    @classmethod
+    async def adelete_by_folder_ids(
+        cls, folder_ids: List[Union[int, str]],
+    ) -> int:
+        """Remove every sync row targeting any of the given knowledge folders.
+
+        Called when a knowledge folder (or batch of folders) is deleted so
+        channel-side bindings do not keep pointing at a tombstone, which
+        otherwise causes the Celery sync worker to fail every run.
+        """
+        if not folder_ids:
+            return 0
+        str_ids = [str(fid) for fid in folder_ids]
+        async with get_async_db_session() as session:
+            stmt = select(ChannelKnowledgeSync).where(
+                col(ChannelKnowledgeSync.folder_id).in_(str_ids),
             )
             rows = list((await session.exec(stmt)).all())
             for r in rows:

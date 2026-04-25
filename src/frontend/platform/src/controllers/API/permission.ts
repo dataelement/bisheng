@@ -122,6 +122,36 @@ export async function getGrantableRelationModelsApi(
   })
 }
 
+export async function getKnowledgeSpaceGrantUsersApi(
+  resourceId: string,
+  params?: { keyword?: string; page?: number; page_size?: number },
+): Promise<any[]> {
+  return await axios.get(`/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/users`, {
+    params: {
+      keyword: params?.keyword ?? "",
+      page: params?.page ?? 1,
+      page_size: params?.page_size ?? 1000,
+    },
+  })
+}
+
+export async function getKnowledgeSpaceGrantDepartmentsApi(
+  resourceId: string,
+): Promise<any[]> {
+  return await axios.get(`/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/departments`)
+}
+
+export async function getKnowledgeSpaceGrantUserGroupsApi(
+  resourceId: string,
+  params?: { keyword?: string },
+): Promise<any[]> {
+  return await axios.get(`/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/user-groups`, {
+    params: {
+      keyword: params?.keyword ?? "",
+    },
+  })
+}
+
 export async function createRelationModelApi(payload: {
   name: string
   relation: "owner" | "manager" | "editor" | "viewer"

@@ -22,8 +22,7 @@ interface KnowledgeTagSelectProps {
     isEditable?: boolean;
 }
 
-const TAG_NAME_MAX_LENGTH = 8;
-const FILE_TAG_LIMIT = 10;
+const TAG_NAME_MAX_LENGTH = 100;
 
 export default function KnowledgeTagSelect({
     knowledgeId,
@@ -104,21 +103,11 @@ export default function KnowledgeTagSelect({
             ? selectedTagIds.filter(id => id !== tagId)
             : [...selectedTagIds, tagId];
 
-        if (nextIds.length > FILE_TAG_LIMIT) {
-            toast({ variant: 'error', description: t('tagsCountLimitExceeded') });
-            return;
-        }
-
         setSelectedTagIds(nextIds);
     };
 
     const handleCreateTag = async (tagName: string) => {
         if (!validateTagName(tagName)) return;
-
-        if (selectedTagIds.length >= FILE_TAG_LIMIT) {
-            toast({ variant: 'error', description: t('tagsCountLimitExceeded') });
-            return;
-        }
 
         const existing = tags.find((tag) => tag.name.trim().toLowerCase() === tagName.trim().toLowerCase());
         if (existing) {
@@ -242,7 +231,7 @@ export default function KnowledgeTagSelect({
                             className="min-h-[22px] min-w-[120px] flex-1 bg-transparent text-sm leading-[22px] text-[#212121] outline-none placeholder-[#86909c]"
                         />
                         <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-[#999]">
-                            {selectedTagIds.length}/{FILE_TAG_LIMIT}
+                            {inputValue.length}/{TAG_NAME_MAX_LENGTH}
                         </span>
                     </div>
 

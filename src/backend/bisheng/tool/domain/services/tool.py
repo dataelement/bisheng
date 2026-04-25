@@ -17,7 +17,6 @@ from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatEr
     ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
     ToolMcpSchemaError, ToolMcpStdioError
 from bisheng.common.services.config_service import settings
-from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
@@ -46,7 +45,7 @@ class ToolServices(BaseModel):
             # When getting a list of custom tools, you need to include a list of tools available to the user
             access_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_READ])
             if access_resources:
-                filtered_ids = ToolPermissionService.filter_tool_ids_by_permission_sync(
+                filtered_ids = await ToolPermissionService.filter_tool_ids_by_permission_async(
                     self.login_user,
                     [int(access) for access in access_resources],
                     'use_tool',
@@ -83,7 +82,7 @@ class ToolServices(BaseModel):
             else:
                 if write_tool_type is None:
                     write_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
-                    filtered_write = ToolPermissionService.filter_tool_ids_by_permission_sync(
+                    filtered_write = await ToolPermissionService.filter_tool_ids_by_permission_async(
                         self.login_user,
                         [int(x) for x in write_resources],
                         'edit_tool',
@@ -435,7 +434,7 @@ class ToolServices(BaseModel):
         for one in tool_types:
             try:
                 await self.refresh_mcp_tools(one, tools_map.get(one.id, []))
-            except Exception as e:
+            except Exception:
                 logger.exception(f'{one.name} tool refresh failed')
                 error_name.append(one.name)
         return error_name

@@ -11,6 +11,7 @@ import secrets
 from typing import List, Optional, Set
 
 from sqlalchemy import and_, delete, func, or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from bisheng.common.errcode.department import (
@@ -28,7 +29,9 @@ from bisheng.common.errcode.department import (
     DepartmentArchivedReadonlyError,
     DepartmentParentArchivedError,
     DepartmentNotFoundError,
-    DepartmentOpenFGAUnavailableError,
+    DepartmentPersonIdDeletedAccountError,
+    DepartmentPersonIdDuplicateError,
+    DepartmentPersonIdRequiredError,
     DepartmentPermissionDeniedError,
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
@@ -62,6 +65,16 @@ logger = logging.getLogger(__name__)
 
 # AdminRole = 1, same as bisheng.database.constants.AdminRole
 _ADMIN_ROLE_ID = 1
+
+
+async def _aget_fga_client_with_fallback():
+    """Return the async FGA client, with sync fallback for degraded contexts."""
+    from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
+
+    fga = await aget_fga_client()
+    if fga is not None:
+        return fga
+    return get_fga_client()
 
 
 def _is_admin(login_user) -> bool:
@@ -315,6 +328,7 @@ class DepartmentService:
                 sort_order=data.sort_order,
                 default_role_ids=data.default_role_ids,
                 source='local',
+                external_id=dept_id,
                 status='active',
                 create_user=login_user.user_id,
             )
@@ -682,6 +696,7 @@ class DepartmentService:
                     tenant_id=tenant_id,
                     path='',
                     source='local',
+                    external_id=dept_id,
                     status='active',
                 )
                 session.add(dept)
@@ -810,10 +825,11 @@ class DepartmentService:
     @classmethod
     async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> Set[int]:
         """OpenFGA：在 department:{id} 上具有 admin 关系的用户 ID 集合。"""
-        from bisheng.core.openfga.manager import aget_fga_client
-        fga = await aget_fga_client()
+        fga = await _aget_fga_client_with_fallback()
         if fga is None:
-            return set()
+            return set(await DepartmentAdminGrantDao.aget_user_ids_by_department(
+                int(dept_internal_id),
+            ))
         try:
             tuples = await fga.read_tuples(
                 relation='admin', object=f'department:{dept_internal_id}',
@@ -822,7 +838,9 @@ class DepartmentService:
             logger.warning(
                 'FGA read_tuples failed for department admin ids dept=%s', dept_internal_id,
             )
-            return set()
+            return set(await DepartmentAdminGrantDao.aget_user_ids_by_department(
+                int(dept_internal_id),
+            ))
         user_ids: Set[int] = set()
         for t in tuples:
             user_str = t.get('user', '') if isinstance(t, dict) else ''
@@ -874,11 +892,6 @@ class DepartmentService:
 
         to_add = list(new_ids - current_ids)
         to_remove = list(current_ids - new_ids)
-
-        if to_add or to_remove:
-            from bisheng.core.openfga.manager import aget_fga_client
-            if await aget_fga_client() is None:
-                raise DepartmentOpenFGAUnavailableError()
 
         if to_add:
             ops = DepartmentChangeHandler.on_admin_set(dept.id, to_add)
@@ -1262,6 +1275,14 @@ class DepartmentService:
         if not _password_meets_prd_policy(plain):
             raise DepartmentInvalidPasswordError()
 
+        person_id = (data.person_id or '').strip()
+        if not person_id:
+            raise DepartmentPersonIdRequiredError()
+        if await UserDao.aget_login_candidates_by_account(person_id):
+            raise DepartmentPersonIdDuplicateError()
+        if await UserDao.aexists_disabled_login_account(person_id):
+            raise DepartmentPersonIdDeletedAccountError()
+
         assignable = await cls.aget_assignable_roles(dept_id, login_user)
         allowed_ids = {r['id'] for r in assignable}
         explicit_ids = [int(x) for x in (data.role_ids or [])]
@@ -1273,16 +1294,6 @@ class DepartmentService:
         if AdminRole in final_role_ids or not set(final_role_ids).issubset(allowed_ids):
             raise DepartmentInvalidRolesError()
 
-        person_id = (data.person_id or '').strip()
-        if not person_id:
-            raise DepartmentInvalidRolesError(msg='Person ID is required')
-        if await UserDao.aget_login_candidates_by_account(person_id):
-            raise DepartmentInvalidRolesError(msg='Person ID already exists')
-        if await UserDao.aexists_disabled_login_account(person_id):
-            raise DepartmentInvalidRolesError(
-                msg='Person ID already belongs to a deleted account. Please restore the original account.',
-            )
-
         pwd_hash = md5_hash(plain)
         user = User(
             user_name=data.user_name,
@@ -1290,9 +1301,12 @@ class DepartmentService:
             source='local',
             external_id=person_id,
         )
-        user = UserDao.add_user_with_groups_and_roles(
-            user, [], final_role_ids,
-        )
+        try:
+            user = UserDao.add_user_with_groups_and_roles(
+                user, [], final_role_ids,
+            )
+        except IntegrityError:
+            raise DepartmentPersonIdDuplicateError() from None
         await LegacyRBACSyncService.sync_user_auth_created(
             user.user_id,
             final_role_ids,
@@ -1510,7 +1524,7 @@ class DepartmentService:
     ) -> None:
         """删除本地人员账号：清部门关系、角色（保留超管）、用户组，软删用户。"""
         from bisheng.database.constants import AdminRole
-        from bisheng.user.domain.models.user import User, UserDao
+        from bisheng.user.domain.models.user import User
         from bisheng.user.domain.models.user_role import UserRole
         from bisheng.database.models.user_group import UserGroup
 

@@ -1,18 +1,21 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
+import { getKnowledgeSpaceGrantDepartmentsApi } from "@/controllers/API/permission"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentTreeNode } from "@/types/api/department"
 import { ChevronDown, ChevronRight, Building2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { SelectedSubject } from "./types"
+import { ResourceType, SelectedSubject } from "./types"
 
 const INDENT_PX = 20
 
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[]
   onChange: (v: SelectedSubject[]) => void
+  resourceType?: ResourceType
+  resourceId?: string
   includeChildren?: boolean
   onIncludeChildrenChange?: (v: boolean) => void
   showIncludeChildrenToggle?: boolean
@@ -23,6 +26,8 @@ interface SubjectSearchDepartmentProps {
 export function SubjectSearchDepartment({
   value,
   onChange,
+  resourceType,
+  resourceId,
   includeChildren = false,
   onIncludeChildrenChange = () => undefined,
   showIncludeChildrenToggle = true,
@@ -38,11 +43,14 @@ export function SubjectSearchDepartment({
 
   useEffect(() => {
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
+    const request = resourceType === "knowledge_space" && resourceId
+      ? getKnowledgeSpaceGrantDepartmentsApi(resourceId)
+      : getDepartmentTreeApi()
+    captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setTree(res)
       setLoading(false)
     })
-  }, [])
+  }, [resourceId, resourceType])
 
   const selectedIds = new Set(value.map((s) => s.id))
 
@@ -92,13 +100,13 @@ export function SubjectSearchDepartment({
   }, [tree, keyword, matchesKeyword])
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-col gap-2">
       <SearchInput
         placeholder={t('search.department')}
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
       />
-      <div className="max-h-[200px] overflow-y-auto border rounded-md">
+      <div className="min-h-[120px] max-h-[clamp(120px,calc(100vh-24rem),260px)] overflow-y-auto rounded-md border">
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
         )}
@@ -208,7 +216,7 @@ function TreeNode({
             <span className="shrink-0 text-xs text-muted-foreground">({node.member_count})</span>
           )}
           {isDisabled && disabledLabel && (
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{disabledLabel}</span>
+            <span className="ml-auto max-w-[8rem] shrink-0 truncate text-xs text-muted-foreground" title={disabledLabel}>{disabledLabel}</span>
           )}
         </div>
       </div>

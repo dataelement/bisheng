@@ -13,10 +13,8 @@ import {
     updateChannelApi,
     getChannelDetailApi,
 } from "~/api/channels";
-import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
-import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -25,6 +23,7 @@ import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
+import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Menu, Plus } from "lucide-react";
 import { cn } from "~/utils";
 import { ChannelShareDialog } from "./ChannelShareDialog";
@@ -65,11 +64,8 @@ export default function Subscription() {
     const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
     /** Bumped on KeepAlive re-activation so share-preview effect re-runs (deps may be unchanged vs cached instance). */
     const [channelTabActivateEpoch, setChannelTabActivateEpoch] = useState(0);
-    const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-    const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
-    const [channelShareOpen, setChannelShareOpen] = useState(false);
-    const [channelShareChannel, setChannelShareChannel] = useState<Channel | null>(null);
-    const [channelShareInitialTab, setChannelShareInitialTab] = useState<"share" | "members" | "permission">("share");
+    const [channelPermissionDialogOpen, setChannelPermissionDialogOpen] = useState(false);
+    const [channelPermissionDialogChannel, setChannelPermissionDialogChannel] = useState<Channel | null>(null);
     const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
@@ -77,13 +73,9 @@ export default function Subscription() {
     const queryClient = useQueryClient();
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
-    const openChannelShareDialog = (
-        channel: Channel,
-        initialTab: "share" | "members" | "permission" = "share",
-    ) => {
-        setChannelShareChannel(channel);
-        setChannelShareInitialTab(initialTab);
-        setChannelShareOpen(true);
+    const openChannelPermissionDialog = (channel: Channel) => {
+        setChannelPermissionDialogChannel(channel);
+        setChannelPermissionDialogOpen(true);
     };
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
@@ -358,7 +350,11 @@ export default function Subscription() {
 
         // 编辑模式：使用 PUT /api/v1/channel/manager/{channel_id}，保证权限设置、内容筛选、子频道等一起更新
         if (editingChannel) {
-            await updateChannelApi(editingChannel.id, payload);
+            const response = await updateChannelApi(editingChannel.id, payload);
+            const updateCode = extractApiStatusCode(response);
+            if (updateCode && updateCode !== 200) {
+                throw createApiStatusError(response);
+            }
             await queryClient.invalidateQueries({ queryKey: ["channels"] });
             // Refresh channel detail cache so ArticleList & tooltip pick up new settings
             await queryClient.invalidateQueries({ queryKey: ["channelDetail", editingChannel.id] });
@@ -406,19 +402,19 @@ export default function Subscription() {
         <div className="relative flex h-full min-h-0 flex-col touch-desktop:flex-row">
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <ChannelSquare
-                    refreshKey={channelSquareRefreshKey}
-                    onBack={() => {
-                        setShowChannelSquare(false);
-                        navigate("/channel", { replace: true });
-                    }}
-                    onPreviewChannel={(id) => {
-                        setManualPreviewChannelId(id);
-                        userClosedSharePreviewRef.current = false;
-                        setPreviewDrawerOpen(true);
-                        navigate(`/channel/share/${id}?square=1`);
-                    }}
-                />
+                    <ChannelSquare
+                        refreshKey={channelSquareRefreshKey}
+                        onBack={() => {
+                            setShowChannelSquare(false);
+                            navigate("/channel", { replace: true });
+                        }}
+                        onPreviewChannel={(id) => {
+                            setManualPreviewChannelId(id);
+                            userClosedSharePreviewRef.current = false;
+                            setPreviewDrawerOpen(true);
+                            navigate(`/channel/share/${id}?square=1`);
+                        }}
+                    />
                 </div>
             ) : (
                 <>
@@ -432,7 +428,7 @@ export default function Subscription() {
                             onChannelSquare={handleChannelSquare}
                             onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                             onManageMembers={(channel) => {
-                                openChannelShareDialog(channel, "members");
+                                openChannelPermissionDialog(channel);
                             }}
                             onChannelSettings={(channel) => {
                                 setEditingChannel(null);
@@ -468,7 +464,7 @@ export default function Subscription() {
                                     onChannelSquare={handleChannelSquare}
                                     onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                                     onManageMembers={(channel) => {
-                                        openChannelShareDialog(channel, "members");
+                                        openChannelPermissionDialog(channel);
                                     }}
                                     onChannelSettings={(channel) => {
                                         setEditingChannel(null);
@@ -502,7 +498,6 @@ export default function Subscription() {
                                 onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
                                 onGoChannelSquare={isH5 ? handleChannelSquare : undefined}
                                 onCreateChannel={isH5 ? handleCreateChannel : undefined}
-                                onOpenChannelShare={(channel) => openChannelShareDialog(channel, "share")}
                                 onFullScreen={(article, ai) => {
                                     enteredFullscreenViaAiRef.current = !!ai;
                                     setFullScreenArticle(article);
@@ -570,7 +565,7 @@ export default function Subscription() {
                     }
                 }}
                 onManageMembers={(channelId) => {
-                    openChannelShareDialog({
+                    openChannelPermissionDialog({
                         id: channelId,
                         name: "",
                         creator: "",
@@ -583,21 +578,14 @@ export default function Subscription() {
                         createdAt: "",
                         updatedAt: "",
                         subChannels: []
-                    }, "members");
+                    });
                 }}
             />
 
-            <KnowledgeSpaceMemberDialog
-                open={memberDialogOpen}
-                onOpenChange={setMemberDialogOpen}
-                space={memberDialogSpace}
-            />
-
             <ChannelShareDialog
-                open={channelShareOpen}
-                onOpenChange={setChannelShareOpen}
-                channel={channelShareChannel}
-                initialTab={channelShareInitialTab}
+                open={channelPermissionDialogOpen}
+                onOpenChange={setChannelPermissionDialogOpen}
+                channel={channelPermissionDialogChannel}
             />
 
             {/* Full-screen overlay — absolute inset-0 covers the entire Subscription (including the channel sidebar), but doesn't affect MainLayout's primary navigation */}

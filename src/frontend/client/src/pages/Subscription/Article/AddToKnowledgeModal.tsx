@@ -293,26 +293,102 @@ export function AddToKnowledgeModal({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const isMax576 = useMediaQuery("(max-width: 576px)");
-    const isMax768 = useMediaQuery("(max-width: 768px)");
+    const isModalMobile768 = useMediaQuery("(max-width: 768px)");
+    const [viewportWidth, setViewportWidth] = useState<number>(() =>
+        typeof window !== "undefined" ? window.innerWidth : 9999
+    );
+    const [viewportHeight, setViewportHeight] = useState<number>(() =>
+        typeof window !== "undefined" ? window.innerHeight : 9999
+    );
+    useEffect(() => {
+        const update = () => {
+            setViewportWidth(window.innerWidth);
+            setViewportHeight(window.innerHeight);
+        };
+        update();
+        window.addEventListener("resize", update);
+        return () => window.removeEventListener("resize", update);
+    }, []);
+    const forceMobile768 = viewportWidth <= 768;
     /**
-     * ≤576px：创建频道抽屉内下钻（返回 + 取消回表单）
-     * 577–768px：居中弹窗（第二稿，无返回；取消关闭）
-     * >768px：桌面宽度弹窗
+     * channel_sync:
+     * <768px：全屏弹窗
+     * >=768px：桌面样式居中弹窗（768-1024 与 >1024 一致）
      */
-    const embedInChannelSheet =
-        mode === "channel_sync" &&
-        isMax576 &&
-        channelSyncPortalHostRef != null;
+    const embedInChannelSheet = false;
     /** 频道同步且非下钻、仍属移动端宽：居中模态 + 统一宽高规则 */
     const isChannelSyncCenteredMobile =
-        mode === "channel_sync" && isMax768 && !embedInChannelSheet;
+        mode === "channel_sync" && (isModalMobile768 || forceMobile768);
+    const shouldUseDesktopChannelSyncDialog =
+        mode === "channel_sync" && !(isModalMobile768 || forceMobile768);
+    const isArticleMobileFullScreen =
+        mode === "article" && (isModalMobile768 || forceMobile768);
     const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+    useEffect(() => {
+        if (!open) return;
+        const runtimeWidth = typeof window !== "undefined" ? window.innerWidth : viewportWidth;
+        const runtimeHeight = typeof window !== "undefined" ? window.innerHeight : viewportHeight;
+        console.info("[AddToKnowledgeModal][debug]", {
+            mode,
+            runtimeWidth,
+            runtimeHeight,
+            viewportWidth,
+            viewportHeight,
+            isH5,
+            isMax576,
+            isModalMobile768,
+            forceMobile768,
+            embedInChannelSheet,
+            isChannelSyncCenteredMobile,
+            shouldUseDesktopChannelSyncDialog,
+        });
+    }, [
+        open,
+        mode,
+        viewportWidth,
+        viewportHeight,
+        isH5,
+        isMax576,
+        isModalMobile768,
+        forceMobile768,
+        embedInChannelSheet,
+        isChannelSyncCenteredMobile,
+        shouldUseDesktopChannelSyncDialog,
+    ]);
+    useEffect(() => {
+        if (!open || mode !== "article") return;
+        const logFooterLayout = () => {
+            const contentRect = articleDialogContentRef.current?.getBoundingClientRect();
+            const footerRect = actionFooterRef.current?.getBoundingClientRect();
+            console.info("[AddToKnowledgeModal][footer-debug]", {
+                runtimeWidth: window.innerWidth,
+                runtimeHeight: window.innerHeight,
+                isModalMobile768,
+                forceMobile768,
+                isArticleMobileFullScreen,
+                contentRect: contentRect
+                    ? { top: contentRect.top, bottom: contentRect.bottom, height: contentRect.height }
+                    : null,
+                footerRect: footerRect
+                    ? { top: footerRect.top, bottom: footerRect.bottom, height: footerRect.height }
+                    : null,
+                footerInViewport: footerRect ? footerRect.bottom <= window.innerHeight && footerRect.top >= 0 : false,
+            });
+        };
+        const rafId = requestAnimationFrame(logFooterLayout);
+        window.addEventListener("resize", logFooterLayout);
+        return () => {
+            cancelAnimationFrame(rafId);
+            window.removeEventListener("resize", logFooterLayout);
+        };
+    }, [open, mode, isModalMobile768, forceMobile768, isArticleMobileFullScreen]);
+
     useLayoutEffect(() => {
         if (!open || !embedInChannelSheet) {
             setPortalHost(null);
             return;
         }
-        setPortalHost(channelSyncPortalHostRef.current);
+        setPortalHost(channelSyncPortalHostRef?.current ?? null);
     }, [open, embedInChannelSheet, channelSyncPortalHostRef]);
     const { showToast } = useToastContext();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
@@ -326,6 +402,8 @@ export function AddToKnowledgeModal({
     const [duplicateFiles, setDuplicateFiles] = useState<Array<{ name: string; path: string }>>([]);
     const [showDuplicate, setShowDuplicate] = useState(false);
     const [pendingConfirm, setPendingConfirm] = useState<{ spaceId: string; parentFolderId: string | null } | null>(null);
+    const articleDialogContentRef = useRef<HTMLDivElement | null>(null);
+    const actionFooterRef = useRef<HTMLDivElement | null>(null);
 
     // Filtered tree by search
     const displayTree = search.trim() ? filterTree(tree, search) : tree;
@@ -629,7 +707,7 @@ export function AddToKnowledgeModal({
     const goBackToChannelForm = () => handleOpenChange(false);
 
     const useFlexTree =
-        embedInChannelSheet || isChannelSyncCenteredMobile;
+        embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen;
 
     const pickerBody = (
         <>
@@ -682,6 +760,8 @@ export function AddToKnowledgeModal({
                         ? "flex min-h-0 flex-1 flex-col px-4 pt-4 sm:px-6"
                         : isChannelSyncCenteredMobile
                             ? "flex min-h-0 flex-1 flex-col px-6 pt-4"
+                            : isArticleMobileFullScreen
+                                ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[84px]"
                             : "px-6 pt-4 touch-mobile:px-4"
                 }
             >
@@ -741,18 +821,21 @@ export function AddToKnowledgeModal({
             </div>
 
             <div
+                ref={actionFooterRef}
                 className={
                     embedInChannelSheet
                         ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 sm:px-5 sm:py-3.5"
                         : isChannelSyncCenteredMobile
-                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-6 py-3.5"
-                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-5 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
+                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] bg-white px-4 py-3"
+                            : isArticleMobileFullScreen
+                                ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
+                            : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-4 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
                 }
             >
                 <div
                     className={cn(
                         "ml-auto min-w-0",
-                        embedInChannelSheet
+                        embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen
                             ? "flex w-full items-center gap-2"
                             : "grid w-[176px] shrink-0 grid-cols-2 gap-2",
                     )}
@@ -783,12 +866,8 @@ export function AddToKnowledgeModal({
     );
 
     const embeddedShell = (
-        <div className="absolute inset-0 z-[80] flex min-h-0 flex-col bg-white">
-            <div className="flex min-h-0 flex-1 items-center justify-center px-10 py-4">
-                <div className="flex h-[80vh] max-h-[600px] w-[calc(100vw-80px)] max-w-[600px] min-h-0 flex-col overflow-hidden rounded-xl border border-[#ECECEC] bg-white shadow-sm">
-                    {pickerBody}
-                </div>
-            </div>
+        <div className="fixed inset-0 z-[100] flex min-h-0 flex-col bg-white">
+            {pickerBody}
         </div>
     );
 
@@ -802,7 +881,7 @@ export function AddToKnowledgeModal({
                         <Dialog open={open} onOpenChange={handleOpenChange}>
                             <DialogContent
                                 close={false}
-                                className="h-[80vh] max-h-[600px] w-[calc(100vw-80px)] max-w-[600px] gap-0 overflow-hidden rounded-xl border border-[#ECECEC] p-0 shadow-sm"
+                                className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !p-0 !shadow-none"
                             >
                                 {pickerBody}
                             </DialogContent>
@@ -812,13 +891,25 @@ export function AddToKnowledgeModal({
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
-                        className="flex h-[80vh] max-h-[600px] w-[calc(100vw-80px)] max-w-[600px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
+                        className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !p-0 !animate-none"
+                        style={{
+                            position: "fixed",
+                            inset: 0,
+                            left: 0,
+                            top: 0,
+                            width: "100vw",
+                            height: "100dvh",
+                            maxWidth: "none",
+                            transform: "none",
+                            borderRadius: 0,
+                            padding: 0,
+                        }}
                     >
                         {pickerBody}
                     </DialogContent>
                 </Dialog>
             )}
-            {open && mode === "channel_sync" && !isMax768 && (
+            {open && shouldUseDesktopChannelSyncDialog && (
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
@@ -832,7 +923,25 @@ export function AddToKnowledgeModal({
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
-                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                        ref={articleDialogContentRef}
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[100dvh] max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
+                        style={
+                            (isModalMobile768 || forceMobile768)
+                                ? {
+                                    position: "fixed",
+                                    inset: 0,
+                                    left: 0,
+                                    top: 0,
+                                    width: "100vw",
+                                    height: "100dvh",
+                                    maxWidth: "none",
+                                    maxHeight: "none",
+                                    transform: "none",
+                                    borderRadius: 0,
+                                    padding: 0,
+                                }
+                                : undefined
+                        }
                     >
                         {pickerBody}
                     </DialogContent>
@@ -867,7 +976,7 @@ export function AddToKnowledgeModal({
                             );
                         })}
                     </div>
-                    <DialogFooter className="px-5 py-3.5 flex flex-row justify-end gap-1">
+                    <DialogFooter className="px-4 py-3.5 flex flex-row justify-end gap-1">
                         <Button
                             variant="outline"
                             size="sm"

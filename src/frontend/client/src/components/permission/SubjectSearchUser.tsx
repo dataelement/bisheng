@@ -1,7 +1,7 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { searchUsers } from "~/api/permission";
-import type { SelectedSubject } from "~/api/permission";
+import { getKnowledgeSpaceGrantUsers, searchUsers } from "~/api/permission";
+import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -9,9 +9,16 @@ import { useLocalize } from "~/hooks";
 interface SubjectSearchUserProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
+  resourceType?: ResourceType;
+  resourceId?: string;
 }
 
-export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
+export function SubjectSearchUser({
+  value,
+  onChange,
+  resourceType,
+  resourceId,
+}: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState<
@@ -27,6 +34,18 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
     abortRef.current = controller;
     setLoading(true);
     try {
+      if (resourceType === "knowledge_space" && resourceId) {
+        const rows = await getKnowledgeSpaceGrantUsers(
+          resourceId,
+          { keyword: name, page: 1, page_size: 2000 },
+          { signal: controller.signal }
+        );
+        if (!controller.signal.aborted) {
+          setResults(Array.isArray(rows) ? rows : []);
+        }
+        return;
+      }
+
       const res = await searchUsers(name, { signal: controller.signal });
       if (!controller.signal.aborted) {
         setResults(res.data || []);
@@ -36,7 +55,7 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, []);
+  }, [resourceId, resourceType]);
 
   useEffect(() => {
     search("");

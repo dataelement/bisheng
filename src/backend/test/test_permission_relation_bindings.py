@@ -12,6 +12,29 @@ def mock_admin_user():
 
 class TestRelationModelBindings:
 
+    def test_normalize_relation_model_name_strips_template_prefix(self):
+        from bisheng.permission.api.endpoints.resource_permission import _normalize_model_dict
+
+        assert _normalize_model_dict({
+            'id': 'custom_view_space',
+            'name': '知识空间模块查看空间',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_space'],
+            'permissions_explicit': True,
+            'is_system': False,
+        })['name'] == '查看空间'
+
+        assert _normalize_model_dict({
+            'id': 'custom_named',
+            'name': '知识空间模块自定义模型',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_space'],
+            'permissions_explicit': True,
+            'is_system': False,
+        })['name'] == '知识空间模块自定义模型'
+
     @pytest.mark.asyncio
     async def test_update_relation_model_marks_explicit_empty_permissions(self, mock_admin_user):
         from bisheng.permission.api.endpoints.resource_permission import update_relation_model

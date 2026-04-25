@@ -8,11 +8,12 @@ import {
 import type {
   GrantItem,
   RelationLevel,
+  RelationModel,
   ResourceType,
   SelectedSubject,
   SubjectType,
 } from "~/api/permission";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
@@ -21,11 +22,20 @@ import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
+const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: "owner", name: "所有者", relation: "owner" },
+  { id: "viewer", name: "可查看", relation: "viewer" },
+  { id: "editor", name: "可编辑", relation: "editor" },
+  { id: "manager", name: "可管理", relation: "manager" },
+];
 
 interface PermissionGrantTabProps {
   resourceType: ResourceType;
   resourceId: string;
   onSuccess: () => void;
+  prefetchedGrantableModels?: RelationModel[];
+  prefetchedGrantableModelsLoaded?: boolean;
+  skipGrantableModelsRequest?: boolean;
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the grant form to the given subject type.
   fixedSubjectType?: SubjectType;
@@ -38,6 +48,9 @@ export function PermissionGrantTab({
   resourceType,
   resourceId,
   onSuccess,
+  prefetchedGrantableModels,
+  prefetchedGrantableModelsLoaded = false,
+  skipGrantableModelsRequest = false,
   fixedSubjectType,
   includeChildren: includeChildrenProp,
   onIncludeChildrenChange,
@@ -53,6 +66,26 @@ export function PermissionGrantTab({
   const [submitting, setSubmitting] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
+
+  const applyRelationModels = useCallback((relationModels: RelationModel[] | undefined) => {
+    const options: RelationModelOption[] = (Array.isArray(relationModels) ? relationModels : []).map((m) => ({
+      id: m.id,
+      name: m.is_system
+        ? localize(`com_permission.level_${m.relation}`)
+        : m.name,
+      relation: m.relation as RelationLevel,
+    }));
+    if (options.length) {
+      setModels(options);
+      setSelectedModelId((current) => (
+        options.some((option) => option.id === current) ? current : options[0].id
+      ));
+      return;
+    }
+
+    setModels(DEFAULT_MODELS);
+    setSelectedModelId("viewer");
+  }, [localize]);
 
   useEffect(() => {
     setSelected((prev) =>
@@ -72,24 +105,27 @@ export function PermissionGrantTab({
   }, [fixedSubjectType]);
 
   useEffect(() => {
+    if (skipGrantableModelsRequest) {
+      if (!prefetchedGrantableModelsLoaded) return;
+      applyRelationModels(prefetchedGrantableModels);
+      return;
+    }
+
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        const options: RelationModelOption[] = (Array.isArray(res) ? res : []).map((m) => ({
-          id: m.id,
-          name: m.is_system
-            ? localize(`com_permission.level_${m.relation}`)
-            : m.name,
-          relation: m.relation as RelationLevel,
-        }));
-        if (options.length) {
-          setModels(options);
-          setSelectedModelId(options[0].id);
-        }
+        applyRelationModels(res);
       })
       .catch(() => {
-        // fallback handled by RelationSelect
+        applyRelationModels(undefined);
       });
-  }, [resourceType, resourceId]);
+  }, [
+    applyRelationModels,
+    prefetchedGrantableModels,
+    prefetchedGrantableModelsLoaded,
+    resourceId,
+    resourceType,
+    skipGrantableModelsRequest,
+  ]);
 
   const relation = useMemo<RelationLevel>(() => {
     return models.find((m) => m.id === selectedModelId)?.relation || "viewer";
@@ -183,18 +219,30 @@ export function PermissionGrantTab({
         )}
       >
         {subjectType === "user" && (
-          <SubjectSearchUser value={selected} onChange={setSelected} />
+          <SubjectSearchUser
+            value={selected}
+            onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
+          />
         )}
         {subjectType === "department" && (
           <SubjectSearchDepartment
             value={selected}
             onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
             includeChildren={includeChildren}
             onIncludeChildrenChange={handleIncludeChildrenChange}
           />
         )}
         {subjectType === "user_group" && (
-          <SubjectSearchUserGroup value={selected} onChange={setSelected} />
+          <SubjectSearchUserGroup
+            value={selected}
+            onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
+          />
         )}
       </div>
 

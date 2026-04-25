@@ -72,6 +72,14 @@ def sync_information_article(information_id: str = None):
         logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
         _update_channels_by_source_id(need_update_informations)
 
+    # v2.5 Module D: push freshly-indexed articles into bound knowledge spaces.
+    # The hook short-circuits internally when indexed_by_source is empty.
+    _sync_new_articles_to_knowledge_spaces(
+        indexed_by_source,
+        information_id=information_id,
+        article_service=article_service,
+    )
+
 
 def _update_channels_by_source_id(source_ids: List[str]):
     """Update latest_article_update_time for channels that use the specified source_id."""
@@ -207,6 +215,60 @@ def _resolve_article_ids_for_config(
         return []
 
 
+def _drop_dead_target_configs(
+    configs: List[ChannelKnowledgeSync],
+) -> List[ChannelKnowledgeSync]:
+    """Filter out configs whose knowledge_space or folder has been deleted."""
+    space_ids = {
+        int(c.knowledge_space_id) for c in configs
+        if c.knowledge_space_id and str(c.knowledge_space_id).isdigit()
+    }
+    folder_ids = {
+        int(c.folder_id) for c in configs
+        if c.folder_id and str(c.folder_id).isdigit()
+    }
+    if not space_ids and not folder_ids:
+        return list(configs)
+
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+    existing_spaces = set()
+    existing_folders = set()
+    with get_sync_db_session() as session:
+        if space_ids:
+            for row in session.exec(
+                select(Knowledge.id).where(Knowledge.id.in_(space_ids))
+            ).all():
+                kid = row[0] if isinstance(row, tuple) else row
+                existing_spaces.add(int(kid))
+        if folder_ids:
+            for row in session.exec(
+                select(KnowledgeFile.id).where(KnowledgeFile.id.in_(folder_ids))
+            ).all():
+                fid = row[0] if isinstance(row, tuple) else row
+                existing_folders.add(int(fid))
+
+    survivors: List[ChannelKnowledgeSync] = []
+    for c in configs:
+        sid = c.knowledge_space_id
+        if sid and str(sid).isdigit() and int(sid) not in existing_spaces:
+            logger.warning(
+                f"Sync config {c.id}: knowledge_space {sid} no longer exists; "
+                f"skipping."
+            )
+            continue
+        fid_val = c.folder_id
+        if fid_val and str(fid_val).isdigit() and int(fid_val) not in existing_folders:
+            logger.warning(
+                f"Sync config {c.id}: folder {fid_val} no longer exists; "
+                f"skipping."
+            )
+            continue
+        survivors.append(c)
+    return survivors
+
+
 def _sync_new_articles_to_knowledge_spaces(
     indexed_by_source: Dict[str, List[str]],
     information_id: str = None,
@@ -235,6 +297,15 @@ def _sync_new_articles_to_knowledge_spaces(
     sync_configs = ChannelKnowledgeSyncDao.list_by_channel_ids_enabled(channel_ids)
     if not sync_configs:
         logger.debug("No enabled knowledge-sync configs for affected channels.")
+        return
+
+    # Defensive: drop configs whose target space or folder no longer exists.
+    # delete_space/delete_folder cleanup hooks may have failed or pre-date this
+    # row; without this guard the worker writes MinIO garbage and logs an
+    # exception every run for each orphan binding.
+    sync_configs = _drop_dead_target_configs(sync_configs)
+    if not sync_configs:
+        logger.info("All sync configs reference deleted spaces/folders; skipping.")
         return
 
     channel_by_id = {c.id: c for c in channels}

@@ -5,7 +5,7 @@ import logging
 from typing import Iterable
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao as _UserDepartmentDao
 from bisheng.database.models.flow import FlowType
 from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.api.endpoints.resource_permission import (
@@ -14,9 +14,12 @@ from bisheng.permission.api.endpoints.resource_permission import (
     _normalize_model_dict,
 )
 from bisheng.permission.domain.application_permission_template import default_permission_ids_for_relation
-from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.permission_service import PermissionService as _PermissionService
 
 logger = logging.getLogger(__name__)
+PermissionService = _PermissionService
+UserDepartmentDao = _UserDepartmentDao
 
 _PERMISSION_LEVEL_TO_RELATION = {
     'owner': 'owner',
@@ -64,12 +67,7 @@ class ApplicationPermissionService:
 
     @staticmethod
     async def _get_current_user_subject_strings(login_user: UserPayload) -> set[str]:
-        subject_strings = {f'user:{login_user.user_id}'}
-        user_group_ids = await login_user.get_user_group_ids(login_user.user_id)
-        subject_strings.update(f'user_group:{group_id}#member' for group_id in user_group_ids)
-        user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
-        subject_strings.update(f'department:{item.department_id}#member' for item in user_departments)
-        return subject_strings
+        return await FineGrainedPermissionService.get_current_user_subject_strings(login_user)
 
     @staticmethod
     async def _get_binding_department_paths(bindings: list[dict]) -> dict[int, str]:
@@ -164,46 +162,15 @@ class ApplicationPermissionService:
         if binding_department_paths is None:
             binding_department_paths = await cls._get_binding_department_paths(bindings)
 
-        effective_permissions: set[str] = set()
-        fga = PermissionService._get_fga()
-        if fga is not None:
-            tuples = await fga.read_tuples(object=f'{object_type}:{object_id}')
-            for tuple_data in tuples:
-                tuple_user = tuple_data.get('user')
-                relation = tuple_data.get('relation')
-                if tuple_user not in user_subject_strings:
-                    continue
-                binding = await cls._resolve_binding_for_tuple(
-                    object_type,
-                    object_id,
-                    tuple_user,
-                    relation,
-                    bindings,
-                    binding_department_paths,
-                    user_subject_strings,
-                )
-                model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
-                effective_permissions.update(cls._permission_ids_for_relation(relation, model))
-
-        implicit_level = await PermissionService.get_implicit_permission_level(
-            user_id=login_user.user_id,
-            object_type=object_type,
-            object_id=str(object_id),
-            login_user=login_user,
+        return await FineGrainedPermissionService.get_effective_permission_ids_async(
+            login_user,
+            object_type,
+            object_id,
+            models=models,
+            bindings=bindings,
+            binding_department_paths=binding_department_paths,
+            user_subject_strings=user_subject_strings,
         )
-        implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
-        effective_permissions.update(cls._permission_ids_for_relation(implicit_relation or ''))
-        if effective_permissions:
-            return effective_permissions
-
-        level = await PermissionService.get_permission_level(
-            user_id=login_user.user_id,
-            object_type=object_type,
-            object_id=str(object_id),
-            login_user=login_user,
-        )
-        relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
-        return cls._permission_ids_for_relation(relation or '')
 
     @classmethod
     async def get_app_permission_map_async(

@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback } from "react";
-import { ChevronLeft } from "lucide-react";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
@@ -16,7 +15,6 @@ interface ChannelLayoutProps {
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
     onCreateChannel?: () => void;
-    onOpenChannelShare?: (channel: Channel) => void;
 }
 
 const MIN_LEFT_WIDTH = 480;
@@ -28,7 +26,6 @@ export function ChannelLayout({
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
-    onOpenChannelShare,
 }: ChannelLayoutProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -107,7 +104,6 @@ export function ChannelLayout({
                     onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}
                     onCreateChannel={onCreateChannel}
-                    onOpenChannelShare={onOpenChannelShare}
                 />
             </div>
 
@@ -151,31 +147,17 @@ export function ChannelLayout({
                     aria-modal="true"
                     aria-label={localize("com_subscription.subscribe")}
                 >
-                    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-[#e5e6eb] px-2">
-                        <button
-                            type="button"
-                            onClick={() => {
+                    <div className="relative min-h-0 flex-1 overflow-hidden">
+                        <ArticleDetail
+                            article={selectedArticle}
+                            loading={detailLoading}
+                            onBack={() => {
                                 if (h5AiAssistantOpen) {
                                     setH5AiAssistantOpen(false);
                                     return;
                                 }
                                 setSelectedArticle(null);
                             }}
-                            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
-                            aria-label={localize("com_ui_go_back")}
-                        >
-                            <ChevronLeft className="size-5" />
-                        </button>
-                        <span className="min-w-0 flex-1 truncate text-left text-[14px] font-medium text-[#1D2129]">
-                            {h5AiAssistantOpen
-                                ? localize("com_subscription.ai_assistant")
-                                : selectedArticle.title}
-                        </span>
-                    </div>
-                    <div className="relative min-h-0 flex-1 overflow-hidden">
-                        <ArticleDetail
-                            article={selectedArticle}
-                            loading={detailLoading}
                             onFullScreen={() => onFullScreen?.(selectedArticle, false)}
                             onAiAssistant={() => setH5AiAssistantOpen(true)}
                         />

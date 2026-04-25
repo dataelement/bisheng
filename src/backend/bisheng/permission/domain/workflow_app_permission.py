@@ -147,12 +147,9 @@ async def _resolve_binding_for_tuple(
 
 
 async def _collect_user_subject_strings(login_user) -> Set[str]:
-    out = {f'user:{login_user.user_id}'}
-    group_ids = await login_user.get_user_group_ids(login_user.user_id)
-    out.update(f'user_group:{gid}#member' for gid in (group_ids or []))
-    uds = await UserDepartmentDao.aget_user_departments(login_user.user_id)
-    out.update(f'department:{ud.department_id}#member' for ud in (uds or []))
-    return out
+    from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+
+    return await FineGrainedPermissionService.get_current_user_subject_strings(login_user)
 
 
 async def get_effective_app_permission_ids(
@@ -161,77 +158,13 @@ async def get_effective_app_permission_ids(
     object_id: str,
 ) -> Set[str]:
     """Effective fine-grained permission ids for the current user on one app resource."""
-    from bisheng.permission.domain.services.permission_service import PermissionService
+    from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 
-    if login_user.is_admin():
-        return {pid for pid, _ in _APP_PERMISSION_DEFINITIONS}
-
-    user_subject_strings = await _collect_user_subject_strings(login_user)
-    from bisheng.permission.api.endpoints.resource_permission import (
-        _get_bindings,
-        _get_relation_models,
-        _normalize_model_dict,
+    return await ApplicationPermissionService.get_effective_permission_ids_async(
+        login_user,
+        object_type,
+        object_id,
     )
-
-    raw_models = await _get_relation_models()
-    model_map = {m['id']: _normalize_model_dict(m) for m in raw_models}
-    bindings = await _get_bindings()
-    binding_department_paths = await _binding_department_paths(bindings)
-    effective: Set[str] = set()
-
-    fga = PermissionService._get_fga()
-    if fga is None:
-        level = await PermissionService.get_permission_level(
-            user_id=login_user.user_id,
-            object_type=object_type,
-            object_id=str(object_id),
-            login_user=login_user,
-        )
-        relation = _PERMISSION_LEVEL_TO_FG_RELATION.get(level or '')
-        return _permission_ids_for_relation(relation or '', None)
-
-    try:
-        tuples = await fga.read_tuples(object=f'{object_type}:{object_id}')
-    except Exception as e:  # noqa: BLE001
-        logger.warning('read_tuples failed for %s:%s: %s', object_type, object_id, e)
-        tuples = []
-
-    for tuple_data in tuples or []:
-        tuple_user = tuple_data.get('user')
-        relation = tuple_data.get('relation')
-        if not tuple_user or not relation or tuple_user not in user_subject_strings:
-            continue
-        binding = await _resolve_binding_for_tuple(
-            object_type,
-            str(object_id),
-            tuple_user,
-            relation,
-            bindings,
-            binding_department_paths,
-            user_subject_strings,
-        )
-        model = model_map.get(binding.get('model_id')) if binding and binding.get('model_id') else None
-        effective.update(_permission_ids_for_relation(relation, model))
-
-    implicit_level = await PermissionService.get_implicit_permission_level(
-        user_id=login_user.user_id,
-        object_type=object_type,
-        object_id=str(object_id),
-        login_user=login_user,
-    )
-    implicit_relation = _PERMISSION_LEVEL_TO_FG_RELATION.get(implicit_level or '')
-    effective.update(_permission_ids_for_relation(implicit_relation or '', None))
-    if effective:
-        return effective
-
-    level = await PermissionService.get_permission_level(
-        user_id=login_user.user_id,
-        object_type=object_type,
-        object_id=str(object_id),
-        login_user=login_user,
-    )
-    relation = _PERMISSION_LEVEL_TO_FG_RELATION.get(level or '')
-    return _permission_ids_for_relation(relation or '', None)
 
 
 async def user_may_share_app(login_user, object_type: str, object_id: str) -> bool:

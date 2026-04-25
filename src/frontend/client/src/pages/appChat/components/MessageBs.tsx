@@ -2,7 +2,7 @@ import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
-import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
@@ -43,8 +43,27 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ logo, title, data, onUnlike = () => { },readOnly, onSource, isGuestMode = false }:
-    { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any, isGuestMode?: boolean }) {
+export default function MessageBs({
+    logo,
+    title,
+    data,
+    onUnlike = () => { },
+    readOnly,
+    onSource,
+    isGuestMode = false,
+    onOpenCitationPanel,
+    activeCitationMessageId,
+}: {
+    logo: React.ReactNode;
+    title: string;
+    data: ChatMessageType;
+    onUnlike?: any;
+    readOnly?: string;
+    onSource?: any;
+    isGuestMode?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+}) {
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
@@ -97,7 +116,16 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
                             <p className="select-none font-semibold text-base mb-1">{title}</p>
                             {message || data.files.length ?
                                 <div ref={messageRef} className="">
-                                    {message && <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} citations={(data as any).citations} /></div>}
+                                    {message && <div className="bs-mkdown text-base break-words [word-break:break-all]">
+                                        <Markdown
+                                            content={message}
+                                            isLatestMessage={false}
+                                            webContent={undefined}
+                                            citations={(data as any).citations}
+                                            messageId={String(data.id)}
+                                            onOpenCitationPanel={onOpenCitationPanel}
+                                        />
+                                    </div>}
                                     {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                     {/* @user */}
                                     {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
@@ -117,6 +145,21 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
                         content={referenceContent}
                         webContent={referenceWebContent}
                         citations={(data as any).citations}
+                        messageId={String(data.id)}
+                        desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
+                        open={onOpenCitationPanel ? activeCitationMessageId === String(data.id) : undefined}
+                        onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
+                            if (!nextOpen && activeCitationMessageId === String(data.id)) {
+                                onOpenCitationPanel({
+                                    messageId: String(data.id),
+                                    content: referenceContent,
+                                    webContent: referenceWebContent,
+                                    citations: (data as any).citations,
+                                    referenceItems: [],
+                                });
+                            }
+                        }) : undefined}
+                        onDesktopOpen={onOpenCitationPanel}
                         buttonClassName="ml-4"
                     />
                     {!isGuestMode && <MessageSource

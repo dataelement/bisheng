@@ -1,11 +1,12 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
+import { getKnowledgeSpaceGrantUserGroupsApi } from "@/controllers/API/permission"
 import { getUserGroupsApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Users } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { SelectedSubject } from "./types"
+import { ResourceType, SelectedSubject } from "./types"
 
 interface UserGroup {
   id: number
@@ -15,9 +16,16 @@ interface UserGroup {
 interface SubjectSearchUserGroupProps {
   value: SelectedSubject[]
   onChange: (v: SelectedSubject[]) => void
+  resourceType?: ResourceType
+  resourceId?: string
 }
 
-export function SubjectSearchUserGroup({ value, onChange }: SubjectSearchUserGroupProps) {
+export function SubjectSearchUserGroup({
+  value,
+  onChange,
+  resourceType,
+  resourceId,
+}: SubjectSearchUserGroupProps) {
   const { t } = useTranslation('permission')
   const [groups, setGroups] = useState<UserGroup[]>([])
   const [loading, setLoading] = useState(false)
@@ -25,11 +33,14 @@ export function SubjectSearchUserGroup({ value, onChange }: SubjectSearchUserGro
 
   useEffect(() => {
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getUserGroupsApi({})).then((res) => {
+    const request = resourceType === "knowledge_space" && resourceId
+      ? getKnowledgeSpaceGrantUserGroupsApi(resourceId)
+      : getUserGroupsApi({})
+    captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setGroups(Array.isArray(res) ? res : [])
       setLoading(false)
     })
-  }, [])
+  }, [resourceId, resourceType])
 
   const filtered = useMemo(() => {
     if (!keyword) return groups
@@ -48,13 +59,13 @@ export function SubjectSearchUserGroup({ value, onChange }: SubjectSearchUserGro
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-col gap-2">
       <SearchInput
         placeholder={t('search.userGroup')}
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
       />
-      <div className="max-h-[200px] overflow-y-auto border rounded-md">
+      <div className="min-h-[120px] max-h-[clamp(120px,calc(100vh-24rem),260px)] overflow-y-auto rounded-md border">
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
         )}
@@ -66,12 +77,12 @@ export function SubjectSearchUserGroup({ value, onChange }: SubjectSearchUserGro
         {!loading && filtered.map((group) => (
           <div
             key={group.id}
-            className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-accent"
+            className="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 hover:bg-accent"
             onClick={() => toggle(group)}
           >
             <Checkbox checked={selectedIds.has(group.id)} />
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm truncate">{group.group_name}</span>
+            <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate text-sm" title={group.group_name}>{group.group_name}</span>
           </div>
         ))}
       </div>

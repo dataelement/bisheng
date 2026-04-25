@@ -40,6 +40,13 @@ function adminsToOptions(admins: DepartmentAdmin[]): DepartmentUserOption[] {
   return admins.map((a) => ({ value: Number(a.user_id), label: a.user_name }))
 }
 
+function sameIdSet(left: Array<number | string>, right: Array<number | string>): boolean {
+  if (left.length !== right.length) return false
+  const leftIds = left.map(String).sort()
+  const rightIds = right.map(String).sort()
+  return leftIds.every((id, idx) => id === rightIds[idx])
+}
+
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
 
@@ -172,8 +179,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     }
   }, [buildParentTreeNodes, dept.dept_id, dept.name, dept.parent_id, t, tree])
 
-  const handleCancel = useCallback(() => {
-    const b = baselineRef.current
+  const restoreBaseline = useCallback((b = baselineRef.current) => {
     if (!b) return
     setName(b.name)
     setAdminSelectValue(b.admins)
@@ -181,6 +187,38 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     setDefaultRoleIds(b.defaultRoleIds)
     setParentIdValue(b.parentId)
   }, [])
+
+  const hasUnsavedSettingsChanges = useCallback(() => {
+    const b = baselineRef.current
+    if (!b) return false
+    if (canEditName && name !== b.name) return true
+    if (canEditParent && parentIdValue !== b.parentId) return true
+    if (
+      !sameIdSet(
+        adminSelectValue.map((o) => o.value),
+        b.admins.map((o) => o.value)
+      )
+    ) return true
+    if (!sameIdSet(defaultRoleIds, b.defaultRoleIds)) return true
+    return false
+  }, [adminSelectValue, canEditName, canEditParent, defaultRoleIds, name, parentIdValue])
+
+  const handleCancel = useCallback(() => {
+    const b = baselineRef.current
+    if (!b) return
+    if (!hasUnsavedSettingsChanges()) {
+      restoreBaseline(b)
+      return
+    }
+    bsConfirm({
+      title: t("prompt"),
+      desc: t("department.confirmCancelSettings", { ns: "bs" }),
+      onOk: (next) => {
+        restoreBaseline(b)
+        next()
+      },
+    })
+  }, [hasUnsavedSettingsChanges, restoreBaseline, t])
 
   const handleGlobalSave = useCallback(async () => {
     if (!canEditPermissions) return
@@ -196,19 +234,38 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     try {
       const body: {
         name?: string
-        default_role_ids: number[]
-        admin_user_ids: number[]
-      } = {
-        default_role_ids: defaultRoleIds.map(Number),
-        admin_user_ids: adminSelectValue.map((o) => o.value),
+        default_role_ids?: number[]
+        admin_user_ids?: number[]
+      } = {}
+      const baseline = baselineRef.current
+      const nextName = name.trim()
+      const nextAdminIds = adminSelectValue.map((o) => o.value)
+      const nextDefaultRoleIds = defaultRoleIds.map(Number)
+      if (canEditName && baseline && nextName !== baseline.name) {
+        body.name = nextName
       }
-      if (canEditName) body.name = name.trim()
+      if (
+        baseline &&
+        !sameIdSet(
+          nextAdminIds,
+          baseline.admins.map((o) => o.value)
+        )
+      ) {
+        body.admin_user_ids = nextAdminIds
+      }
+      if (baseline && !sameIdSet(nextDefaultRoleIds, baseline.defaultRoleIds)) {
+        body.default_role_ids = nextDefaultRoleIds
+      }
       const nextParentId = parentIdValue
       const parentChanged =
         canEditParent &&
-        baselineRef.current &&
+        baseline &&
         nextParentId !== null &&
-        nextParentId !== baselineRef.current.parentId
+        nextParentId !== baseline.parentId
+
+      if (!parentChanged && Object.keys(body).length === 0) {
+        return
+      }
 
       if (parentChanged) {
         const moveRes = await captureAndAlertRequestErrorHoc(
@@ -232,7 +289,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
       setAdminSelectValue(adminOpts)
       adminSelectValueRef.current = adminOpts
       baselineRef.current = {
-        name: name.trim(),
+        name: nextName,
         admins: adminOpts,
         defaultRoleIds: [...defaultRoleIds],
         parentId: nextParentId ?? baselineRef.current?.parentId ?? dept.parent_id ?? null,

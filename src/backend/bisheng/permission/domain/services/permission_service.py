@@ -25,8 +25,6 @@ from typing import List, Optional, Set
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
-    VALID_RELATIONS,
-    VALID_RESOURCE_TYPES,
     AuthorizeGrantItem,
     AuthorizeRevokeItem,
     PermissionLevel,
@@ -93,7 +91,7 @@ class PermissionService:
 
         # L5: OpenFGA check
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 logger.warning('FGAClient not available, falling back to owner / implicit dept-admin')
                 implicit_level = await cls._get_implicit_permission_level_after_gate(
@@ -170,7 +168,7 @@ class PermissionService:
                 )
 
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 logger.warning('FGAClient not available for list_objects, using fallback scopes only')
                 ids = await cls._finalize_accessible_ids(
@@ -323,7 +321,7 @@ class PermissionService:
             pre_recorded_ids = await cls._pre_record_failed_tuples(operations)
 
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 if not crash_safe:
                     await cls._save_failed_tuples(operations, 'FGAClient not available')
@@ -495,7 +493,7 @@ class PermissionService:
         and returns structured ResourcePermissionItem list.
         """
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 return []
 
@@ -550,10 +548,11 @@ class PermissionService:
         dept_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'department']
         group_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'user_group']
 
-        # Step 3: Batch resolve names and user-group captions for the user list UI
-        name_map, user_group_names_map = await asyncio.gather(
+        # Step 3: Batch resolve names and user-group captions for the user/group list UI
+        name_map, user_group_names_map, user_group_member_names_map = await asyncio.gather(
             cls._resolve_subject_names(user_ids, dept_ids, group_ids),
             cls._resolve_user_group_names(user_ids),
+            cls._resolve_user_group_member_names(group_ids),
         )
 
         # Step 4: Build items and merge department entries
@@ -584,6 +583,8 @@ class PermissionService:
                     subject_type=p['subject_type'],
                     subject_id=p['subject_id'],
                     subject_name=name,
+                    subject_member_names=user_group_member_names_map.get(p['subject_id'])
+                    if p['subject_type'] == 'user_group' else None,
                     subject_group_names=user_group_names_map.get(p['subject_id']) if p['subject_type'] == 'user' else None,
                     relation=p['relation'],
                 ))
@@ -618,6 +619,56 @@ class PermissionService:
                 resolved[int(user_id)] = names
 
         return resolved
+
+    @classmethod
+    async def _resolve_user_group_member_names(
+        cls,
+        group_ids: List[int],
+    ) -> dict[int, List[str]]:
+        """Batch-resolve visible member names for user-group subjects."""
+        if not group_ids:
+            return {}
+
+        try:
+            from bisheng.database.models.user_group import UserGroupDao
+            from bisheng.user.domain.models.user import UserDao
+
+            rows = await UserGroupDao.aget_group_users(list(set(group_ids)))
+            if not rows:
+                return {}
+
+            member_group_pairs: list[tuple[int, int]] = []
+            user_ids = set()
+            for row in rows:
+                group_id = int(getattr(row, 'group_id', 0) or 0)
+                user_id = int(getattr(row, 'user_id', 0) or 0)
+                if not group_id or not user_id:
+                    continue
+                member_group_pairs.append((group_id, user_id))
+                user_ids.add(user_id)
+
+            if not member_group_pairs:
+                return {}
+
+            users = await UserDao.aget_user_by_ids(sorted(user_ids))
+            user_name_map = {
+                int(user.user_id): user.user_name
+                for user in users or []
+                if getattr(user, 'delete', 0) == 0 and getattr(user, 'user_name', None)
+            }
+
+            resolved: dict[int, List[str]] = {}
+            for group_id, user_id in member_group_pairs:
+                user_name = user_name_map.get(user_id)
+                if not user_name:
+                    continue
+                names = resolved.setdefault(group_id, [])
+                if user_name not in names:
+                    names.append(user_name)
+            return resolved
+        except Exception as e:
+            logger.warning('Failed to resolve user-group member names: %s', e)
+            return {}
 
     @classmethod
     async def _resolve_subject_names(
@@ -696,7 +747,7 @@ class PermissionService:
             return shortcut_level
 
         try:
-            fga = cls._get_fga()
+            fga = await cls._aget_fga()
             if fga is None:
                 return await cls._get_implicit_permission_level_after_gate(
                     user_id, object_type, object_id,
@@ -790,7 +841,9 @@ class PermissionService:
 
         visible = await visible_tenants()
         if resource_tenant_id not in visible:
-            if not await cls._is_shared_to(user_id, resource_tenant_id):
+            if not await cls._is_shared_to(
+                user_id, resource_tenant_id, visible_tenant_ids=visible,
+            ):
                 return True, None
 
         from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
@@ -819,6 +872,13 @@ class PermissionService:
                 return PermissionLevel.owner.value
             if creator_id is not None and await cls._implicit_dept_admin_covers(user_id, creator_id):
                 return PermissionLevel.can_manage.value
+            department_space_level = await cls._implicit_department_space_member_level(
+                user_id,
+                object_type,
+                object_id,
+            )
+            if department_space_level is not None:
+                return department_space_level
             return None
         except Exception as e:
             logger.debug(
@@ -838,6 +898,10 @@ class PermissionService:
             return True
         if level == PermissionLevel.can_manage.value:
             return cls._relation_implicit_manager_ok(relation, object_type)
+        if level == PermissionLevel.can_edit.value:
+            return relation in ('can_edit', 'can_read', 'editor', 'viewer')
+        if level == PermissionLevel.can_read.value:
+            return relation in ('can_read', 'viewer')
         return False
 
     @classmethod
@@ -874,6 +938,29 @@ class PermissionService:
             if int(ud.department_id) in subtree:
                 return True
         return False
+
+    @classmethod
+    async def _implicit_department_space_member_level(
+        cls,
+        user_id: int,
+        object_type: str,
+        object_id: str,
+    ) -> Optional[str]:
+        if object_type != 'knowledge_space' or not str(object_id).isdigit():
+            return None
+
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.database.models.department import UserDepartmentDao
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
+
+        with bypass_tenant_filter():
+            binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(object_id))
+            if binding is None:
+                return None
+            user_departments = await UserDepartmentDao.aget_user_departments(user_id)
+        if any(int(row.department_id) == int(binding.department_id) for row in user_departments):
+            return PermissionLevel.can_read.value
+        return None
 
     @classmethod
     async def _distinct_user_ids_in_departments(cls, department_ids: Set[int]) -> Set[int]:
@@ -1115,7 +1202,8 @@ class PermissionService:
             if tenant_id not in visible
         })
         shared_checks = await asyncio.gather(*[
-            cls._is_shared_to(user_id, tenant_id) for tenant_id in shared_tenant_ids
+            cls._is_shared_to(user_id, tenant_id, visible_tenant_ids=visible)
+            for tenant_id in shared_tenant_ids
         ])
         shared_by_tenant = {
             tenant_id: allowed
@@ -1484,6 +1572,25 @@ class PermissionService:
         from bisheng.core.openfga.manager import get_fga_client
         return get_fga_client()
 
+    @classmethod
+    async def _aget_fga(cls):
+        """Async accessor for FGAClient.
+
+        PermissionService methods are async and FGAManager is initialized
+        asynchronously. Prefer the async accessor here so write paths do not
+        falsely degrade to ``FGAClient not available`` when the sync accessor
+        cannot materialize the optional context.
+
+        Falls back to ``_get_fga()`` so existing tests that patch the sync
+        helper keep working without broad rewrites.
+        """
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        if fga is not None:
+            return fga
+        return cls._get_fga()
+
     # ── F013 helpers (Tenant tree) ──────────────────────────────
 
     @classmethod
@@ -1533,21 +1640,66 @@ class PermissionService:
         return None
 
     @classmethod
-    async def _is_shared_to(cls, user_id: int, target_tenant_id: int) -> bool:
-        """True iff user belongs to target_tenant#shared_to#member (Root → Child share).
+    async def _is_shared_to(
+        cls,
+        user_id: int,
+        target_tenant_id: int,
+        visible_tenant_ids: Optional[List[int]] = None,
+    ) -> bool:
+        """True iff any visible tenant of the user has ``shared_to`` on target tenant.
 
-        Used by L3 visibility gate when the resource tenant is not in the
-        user's visible set. Depends on F017 to write the shared_to tuples
-        at resource creation time. Returns False on any FGA error.
+        F017 writes tuples as ``tenant:{child}#shared_to -> tenant:{root}``.
+        OpenFGA ``object`` must stay in ``type:id`` form, so we must query
+        against ``object=tenant:{target}`` and use the visible tenant itself
+        as the tuple subject.
         """
-        fga = cls._get_fga()
+        fga = await cls._aget_fga()
         if fga is None:
             return False
+
+        candidate_tenant_ids = [
+            int(one) for one in (visible_tenant_ids or []) if str(one).isdigit()
+        ]
+        if not candidate_tenant_ids:
+            try:
+                from bisheng.database.models.tenant import UserTenantDao, ROOT_TENANT_ID
+
+                active = await UserTenantDao.aget_active_user_tenant(user_id)
+                if active and active.tenant_id != ROOT_TENANT_ID:
+                    candidate_tenant_ids = [int(active.tenant_id), ROOT_TENANT_ID]
+                else:
+                    candidate_tenant_ids = [ROOT_TENANT_ID]
+            except Exception as e:
+                logger.warning(
+                    '[FGA shared_to check] fallback visible tenant lookup failed '
+                    'user_id=%s target_tenant_id=%s error=%s',
+                    user_id, target_tenant_id, e,
+                )
+                return False
+
+        fga_relation = 'shared_to'
+        fga_object = f'tenant:{target_tenant_id}'
         try:
-            return await fga.check(
-                user=f'user:{user_id}',
-                relation='member',
-                object=f'tenant:{target_tenant_id}#shared_to',
-            )
+            for tenant_id in candidate_tenant_ids:
+                fga_user = f'tenant:{tenant_id}'
+                logger.info(
+                    '[FGA shared_to check] user_id=%s target_tenant_id=%s '
+                    'candidate_tenant_id=%s user=%s relation=%s object=%s',
+                    user_id, target_tenant_id, tenant_id, fga_user, fga_relation, fga_object,
+                )
+                if await fga.check(
+                    user=fga_user,
+                    relation=fga_relation,
+                    object=fga_object,
+                ):
+                    return True
+            return False
         except FGAConnectionError:
+            return False
+        except Exception as e:
+            logger.error(
+                '[FGA shared_to check] failed user_id=%s target_tenant_id=%s '
+                'candidate_tenant_ids=%s relation=%s object=%s error=%s',
+                user_id, target_tenant_id, candidate_tenant_ids, fga_relation, fga_object, e,
+            )
             return False

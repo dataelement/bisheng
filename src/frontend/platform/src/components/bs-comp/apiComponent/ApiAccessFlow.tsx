@@ -130,7 +130,6 @@ print(response.text)# 输出工作流的响应`
                     "reasoning_content": null,
                     "output_key": null,
                     "files": null,
-                    "source_url": null,
                     "extra": null
                 },
                 "input_schema": null
@@ -284,7 +283,6 @@ print(response.text)# 输出工作流的响应`
                                             <JsonItem line name="path" type="str" desc="文件路径" example="http://minio:9000/xxx.png?aa=xxx"></JsonItem>
                                             <JsonItem line name="name" type="str" desc="文件名称" example="测试图片.png"></JsonItem>
                                         </JsonItem>
-                                        <JsonItem line name="source_url" type="str" desc="溯源url" example=""></JsonItem>
                                         <JsonItem line name="extra" type="str" desc="QA知识库溯源内容" example='{"qa": "本答案来源于已有问答库: QA 知识库", "url": null}'></JsonItem>
                                     </JsonItem>
                                 </TableCell>
@@ -344,7 +342,6 @@ print(response.text)# 输出工作流的响应`
         "name": "测试图片.png"
       }
     ],
-    "source_url": "",  # 知识库问答溯源页面地址，需要自己拼接毕昇的前端地址。具体是否支持溯源请参考产品文档
     "extra": "{\"qa\": \"本答案来源于已有问答库: QA 知识库\", \"url\": null}"  # QA知识库溯源内容
   },
 }`}
@@ -746,8 +743,7 @@ def upload_file(local_path: str):
         "path": "http://minio:9000/xxx.png?aa=xxx",
         "name": "测试图片.png"
       }
-    ],
-    "source_url": ""
+    ]
   }
 }`}
                                     </SyntaxHighlighter>
@@ -760,7 +756,6 @@ def upload_file(local_path: str):
                         <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
                             <li className='mt-2 leading-6'>将 <code className="bg-gray-200 p-1 rounded">output_schema.message</code> 展示给用户</li>
                             <li className='mt-2 leading-6'>如果 <code className="bg-gray-200 p-1 rounded">files</code> 不为空，则提供文件下载按钮或预览功能</li>
-                            <li className='mt-2 leading-6'><code className="bg-gray-200 p-1 rounded">source_url</code> 基于毕昇服务根路径，需要拼接毕昇访问地址才可访问</li>
                         </ul>
                     </div>
 
@@ -804,8 +799,7 @@ def upload_file(local_path: str):
                 "path": "http://minio:9000/xxx.png?aa=xxx",
                 "name": "测试图片.png"
             }
-        ],
-        "source_url": ""
+        ]
     },
     "input_schema": {
         "input_type": "message_inline_input",
@@ -891,8 +885,7 @@ def upload_file(local_path: str):
                 "path": "http://minio:9000/xxx.png?aa=xxx",
                 "name": "测试图片.png"
             }
-        ],
-        "source_url": ""
+        ]
     },
     "input_schema": {
         "input_type": "message_inline_option",
@@ -995,8 +988,7 @@ def upload_file(local_path: str):
   "output_schema": {
     "message": "你好，这是流式完成后最终的答案",
     "reasoning_content": "",  # 深度思考的内容，message内容不为空代表深度思考结束
-    "output_key": "output_1",
-    "source_url": "" # 是否支持溯源请参考产品文档
+    "output_key": "output_1"
   }
 }`}
                     </SyntaxHighlighter>

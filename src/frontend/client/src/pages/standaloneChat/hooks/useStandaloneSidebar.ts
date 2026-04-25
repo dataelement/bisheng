@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import type { AppConversation, AppItem, ConversationGroup } from '~/@types/app';
 import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from '~/api/apps';
@@ -38,6 +39,7 @@ const FLOW_TYPE_WORKFLOW = 10;
 export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
   const { mode, flowType, flowId, apiVersion } = ctx;
   const localize = useLocalize();
+  const navigate = useNavigate();
   const isGuest = mode === 'guest';
   const numericFlowType = flowType === 'assistant' ? FLOW_TYPE_ASSISTANT : FLOW_TYPE_WORKFLOW;
 
@@ -215,6 +217,14 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
           ? await getAssistantDetailApi(flowId, undefined, true, apiVersion)
           : await getFlowApi(flowId, apiVersion, undefined, true);
         console.log('[standalone] flow detail response:', res);
+        // Auth-mode standalone chat: surface a dedicated 403 page when the
+        // current user has no permission. Guest mode keeps the silent fallback
+        // because passwordless links may legitimately hit non-200 transient
+        // responses without warranting a hard redirect.
+        if (res?.status_code === 403 && mode === 'auth') {
+          navigate('/403', { replace: true });
+          return;
+        }
         if (res?.status_code !== 200) return;
         const data = res.data;
         if (!data) return;
@@ -230,7 +240,7 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
         console.error('[standalone] Failed to fetch app detail:', err);
       }
     })();
-  }, [flowId, numericFlowType, apiVersion, setCurrentApp]);
+  }, [flowId, numericFlowType, apiVersion, mode, navigate, setCurrentApp]);
 
   // Initialize: fetch conversations only. Do NOT auto-create a new chat when
   // the list is empty — the page renders an empty-state CTA (TC-APP-PUB-013/014/015)
@@ -256,7 +266,12 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
     if (draftChatIds.size === 0) return;
     draftChatIds.forEach((draftId) => {
       const chat = chats[draftId];
-      const hasUserMessage = chat?.messages?.some((m) => m.isSend);
+      // Runtime-sent messages set `category: 'question'` (createSendMsg) but
+      // not `isSend`; history-fetched messages set both. Check either to cover
+      // both cases — relying on `isSend` alone misses live drafts.
+      const hasUserMessage = chat?.messages?.some(
+        (m) => m.isSend || m.category === 'question',
+      );
       if (!hasUserMessage) return;
 
       draftChatIds.delete(draftId);

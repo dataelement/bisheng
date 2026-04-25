@@ -46,36 +46,28 @@ export function PermissionGrantTab({
   const { message } = useToast()
   const [subjectType, setSubjectType] = useState<SubjectType>('user')
   const [selected, setSelected] = useState<SelectedSubject[]>([])
-  const [models, setModels] = useState<RelationModelOption[]>([])
-  const [selectedModelId, setSelectedModelId] = useState<string>('viewer')
+  const [modelSource, setModelSource] = useState<{
+    relationModels?: RelationModel[]
+    fallbackToDefault: boolean
+  }>({ fallbackToDefault: true })
+  const [selectedModelId, setSelectedModelId] = useState<string>('owner')
   const [includeChildren, setIncludeChildren] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   const applyRelationModels = useCallback((relationModels: RelationModel[] | undefined, fallbackToDefault: boolean) => {
-    if (fallbackToDefault) {
-      setModels(DEFAULT_MODELS)
-      setSelectedModelId('viewer')
+    const hasModels = Boolean(relationModels?.length)
+    const shouldUseDefault = fallbackToDefault || !hasModels
+    setModelSource({
+      relationModels,
+      fallbackToDefault: shouldUseDefault,
+    })
+    if (shouldUseDefault) {
+      setSelectedModelId(DEFAULT_MODELS[0].id)
       return
     }
 
-    const options: RelationModelOption[] = (relationModels || [])
-      .map((m) => ({
-        id: m.id,
-        name: m.is_system ? t(`level.${m.relation}`) : m.name,
-        relation: m.relation as RelationLevel,
-      }))
-
-    if (options.length) {
-      setModels(options)
-      setSelectedModelId((current) => (
-        options.some((option) => option.id === current) ? current : options[0].id
-      ))
-      return
-    }
-
-    setModels(DEFAULT_MODELS)
-    setSelectedModelId('viewer')
-  }, [t])
+    setSelectedModelId(relationModels![0].id)
+  }, [])
 
   useEffect(() => {
     if (skipGrantableModelsRequest) {
@@ -103,8 +95,22 @@ export function PermissionGrantTab({
     resourceType,
     skipGrantableModelsRequest,
     applyRelationModels,
-    t,
   ])
+
+  const models = useMemo<RelationModelOption[]>(() => {
+    if (!modelSource.fallbackToDefault && modelSource.relationModels?.length) {
+      return modelSource.relationModels.map((m) => ({
+        id: m.id,
+        name: m.is_system ? t(`level.${m.relation}`) : m.name,
+        relation: m.relation as RelationLevel,
+      }))
+    }
+
+    return DEFAULT_MODELS.map((m) => ({
+      ...m,
+      name: t(`level.${m.relation}`),
+    }))
+  }, [modelSource, t])
 
   const relation = useMemo<RelationLevel>(() => {
     return models.find((m) => m.id === selectedModelId)?.relation || 'viewer'
@@ -167,7 +173,7 @@ export function PermissionGrantTab({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-col gap-4">
       {/* Subject type selector */}
       <div className="flex gap-1 p-1 bg-muted rounded-md w-fit">
         {SUBJECT_TYPES.map((type) => (
@@ -187,29 +193,43 @@ export function PermissionGrantTab({
 
       {/* Subject search based on type */}
       {subjectType === 'user' && (
-        <SubjectSearchUser value={selected} onChange={setSelected} />
+        <SubjectSearchUser
+          value={selected}
+          onChange={setSelected}
+          resourceType={resourceType}
+          resourceId={resourceId}
+        />
       )}
       {subjectType === 'department' && (
         <SubjectSearchDepartment
           value={selected}
           onChange={setSelected}
+          resourceType={resourceType}
+          resourceId={resourceId}
           includeChildren={includeChildren}
           onIncludeChildrenChange={setIncludeChildren}
         />
       )}
       {subjectType === 'user_group' && (
-        <SubjectSearchUserGroup value={selected} onChange={setSelected} />
+        <SubjectSearchUserGroup
+          value={selected}
+          onChange={setSelected}
+          resourceType={resourceType}
+          resourceId={resourceId}
+        />
       )}
 
       {/* Selected subjects preview */}
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto pr-1">
           {selected.map((s) => (
             <span
               key={`${s.type}-${s.id}`}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-muted rounded-md"
+              className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
             >
-              {s.name}
+              <span className="min-w-0 max-w-[min(24rem,100%)] truncate" title={s.name}>
+                {s.name}
+              </span>
               {s.type === 'department' && s.include_children && (
                 <span className="text-muted-foreground">
                   ({t('includeChildren')})

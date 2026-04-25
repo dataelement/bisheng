@@ -31,6 +31,7 @@ import {
   buildCitationPreview,
   createCitationDetailMap,
   getCitationClassName,
+  getCitationDocumentUrl,
   getCitationSourceLabel,
   getLegacyCitationPreview,
   isRagCitation,
@@ -651,6 +652,16 @@ const Markdown = memo(({
   const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const citationBatchRequestKeyRef = useRef<string>('');
 
+  const shouldResolveCitationDetail = useCallback((citationId?: string, detail?: ChatCitation | null) => {
+    if (!citationId || citationId.startsWith('citation:')) {
+      return false;
+    }
+    if (!detail) {
+      return true;
+    }
+    return isRagCitation(detail) && !getCitationDocumentUrl(detail);
+  }, []);
+
   useEffect(() => {
     Object.entries(initialCitationDetailMap).forEach(([citationId, detail]) => {
       citationDetailCacheRef.current[citationId] = detail;
@@ -662,10 +673,12 @@ const Markdown = memo(({
   }, [initialCitationDetailMap]);
 
   useEffect(() => {
+    const citationIdsFromContent = Object.values(citationMap).map((item) => item.citationId);
+    const citationIdsFromDetails = (citations ?? []).map((item) => item?.citationId);
     const citationIds = Array.from(new Set(
-      Object.values(citationMap)
-        .map((item) => item.citationId)
-        .filter((citationId) => citationId && !citationId.startsWith('citation:') && !citationDetailCacheRef.current[citationId]),
+      [...citationIdsFromContent, ...citationIdsFromDetails]
+        .filter((citationId): citationId is string => !!citationId)
+        .filter((citationId) => shouldResolveCitationDetail(citationId, citationDetailCacheRef.current[citationId])),
     ));
 
     if (!citationIds.length) {
@@ -698,11 +711,11 @@ const Markdown = memo(({
         console.error('Failed to resolve citation details:', error);
         citationBatchRequestKeyRef.current = '';
       });
-  }, [citationMap]);
+  }, [citationMap, citations, shouldResolveCitationDetail]);
 
   const loadCitationDetail = useCallback<CitationDetailLoader>(async (citationId) => {
     const cachedDetail = citationDetailCacheRef.current[citationId];
-    if (cachedDetail) {
+    if (cachedDetail && !shouldResolveCitationDetail(citationId, cachedDetail)) {
       return cachedDetail;
     }
 
@@ -725,7 +738,7 @@ const Markdown = memo(({
 
     citationRequestCacheRef.current[citationId] = request;
     return request;
-  }, []);
+  }, [shouldResolveCitationDetail]);
 
   const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
     const nextPreview = {
@@ -817,6 +830,32 @@ const Markdown = memo(({
                             {legacyIndexValue}
                           </Citation>
                         );
+                      } else {
+                        const citationDetail = citations?.[legacyIndex - 1] ?? null;
+                        const citationData = citationDetail
+                          ? {
+                            label: legacyIndex,
+                            ref: `citation:${legacyIndexValue}`,
+                            type: citationDetail.type || 'knowledgeSearch',
+                            groupKey: citationDetail.citationId,
+                            chunkId: String(citationDetail.itemId || citationDetail.sourcePayload?.items?.[0]?.itemId || legacyIndexValue),
+                            citationId: citationDetail.citationId,
+                            itemId: String(citationDetail.itemId || citationDetail.sourcePayload?.items?.[0]?.itemId || legacyIndexValue),
+                          }
+                          : null;
+                        if (citationData) {
+                          nodes.push(
+                            <Citation
+                              key={`rag-legacy-${matchIndex}`}
+                              data={citationData}
+                              initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
+                              loadCitationDetail={loadCitationDetail}
+                              onOpenDocumentPreview={handleOpenDocumentPreview}
+                            >
+                              {legacyIndexValue}
+                            </Citation>
+                          );
+                        }
                       }
                     } else if (privateRef) {
                       const citationData = citationMap[privateRef];

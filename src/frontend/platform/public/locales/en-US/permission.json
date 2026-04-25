@@ -43,6 +43,7 @@
   "error": {
     "permissionDenied": "Permission denied",
     "grantFailed": "Failed to grant permission",
+    "lastOwner": "At least one owner must remain. You cannot remove the last owner.",
     "revokeFailed": "Failed to revoke permission"
   },
   "success": {

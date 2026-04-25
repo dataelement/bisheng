@@ -68,11 +68,13 @@ interface MemberTableProps {
   }) => void
 }
 
+const EMPTY_DEPARTMENT_TREE: DepartmentTreeNode[] = []
+
 export function MemberTable({
   deptId,
   deptName,
   dept = null,
-  tree = [],
+  tree = EMPTY_DEPARTMENT_TREE,
   isArchived = false,
   onChanged,
   membersRefreshSignal = 0,

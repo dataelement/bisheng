@@ -405,7 +405,11 @@ export default function DepartmentUsersSelect({
                 {!disabled && !lockedSet.has(Number(v.value)) && (
                   <X
                     className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"
-                    onClick={() => setPicked(v)}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onChange((value || []).filter((x) => Number(x.value) !== Number(v.value)))
+                    }}
                   />
                 )}
               </span>
@@ -416,16 +420,25 @@ export default function DepartmentUsersSelect({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="w-[min(100vw-2rem,520px)] max-w-[min(100vw-2rem,520px)] p-2"
+        collisionPadding={12}
+        className="w-[min(calc(100vw_-_2rem),520px)] max-w-[calc(100vw_-_2rem)] overflow-hidden p-2"
+        style={{
+          maxHeight: "min(520px, var(--radix-popover-content-available-height, 520px))",
+        }}
       >
-        <div className="flex max-h-[520px] flex-col gap-2">
+        <div
+          className="flex min-h-0 flex-col gap-2 overflow-hidden"
+          style={{
+            maxHeight: "min(504px, calc(var(--radix-popover-content-available-height, 520px) - 1rem))",
+          }}
+        >
           <SearchInput
             placeholder={searchPlaceholder || t("system.searchUser")}
-            className="mb-1"
+            className="mb-1 shrink-0"
             value={keyword}
             onChange={(e) => handleKeywordChange(e.target.value)}
           />
-          <div className="min-h-[140px] max-h-[420px] overflow-y-auto rounded-md border">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
             {loadingTree ? (
               <div className="py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
             ) : tree.length === 0 ? (
@@ -446,4 +459,3 @@ export default function DepartmentUsersSelect({
     </Popover>
   )
 }
-

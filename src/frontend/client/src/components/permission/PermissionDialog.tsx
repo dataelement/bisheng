@@ -1,5 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLocalize } from "~/hooks";
+import { getGrantableRelationModels } from "~/api/permission";
+import type { RelationModel, ResourceType } from "~/api/permission";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +11,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { PermissionListTab } from "./PermissionListTab";
 import { PermissionGrantTab } from "./PermissionGrantTab";
-import type { ResourceType } from "~/api/permission";
 
 interface PermissionDialogProps {
   open: boolean;
@@ -29,11 +30,28 @@ export function PermissionDialog({
   const localize = useLocalize();
   const [activeTab, setActiveTab] = useState("list");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
+  const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
 
   const handleGrantSuccess = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setActiveTab("list");
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setGrantableModelsLoaded(false);
+    getGrantableRelationModels(resourceType, resourceId)
+      .then((res) => {
+        setGrantableModels(Array.isArray(res) ? res : []);
+        setGrantableModelsLoaded(true);
+      })
+      .catch(() => {
+        setGrantableModels([]);
+        setGrantableModelsLoaded(true);
+      });
+  }, [open, resourceId, resourceType]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -57,6 +75,9 @@ export function PermissionDialog({
               resourceType={resourceType}
               resourceId={resourceId}
               refreshKey={refreshKey}
+              prefetchedGrantableModels={grantableModels}
+              prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+              skipGrantableModelsRequest
             />
           </TabsContent>
           <TabsContent value="grant" className="p-0">
@@ -64,6 +85,9 @@ export function PermissionDialog({
               resourceType={resourceType}
               resourceId={resourceId}
               onSuccess={handleGrantSuccess}
+              prefetchedGrantableModels={grantableModels}
+              prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+              skipGrantableModelsRequest
             />
           </TabsContent>
         </Tabs>
