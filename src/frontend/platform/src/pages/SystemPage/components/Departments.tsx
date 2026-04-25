@@ -220,6 +220,8 @@ export default function Departments() {
               <MemberTable
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
+                dept={selectedDept}
+                tree={tree}
                 isArchived={selectedDept.status === "archived"}
                 onChanged={handleTreeChange}
                 membersRefreshSignal={membersRefreshSignal}
