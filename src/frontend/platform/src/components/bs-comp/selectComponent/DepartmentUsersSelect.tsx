@@ -369,6 +369,7 @@ export default function DepartmentUsersSelect({
                   <Checkbox checked={selected} disabled={locked} onCheckedChange={() => setPicked(u, displayPathForNode)} />
                   <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="truncate">{u.label}</span>
+                  <span className="shrink-0">（{u.value}）</span>
                 </div>
               )
             })}
@@ -400,7 +401,7 @@ export default function DepartmentUsersSelect({
                 key={v.value}
                 className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs text-foreground"
               >
-                {v.label}
+                {v.label}（{v.value}）
                 {!disabled && !lockedSet.has(Number(v.value)) && (
                   <X
                     className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"
