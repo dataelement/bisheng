@@ -243,17 +243,19 @@ export default function KnowledgeSpace() {
                                                                         ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
                                                                         : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
                                                                 </span>
-                                                                <span
-                                                                    className={
-                                                                        space.sensitive_check_enabled
-                                                                            ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
-                                                                            : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
-                                                                    }
-                                                                >
-                                                                    {space.sensitive_check_enabled
-                                                                        ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
-                                                                        : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
-                                                                </span>
+                                                                {showSensitiveCheckControl && (
+                                                                    <span
+                                                                        className={
+                                                                            space.sensitive_check_enabled
+                                                                                ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
+                                                                                : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
+                                                                        }
+                                                                    >
+                                                                        {space.sensitive_check_enabled
+                                                                            ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
+                                                                            : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
