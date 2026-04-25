@@ -548,10 +548,11 @@ class PermissionService:
         dept_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'department']
         group_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'user_group']
 
-        # Step 3: Batch resolve names and user-group captions for the user list UI
-        name_map, user_group_names_map = await asyncio.gather(
+        # Step 3: Batch resolve names and user-group captions for the user/group list UI
+        name_map, user_group_names_map, user_group_member_names_map = await asyncio.gather(
             cls._resolve_subject_names(user_ids, dept_ids, group_ids),
             cls._resolve_user_group_names(user_ids),
+            cls._resolve_user_group_member_names(group_ids),
         )
 
         # Step 4: Build items and merge department entries
@@ -582,6 +583,8 @@ class PermissionService:
                     subject_type=p['subject_type'],
                     subject_id=p['subject_id'],
                     subject_name=name,
+                    subject_member_names=user_group_member_names_map.get(p['subject_id'])
+                    if p['subject_type'] == 'user_group' else None,
                     subject_group_names=user_group_names_map.get(p['subject_id']) if p['subject_type'] == 'user' else None,
                     relation=p['relation'],
                 ))
@@ -616,6 +619,56 @@ class PermissionService:
                 resolved[int(user_id)] = names
 
         return resolved
+
+    @classmethod
+    async def _resolve_user_group_member_names(
+        cls,
+        group_ids: List[int],
+    ) -> dict[int, List[str]]:
+        """Batch-resolve visible member names for user-group subjects."""
+        if not group_ids:
+            return {}
+
+        try:
+            from bisheng.database.models.user_group import UserGroupDao
+            from bisheng.user.domain.models.user import UserDao
+
+            rows = await UserGroupDao.aget_group_users(list(set(group_ids)))
+            if not rows:
+                return {}
+
+            member_group_pairs: list[tuple[int, int]] = []
+            user_ids = set()
+            for row in rows:
+                group_id = int(getattr(row, 'group_id', 0) or 0)
+                user_id = int(getattr(row, 'user_id', 0) or 0)
+                if not group_id or not user_id:
+                    continue
+                member_group_pairs.append((group_id, user_id))
+                user_ids.add(user_id)
+
+            if not member_group_pairs:
+                return {}
+
+            users = await UserDao.aget_user_by_ids(sorted(user_ids))
+            user_name_map = {
+                int(user.user_id): user.user_name
+                for user in users or []
+                if getattr(user, 'delete', 0) == 0 and getattr(user, 'user_name', None)
+            }
+
+            resolved: dict[int, List[str]] = {}
+            for group_id, user_id in member_group_pairs:
+                user_name = user_name_map.get(user_id)
+                if not user_name:
+                    continue
+                names = resolved.setdefault(group_id, [])
+                if user_name not in names:
+                    names.append(user_name)
+            return resolved
+        except Exception as e:
+            logger.warning('Failed to resolve user-group member names: %s', e)
+            return {}
 
     @classmethod
     async def _resolve_subject_names(

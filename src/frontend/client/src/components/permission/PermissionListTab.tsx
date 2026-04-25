@@ -158,11 +158,12 @@ export function PermissionListTab({
     return subjectEntries.filter((entry) => {
       const name = entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
       const groupNames = entry.subject_group_names?.join(" ") ?? "";
+      const memberNames = entry.subject_member_names?.join(" ") ?? "";
       const includeChildrenText =
         entry.subject_type === "department" && entry.include_children
           ? localize("com_permission.include_children")
           : "";
-      return `${name} ${groupNames} ${includeChildrenText}`
+      return `${name} ${groupNames} ${memberNames} ${includeChildrenText}`
         .toLowerCase()
         .includes(normalizedSearchQuery);
     });
@@ -279,7 +280,7 @@ export function PermissionListTab({
         : localize("com_permission.subject_department");
     }
 
-    return localize("com_permission.subject_user_group");
+    return entry.subject_member_names?.join("、") ?? localize("com_permission.subject_user_group");
   };
 
   const handleListScroll = () => {

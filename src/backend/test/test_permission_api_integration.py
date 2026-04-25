@@ -6,6 +6,7 @@ without requiring a full running backend.
 """
 
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
@@ -146,6 +147,117 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 19000
         mock_authorize.assert_not_awaited()
+
+    def test_authorize_api_blocks_self_owner_revoke_when_it_is_the_last_owner(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='owner',
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value={'manage_app_owner'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=7,
+                    subject_name='viewer',
+                    relation='owner',
+                ),
+            ],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    json={
+                        'grants': [],
+                        'revokes': [{
+                            'subject_type': 'user',
+                            'subject_id': 7,
+                            'relation': 'owner',
+                        }],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 19000
+        mock_authorize.assert_not_awaited()
+
+    def test_authorize_api_allows_self_owner_revoke_when_another_owner_remains(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='owner',
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value={'manage_app_owner'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=7,
+                    subject_name='viewer',
+                    relation='owner',
+                ),
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=9,
+                    subject_name='co-owner',
+                    relation='owner',
+                ),
+            ],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize, patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ):
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    json={
+                        'grants': [],
+                        'revokes': [{
+                            'subject_type': 'user',
+                            'subject_id': 7,
+                            'relation': 'owner',
+                        }],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        mock_authorize.assert_awaited_once()
 
     def test_permissions_list_requires_can_edit_on_resource(self):
         app = _make_app(_ViewerUser)
@@ -293,6 +405,78 @@ class TestPermissionApiIntegration:
         assert body['status_code'] == 200
         assert body['data'][0]['subject_id'] == 8
         assert body['data'][0]['model_id'] == 'viewer'
+
+    def test_department_space_permissions_include_implicit_display_rows(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[
+                {
+                    'id': 'manager',
+                    'name': '可管理',
+                    'relation': 'manager',
+                    'grant_tier': 'manager',
+                    'permissions': [],
+                    'permissions_explicit': False,
+                    'is_system': True,
+                },
+                {
+                    'id': 'viewer',
+                    'name': '可查看',
+                    'relation': 'viewer',
+                    'grant_tier': 'usage',
+                    'permissions': [],
+                    'permissions_explicit': False,
+                    'is_system': True,
+                },
+            ],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(department_id=10),
+        ), patch(
+            'bisheng.database.models.department.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=10, name='财务部'),
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_manage',
+        ):
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/knowledge_space/101/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        rows = {
+            (item['subject_type'], item['subject_id']): item
+            for item in body['data']
+        }
+        assert set(rows) == {
+            ('department', 10),
+            ('user', 7),
+        }
+        assert rows[('department', 10)]['relation'] == 'viewer'
+        assert rows[('department', 10)]['model_id'] == 'viewer'
+        assert rows[('department', 10)]['subject_name'] == '财务部'
+        assert rows[('department', 10)]['include_children'] is False
+        assert rows[('user', 7)]['relation'] == 'manager'
+        assert rows[('user', 7)]['model_id'] == 'manager'
+        assert rows[('user', 7)]['subject_name'] == 'viewer'
 
     def test_permission_check_uses_permission_id_for_all_resource_types(self):
         app = _make_app(_ViewerUser)

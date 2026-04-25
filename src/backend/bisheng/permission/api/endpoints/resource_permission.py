@@ -70,6 +70,12 @@ _MANAGE_PERMISSION_BY_RESOURCE = {
     'folder': 'manage_folder_relation',
     'knowledge_file': 'manage_file_relation',
 }
+_PERMISSION_LEVEL_TO_RELATION = {
+    PermissionLevel.owner.value: 'owner',
+    PermissionLevel.can_manage.value: 'manager',
+    PermissionLevel.can_edit.value: 'editor',
+    PermissionLevel.can_read.value: 'viewer',
+}
 # 无绑定信息的撤回：保持历史行为，需可管理及以上
 _LEGACY_REVOKE_MAX_CALLER_INDEX = 1
 _RELATION_MODELS_KEY = 'permission_relation_models_v1'
@@ -447,6 +453,143 @@ def _grant_management_permission_id(resource_type: str, grant, model_map: dict) 
     return _management_permission_id(resource_type, grant_tier)
 
 
+def _attach_default_model_metadata(item: ResourcePermissionItem, model_map: dict) -> None:
+    model = model_map.get(item.relation)
+    if not model:
+        return
+    item.model_id = model.get('id') or item.relation
+    item.model_name = model.get('name')
+
+
+def _permission_subject_key(item: ResourcePermissionItem) -> tuple[str, int, str]:
+    return item.subject_type, int(item.subject_id), item.relation
+
+
+def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
+    return (
+        getattr(revoke, 'subject_type', None) == 'user'
+        and int(getattr(revoke, 'subject_id', 0) or 0) == int(login_user.user_id)
+        and getattr(revoke, 'relation', None) == 'owner'
+    )
+
+
+async def _can_remove_self_owner_relation(
+    *,
+    resource_type: str,
+    resource_id: str,
+    revokes: list,
+) -> bool:
+    """Only allow self owner removal when another owner already exists."""
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    permissions = await PermissionService.get_resource_permissions(
+        object_type=resource_type,
+        object_id=resource_id,
+    )
+    owner_signatures = {
+        _tuple_signature(item)
+        for item in permissions
+        if getattr(item, 'relation', None) == 'owner'
+    }
+    revoke_signatures = {
+        _tuple_signature(item)
+        for item in revokes
+        if getattr(item, 'relation', None) == 'owner'
+    }
+    remaining_owner_count = len(owner_signatures - revoke_signatures)
+    return remaining_owner_count > 0
+
+
+async def _add_implicit_permission_entries(
+    *,
+    resource_type: str,
+    resource_id: str,
+    permissions: list[ResourcePermissionItem],
+    model_map: dict,
+    login_user: UserPayload,
+) -> list[ResourcePermissionItem]:
+    """Show department-space implicit access sources in the permission dialog.
+
+    Department knowledge spaces can be accessible through the
+    department_knowledge_space binding or implicit permission shortcuts even
+    when older data has no explicit OpenFGA tuple to list. The authorization
+    checks already honor those paths; this keeps the management dialog aligned
+    with the effective permission model.
+    """
+    out = list(permissions)
+    if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
+        return out
+
+    try:
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
+
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id))
+    except Exception as e:
+        logger.debug('Could not load department-space binding for %s: %s', resource_id, e)
+        return out
+    if binding is None:
+        return out
+
+    existing = {_permission_subject_key(item) for item in out}
+
+    department_id = int(binding.department_id)
+    department_key = ('department', department_id, 'viewer')
+    if department_key not in existing:
+        department_name = None
+        try:
+            from bisheng.database.models.department import DepartmentDao
+
+            dept = await DepartmentDao.aget_by_id(department_id)
+            department_name = getattr(dept, 'name', None) if dept else None
+        except Exception as e:
+            logger.debug('Could not resolve department %s for permission list: %s', department_id, e)
+        item = ResourcePermissionItem(
+            subject_type='department',
+            subject_id=department_id,
+            subject_name=department_name,
+            relation='viewer',
+            include_children=False,
+        )
+        _attach_default_model_metadata(item, model_map)
+        out.append(item)
+        existing.add(_permission_subject_key(item))
+
+    user_has_list_entry = any(
+        item.subject_type == 'user' and int(item.subject_id) == int(login_user.user_id)
+        for item in out
+    )
+    if not login_user.is_admin() and not user_has_list_entry:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        implicit_level = await PermissionService.get_implicit_permission_level(
+            user_id=login_user.user_id,
+            object_type=resource_type,
+            object_id=resource_id,
+            login_user=login_user,
+        )
+        relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
+        if relation:
+            user_name = getattr(login_user, 'user_name', None)
+            if not user_name:
+                try:
+                    from bisheng.user.domain.models.user import UserDao
+
+                    user = await UserDao.aget_user(login_user.user_id)
+                    user_name = getattr(user, 'user_name', None) if user else None
+                except Exception as e:
+                    logger.debug('Could not resolve user %s for permission list: %s', login_user.user_id, e)
+            item = ResourcePermissionItem(
+                subject_type='user',
+                subject_id=login_user.user_id,
+                subject_name=user_name,
+                relation=relation,
+            )
+            _attach_default_model_metadata(item, model_map)
+            out.append(item)
+
+    return out
+
+
 @router.post('/resources/{resource_type}/{resource_id}/authorize')
 async def authorize_resource(
     resource_type: str,
@@ -529,6 +672,18 @@ async def authorize_resource(
         revoke for revoke in (request.revokes or [])
         if _tuple_signature(revoke) not in rebind_only_signatures
     ]
+
+    self_owner_revokes = [
+        revoke for revoke in tuple_revokes
+        if _is_self_owner_revoke(revoke, login_user)
+    ]
+    if self_owner_revokes:
+        if not await _can_remove_self_owner_relation(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            revokes=self_owner_revokes,
+        ):
+            return PermissionDeniedError.return_resp()
 
     if tuple_grants or tuple_revokes:
         logger.info(
@@ -663,6 +818,13 @@ async def get_resource_permissions(
         visible_permissions.append(p)
     permissions = visible_permissions
     permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
+    permissions = await _add_implicit_permission_entries(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        permissions=permissions,
+        model_map=model_map,
+        login_user=login_user,
+    )
     return resp_200(permissions)
 
 
