@@ -400,7 +400,7 @@
     "createTagWithName": "Create tag \"{{name}}\"",
     "deleteTag": "Delete Tag",
     "confirmDeleteTag": "Delete tag \"{{name}}\"?",
-    "tagsCountLimitExceeded": "Each file can be associated with up to 5 tags",
+    "tagsCountLimitExceeded": "Tag count exceeds the allowed limit",
     "tagNameMaxLength": "Tag name cannot exceed {{count}} characters",
     "tagExists": "Tag already exists",
     "tagAdded": "Tag added successfully",
