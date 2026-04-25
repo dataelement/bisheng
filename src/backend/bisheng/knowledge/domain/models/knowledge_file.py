@@ -5,7 +5,7 @@ from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text, and_
+from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -349,18 +349,28 @@ class KnowledgeFileDao(KnowledgeFileBase):
                                       extra_file_ids: List[int] = None,
                                       *, order_by: str = None, order_field: str = None, order_sort: str = "desc"):
         and_statement = []
-        if file_name:
-            and_statement.append(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status:
             and_statement.append(KnowledgeFile.status.in_(status))
         if file_ids:
             and_statement.append(KnowledgeFile.id.in_(file_ids))
         if file_level_path:
             and_statement.append(KnowledgeFile.file_level_path.like(f"{file_level_path}%"))
-        if extra_file_ids:
-            statement = statement.where(or_(KnowledgeFile.id.in_(extra_file_ids), and_(*and_statement)))
-        else:
-            statement = statement.where(*and_statement)
+
+        keyword_statement = None
+        if file_name and extra_file_ids:
+            keyword_statement = or_(
+                KnowledgeFile.file_name.like(f'%{file_name}%'),
+                KnowledgeFile.id.in_(extra_file_ids),
+            )
+        elif file_name:
+            keyword_statement = KnowledgeFile.file_name.like(f'%{file_name}%')
+        elif extra_file_ids:
+            keyword_statement = KnowledgeFile.id.in_(extra_file_ids)
+
+        if keyword_statement is not None:
+            and_statement.append(keyword_statement)
+
+        statement = statement.where(*and_statement)
 
         if order_field and order_sort:
             from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao

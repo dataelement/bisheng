@@ -71,19 +71,6 @@ class TagDao(Tag):
             return session.exec(statement).all()
 
     @classmethod
-    async def asearch_tags(cls, keyword: str = None, page: int = 0, limit: int = 0, *,
-                           business_type: TagBusinessTypeEnum, business_id: str) -> List[Tag]:
-        """ Get all tags by default Paginable """
-        statement = select(Tag)
-        if keyword:
-            statement = statement.where(Tag.name.like(f'%{keyword}%'))
-        if page and limit:
-            statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.where(Tag.business_type == business_type, Tag.business_id == business_id)
-        async with get_async_db_session() as session:
-            return (await session.exec(statement)).all()
-
-    @classmethod
     def count_tags(cls, keyword: str = None, *, business_type: TagBusinessTypeEnum, business_id: str) -> int:
         """ Count the number of tags """
         statement = select(func.count(Tag.id))
