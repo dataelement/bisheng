@@ -80,6 +80,9 @@ class TestAupdateTenantStatusRootProtection:
         })()
 
         with patch(
+            'bisheng.tenant.domain.services.tenant_service.TenantDao.aget_by_id',
+            new_callable=AsyncMock, return_value=mock_tenant,
+        ), patch(
             'bisheng.tenant.domain.services.tenant_service.TenantDao.aupdate_tenant',
             new_callable=AsyncMock, return_value=mock_tenant,
         ), patch(
@@ -93,6 +96,9 @@ class TestAupdateTenantStatusRootProtection:
                 data=TenantStatusUpdate(status='disabled'),
                 login_user=fake_user,
             )
+        # Prior status was already 'disabled' (mock returned the same row),
+        # so no JWT revocation should fire — this test stays focused on the
+        # root-protection guard, not the §11.9.11 revocation pathway.
         assert result['status'] == 'disabled'
 
 

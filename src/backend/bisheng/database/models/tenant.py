@@ -721,6 +721,24 @@ class UserTenantDao:
                 return result.first()
 
     @classmethod
+    async def aget_active_user_ids_by_tenant(cls, tenant_id: int) -> List[int]:
+        """Return user_ids whose active leaf is the given tenant.
+
+        Used by ``TenantService._revoke_active_jwts_for_tenant`` (PRD §5.1.3
+        step 1) to enumerate the users whose JWTs must be revoked when a
+        Child Tenant transitions to ``disabled``.
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(UserTenant.user_id).where(
+                        UserTenant.tenant_id == tenant_id,
+                        UserTenant.is_active == 1,
+                    )
+                )
+                return [int(row) for row in result.all()]
+
+    @classmethod
     async def adeactivate_user_tenant(
         cls, user_id: int, tenant_id: int,
     ) -> int:
