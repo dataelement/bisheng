@@ -4,6 +4,7 @@ import {
   authorizeResource,
   getDepartmentTree,
   getGrantableRelationModels,
+  getResourcePermissions,
   getResourceGrantDepartments,
   getResourceGrantUserGroups,
   getResourceGrantUsers,
@@ -22,6 +23,7 @@ jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getDepartmentTree: jest.fn(),
   getGrantableRelationModels: jest.fn(),
+  getResourcePermissions: jest.fn(),
   getResourceGrantDepartments: jest.fn(),
   getResourceGrantUserGroups: jest.fn(),
   getResourceGrantUsers: jest.fn(),
@@ -30,13 +32,16 @@ jest.mock("~/api/permission", () => ({
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 const mockedGetDepartmentTree = jest.mocked(getDepartmentTree);
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
+const mockedGetResourcePermissions = jest.mocked(getResourcePermissions);
 const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
 const mockedGetResourceGrantUserGroups = jest.mocked(getResourceGrantUserGroups);
 const mockedGetResourceGrantUsers = jest.mocked(getResourceGrantUsers);
 
 describe("PermissionGrantTab", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null);
+    mockedGetResourcePermissions.mockResolvedValue([]);
     mockedGetGrantableRelationModels.mockResolvedValue([
       {
         id: "viewer",
@@ -105,5 +110,75 @@ describe("PermissionGrantTab", () => {
       "space-1",
       { signal: expect.any(AbortSignal) },
     );
+  });
+
+  it("marks already granted departments as checked without submitting them again", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "department",
+        subject_id: 7,
+        subject_name: "测试部门",
+        relation: "viewer",
+        include_children: false,
+      },
+    ] as any);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_department" }));
+
+    const departmentLabel = await screen.findByText("测试部门");
+    const checkbox = departmentLabel.parentElement?.querySelector('[role="checkbox"]');
+
+    await waitFor(() => {
+      expect(checkbox).toHaveAttribute("data-state", "checked");
+      expect(checkbox).toBeDisabled();
+    });
+
+    fireEvent.click(departmentLabel);
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
+
+    expect(mockedAuthorizeResource).not.toHaveBeenCalled();
+  });
+
+  it("marks already granted users as checked without submitting them again", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 8,
+        subject_name: "Alice",
+        relation: "viewer",
+      },
+    ] as any);
+    mockedGetResourceGrantUsers.mockResolvedValue([
+      { user_id: 8, user_name: "Alice" },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    const userLabel = await screen.findByText("Alice");
+    const checkbox = userLabel.parentElement?.querySelector('[role="checkbox"]');
+
+    await waitFor(() => {
+      expect(checkbox).toHaveAttribute("data-state", "checked");
+      expect(checkbox).toBeDisabled();
+    });
+
+    fireEvent.click(userLabel);
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
+
+    expect(mockedAuthorizeResource).not.toHaveBeenCalled();
   });
 });

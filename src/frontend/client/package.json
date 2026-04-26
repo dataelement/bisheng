@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check-imports": "node scripts/check-case-sensitive-imports.mjs",
+    "dev": "cross-env NODE_ENV=development vite",
     "start": "cross-env NODE_ENV=development vite",
     "build": "cross-env NODE_ENV=production vite build",
     "build:vconsole": "cross-env NODE_ENV=production VITE_ENABLE_VCONSOLE=true vite build",

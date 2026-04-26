@@ -1,16 +1,5 @@
-const PLATFORM_MENU_KEYS = [
-  'admin',
-  'backend',
-  'knowledge',
-  'build',
-  'create_app',
-  'model',
-  'sys',
-  'system_config',
-  'log',
-  'board',
-  'mark_task',
-];
+const PLATFORM_ENTRY_KEYS = ['admin', 'backend'];
+const WORKBENCH_ENTRY_KEYS = ['workstation', 'frontend'];
 
 type PlatformAccessUserLike = {
   role?: string | null;
@@ -24,5 +13,13 @@ export function canOpenPlatformAdminPanel(user?: PlatformAccessUserLike | null):
   if (user.role === 'admin') return true;
   if (user.is_department_admin) return true;
   if (!Array.isArray(user.plugins)) return false;
-  return PLATFORM_MENU_KEYS.some((key) => user.plugins?.includes(key));
+  return PLATFORM_ENTRY_KEYS.some((key) => user.plugins?.includes(key));
+}
+
+export function canOpenWorkbench(user?: PlatformAccessUserLike | null): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.is_department_admin) return true;
+  if (!Array.isArray(user.plugins)) return false;
+  return WORKBENCH_ENTRY_KEYS.some((key) => user.plugins?.includes(key));
 }

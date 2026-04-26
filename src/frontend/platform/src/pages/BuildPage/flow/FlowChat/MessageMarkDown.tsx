@@ -237,11 +237,15 @@ function CitationPreviewCard({
 }
 
 const Citation = ({
-    data,
+    data: rawData,
     children,
     initialDetail,
     webContent,
     loadCitationDetail,
+    popoverKey,
+    activePopoverKey,
+    onActivePopoverKeyChange,
+    onClosePopover,
     onOpenDocumentPreview,
 }: {
     data: Partial<CitationDisplayData>;
@@ -249,11 +253,15 @@ const Citation = ({
     initialDetail?: ChatCitation | null;
     webContent?: any;
     loadCitationDetail: CitationDetailLoader;
+    popoverKey: string;
+    activePopoverKey: string | null;
+    onActivePopoverKeyChange: (key: string | null) => void;
+    onClosePopover: (key: string) => void;
     onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
 }) => {
-    if (!data) return null;
-
-    const [open, setOpen] = useState(false);
+    const data = rawData ?? ({} as Partial<CitationDisplayData>);
+    const hasData = !!rawData;
+    const isOpen = activePopoverKey === popoverKey;
     const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(false);
@@ -342,7 +350,7 @@ const Citation = ({
             window.clearTimeout(closeTimerRef.current);
             closeTimerRef.current = null;
         }
-        setOpen(nextOpen);
+        onActivePopoverKeyChange(nextOpen ? popoverKey : null);
         if (nextOpen) {
             void fetchDetail();
         }
@@ -353,15 +361,20 @@ const Citation = ({
             window.clearTimeout(closeTimerRef.current);
         }
         closeTimerRef.current = window.setTimeout(() => {
-            setOpen(false);
+            onClosePopover(popoverKey);
         }, 120);
     };
 
+    if (!hasData) {
+        return null;
+    }
+
     return (
-        <Popover open={open} onOpenChange={handleOpenChange}>
+        <Popover open={isOpen} onOpenChange={handleOpenChange}>
             <PopoverTrigger asChild>
                 <button
                     type="button"
+                    data-citation-trigger="true"
                     data-citation-ref={data.ref}
                     data-citation-id={data.citationId}
                     data-citation-item-id={data.itemId}
@@ -372,9 +385,9 @@ const Citation = ({
                     onClick={handleCitationClick}
                     onMouseEnter={() => handleOpenChange(true)}
                     onMouseLeave={scheduleClose}
-                    className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
+                    className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
                 >
-                    <span>{children}</span>
+                    <span className="flex h-[18px] items-center">{children}</span>
                 </button>
             </PopoverTrigger>
             <PopoverContent
@@ -410,6 +423,11 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
 
     const { data: linsightConfig } = useLinsightConfig();
     const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
+    const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
+    const handleCloseCitationPopover = useCallback((popoverKey: string) => {
+        setActiveCitationPopoverKey((currentKey) => currentKey === popoverKey ? null : currentKey);
+    }, []);
+
     function filterMermaidBlocks(input) {
         const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
         const openMermaidPattern = /```mermaid[\s\S]*$/g;
@@ -589,6 +607,10 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                                                     key={`legacy-${matchIndex}`}
                                                     webContent={webContent}
                                                     loadCitationDetail={loadCitationDetail}
+                                                    popoverKey={`legacy-${matchIndex}`}
+                                                    activePopoverKey={activeCitationPopoverKey}
+                                                    onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                                                    onClosePopover={handleCloseCitationPopover}
                                                     onOpenDocumentPreview={handleOpenDocumentPreview}
                                                     data={{
                                                         label: legacyIndex,
@@ -613,6 +635,10 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
                                                     data={citationData}
                                                     initialDetail={citationDetailMap[citationData.citationId]}
                                                     loadCitationDetail={loadCitationDetail}
+                                                    popoverKey={`private-${matchIndex}`}
+                                                    activePopoverKey={activeCitationPopoverKey}
+                                                    onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                                                    onClosePopover={handleCloseCitationPopover}
                                                     onOpenDocumentPreview={handleOpenDocumentPreview}
                                                 >
                                                     {citationData.label}

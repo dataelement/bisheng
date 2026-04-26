@@ -74,7 +74,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const canEditPermissions = !isArchived
   const canEditParent = !isArchived && !isSynced && !isRootDept
 
-  /** 最近一次从服务端加载成功的快照，用于「取消」还原 */
+  /** 最近一次从服务端加载成功的快照（父部门变更判断、保存后更新） */
   const baselineRef = useRef<{
     name: string
     admins: DepartmentUserOption[]
@@ -483,14 +483,13 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
                   : undefined
               }
             />
-            <p className="mt-1 max-w-md text-xs leading-snug text-gray-500 dark:text-gray-400">
-              {dept.is_tenant_root
-                ? t("bs:tenant.initialAdminSubtreeHint", {
-                    defaultValue:
-                      "管理员必须来自该部门子树，不能选取子树外用户。",
-                  })
-                : t("bs:department.adminsHint")}
-            </p>
+            {dept.is_tenant_root ? (
+              <p className="mt-1 max-w-md text-xs leading-snug text-gray-500 dark:text-gray-400">
+                {t("bs:tenant.initialAdminSubtreeHint", {
+                  defaultValue: "管理员必须来自该部门子树，不能选取子树外用户。",
+                })}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label>{t("bs:department.defaultRoles")}</Label>
@@ -524,25 +523,15 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         </div>
       )}
 
-      {/* 全局保存 / 取消 + 删除部门 */}
+      {/* 全局保存 + 删除部门 */}
       {!isArchived && (
         <div className="mt-5 border-t pt-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-wrap items-center gap-2">
               {canEditPermissions && (
-                <>
-                  <Button type="button" onClick={() => void handleGlobalSave()} disabled={saving}>
-                    {t("save")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCancel}
-                    disabled={saving}
-                  >
-                    {t("bs:cancel")}
-                  </Button>
-                </>
+                <Button type="button" onClick={() => void handleGlobalSave()} disabled={saving}>
+                  {t("save")}
+                </Button>
               )}
             </div>
             <div className="min-w-[1rem] flex-1" />

@@ -141,4 +141,25 @@ describe("KnowledgeSpaceShareDialog", () => {
     expect(screen.getByText("list:knowledge_file:file-9:user")).toBeInTheDocument();
     expect(screen.getByText("grant:knowledge_file:file-9:user:include")).toBeInTheDocument();
   });
+
+  it("can manage a folder resource with the same grant dialog", async () => {
+    render(
+      <KnowledgeSpaceShareDialog
+        open
+        onOpenChange={jest.fn()}
+        resourceType="folder"
+        resourceId="folder-9"
+        resourceName="Folder 9"
+        showShareTab={false}
+        showMembersTab={false}
+        showPermissionTab
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetGrantableRelationModels).toHaveBeenCalledWith("folder", "folder-9");
+    });
+    expect(screen.getByText("list:folder:folder-9:user")).toBeInTheDocument();
+    expect(screen.getByText("grant:folder:folder-9:user:include")).toBeInTheDocument();
+  });
 });

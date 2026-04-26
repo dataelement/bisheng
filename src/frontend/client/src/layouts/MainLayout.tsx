@@ -25,8 +25,9 @@ const systemNoticeTodayKey = () => {
 };
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenPlatformAdminPanel } from '~/utils/platformAccess';
+import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
+import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { lastSectionPaths } from './appModuleNavPaths';
 
 interface SidebarItemProps {
@@ -106,6 +107,17 @@ function Sidebar({
       }),
     [plugins, user],
   );
+  const canOpenWorkbenchEntry = useMemo(
+    () =>
+      !Array.isArray(plugins) ||
+      canOpenWorkbench({
+        role: user?.role,
+        plugins,
+        is_department_admin: (user as { is_department_admin?: boolean } | undefined)
+          ?.is_department_admin,
+      }),
+    [plugins, user],
+  );
   const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
@@ -114,8 +126,17 @@ function Sidebar({
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
+  const showAdminPanelShortcut =
+    (user as { has_admin_console?: boolean } | null)?.has_admin_console
+    ?? (
+      user?.role === 'admin'
+      || Boolean(plugins?.includes('backend') || plugins?.includes('admin'))
+    );
+
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
-  const links = useMemo(() => [
+  const links = useMemo(() => {
+    if (!canOpenWorkbenchEntry) return [];
+    return [
     {
       section: 'home',
       to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
@@ -150,7 +171,8 @@ function Sidebar({
     if (l.section === 'channel') return showSubscriptionTab;
     if (l.section === 'knowledge') return showKnowledgeSpaceTab;
     return true;
-  }), [pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
+  });
+  }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -217,7 +239,7 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col gap-4 items-center">
-        {!isMobile && canOpenPlatform && (
+        {!isMobile && (canOpenPlatform || showAdminPanelShortcut) && (
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
               title={localize('com_nav_admin_panel')}
@@ -353,6 +375,7 @@ export default function MainLayout() {
 
   return (
     <div className="relative flex h-[100dvh] w-screen overflow-hidden bg-[#F9F9F9]">
+      <WorkbenchAccessGuard />
       {shouldHideSidebarOnMobileAppsArea ? null : (
         <Sidebar
           mobileSidebarOpen={mobileSidebarOpen}

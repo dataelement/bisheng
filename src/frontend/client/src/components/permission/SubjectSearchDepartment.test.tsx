@@ -127,6 +127,24 @@ describe("SubjectSearchDepartment", () => {
     ]);
   });
 
+  it("shows already granted departments as checked and disabled", async () => {
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        disabledIds={[1]}
+      />,
+    );
+
+    const departmentLabel = await screen.findByText("全集团");
+    const checkbox = within(departmentLabel.parentElement as HTMLElement).getByRole("checkbox");
+
+    expect(checkbox).toHaveAttribute("data-state", "checked");
+    expect(checkbox).toBeDisabled();
+  });
+
   it("uses resource-scoped department candidates when a resource is provided", async () => {
     render(
       <SubjectSearchDepartment

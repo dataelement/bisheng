@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from bisheng.common.errcode.role import QuotaExceededError, QuotaConfigInvalidError
 from bisheng.common.errcode.tenant_quota import (
@@ -112,10 +112,11 @@ class QuotaService:
         resource_type: str,
         tenant_id: int,
         login_user=None,
-    ) -> int:
+    ) -> Union[int, float]:
         """Three-level effective quota calculation.
 
-        Returns -1 for unlimited, 0 for prohibited, or positive int limit.
+        Returns -1 for unlimited, 0 for prohibited, or a positive limit (``float`` GB
+        for ``knowledge_space_file`` when configured with decimals; otherwise ``int``).
         """
         if login_user and login_user.is_admin():
             return -1
@@ -135,7 +136,9 @@ class QuotaService:
         return await cls._apply_tenant_cap(role_quota, tenant_id, resource_type)
 
     @classmethod
-    async def _apply_tenant_cap(cls, role_quota: int, tenant_id: int, resource_type: str) -> int:
+    async def _apply_tenant_cap(
+        cls, role_quota: Union[int, float], tenant_id: int, resource_type: str
+    ) -> Union[int, float]:
         """Apply tenant hard limit to role quota (single-tenant view).
 
         v2.5.0 baseline — retained for `get_effective_quota` which powers the
@@ -158,7 +161,7 @@ class QuotaService:
     @classmethod
     async def _apply_tenant_chain_cap(
         cls,
-        role_quota: int,
+        role_quota: Union[int, float],
         tenant_id: int,
         resource_type: str,
     ) -> tuple[int, Optional[tuple[int, str, int, int, str]]]:
@@ -327,7 +330,15 @@ class QuotaService:
             return True
 
         user_used = await cls.get_user_resource_count(user_id, resource_type)
-        if user_used >= effective:
+        if resource_type == 'knowledge_space_file':
+            if float(user_used) >= float(effective) - 1e-9:
+                raise TenantRoleQuotaExceededError(
+                    msg=(
+                        f'Role quota exceeded for {resource_type} '
+                        f'(user_used={user_used}, effective={effective})'
+                    ),
+                )
+        elif user_used >= effective:
             raise TenantRoleQuotaExceededError(
                 msg=(
                     f'Role quota exceeded for {resource_type} '
@@ -398,27 +409,82 @@ class QuotaService:
         return items
 
     @classmethod
-    def role_knowledge_space_file_limit_gb(cls, role) -> int:
+    def role_knowledge_space_file_limit_gb(cls, role) -> float:
         """Single role: storage quota (GB) from quota_config vs deprecated column.
 
-        Returns ``-1`` when quota_config marks unlimited for this role.
+        Returns ``-1.0`` when quota_config marks unlimited for this role.
+        ``0.0`` means no positive cap from this role row (merge with other roles / default).
         """
         qc = (role.quota_config or {}).get('knowledge_space_file')
         if qc == -1:
-            return -1
+            return -1.0
         legacy = getattr(role, 'knowledge_space_file_limit', None) or 0
-        candidates: list[int] = []
-        if qc is not None and isinstance(qc, int) and qc > 0:
-            candidates.append(qc)
+        candidates: list[float] = []
+        if qc is not None and isinstance(qc, (int, float)) and not isinstance(qc, bool):
+            g = float(qc)
+            if g > 0:
+                candidates.append(round(g, 1))
         if isinstance(legacy, int) and legacy > 0:
-            candidates.append(legacy)
-        return max(candidates) if candidates else 0
+            candidates.append(float(legacy))
+        return max(candidates) if candidates else 0.0
+
+    @classmethod
+    def _aggregate_knowledge_space_file_limit_gb(cls, roles) -> float:
+        """Multi-role max for knowledge space upload (GB); ``-1`` = unlimited."""
+        if not roles:
+            return float(DEFAULT_ROLE_QUOTA['knowledge_space_file'])
+        max_gb: Optional[float] = None
+        for role in roles:
+            g = cls.role_knowledge_space_file_limit_gb(role)
+            if g == -1.0:
+                return -1.0
+            if g > 0:
+                max_gb = g if max_gb is None else max(max_gb, g)
+        if max_gb is not None:
+            return round(float(max_gb), 1)
+        return float(DEFAULT_ROLE_QUOTA['knowledge_space_file'])
+
+    @staticmethod
+    def _knowledge_space_quota_gb_to_bytes(gb: float) -> int:
+        g = round(float(gb), 1)
+        return int(round(g * (1024**3)))
+
+    @classmethod
+    async def get_knowledge_space_upload_limit_bytes(cls, login_user) -> Optional[int]:
+        """Total upload cap in bytes for knowledge-space files (role max × tenant chain).
+
+        ``None`` means unlimited. ``0`` means no remaining headroom under tenant policy.
+        """
+        if login_user and login_user.is_admin():
+            return None
+        user_id = login_user.user_id
+        tenant_id = login_user.tenant_id
+        user_roles = await UserRoleDao.aget_user_roles(user_id)
+        if not user_roles:
+            role_gb = float(DEFAULT_ROLE_QUOTA['knowledge_space_file'])
+        else:
+            role_rows = await RoleDao.aget_role_by_ids([r.role_id for r in user_roles])
+            role_gb = cls._aggregate_knowledge_space_file_limit_gb(role_rows)
+        if role_gb == -1:
+            eff, blocker = await cls._apply_tenant_chain_cap(-1, tenant_id, 'knowledge_space_file')
+            if blocker is not None:
+                return 0
+            if eff == -1:
+                return None
+            return cls._knowledge_space_quota_gb_to_bytes(float(eff))
+        eff, blocker = await cls._apply_tenant_chain_cap(role_gb, tenant_id, 'knowledge_space_file')
+        if blocker is not None:
+            return 0
+        return cls._knowledge_space_quota_gb_to_bytes(float(eff))
 
     @classmethod
     def _compute_role_quotas(cls, roles) -> dict:
         """Compute multi-role quota: take max per resource type, -1 wins (AC-16)."""
         result = {}
         for resource_type in DEFAULT_ROLE_QUOTA:
+            if resource_type == 'knowledge_space_file':
+                result[resource_type] = cls._aggregate_knowledge_space_file_limit_gb(roles)
+                continue
             max_q = None
             for role in roles:
                 q = (role.quota_config or {}).get(resource_type)
@@ -526,6 +592,24 @@ class QuotaService:
                 raise QuotaConfigInvalidError(
                     msg=f'quota_config[{key}] must be boolean or 0/1, got {value!r}',
                 )
+            if key == 'knowledge_space_file':
+                if value == -1:
+                    continue
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise QuotaConfigInvalidError(
+                        msg=f'quota_config[{key}] must be -1 or a number, got {type(value).__name__}',
+                    )
+                num = float(value)
+                r = round(num, 1)
+                if abs(r - num) > 1e-6:
+                    raise QuotaConfigInvalidError(
+                        msg=f'quota_config[{key}] allows at most one decimal place, got {value!r}',
+                    )
+                if r < 0.1 or r > 999:
+                    raise QuotaConfigInvalidError(
+                        msg=f'quota_config[{key}] must be -1 or between 0.1 and 999 (GB), got {value}',
+                    )
+                continue
             if isinstance(value, bool) or not isinstance(value, int):
                 raise QuotaConfigInvalidError(
                     msg=f'quota_config[{key}] must be an integer, got {type(value).__name__}',

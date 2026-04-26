@@ -97,7 +97,7 @@ function AccountSettings() {
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent className='w-60 rounded-2xl'>
-          {canOpenPlatform && <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
+          {(canOpenPlatform || (user as { has_admin_console?: boolean })?.has_admin_console) && <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
             <DropdownMenuItem className='select-item text-sm font-normal'>
               <GanttChartIcon className="icon-md" />
               {localize('com_nav_admin_panel')}

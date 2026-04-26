@@ -438,7 +438,7 @@ class TestRelationModelBindings:
         mock_save_bindings.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_department_include_children_binding_collapses_generated_child_rows(self):
+    async def test_department_include_children_binding_flattens_generated_child_rows(self):
         from bisheng.permission.api.endpoints.resource_permission import (
             _apply_binding_metadata_to_permissions,
         )
@@ -509,9 +509,90 @@ class TestRelationModelBindings:
 
         assert [(item.subject_type, item.subject_id) for item in result] == [
             ('department', 3),
+            ('department', 4),
             ('user_group', 8),
         ]
         assert result[0].include_children is True
         assert result[0].model_id == 'viewer'
         assert result[0].model_name == '可查看'
-        assert result[1].model_id == 'editor'
+        assert result[1].include_children is False
+        assert result[1].model_id == 'viewer'
+        assert result[1].model_name == '可查看'
+        assert result[2].model_id == 'editor'
+
+    @pytest.mark.asyncio
+    async def test_department_include_children_revoke_cleans_exact_and_subtree_bindings(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import authorize_resource
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRequest, AuthorizeRevokeItem
+
+        request = AuthorizeRequest(
+            revokes=[
+                AuthorizeRevokeItem(
+                    subject_type='department',
+                    subject_id=3,
+                    relation='viewer',
+                    include_children=True,
+                ),
+            ],
+        )
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[
+                {
+                    'key': 'assistant:9:department:3:viewer:1',
+                    'resource_type': 'assistant',
+                    'resource_id': '9',
+                    'subject_type': 'department',
+                    'subject_id': 3,
+                    'relation': 'viewer',
+                    'include_children': True,
+                    'model_id': 'viewer',
+                },
+                {
+                    'key': 'assistant:9:department:3:viewer:0',
+                    'resource_type': 'assistant',
+                    'resource_id': '9',
+                    'subject_type': 'department',
+                    'subject_id': 3,
+                    'relation': 'viewer',
+                    'include_children': False,
+                    'model_id': 'viewer',
+                },
+                {
+                    'key': 'assistant:9:user_group:8:editor:-',
+                    'resource_type': 'assistant',
+                    'resource_id': '9',
+                    'subject_type': 'user_group',
+                    'subject_id': 8,
+                    'relation': 'editor',
+                    'include_children': None,
+                    'model_id': 'editor',
+                },
+            ],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings, patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ):
+            await authorize_resource(
+                resource_type='assistant',
+                resource_id='9',
+                request=request,
+                login_user=mock_admin_user,
+            )
+
+        saved = mock_save_bindings.await_args.args[0]
+        assert saved == [{
+            'key': 'assistant:9:user_group:8:editor:-',
+            'resource_type': 'assistant',
+            'resource_id': '9',
+            'subject_type': 'user_group',
+            'subject_id': 8,
+            'relation': 'editor',
+            'include_children': None,
+            'model_id': 'editor',
+        }]

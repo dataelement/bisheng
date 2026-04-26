@@ -127,6 +127,18 @@ class DepartmentAdminGrantDao:
             await session.commit()
 
     @classmethod
+    async def aget_user_ids_for_department(cls, department_id: int) -> List[int]:
+        """All user_ids with a manual/SSO department admin grant on this dept."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(DepartmentAdminGrant.user_id).where(
+                    DepartmentAdminGrant.department_id == department_id,
+                )
+            )
+            rows = result.all()
+            return [int(r[0]) for r in rows]
+
+    @classmethod
     async def adelete_for_department_users(
         cls, department_id: int, user_ids: List[int],
     ) -> None:

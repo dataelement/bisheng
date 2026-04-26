@@ -172,6 +172,39 @@ describe("Knowledge-space grant subject sources", () => {
     expect(childCheckbox).toBeChecked();
   });
 
+  it("shows already granted departments as checked and disabled in grant candidates", async () => {
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "BS@10",
+        name: "研发部",
+        parent_id: null,
+        path: "/10/",
+        sort_order: 0,
+        source: "local",
+        status: "active",
+        member_count: 0,
+        children: [],
+      },
+    ] as any);
+
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={vi.fn()}
+        resourceType="knowledge_space"
+        resourceId="88"
+        disabledIds={[10]}
+      />,
+    );
+
+    const departmentLabel = await screen.findByText("研发部");
+    const checkbox = within(departmentLabel.parentElement as HTMLElement).getByRole("checkbox");
+
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
+  });
+
   it("materializes inherited selections before removing include-children mode", async () => {
     mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
       {

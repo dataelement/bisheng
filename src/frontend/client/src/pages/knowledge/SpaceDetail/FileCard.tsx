@@ -33,6 +33,9 @@ interface FileCardProps {
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     onManagePermission?: () => void;
+    canRename?: boolean;
+    canDelete?: boolean;
+    canDownload?: boolean;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
     /** H5: render as list-row (not card tile). */
@@ -56,6 +59,9 @@ export function FileCard({
     onValidateName,
     onCancelCreate,
     onManagePermission,
+    canRename = false,
+    canDelete = false,
+    canDownload = false,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
     mobileListMode = false,
@@ -217,10 +223,10 @@ export function FileCard({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin || Boolean(onManagePermission);
+    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
-    const showInlineDownloadButton = !hideDownloadActions && !showMoreMenu;
-    const showMenuDownloadItem = !hideDownloadActions;
+    const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
+    const showMenuDownloadItem = canDownload && !hideDownloadActions;
     const showCardActions = moreMenuOpen || hovered;
     const cardOpensPreviewOrFolder =
         !isCreating &&
@@ -353,44 +359,44 @@ export function FileCard({
                                             </DropdownMenuItem>
                                         )}
 
-                                        {isAdmin && (
-                                            <>
-                                                {!isFolder && (
-                                                    <DropdownMenuItem
-                                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                                        className="flex items-center"
-                                                    >
-                                                        <Tag className="mr-2 size-4 shrink-0" />
-                                                        {localize("com_knowledge.edit_tags")}
-                                                    </DropdownMenuItem>
-                                                )}
-                                                <DropdownMenuItem
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        startRenaming();
-                                                    }}
-                                                    className="flex items-center"
-                                                >
-                                                    <Edit className="mr-2 size-4 shrink-0" />
-                                                    {localize("com_knowledge.rename")}
-                                                </DropdownMenuItem>
-                                                {hasRetryOption && (
-                                                    <DropdownMenuItem
-                                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                                        className="flex items-center"
-                                                    >
-                                                        <RefreshCw className="mr-2 size-4 shrink-0" />
-                                                        {localize("com_knowledge.retry")}
-                                                    </DropdownMenuItem>
-                                                )}
-                                                <DropdownMenuItem
-                                                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                    className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                                >
-                                                    <Trash2 className="mr-2 size-4 shrink-0" />
-                                                    {localize("com_knowledge.delete")}
-                                                </DropdownMenuItem>
-                                            </>
+                                        {isAdmin && !isFolder && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                className="flex items-center"
+                                            >
+                                                <Tag className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.edit_tags")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {canRename && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    startRenaming();
+                                                }}
+                                                className="flex items-center"
+                                            >
+                                                <Edit className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.rename")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {isAdmin && hasRetryOption && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                className="flex items-center"
+                                            >
+                                                <RefreshCw className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.retry")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {canDelete && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                                className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
+                                            >
+                                                <Trash2 className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.delete")}
+                                            </DropdownMenuItem>
                                         )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -489,44 +495,44 @@ export function FileCard({
                                     </DropdownMenuItem>
                                 )}
 
-                                {isAdmin && (
-                                    <>
-                                        {!isFolder && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Tag className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.edit_tags")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        <DropdownMenuItem
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                startRenaming();
-                                            }}
-                                            className="flex items-center"
-                                        >
-                                            <Edit className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.rename")}
-                                        </DropdownMenuItem>
-                                        {hasRetryOption && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                                className="flex items-center"
-                                            >
-                                                <RefreshCw className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.retry")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                            className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                        >
-                                            <Trash2 className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.delete")}
-                                        </DropdownMenuItem>
-                                    </>
+                                {isAdmin && !isFolder && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                        className="flex items-center"
+                                    >
+                                        <Tag className="mr-2 size-4 shrink-0" />
+                                        {localize("com_knowledge.edit_tags")}
+                                    </DropdownMenuItem>
+                                )}
+                                {canRename && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            startRenaming();
+                                        }}
+                                        className="flex items-center"
+                                    >
+                                        <Edit className="mr-2 size-4 shrink-0" />
+                                        {localize("com_knowledge.rename")}
+                                    </DropdownMenuItem>
+                                )}
+                                {isAdmin && hasRetryOption && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                        className="flex items-center"
+                                    >
+                                        <RefreshCw className="mr-2 size-4 shrink-0" />
+                                        {localize("com_knowledge.retry")}
+                                    </DropdownMenuItem>
+                                )}
+                                {canDelete && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                        className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
+                                    >
+                                        <Trash2 className="mr-2 size-4 shrink-0" />
+                                        {localize("com_knowledge.delete")}
+                                    </DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>

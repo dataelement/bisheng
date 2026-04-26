@@ -52,6 +52,8 @@ interface KnowledgeSpaceHeaderProps {
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
+    canCreateFolder?: boolean;
+    canUploadFile?: boolean;
 
     // Batch Operation Props
     selectedCount: number;
@@ -59,13 +61,16 @@ interface KnowledgeSpaceHeaderProps {
     hasFailedFiles: boolean;
     onClearSelection: () => void;
     onBatchDownload: () => void;
+    canBatchDownload?: boolean;
     onBatchTag: () => void;
     onBatchRetry: () => void;
     onBatchDelete: () => void;
+    canBatchDelete?: boolean;
     onGoKnowledgeSquare?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     enableCardMode?: boolean;
+    canShareSpace?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -84,18 +89,23 @@ export function KnowledgeSpaceHeader({
     onSort,
     onCreateFolder,
     onTriggerUpload,
+    canCreateFolder = false,
+    canUploadFile = false,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
     onClearSelection,
     onBatchDownload,
+    canBatchDownload = false,
     onBatchTag,
     onBatchRetry,
     onBatchDelete,
+    canBatchDelete = false,
     onGoKnowledgeSquare,
     onToggleAiAssistant,
     isAiAssistantOpen,
     enableCardMode = true,
+    canShareSpace = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -117,9 +127,10 @@ export function KnowledgeSpaceHeader({
     }, []);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
-    const showShare = space.visibility !== VisibilityType.PRIVATE;
+    const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
-    const showToolbarActions = isAdmin || selectedCount > selectedThreshold;
+    const showAddMenu = canCreateFolder || canUploadFile;
+    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
 
     const viewFilterSortCluster = (
@@ -264,10 +275,12 @@ export function KnowledgeSpaceHeader({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
-                            <Download className="mr-2 size-4" />
-                            {localize("com_knowledge.batch_download")}
-                        </DropdownMenuItem>
+                        {canBatchDownload && (
+                            <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
+                                <Download className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_download")}
+                            </DropdownMenuItem>
+                        )}
                         {isAdmin && !hasFoldersSelected && (
                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                 <Tag className="mr-2 size-4" />
@@ -280,7 +293,7 @@ export function KnowledgeSpaceHeader({
                                 {localize("com_knowledge.batch_retry")}
                             </DropdownMenuItem>
                         )}
-                        {isAdmin && (
+                        {canBatchDelete && (
                             <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
                                 <Trash2 className="mr-2 size-4" />
                                 {localize("com_knowledge.batch_delete")}
@@ -289,7 +302,7 @@ export function KnowledgeSpaceHeader({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
-            {isAdmin && (
+            {showAddMenu && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
@@ -298,14 +311,18 @@ export function KnowledgeSpaceHeader({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                            <FolderPlus className="mr-2 size-4" />
-                            {localize("com_knowledge.new_folder")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
-                            <Upload className="mr-2 size-4" />
-                            {localize("com_knowledge.upload_file")}
-                        </DropdownMenuItem>
+                        {canCreateFolder && (
+                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                <FolderPlus className="mr-2 size-4" />
+                                {localize("com_knowledge.new_folder")}
+                            </DropdownMenuItem>
+                        )}
+                        {canUploadFile && (
+                            <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
+                                <Upload className="mr-2 size-4" />
+                                {localize("com_knowledge.upload_file")}
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}

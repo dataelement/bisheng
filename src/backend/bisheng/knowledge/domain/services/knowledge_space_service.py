@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +30,6 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
@@ -54,7 +54,6 @@ from bisheng.permission.domain.services.fine_grained_permission_service import F
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.knowledge import file_worker
 
@@ -771,7 +770,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         bindings = await self._get_relation_bindings()
         binding_department_paths = await self._get_binding_department_paths(bindings)
         models = await self._get_relation_models_map()
-        effective_permissions = await FineGrainedPermissionService.get_effective_permission_ids_async(
+        lineage_binding_can_override = object_type in {'folder', 'knowledge_file'}
+        effective_permissions, matched_lineage_binding = await FineGrainedPermissionService.get_effective_permission_ids_async(
             self.login_user,
             object_type,
             object_id,
@@ -780,10 +780,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
             lineage=lineage,
+            nearest_binding_wins=lineage_binding_can_override,
+            return_match_metadata=True,
         )
         for lineage_type, lineage_id in lineage:
             if lineage_type == 'knowledge_space':
-                effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
+                if not (lineage_binding_can_override and matched_lineage_binding):
+                    effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
         return effective_permissions
 
@@ -1018,10 +1021,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
 
-        if auth_type is not None:
-            await self._require_permission_id('knowledge_space', space_id, 'manage_space_relation')
-        else:
-            await self._require_permission_id('knowledge_space', space_id, 'edit_space')
+        await self._require_permission_id('knowledge_space', space_id, 'edit_space')
 
         old_auth_type = space.auth_type
 
@@ -1492,6 +1492,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
+    async def _filter_visible_child_items(
+        self,
+        items: List[KnowledgeFile],
+        *,
+        space_id: int,
+    ) -> List[KnowledgeFile]:
+        async def can_view(item: KnowledgeFile) -> bool:
+            object_type = 'folder' if item.file_type == FileType.DIR.value else 'knowledge_file'
+            permission_id = 'view_folder' if item.file_type == FileType.DIR.value else 'view_file'
+            effective_permissions = await self._get_effective_permission_ids(
+                object_type,
+                item.id,
+                space_id=space_id,
+            )
+            return permission_id in effective_permissions
+
+        visibility = await asyncio.gather(*(can_view(item) for item in items))
+        return [item for item, allowed in zip(items, visibility) if allowed]
+
+    @staticmethod
+    def _paginate_items(items: List[KnowledgeFile], page: int, page_size: int) -> List[KnowledgeFile]:
+        if not page or not page_size:
+            return items
+        start = (page - 1) * page_size
+        return items[start:start + page_size]
+
     async def list_space_children(
         self,
         space_id: int,
@@ -1514,13 +1540,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id('folder', parent_id, 'view_folder', space_id=space_id)
         else:
             await self._require_permission_id('knowledge_space', space_id, 'view_space')
-        total, items = await asyncio.gather(
-            SpaceFileDao.async_count_children(space_id, parent_id, file_ids=file_ids, file_status=file_status),
-            SpaceFileDao.async_list_children(space_id, parent_id, file_ids=file_ids, order_field=order_field,
-                                             order_sort=order_sort, file_status=file_status, page=page,
-                                             page_size=page_size),
+        items = await SpaceFileDao.async_list_children(
+            space_id,
+            parent_id,
+            file_ids=file_ids,
+            order_field=order_field,
+            order_sort=order_sort,
+            file_status=file_status,
+            page=0,
+            page_size=0,
         )
-        data = await self._handle_file_folder_extra_info(items)
+        visible_items = await self._filter_visible_child_items(items, space_id=space_id)
+        total = len(visible_items)
+        data = await self._handle_file_folder_extra_info(self._paginate_items(visible_items, page, page_size))
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
@@ -1588,13 +1620,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                           extra_file_ids=extra_file_ids, status=file_status,
                                                           file_level_path=file_level_path, order_by="file_type",
-                                                          order_field=order_field, order_sort=order_sort,
-                                                          page=page, page_size=page_size)
-        total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
-                                                              extra_file_ids=extra_file_ids, status=file_status,
-                                                              file_level_path=file_level_path)
-
-        data = await self._handle_file_folder_extra_info(res)
+                                                          order_field=order_field, order_sort=order_sort)
+        visible_items = await self._filter_visible_child_items(res, space_id=space_id)
+        total = len(visible_items)
+        data = await self._handle_file_folder_extra_info(self._paginate_items(visible_items, page, page_size))
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
@@ -1679,9 +1708,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_tuples_to_cleanup = [('folder', folder_id)]
         for child in children:
             if child.file_type == FileType.DIR.value:
+                await self._require_permission_id('folder', child.id, 'delete_folder', space_id=space_id)
                 floder_ids.append(child.id)
                 resource_tuples_to_cleanup.append(('folder', child.id))
             else:
+                await self._require_permission_id('knowledge_file', child.id, 'delete_file', space_id=space_id)
                 file_ids.append(child.id)
                 resource_tuples_to_cleanup.append(('knowledge_file', child.id))
 
@@ -1787,21 +1818,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type = 'folder'
             parent_resource_id = parent_id
 
-        # GB → bytes cap for space owner; multi-role 取各角色上限的最大值；-1 表示不限制
-        default_file_size_limit = 40
-
-        roles = await UserRoleDao.aget_user_roles(db_knowledge.user_id)
-        if roles:
-            role_rows = await RoleDao.aget_role_by_ids([one.role_id for one in roles])
-            for one in role_rows:
-                gb = QuotaService.role_knowledge_space_file_limit_gb(one)
-                if gb == -1:
-                    default_file_size_limit = 10 ** 9
-                    break
-                if gb > 0:
-                    default_file_size_limit = max(default_file_size_limit, gb)
-        default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
-        logger.debug(f"space_file_size_limit: {default_file_size_limit}")
+        # Upload cap: 实际上传人 login_user 的角色配额（多角色取 max），再与租户链取 min；超管不限
+        limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        logger.debug('space_file_upload_limit_bytes=%s user_id=%s', limit_bytes, self.login_user.user_id)
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
         folder_id2name = {}
@@ -1827,8 +1846,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
         for one in file_path:
-            if current_total_file_size > default_file_size_limit:
-                raise SpaceFileSizeLimitError()
+            if limit_bytes is not None:
+                try:
+                    incoming_size = os.path.getsize(one)
+                except OSError as exc:
+                    logger.warning('Cannot stat upload path %s: %s', one, exc)
+                    raise SpaceFileSizeLimitError() from exc
+                if incoming_size > limit_bytes or current_total_file_size + incoming_size > limit_bytes:
+                    raise SpaceFileSizeLimitError()
             db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
                                                         file_info=KnowledgeFileOne(
                                                             file_path=one,
@@ -1905,6 +1930,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_file_preview(self, file_id: int) -> dict:
         file_record = await self._require_file_relation(file_id, 'can_read')
         await self._require_permission_id('knowledge_file', file_id, 'view_file', space_id=file_record.knowledge_id)
+
+        original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+
+        return {
+            "original_url": original_url,
+            "preview_url": preview_url,
+        }
+
+    async def get_file_download(self, file_id: int, *, space_id: Optional[int] = None) -> dict:
+        file_record = await self._require_file_relation(file_id, 'can_read', space_id=space_id)
+        await self._require_permission_id('knowledge_file', file_id, 'download_file', space_id=file_record.knowledge_id)
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
 
@@ -2115,6 +2151,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id('folder', folder_id, 'download_folder', space_id=space_id)
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
+            for descendant in descendants:
+                if descendant.file_type == FileType.DIR.value:
+                    await self._require_permission_id(
+                        'folder', descendant.id, 'download_folder', space_id=space_id
+                    )
+                else:
+                    await self._require_permission_id(
+                        'knowledge_file', descendant.id, 'download_file', space_id=space_id
+                    )
             folder_db_records.append(folder)
             folder_db_records.extend(descendants)
 

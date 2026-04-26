@@ -13,6 +13,13 @@ import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/bs-ui/tooltip"
+import { cn } from "@/utils"
+import {
   applyDepartmentMemberEditApi,
   checkDepartmentMemberDeleteApi,
   deleteDepartmentLocalMemberApi,
@@ -347,27 +354,37 @@ export function OrganizationMemberEditDialog({
                   <div>
                     <Label>{t("bs:department.primary")}</Label>
                     {form.can_change_primary && primaryDeptInternalId != null ? (
-                      <>
-                        <TreeDepartmentSelect
-                          className="mt-1"
-                          modal={false}
-                          nodes={treeNodes}
-                          value={primaryDeptInternalId}
-                          onChange={(id, node) => void handlePrimaryDeptChange(id, node)}
-                          placeholder={t("bs:department.memberEditPrimaryPlaceholder")}
-                          showMemberCount
-                        />
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {t("bs:department.memberEditPrimaryHint")}
-                        </p>
-                      </>
+                      <TreeDepartmentSelect
+                        className="mt-1"
+                        modal={false}
+                        nodes={treeNodes}
+                        value={primaryDeptInternalId}
+                        onChange={(id, node) => void handlePrimaryDeptChange(id, node)}
+                        placeholder={t("bs:department.memberEditPrimaryPlaceholder")}
+                        showMemberCount
+                      />
                     ) : (
                       <>
-                        <Input
-                          className="mt-1 bg-muted"
-                          readOnly
-                          value={form.primary_department.name}
-                        />
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  "mt-1 flex h-9 w-full min-w-0 cursor-default items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-foreground shadow-sm",
+                                )}
+                              >
+                                <span className="min-w-0 flex-1 truncate">
+                                  {form.primary_department.name}
+                                </span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="z-[100] max-w-md">
+                              <p className="break-words text-left text-xs">
+                                {form.primary_department.name}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {t("bs:department.memberEditPrimaryReadonly")}
                         </p>

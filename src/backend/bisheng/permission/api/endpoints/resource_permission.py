@@ -350,8 +350,9 @@ async def _apply_binding_metadata_to_permissions(
     """Overlay persisted UI binding metadata onto raw FGA tuple rows.
 
     Department grants with include_children=True are written as one tuple per
-    subtree department. The permission list should show the original parent
-    grant, not a flat list of generated child department tuples.
+    subtree department. The permission list should expose those concrete rows
+    while copying the original parent binding's relation-model metadata to the
+    generated child department rows.
     """
     if not bindings:
         return permissions
@@ -365,10 +366,11 @@ async def _apply_binding_metadata_to_permissions(
         for b in bindings
         if b.get('subject_id') is not None
     }
-    generated_department_keys: set[tuple] = set()
 
     for binding in bindings:
         subject_type = binding.get('subject_type')
+        if binding.get('subject_id') is None:
+            continue
         subject_id = int(binding.get('subject_id'))
         relation = binding.get('relation')
         key = (subject_type, subject_id, relation)
@@ -382,30 +384,35 @@ async def _apply_binding_metadata_to_permissions(
             )
             item_map[key] = item
 
-        item.include_children = binding.get('include_children')
-        item.model_id = binding.get('model_id')
-        item.model_name = model_map.get(item.model_id, {}).get('name')
+        binding_include_children = binding.get('include_children')
+        binding_model_id = binding.get('model_id')
+        binding_model_name = model_map.get(binding_model_id, {}).get('name')
+        item.include_children = binding_include_children
+        item.model_id = binding_model_id
+        item.model_name = binding_model_name
 
-        if subject_type == 'department' and binding.get('include_children'):
+        if subject_type == 'department' and binding_include_children:
             try:
                 from bisheng.database.models.department import DepartmentDao
 
                 dept = await DepartmentDao.aget_by_id(subject_id)
                 subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path) if dept else [subject_id]
             except Exception as e:
-                logger.warning('Failed to collapse department permission subtree: %s', e)
+                logger.warning('Failed to expand department permission subtree metadata: %s', e)
                 subtree_ids = [subject_id]
 
             for dept_id in subtree_ids:
                 child_key = ('department', int(dept_id), relation)
-                if child_key != key and child_key not in bound_keys:
-                    generated_department_keys.add(child_key)
+                if child_key == key or child_key in bound_keys:
+                    continue
+                child_item = item_map.get(child_key)
+                if child_item is None:
+                    continue
+                child_item.include_children = False
+                child_item.model_id = binding_model_id
+                child_item.model_name = binding_model_name
 
-    return [
-        item
-        for key, item in item_map.items()
-        if key not in generated_department_keys
-    ]
+    return list(item_map.values())
 
 
 def _tuple_signature(item) -> tuple:
@@ -460,6 +467,14 @@ def _management_permission_ids(resource_type: str) -> set[str]:
     return set(tier_map.values())
 
 
+def _uses_direct_management_permission(resource_type: str) -> bool:
+    return resource_type in _MANAGE_PERMISSION_BY_RESOURCE
+
+
+def _lineage_binding_can_override(resource_type: str) -> bool:
+    return resource_type in {'folder', 'knowledge_file'}
+
+
 async def _has_resource_permission_management_access(
     *,
     resource_type: str,
@@ -472,12 +487,13 @@ async def _has_resource_permission_management_access(
     if management_permission_ids:
         from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
-        return await FineGrainedPermissionService.has_any_permission_async(
+        effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
             login_user,
             resource_type,
             resource_id,
-            management_permission_ids,
+            nearest_binding_wins=_lineage_binding_can_override(resource_type),
         )
+        return bool(management_permission_ids & effective_permission_ids)
 
     return await PermissionService.check(
         user_id=login_user.user_id,
@@ -786,12 +802,6 @@ async def authorize_resource(
             b.get('key'): b for b in await _get_bindings()
             if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
         }
-        caller_level = await PermissionService.get_permission_level(
-            user_id=login_user.user_id,
-            object_type=resource_type,
-            object_id=resource_id,
-            login_user=login_user,
-        )
         management_permission_ids = _management_permission_ids(resource_type)
         caller_permission_ids = set()
         if management_permission_ids:
@@ -801,36 +811,51 @@ async def authorize_resource(
                 login_user,
                 resource_type,
                 resource_id,
+                nearest_binding_wins=_lineage_binding_can_override(resource_type),
             )
 
-        for grant in (request.grants or []):
-            ceiling = _grant_ceiling_index(grant, model_map)
-            if ceiling is None or not _caller_satisfies_ceiling(caller_level, ceiling):
+        if _uses_direct_management_permission(resource_type):
+            if management_permission_ids and not (management_permission_ids & caller_permission_ids):
                 return PermissionDeniedError.return_resp()
-            permission_id = _grant_management_permission_id(resource_type, grant, model_map)
-            if permission_id and permission_id not in caller_permission_ids:
-                return PermissionDeniedError.return_resp()
-
-        for revoke in (request.revokes or []):
-            binding = _binding_from_map(
-                binding_map,
-                resource_type,
-                str(resource_id),
-                revoke.subject_type,
-                revoke.subject_id,
-                revoke.relation,
-                getattr(revoke, 'include_children', None),
+            for grant in (request.grants or []):
+                if _grant_ceiling_index(grant, model_map) is None:
+                    return PermissionDeniedError.return_resp()
+        else:
+            caller_level = await PermissionService.get_permission_level(
+                user_id=login_user.user_id,
+                object_type=resource_type,
+                object_id=resource_id,
+                login_user=login_user,
             )
-            if binding and binding.get('model_id'):
-                m = model_map.get(binding['model_id'])
-                ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'), _LEGACY_REVOKE_MAX_CALLER_INDEX) if m else _LEGACY_REVOKE_MAX_CALLER_INDEX
-            else:
-                ceiling = _LEGACY_REVOKE_MAX_CALLER_INDEX
-            if not _caller_satisfies_ceiling(caller_level, ceiling):
-                return PermissionDeniedError.return_resp()
-            permission_id = _grant_management_permission_id(resource_type, revoke, model_map)
-            if permission_id and permission_id not in caller_permission_ids:
-                return PermissionDeniedError.return_resp()
+
+            for grant in (request.grants or []):
+                ceiling = _grant_ceiling_index(grant, model_map)
+                if ceiling is None or not _caller_satisfies_ceiling(caller_level, ceiling):
+                    return PermissionDeniedError.return_resp()
+                permission_id = _grant_management_permission_id(resource_type, grant, model_map)
+                if permission_id and permission_id not in caller_permission_ids:
+                    return PermissionDeniedError.return_resp()
+
+            for revoke in (request.revokes or []):
+                binding = _binding_from_map(
+                    binding_map,
+                    resource_type,
+                    str(resource_id),
+                    revoke.subject_type,
+                    revoke.subject_id,
+                    revoke.relation,
+                    getattr(revoke, 'include_children', None),
+                )
+                if binding and binding.get('model_id'):
+                    m = model_map.get(binding['model_id'])
+                    ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'), _LEGACY_REVOKE_MAX_CALLER_INDEX) if m else _LEGACY_REVOKE_MAX_CALLER_INDEX
+                else:
+                    ceiling = _LEGACY_REVOKE_MAX_CALLER_INDEX
+                if not _caller_satisfies_ceiling(caller_level, ceiling):
+                    return PermissionDeniedError.return_resp()
+                permission_id = _grant_management_permission_id(resource_type, revoke, model_map)
+                if permission_id and permission_id not in caller_permission_ids:
+                    return PermissionDeniedError.return_resp()
 
     grant_signatures = {_tuple_signature(g) for g in (request.grants or [])}
     revoke_signatures = {_tuple_signature(r) for r in (request.revokes or [])}
@@ -888,8 +913,15 @@ async def authorize_resource(
     bindings = await _get_bindings()
     bindings_map = {b.get('key'): b for b in bindings if b.get('key')}
     for revoke in (request.revokes or []):
-        include_children_values = [getattr(revoke, 'include_children', None)]
-        if _is_invalid_owner_subject(revoke.subject_type, revoke.relation) and revoke.subject_type == 'department':
+        include_children = getattr(revoke, 'include_children', None)
+        include_children_values = [include_children]
+        if (
+            revoke.subject_type == 'department'
+            and (
+                include_children is True
+                or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+            )
+        ):
             include_children_values = [True, False]
         for include_children in include_children_values:
             for key in _binding_lookup_keys(
@@ -1075,18 +1107,10 @@ async def get_grantable_relation_models(
     if object_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
 
-    from bisheng.permission.domain.services.permission_service import PermissionService
-
     raw = [_normalize_model_dict(m) for m in await _get_relation_models()]
     if login_user.is_admin():
         return resp_200([RelationModelItem(**m) for m in raw])
 
-    caller_level = await PermissionService.get_permission_level(
-        user_id=login_user.user_id,
-        object_type=object_type,
-        object_id=object_id,
-        login_user=login_user,
-    )
     management_permission_ids = _management_permission_ids(object_type)
     caller_permission_ids = set()
     if management_permission_ids:
@@ -1096,7 +1120,21 @@ async def get_grantable_relation_models(
             login_user,
             object_type,
             object_id,
+            nearest_binding_wins=_lineage_binding_can_override(object_type),
         )
+    if _uses_direct_management_permission(object_type):
+        if management_permission_ids and (management_permission_ids & caller_permission_ids):
+            return resp_200([RelationModelItem(**m) for m in raw])
+        return resp_200([])
+
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    caller_level = await PermissionService.get_permission_level(
+        user_id=login_user.user_id,
+        object_type=object_type,
+        object_id=object_id,
+        login_user=login_user,
+    )
     out = []
     for m in raw:
         ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'))

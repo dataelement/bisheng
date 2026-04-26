@@ -216,15 +216,17 @@ export default function CitationDocumentPreviewDrawer({
     document.body.removeChild(link);
   };
 
-  return (
+  const drawer = (
     <aside
       className={cn(
         'fixed flex flex-col bg-white',
         isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
-        'z-[9] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
       aria-label="文档预览"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
       <div
         className={cn(
@@ -284,5 +286,21 @@ export default function CitationDocumentPreviewDrawer({
         <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
       </div>
     </aside>
+  );
+
+  if (isFullBleedMobile) {
+    return drawer;
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[120]">
+      <button
+        type="button"
+        aria-label="关闭文档预览"
+        className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
+        onClick={onClose}
+      />
+      {drawer}
+    </div>
   );
 }

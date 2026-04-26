@@ -164,6 +164,14 @@ class Department(SQLModelSerializable, table=True):
             comment='Default role IDs for department members',
         ),
     )
+    concurrent_session_limit: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer, nullable=False,
+            server_default=text('0'),
+            comment='Dept-wide max concurrent daily-mode chat users; 0=unlimited (F030)',
+        ),
+    )
     create_user: Optional[int] = Field(
         default=None,
         sa_column=Column(Integer, nullable=True, comment='Creator user ID'),
@@ -902,7 +910,6 @@ class UserDepartmentDao:
                 .join(User, User.user_id == UserDepartment.user_id)
                 .where(
                     UserDepartment.department_id == department_id,
-                    User.delete == 0,
                 )
             )
             if keyword:
@@ -937,7 +944,6 @@ class UserDepartmentDao:
                 .join(User, User.user_id == UserDepartment.user_id)
                 .where(
                     UserDepartment.department_id == department_id,
-                    User.delete == 0,
                 )
             )
             if keyword:
@@ -972,6 +978,18 @@ class UserDepartmentDao:
                 )
             )
             return result.one()
+
+    @classmethod
+    async def aget_user_ids_for_department(cls, department_id: int) -> List[int]:
+        """All user_ids with a membership row on this department (any primary flag)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment.user_id).where(
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            rows = result.all()
+            return [int(r[0]) for r in rows]
 
     @classmethod
     def get_user_departments(cls, user_id: int) -> List[UserDepartment]:

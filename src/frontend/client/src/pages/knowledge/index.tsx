@@ -702,6 +702,7 @@ export default function Knowledge() {
                                         onEditTags={fileUpload.handleEditTags}
                                         onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
                                         currentPath={fileManager.currentPath}
+                                        currentFolderId={fileManager.currentFolderId}
                                         onDragStateChange={handleDragStateChange}
                                         uploadingFiles={fileUpload.uploadingFiles}
                                         creatingFolder={fileUpload.creatingFolder}

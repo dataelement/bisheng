@@ -118,6 +118,10 @@ export type TUser = {
   is_department_admin?: boolean;
   /** 与 /user/info 的 menu_approval_mode 对齐 */
   menu_approval_mode?: boolean;
+  /** /user/info：有效工作台区域 */
+  has_workbench?: boolean;
+  /** /user/info：有效管理后台区域 */
+  has_admin_console?: boolean;
   backupCodes?: TBackupCode[];
   createdAt: string;
   updatedAt: string;

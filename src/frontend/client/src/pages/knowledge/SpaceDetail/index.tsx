@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useRecoilValue } from "recoil";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { ALLOWED_EXTENSIONS, DEFAULT_MAX_FILE_SIZE_MB, triggerUrlDownload } from "../knowledgeUtils";
@@ -13,7 +13,11 @@ import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { canOpenPermissionDialog } from "~/api/permission";
+import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
+import {
+    hasKnowledgeSpacePermission,
+    useKnowledgeSpaceActionPermissions,
+} from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn, getFullWidthLength } from "~/utils";
 
@@ -37,6 +41,7 @@ interface KnowledgeSpaceContentProps {
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     currentPath: Array<{ id?: string; name: string }>;
+    currentFolderId?: string;
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
@@ -67,6 +72,7 @@ export function KnowledgeSpaceContent({
     onEditTags,
     onRetryFile,
     currentPath,
+    currentFolderId,
     onDragStateChange,
     uploadingFiles = [],
     creatingFolder,
@@ -158,6 +164,14 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
+    const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "share_space",
+    );
+    const [canCreateFolder, setCanCreateFolder] = useState(false);
+    const [canUploadFile, setCanUploadFile] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -165,6 +179,9 @@ export function KnowledgeSpaceContent({
         type: "folder" | "knowledge_file";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
+    const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
+    const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
+    const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -172,6 +189,49 @@ export function KnowledgeSpaceContent({
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+
+        const objectType = currentFolderId ? "folder" : "knowledge_space";
+        const objectId = currentFolderId || space.id;
+
+        Promise.allSettled([
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "create_folder",
+                { signal: controller.signal },
+            ),
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "upload_file",
+                { signal: controller.signal },
+            ),
+        ]).then(([createFolderResult, uploadFileResult]) => {
+            if (cancelled) return;
+            setCanCreateFolder(
+                createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
+            );
+            setCanUploadFile(
+                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
+            );
+        }).catch(() => {
+            if (!cancelled) {
+                setCanCreateFolder(false);
+                setCanUploadFile(false);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [currentFolderId, space.id]);
 
     useEffect(() => {
         let cancelled = false;
@@ -219,6 +279,147 @@ export function KnowledgeSpaceContent({
         permissionEntryProbeKey,
     ]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (isAdmin) {
+            setRenameEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setRenameEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+                const result = await checkPermission(
+                    resourceType,
+                    file.id,
+                    "can_edit",
+                    file.type === FileType.FOLDER ? "rename_folder" : "rename_file",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setRenameEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [isAdmin, permissionEntryProbeKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (isAdmin) {
+            setDownloadEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setDownloadEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+                const result = await checkPermission(
+                    resourceType,
+                    file.id,
+                    "can_read",
+                    file.type === FileType.FOLDER ? "download_folder" : "download_file",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setDownloadEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [isAdmin, permissionEntryProbeKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (isAdmin) {
+            setDeleteEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setDeleteEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+                const result = await checkPermission(
+                    resourceType,
+                    file.id,
+                    "can_delete",
+                    file.type === FileType.FOLDER ? "delete_folder" : "delete_file",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setDeleteEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [isAdmin, permissionEntryProbeKey]);
+
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
     const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
@@ -228,6 +429,7 @@ export function KnowledgeSpaceContent({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const triggerUpload = () => {
+        if (!canUploadFile) return;
         fileInputRef.current?.click();
     };
 
@@ -255,7 +457,9 @@ export function KnowledgeSpaceContent({
                 }
             }
 
-            onUploadFile(filesList);
+            if (canUploadFile) {
+                onUploadFile(filesList);
+            }
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
@@ -263,7 +467,7 @@ export function KnowledgeSpaceContent({
     // ─── Drag and drop ──────────────────────────────────────────────────
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
-        onUploadFile,
+        onUploadFile: canUploadFile ? onUploadFile : () => undefined,
         maxFileSizeMB,
     });
 
@@ -326,6 +530,13 @@ export function KnowledgeSpaceContent({
 
     const handleBatchDownload = async () => {
         const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
+            downloadEntryIds.has(file.id)
+        );
+        if (!canDownloadSelected) {
+            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            return;
+        }
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
         try {
@@ -353,6 +564,10 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
+        if (!downloadEntryIds.has(fileId)) {
+            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            return;
+        }
         try {
             if (isFolder) {
                 // Folders must use batch download (returns zip)
@@ -363,10 +578,10 @@ export function KnowledgeSpaceContent({
                 triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
             } else {
                 // Single file: use preview_url for channel files, original_url for others
-                const previewData = await getFilePreviewApi(String(space.id), fileId);
+                const downloadData = await getFileDownloadApi(String(space.id), fileId);
                 const downloadUrl = file?.fileSource === 'channel'
-                    ? previewData.preview_url || previewData.original_url
-                    : previewData.original_url;
+                    ? downloadData.preview_url || downloadData.original_url
+                    : downloadData.original_url;
                 if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(downloadUrl, file?.name);
             }
@@ -426,7 +641,11 @@ export function KnowledgeSpaceContent({
 
         if (!confirmed) return;
 
-        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        if (!canBatchDelete) {
+            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
+            return;
+        }
+
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
 
@@ -449,6 +668,10 @@ export function KnowledgeSpaceContent({
         if (!file) return;
 
         const isFolder = file.type === FileType.FOLDER;
+        if (!deleteEntryIds.has(fileId)) {
+            showToast({ message: localize("com_knowledge.delete_failed"), status: "error" });
+            return;
+        }
 
         const confirmed = await confirm({
             title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : localize("com_knowledge.confirm_delete_file"),
@@ -519,6 +742,13 @@ export function KnowledgeSpaceContent({
         )
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
+    const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+    const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
+        deleteEntryIds.has(file.id)
+    );
+    const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
+        downloadEntryIds.has(file.id)
+    );
 
     return (
         <div
@@ -555,17 +785,22 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
+                canCreateFolder={canCreateFolder}
+                canUploadFile={canUploadFile}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
                 onClearSelection={() => setSelectedFiles(new Set())}
                 onBatchDownload={handleBatchDownload}
+                canBatchDownload={canBatchDownload}
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
+                canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
+                canShareSpace={canShareSpace}
             />
 
             {/* Content Container (Scrollable) */}
@@ -579,8 +814,8 @@ export function KnowledgeSpaceContent({
                                 alt="empty"
                             />
                             <p className="text-[14px] leading-6 text-[#4E5969]">
-                                {searchQuery ? localize("com_knowledge.no_matched_file") : isAdmin ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
-                                {isAdmin && !searchQuery && (
+                                {searchQuery ? localize("com_knowledge.no_matched_file") : canUploadFile ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
+                                {canUploadFile && !searchQuery && (
                                     <span
                                         className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                                         onClick={triggerUpload}
@@ -625,6 +860,9 @@ export function KnowledgeSpaceContent({
                                     onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                     onCancelCreate={onCancelCreateFolder}
                                     onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                    canRename={renameEntryIds.has(file.id)}
+                                    canDelete={deleteEntryIds.has(file.id)}
+                                    canDownload={downloadEntryIds.has(file.id)}
                                     mobileListMode={isH5 && viewMode === "list"}
                                 />
                             ))}
@@ -648,6 +886,9 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={permissionEntryIds}
+                                    renameEntryIds={renameEntryIds}
+                                    deleteEntryIds={deleteEntryIds}
+                                    downloadEntryIds={downloadEntryIds}
                                     onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

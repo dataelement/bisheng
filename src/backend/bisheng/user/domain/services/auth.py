@@ -619,15 +619,41 @@ class LoginUser(BaseModel):
         return role, web_menu
 
     @classmethod
-    async def user_has_workbench_or_admin_effective_menu(cls, user: User) -> bool:
-        """True if effective web_menu grants workbench or admin-console area (incl. parent-only keys)."""
+    async def effective_workbench_admin_flags(cls, user: User) -> Tuple[bool, bool]:
+        """Effective (has_workbench, has_admin_console) after orphan strip and dept-admin merge."""
         db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
         if any(ur.role_id == AdminRole for ur in db_user_role):
-            return True
+            return True, True
         is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
         _, web_menu = await cls.get_roles_web_menu(user, is_department_admin=is_department_admin)
         wm = set(web_menu)
-        return bool((wm & _WEB_MENU_WORKBENCH_ALL) or (wm & _WEB_MENU_ADMIN_ALL))
+        has_wb = bool(wm & _WEB_MENU_WORKBENCH_ALL)
+        has_adm = bool(wm & _WEB_MENU_ADMIN_ALL)
+        return has_wb, has_adm
+
+    @classmethod
+    async def user_has_workbench_or_admin_effective_menu(cls, user: User) -> bool:
+        """True if effective web_menu grants workbench or admin-console area (incl. parent-only keys)."""
+        has_wb, has_adm = await cls.effective_workbench_admin_flags(user)
+        return has_wb or has_adm
+
+    @classmethod
+    def default_web_entry(cls, has_workbench: bool, has_admin_console: bool) -> str:
+        """First app after login: ``platform`` (管理后台) or ``workspace`` (工作台). Both open → platform."""
+        if has_admin_console:
+            return 'platform'
+        if has_workbench:
+            return 'workspace'
+        return 'platform'
+
+    @classmethod
+    async def user_entry_payload_for_read(cls, user: User) -> dict:
+        hw, ha = await cls.effective_workbench_admin_flags(user)
+        return {
+            'has_workbench': hw,
+            'has_admin_console': ha,
+            'default_entry': cls.default_web_entry(hw, ha),
+        }
 
     @classmethod
     async def compute_menu_approval_mode(cls, user: User) -> bool:

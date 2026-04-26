@@ -6,6 +6,7 @@ import { SystemRoles } from "~/types/chat";
 export const KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS = [
     "edit_space",
     "delete_space",
+    "share_space",
     "manage_space_relation",
 ] as const;
 
@@ -15,6 +16,7 @@ export type KnowledgeSpaceActionPermission =
 const PERMISSION_RELATION: Record<KnowledgeSpaceActionPermission, string> = {
     edit_space: "can_edit",
     delete_space: "can_delete",
+    share_space: "can_manage",
     manage_space_relation: "can_manage",
 };
 

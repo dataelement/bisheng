@@ -112,16 +112,19 @@ class SpaceFileDao(KnowledgeFileDao):
             )
             status_filter = or_(
                 and_(KnowledgeFile.file_type == 1, KnowledgeFile.status.in_(file_status)),
-                and_(KnowledgeFile.file_type == 0, descendant_exists)
+                and_(
+                    KnowledgeFile.file_type == 0,
+                    or_(KnowledgeFile.status.in_(file_status), descendant_exists),
+                )
             )
             filters.append(status_filter)
 
         statement = (
             select(KnowledgeFile)
             .where(*filters)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
         )
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
         if order_field and order_sort:
             statement = statement.order_by(text(cls.order_field_text(order_field, order_sort)))
         async with get_async_db_session() as session:
@@ -204,7 +207,10 @@ class SpaceFileDao(KnowledgeFileDao):
             )
             status_filter = or_(
                 and_(KnowledgeFile.file_type == FileType.FILE.value, KnowledgeFile.status.in_(file_status)),
-                and_(KnowledgeFile.file_type == FileType.DIR.value, descendant_exists)
+                and_(
+                    KnowledgeFile.file_type == FileType.DIR.value,
+                    or_(KnowledgeFile.status.in_(file_status), descendant_exists),
+                )
             )
             filters.append(status_filter)
 

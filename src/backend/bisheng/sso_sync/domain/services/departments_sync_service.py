@@ -34,6 +34,9 @@ from bisheng.sso_sync.domain.schemas.payloads import (
     DepartmentsSyncRequest,
     DepartmentUpsertItem,
 )
+from bisheng.department.domain.services.department_archive_cleanup_service import (
+    DepartmentArchiveCleanupService,
+)
 from bisheng.sso_sync.domain.services.dept_upsert_service import (
     DeptUpsertService,
 )
@@ -49,7 +52,10 @@ class DepartmentsSyncService:
 
     @classmethod
     async def execute(
-        cls, payload: DepartmentsSyncRequest, request_ip: str = '',
+        cls,
+        payload: DepartmentsSyncRequest,
+        request_ip: str = '',
+        row_source: str = SSO_SOURCE,
     ) -> BatchResult:
         result = BatchResult()
 
@@ -62,19 +68,25 @@ class DepartmentsSyncService:
                 # lookups up front; items inserting a brand-new parent in
                 # the same batch still hit the DAO fallback inside the
                 # upsert service (cache miss → single query).
-                parent_cache = await cls._preload_parent_cache(payload.upsert)
+                parent_cache = await cls._preload_parent_cache(
+                    payload.upsert, row_source,
+                )
 
                 # --- upsert round ---
                 for item in payload.upsert:
                     await cls._apply_upsert(
-                        item, payload.source_ts, result, parent_cache,
+                        item,
+                        payload.source_ts,
+                        result,
+                        parent_cache,
+                        row_source,
                     )
                     # Freshly upserted rows can become parents for later
                     # items in the same batch — keep the cache in sync so
                     # subsequent children don't re-query the DAO.
                     if item.external_id not in parent_cache:
                         fresh = await DepartmentDao.aget_by_source_external_id(
-                            cls.SOURCE, item.external_id,
+                            row_source, item.external_id,
                         )
                         if fresh is not None:
                             parent_cache[item.external_id] = fresh
@@ -82,7 +94,11 @@ class DepartmentsSyncService:
                 # --- remove round ---
                 for ext_id in payload.remove:
                     await cls._apply_remove(
-                        ext_id, payload.source_ts, result, request_ip,
+                        ext_id,
+                        payload.source_ts,
+                        result,
+                        request_ip,
+                        row_source,
                     )
             finally:
                 current_tenant_id.reset(token)
@@ -91,7 +107,7 @@ class DepartmentsSyncService:
 
     @classmethod
     async def _preload_parent_cache(
-        cls, upsert_items,
+        cls, upsert_items, row_source: str,
     ) -> Dict[str, Department]:
         """Gather every parent_external_id referenced by the upsert batch
         and load them with a single DAO lookup per distinct parent.
@@ -107,7 +123,7 @@ class DepartmentsSyncService:
         }
         cache: Dict[str, Department] = {}
         for ext in parent_ext_ids:
-            row = await DepartmentDao.aget_by_source_external_id(cls.SOURCE, ext)
+            row = await DepartmentDao.aget_by_source_external_id(row_source, ext)
             if row is not None:
                 cache[ext] = row
         return cache
@@ -123,10 +139,11 @@ class DepartmentsSyncService:
         source_ts: Optional[int],
         result: BatchResult,
         parent_cache: Optional[Dict[str, Department]] = None,
+        row_source: str = SSO_SOURCE,
     ) -> None:
         try:
             existing = await DepartmentDao.aget_by_source_external_id(
-                cls.SOURCE, item.external_id,
+                row_source, item.external_id,
             )
             incoming_ts = int(item.ts or source_ts or 0)
             decision = await OrgSyncTsGuard.check_and_update(
@@ -144,7 +161,7 @@ class DepartmentsSyncService:
             await DeptUpsertService.upsert_from_sync_payload(
                 existing=existing,
                 item=item,
-                source=cls.SOURCE,
+                source=row_source,
                 last_sync_ts=incoming_ts,
                 parent_cache=parent_cache,
             )
@@ -169,10 +186,11 @@ class DepartmentsSyncService:
         source_ts: Optional[int],
         result: BatchResult,
         request_ip: str,
+        row_source: str = SSO_SOURCE,
     ) -> None:
         try:
             dept = await DepartmentDao.aget_by_source_external_id(
-                cls.SOURCE, external_id,
+                row_source, external_id,
             )
             if dept is None:
                 # Nothing to do; not an error. Happens on double-delete.
@@ -197,9 +215,12 @@ class DepartmentsSyncService:
 
             mounted_before = dept.mounted_tenant_id
             await DepartmentDao.aarchive_by_external_id(
-                source=cls.SOURCE,
+                source=row_source,
                 external_id=external_id,
                 last_sync_ts=incoming_ts,
+            )
+            await DepartmentArchiveCleanupService.arun_for_archived_department(
+                int(dept.id), reason='f014_department_remove',
             )
             # F011 orphan handler owns the tenant.orphaned audit + notify
             # pipeline; we only trigger it with the right deletion_source.

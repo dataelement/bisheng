@@ -32,6 +32,12 @@ export type User = {
     is_child_admin?: boolean;
     leaf_tenant_id?: number;
     leaf_tenant_name?: string;
+    /** Effective WEB_MENU: workbench area (v2.5 entry routing). */
+    has_workbench?: boolean;
+    /** Effective WEB_MENU: admin console area. */
+    has_admin_console?: boolean;
+    /** ``platform`` | ``workspace`` — post-login default when both → platform. */
+    default_entry?: string;
 };
 
 export type ROLE = {

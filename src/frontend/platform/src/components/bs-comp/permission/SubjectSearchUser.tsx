@@ -23,6 +23,7 @@ interface SubjectSearchUserProps {
   onChange: (v: SelectedSubject[]) => void
   resourceType?: ResourceType
   resourceId?: string
+  disabledIds?: number[]
 }
 
 export function SubjectSearchUser({
@@ -30,6 +31,7 @@ export function SubjectSearchUser({
   onChange,
   resourceType,
   resourceId,
+  disabledIds = [],
 }: SubjectSearchUserProps) {
   const { t } = useTranslation('permission')
   const { user } = useContext(userContext)
@@ -162,8 +164,10 @@ export function SubjectSearchUser({
   }
 
   const selectedIds = new Set(value.map((s) => s.id))
+  const disabledIdSet = new Set(disabledIds)
 
   const toggle = (user: UserSearchResult) => {
+    if (disabledIdSet.has(user.user_id)) return
     if (selectedIds.has(user.user_id)) {
       onChange(value.filter((s) => s.id !== user.user_id))
     } else {
@@ -193,10 +197,17 @@ export function SubjectSearchUser({
           return (
             <div
               key={user.user_id}
-              className="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 hover:bg-accent"
+              className={`flex min-w-0 items-center gap-2 px-3 py-2 ${
+                disabledIdSet.has(user.user_id)
+                  ? 'cursor-not-allowed opacity-60'
+                  : 'cursor-pointer hover:bg-accent'
+              }`}
               onClick={() => toggle(user)}
             >
-              <Checkbox checked={selectedIds.has(user.user_id)} />
+              <Checkbox
+                checked={selectedIds.has(user.user_id) || disabledIdSet.has(user.user_id)}
+                disabled={disabledIdSet.has(user.user_id)}
+              />
               <UserIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm" title={user.user_name}>{user.user_name}</div>

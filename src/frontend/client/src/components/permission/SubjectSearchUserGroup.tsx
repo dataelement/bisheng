@@ -16,6 +16,7 @@ interface SubjectSearchUserGroupProps {
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
   resourceId?: string;
+  disabledIds?: number[];
 }
 
 export function SubjectSearchUserGroup({
@@ -23,6 +24,7 @@ export function SubjectSearchUserGroup({
   onChange,
   resourceType,
   resourceId,
+  disabledIds = [],
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -57,8 +59,10 @@ export function SubjectSearchUserGroup({
   }, [groups, keyword]);
 
   const selectedIds = new Set(value.map((s) => s.id));
+  const disabledIdSet = new Set(disabledIds);
 
   const toggle = (group: UserGroup) => {
+    if (disabledIdSet.has(group.id)) return;
     if (selectedIds.has(group.id)) {
       onChange(value.filter((s) => s.id !== group.id));
     } else {
@@ -95,10 +99,17 @@ export function SubjectSearchUserGroup({
           filtered.map((group) => (
             <div
               key={group.id}
-              className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-gray-50"
+              className={`flex items-center gap-2 px-3 py-2 ${
+                disabledIdSet.has(group.id)
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-pointer hover:bg-gray-50"
+              }`}
               onClick={() => toggle(group)}
             >
-              <Checkbox checked={selectedIds.has(group.id)} />
+              <Checkbox
+                checked={selectedIds.has(group.id) || disabledIdSet.has(group.id)}
+                disabled={disabledIdSet.has(group.id)}
+              />
               <Users className="h-4 w-4 text-gray-400" />
               <span className="truncate text-sm">{group.group_name}</span>
             </div>

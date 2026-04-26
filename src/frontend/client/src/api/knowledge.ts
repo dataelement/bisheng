@@ -116,6 +116,13 @@ export interface KnowledgeSpace {
     departmentName?: string;
 }
 
+export type SpaceSubscribeStatus = "subscribed" | "pending";
+
+export interface SubscribeSpaceResult {
+    status: SpaceSubscribeStatus;
+    spaceId: string;
+}
+
 /** Space tag entity used by tagging UI */
 export interface SpaceTag {
     id: number;
@@ -921,7 +928,7 @@ export async function batchUpdateTagsApi(
  * Subscribe to a space
  * POST /api/v1/knowledge/space/{space_id}/subscribe
  */
-export async function subscribeSpaceApi(space_id: string): Promise<void> {
+export async function subscribeSpaceApi(space_id: string): Promise<SubscribeSpaceResult> {
     const res = await request.post(`/api/v1/knowledge/space/${space_id}/subscribe`) as any;
     if (res?.status_code && res.status_code !== 200) {
         const msg =
@@ -931,6 +938,15 @@ export async function subscribeSpaceApi(space_id: string): Promise<void> {
             "subscribe space failed";
         throw new Error(msg);
     }
+    const payload = res?.data ?? res ?? {};
+    const status = String(payload?.status ?? "").toLowerCase();
+    if (status !== "subscribed" && status !== "pending") {
+        throw new Error("subscribe space failed: missing subscription status");
+    }
+    return {
+        status,
+        spaceId: String(payload?.space_id ?? payload?.spaceId ?? space_id),
+    };
 }
 
 /**
@@ -1076,7 +1092,13 @@ export async function createFolderApi(
             name: data.name,
             parent_id: data.parent_id ? Number(data.parent_id) : null,
         }
-    ) as ApiResponse<RawSpaceChild>;
+    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "create folder failed");
+    }
+    if (!res?.data) {
+        throw new Error("create folder failed: missing data");
+    }
     return mapChild(res.data, space_id);
 }
 
@@ -1088,14 +1110,25 @@ export async function renameFolderApi(
     folder_id: string,
     name: string
 ): Promise<void> {
-    return request.put(`/api/v1/knowledge/space/${space_id}/folders/${folder_id}`, { name });
+    const res = await request.put(
+        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`,
+        { name }
+    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "rename folder failed");
+    }
 }
 
 /**
  * Delete a folder (recursively deletes all children)
  */
 export async function deleteFolderApi(space_id: string, folder_id: string): Promise<void> {
-    return request.delete(`/api/v1/knowledge/space/${space_id}/folders/${folder_id}`);
+    const res = await request.delete(
+        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`
+    ) as ApiResponse<null> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "delete folder failed");
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -1112,7 +1145,13 @@ export async function uploadFileToServerApi(
 ): Promise<UploadFileResponse> {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse>;
+    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "upload file failed");
+    }
+    if (!res?.data?.file_path) {
+        throw new Error("upload file failed: missing file path");
+    }
     return res.data;
 }
 
@@ -1127,7 +1166,10 @@ export async function addFilesApi(
         `/api/v1/knowledge/space/${space_id}/files`,
         data,
         { showError: true }
-    ) as ApiResponse<RawSpaceChild[]>;
+    ) as ApiResponse<RawSpaceChild[]> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "register files failed");
+    }
     const payload: any = res?.data ?? {};
     const list = extractList<RawSpaceChild>(payload);
     return list.map(raw => {
@@ -1191,7 +1233,13 @@ export async function batchDeleteApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
 ): Promise<void> {
-    return request.post(`/api/v1/knowledge/space/${space_id}/files/batch-delete`, data);
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/files/batch-delete`,
+        data
+    ) as ApiResponse<null> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "batch delete failed");
+    }
 }
 
 /**
@@ -1205,6 +1253,9 @@ export async function batchDownloadApi(
         `/api/v1/knowledge/space/${space_id}/files/batch-download`,
         data
     );
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "batch download failed");
+    }
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";
 }
@@ -1246,6 +1297,23 @@ export async function getFilePreviewApi(
 ): Promise<{ original_url: string; preview_url: string }> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const data = res?.data ?? res;
+    return {
+        original_url: data?.original_url ?? "",
+        preview_url: data?.preview_url ?? "",
+    };
+}
+
+/**
+ * Get file download URL. This is intentionally separate from preview because
+ * viewing a file does not imply download permission.
+ */
+export async function getFileDownloadApi(
+    space_id: string,
+    file_id: string
+): Promise<{ original_url: string; preview_url: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/download`);
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",

@@ -4,9 +4,11 @@ import { useToastContext } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getResourcePermissions,
 } from "~/api/permission";
 import type {
   GrantItem,
+  PermissionEntry,
   RelationLevel,
   RelationModel,
   ResourceType,
@@ -28,6 +30,12 @@ const DEFAULT_MODELS: RelationModelOption[] = [
   { id: "editor", name: "可编辑", relation: "editor" },
   { id: "manager", name: "可管理", relation: "manager" },
 ];
+
+const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
+  user: [],
+  department: [],
+  user_group: [],
+};
 
 interface PermissionGrantTabProps {
   resourceType: ResourceType;
@@ -63,6 +71,9 @@ export function PermissionGrantTab({
   const [models, setModels] = useState<RelationModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("viewer");
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(true);
+  const [grantedSubjectIds, setGrantedSubjectIds] = useState<Record<SubjectType, number[]>>(
+    EMPTY_GRANTED_SUBJECT_IDS
+  );
   const [submitting, setSubmitting] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
@@ -87,6 +98,24 @@ export function PermissionGrantTab({
     setSelectedModelId("viewer");
   }, [localize]);
 
+  const applyGrantedPermissions = useCallback((permissions: PermissionEntry[] | undefined) => {
+    const next = {
+      user: new Set<number>(),
+      department: new Set<number>(),
+      user_group: new Set<number>(),
+    };
+    for (const permission of Array.isArray(permissions) ? permissions : []) {
+      if (permission.subject_type in next) {
+        next[permission.subject_type].add(permission.subject_id);
+      }
+    }
+    setGrantedSubjectIds({
+      user: Array.from(next.user),
+      department: Array.from(next.department),
+      user_group: Array.from(next.user_group),
+    });
+  }, []);
+
   useEffect(() => {
     setSelected((prev) =>
       prev.map((subject) =>
@@ -103,6 +132,20 @@ export function PermissionGrantTab({
       setSelected([]);
     }
   }, [fixedSubjectType]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getResourcePermissions(resourceType, resourceId)
+      .then((permissions) => {
+        if (!cancelled) applyGrantedPermissions(permissions);
+      })
+      .catch(() => {
+        if (!cancelled) setGrantedSubjectIds(EMPTY_GRANTED_SUBJECT_IDS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyGrantedPermissions, resourceId, resourceType]);
 
   useEffect(() => {
     if (skipGrantableModelsRequest) {
@@ -224,6 +267,7 @@ export function PermissionGrantTab({
             onChange={setSelected}
             resourceType={resourceType}
             resourceId={resourceId}
+            disabledIds={grantedSubjectIds.user}
           />
         )}
         {subjectType === "department" && (
@@ -234,6 +278,7 @@ export function PermissionGrantTab({
             resourceId={resourceId}
             includeChildren={includeChildren}
             onIncludeChildrenChange={handleIncludeChildrenChange}
+            disabledIds={grantedSubjectIds.department}
           />
         )}
         {subjectType === "user_group" && (
@@ -242,6 +287,7 @@ export function PermissionGrantTab({
             onChange={setSelected}
             resourceType={resourceType}
             resourceId={resourceId}
+            disabledIds={grantedSubjectIds.user_group}
           />
         )}
       </div>

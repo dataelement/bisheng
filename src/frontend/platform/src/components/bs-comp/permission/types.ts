@@ -19,6 +19,8 @@ export interface PermissionEntry {
   subject_type: SubjectType
   subject_id: number
   subject_name: string | null
+  subject_group_names?: string[]
+  subject_member_names?: string[]
   relation: RelationLevel
   model_id?: string
   model_name?: string

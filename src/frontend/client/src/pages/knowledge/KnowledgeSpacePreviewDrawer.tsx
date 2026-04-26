@@ -275,13 +275,10 @@ export function KnowledgeSpacePreviewDrawer({
         if (status === "joined" || status === "pending" || status === "rejected") return;
         if (subscribing) return;
 
-        const nextUiStatus: "joined" | "pending" = isPublic ? "joined" : "pending";
         const prevUiStatus = status;
 
         (async () => {
             setSubscribing(true);
-            setStatus(nextUiStatus);
-            onSquareStatusChange?.(String(space.id), nextUiStatus);
 
             const rollback = () => {
                 setStatus(prevUiStatus);
@@ -303,8 +300,22 @@ export function KnowledgeSpacePreviewDrawer({
                     // If the limit check fails, fall back to existing behavior.
                 }
 
-                await subscribeSpaceApi(space.id);
-                if (isPublic) {
+                const result = await subscribeSpaceApi(space.id);
+                const nextUiStatus: "joined" | "pending" = result.status === "subscribed" ? "joined" : "pending";
+                setStatus(nextUiStatus);
+                setSpace((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              squareStatus: nextUiStatus,
+                              subscriptionStatus: result.status,
+                              isFollowed: nextUiStatus === "joined",
+                              isPending: nextUiStatus === "pending",
+                          }
+                        : prev
+                );
+                onSquareStatusChange?.(String(space.id), nextUiStatus);
+                if (nextUiStatus === "joined") {
                     showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
                 } else {
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });

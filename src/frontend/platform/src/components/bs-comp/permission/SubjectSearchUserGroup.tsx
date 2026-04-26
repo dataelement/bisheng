@@ -18,6 +18,7 @@ interface SubjectSearchUserGroupProps {
   onChange: (v: SelectedSubject[]) => void
   resourceType?: ResourceType
   resourceId?: string
+  disabledIds?: number[]
 }
 
 export function SubjectSearchUserGroup({
@@ -25,6 +26,7 @@ export function SubjectSearchUserGroup({
   onChange,
   resourceType,
   resourceId,
+  disabledIds = [],
 }: SubjectSearchUserGroupProps) {
   const { t } = useTranslation('permission')
   const [groups, setGroups] = useState<UserGroup[]>([])
@@ -49,8 +51,10 @@ export function SubjectSearchUserGroup({
   }, [groups, keyword])
 
   const selectedIds = new Set(value.map((s) => s.id))
+  const disabledIdSet = new Set(disabledIds)
 
   const toggle = (group: UserGroup) => {
+    if (disabledIdSet.has(group.id)) return
     if (selectedIds.has(group.id)) {
       onChange(value.filter((s) => s.id !== group.id))
     } else {
@@ -77,10 +81,17 @@ export function SubjectSearchUserGroup({
         {!loading && filtered.map((group) => (
           <div
             key={group.id}
-            className="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 hover:bg-accent"
+            className={`flex min-w-0 items-center gap-2 px-3 py-2 ${
+              disabledIdSet.has(group.id)
+                ? 'cursor-not-allowed opacity-60'
+                : 'cursor-pointer hover:bg-accent'
+            }`}
             onClick={() => toggle(group)}
           >
-            <Checkbox checked={selectedIds.has(group.id)} />
+            <Checkbox
+              checked={selectedIds.has(group.id) || disabledIdSet.has(group.id)}
+              disabled={disabledIdSet.has(group.id)}
+            />
             <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 truncate text-sm" title={group.group_name}>{group.group_name}</span>
           </div>

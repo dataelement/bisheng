@@ -23,12 +23,14 @@ vi.mock("@/components/bs-comp/permission/PermissionListTab", () => ({
     resourceType,
     resourceId,
     refreshKey,
+    fixedSubjectType,
   }: {
     resourceType: string;
     resourceId: string;
     refreshKey?: number;
+    fixedSubjectType?: string;
   }) => (
-    <div>{`list:${resourceType}:${resourceId}:${refreshKey ?? 0}`}</div>
+    <div>{`list:${resourceType}:${resourceId}:${fixedSubjectType ?? "none"}:${refreshKey ?? 0}`}</div>
   ),
 }));
 
@@ -37,13 +39,17 @@ vi.mock("@/components/bs-comp/permission/PermissionGrantTab", () => ({
     resourceType,
     resourceId,
     onSuccess,
+    fixedSubjectType,
+    includeChildren,
   }: {
     resourceType: string;
     resourceId: string;
     onSuccess: () => void;
+    fixedSubjectType?: string;
+    includeChildren?: boolean;
   }) => (
     <div>
-      <div>{`grant:${resourceType}:${resourceId}`}</div>
+      <div>{`grant:${resourceType}:${resourceId}:${fixedSubjectType ?? "none"}:${includeChildren ? "include" : "exclude"}`}</div>
       <button type="button" onClick={onSuccess}>grant-success</button>
     </div>
   ),
@@ -164,7 +170,7 @@ describe("Permission dialog regressions", () => {
     ] as any);
   });
 
-  it("renders only list and grant tabs after removing the dead share tab", () => {
+  it("renders the new subject-scoped permission shell", () => {
     renderAsAdmin(
       <PermissionDialog
         open
@@ -175,8 +181,11 @@ describe("Permission dialog regressions", () => {
       />,
     );
 
-    expect(screen.getByText("dialog.tabList")).toBeInTheDocument();
-    expect(screen.getByText("dialog.tabGrant")).toBeInTheDocument();
+    expect(screen.getByText("subject.user")).toBeInTheDocument();
+    expect(screen.getByText("subject.department")).toBeInTheDocument();
+    expect(screen.getByText("subject.userGroup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "dialog.tabGrant" })).toBeInTheDocument();
+    expect(screen.queryByText("dialog.tabList")).not.toBeInTheDocument();
     expect(screen.queryByText("dialog.tabShare")).not.toBeInTheDocument();
   });
 
@@ -208,11 +217,12 @@ describe("Permission dialog regressions", () => {
       />,
     );
 
-    expect(screen.getByText("list:knowledge_space:1:0")).toBeInTheDocument();
+    expect(screen.getByText("list:knowledge_space:1:user:0")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "dialog.tabGrant" }));
     fireEvent.click(screen.getByRole("button", { name: "grant-success" }));
 
-    expect(screen.getByText("list:knowledge_space:1:1")).toBeInTheDocument();
+    expect(screen.getByText("list:knowledge_space:1:user:1")).toBeInTheDocument();
   });
 });
 

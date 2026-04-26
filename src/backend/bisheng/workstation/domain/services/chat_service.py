@@ -19,7 +19,11 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
-from bisheng.common.errcode.workstation import ConversationNotFoundError
+from bisheng.common.errcode.workstation import (
+    ConversationNotFoundError,
+    DepartmentDailyChatConcurrentLimitError,
+)
+from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -1160,7 +1164,7 @@ async def _agent_stream_chat_completion(
             media_type='text/event-stream',
         )
 
-    async def event_stream():
+    async def _agent_event_stream_impl():
         # Single ordered event log — one entry per thinking segment or tool
         # call, in arrival order. The frontend renders this array directly;
         # parallel arrays + `segment_idx`/`after_segment` cross-references
@@ -1562,6 +1566,26 @@ async def _agent_stream_chat_completion(
                 gen_title(data.text or '', final_msg, bisheng_llm, conversation_id, login_user, request)
             )
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
+
+    async def event_stream():
+        dept_flow_slot: Optional[int] = None
+        flow_lim, flow_dept = await DepartmentFlowService.resolve_limit_and_dept(login_user)
+        if flow_lim > 0 and flow_dept is not None:
+            acquired = await DepartmentFlowService.try_acquire_daily_chat_slot(
+                flow_dept, login_user.user_id, flow_lim,
+            )
+            if not acquired:
+                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
+                return
+            dept_flow_slot = flow_dept
+        try:
+            async for chunk in _agent_event_stream_impl():
+                yield chunk
+        finally:
+            if dept_flow_slot is not None:
+                await DepartmentFlowService.release_daily_chat_slot(
+                    dept_flow_slot, login_user.user_id,
+                )
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 

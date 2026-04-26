@@ -513,7 +513,6 @@ export default function RolesAndPermissions() {
           </div>
           <div className="space-y-2">
             <p className="text-sm font-medium">{t("system.relationModelAuthLevelTitle")}</p>
-            <p className="text-xs text-muted-foreground">{t("system.relationModelAuthLevelHint")}</p>
             <Select
               value={newCreateRelation}
               onValueChange={(v) => setNewCreateRelation(v as ModelRelation)}

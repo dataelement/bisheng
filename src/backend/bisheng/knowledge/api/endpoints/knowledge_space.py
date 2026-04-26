@@ -373,6 +373,16 @@ async def get_file_preview(
     return resp_200(urls)
 
 
+@router.get('/{space_id}/files/{file_id}/download')
+async def get_file_download(
+        space_id: int,
+        file_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    urls = await svc.get_file_download(file_id, space_id=space_id)
+    return resp_200(urls)
+
+
 @router.post('/{space_id}/files/{file_id}/tag')
 async def update_file_tags(
         space_id: int,
