@@ -59,7 +59,7 @@ export type CitationReferencesDesktopPayload = {
 type CitationDesktopView = 'list' | 'document-preview';
 const CITATION_PANEL_EXPANDED_BREAKPOINT = 768;
 
-function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
+function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
   return (
     <div
@@ -68,7 +68,7 @@ function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | 
         isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-[#F5F8FF] text-[#024DE3]',
       )}
     >
-      [{label}] - {isWeb ? '网页' : '文档'}
+      {isWeb ? '网页' : '文档'}
     </div>
   );
 }
@@ -119,7 +119,7 @@ function CitationReferenceCard({
   return (
     <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
       <div className="flex items-center">
-        <SourceTypeBadge preview={preview} label={item.data.label} type={item.data.type} />
+        <SourceTypeBadge preview={preview} type={item.data.type} />
       </div>
 
       {canOpenDocument ? (

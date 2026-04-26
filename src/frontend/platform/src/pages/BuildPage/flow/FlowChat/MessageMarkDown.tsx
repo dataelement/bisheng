@@ -52,7 +52,6 @@ const remarkCitationPlugin = () => {
 function CitationPreviewCard({
     preview,
     detail,
-    label,
     isLoading,
     error,
     onCardClick,
@@ -60,7 +59,6 @@ function CitationPreviewCard({
 }: {
     preview: CitationPreview | null;
     detail?: ChatCitation | null;
-    label?: number;
     isLoading: boolean;
     error: boolean;
     onCardClick?: () => void;
@@ -148,7 +146,7 @@ function CitationPreviewCard({
                 : "min-w-[76px] bg-[#F5F8FF] text-[#024DE3]"
                 }`}
         >
-            [{label}] - {isWeb ? "网页" : "文档"}
+            {isWeb ? "网页" : "文档"}
         </div>
     );
     const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : "";
@@ -390,7 +388,6 @@ const Citation = ({
                 <CitationPreviewCard
                     preview={preview}
                     detail={detail}
-                    label={data.label}
                     isLoading={isLoading}
                     error={error}
                     onCardClick={() => void handleCitationClick()}
