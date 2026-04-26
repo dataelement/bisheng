@@ -467,6 +467,10 @@ def _management_permission_ids(resource_type: str) -> set[str]:
     return set(tier_map.values())
 
 
+def _uses_direct_management_permission(resource_type: str) -> bool:
+    return resource_type in _MANAGE_PERMISSION_BY_RESOURCE
+
+
 async def _has_resource_permission_management_access(
     *,
     resource_type: str,
@@ -793,12 +797,6 @@ async def authorize_resource(
             b.get('key'): b for b in await _get_bindings()
             if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
         }
-        caller_level = await PermissionService.get_permission_level(
-            user_id=login_user.user_id,
-            object_type=resource_type,
-            object_id=resource_id,
-            login_user=login_user,
-        )
         management_permission_ids = _management_permission_ids(resource_type)
         caller_permission_ids = set()
         if management_permission_ids:
@@ -810,34 +808,48 @@ async def authorize_resource(
                 resource_id,
             )
 
-        for grant in (request.grants or []):
-            ceiling = _grant_ceiling_index(grant, model_map)
-            if ceiling is None or not _caller_satisfies_ceiling(caller_level, ceiling):
+        if _uses_direct_management_permission(resource_type):
+            if management_permission_ids and not (management_permission_ids & caller_permission_ids):
                 return PermissionDeniedError.return_resp()
-            permission_id = _grant_management_permission_id(resource_type, grant, model_map)
-            if permission_id and permission_id not in caller_permission_ids:
-                return PermissionDeniedError.return_resp()
-
-        for revoke in (request.revokes or []):
-            binding = _binding_from_map(
-                binding_map,
-                resource_type,
-                str(resource_id),
-                revoke.subject_type,
-                revoke.subject_id,
-                revoke.relation,
-                getattr(revoke, 'include_children', None),
+            for grant in (request.grants or []):
+                if _grant_ceiling_index(grant, model_map) is None:
+                    return PermissionDeniedError.return_resp()
+        else:
+            caller_level = await PermissionService.get_permission_level(
+                user_id=login_user.user_id,
+                object_type=resource_type,
+                object_id=resource_id,
+                login_user=login_user,
             )
-            if binding and binding.get('model_id'):
-                m = model_map.get(binding['model_id'])
-                ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'), _LEGACY_REVOKE_MAX_CALLER_INDEX) if m else _LEGACY_REVOKE_MAX_CALLER_INDEX
-            else:
-                ceiling = _LEGACY_REVOKE_MAX_CALLER_INDEX
-            if not _caller_satisfies_ceiling(caller_level, ceiling):
-                return PermissionDeniedError.return_resp()
-            permission_id = _grant_management_permission_id(resource_type, revoke, model_map)
-            if permission_id and permission_id not in caller_permission_ids:
-                return PermissionDeniedError.return_resp()
+
+            for grant in (request.grants or []):
+                ceiling = _grant_ceiling_index(grant, model_map)
+                if ceiling is None or not _caller_satisfies_ceiling(caller_level, ceiling):
+                    return PermissionDeniedError.return_resp()
+                permission_id = _grant_management_permission_id(resource_type, grant, model_map)
+                if permission_id and permission_id not in caller_permission_ids:
+                    return PermissionDeniedError.return_resp()
+
+            for revoke in (request.revokes or []):
+                binding = _binding_from_map(
+                    binding_map,
+                    resource_type,
+                    str(resource_id),
+                    revoke.subject_type,
+                    revoke.subject_id,
+                    revoke.relation,
+                    getattr(revoke, 'include_children', None),
+                )
+                if binding and binding.get('model_id'):
+                    m = model_map.get(binding['model_id'])
+                    ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'), _LEGACY_REVOKE_MAX_CALLER_INDEX) if m else _LEGACY_REVOKE_MAX_CALLER_INDEX
+                else:
+                    ceiling = _LEGACY_REVOKE_MAX_CALLER_INDEX
+                if not _caller_satisfies_ceiling(caller_level, ceiling):
+                    return PermissionDeniedError.return_resp()
+                permission_id = _grant_management_permission_id(resource_type, revoke, model_map)
+                if permission_id and permission_id not in caller_permission_ids:
+                    return PermissionDeniedError.return_resp()
 
     grant_signatures = {_tuple_signature(g) for g in (request.grants or [])}
     revoke_signatures = {_tuple_signature(r) for r in (request.revokes or [])}
@@ -1089,18 +1101,10 @@ async def get_grantable_relation_models(
     if object_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
 
-    from bisheng.permission.domain.services.permission_service import PermissionService
-
     raw = [_normalize_model_dict(m) for m in await _get_relation_models()]
     if login_user.is_admin():
         return resp_200([RelationModelItem(**m) for m in raw])
 
-    caller_level = await PermissionService.get_permission_level(
-        user_id=login_user.user_id,
-        object_type=object_type,
-        object_id=object_id,
-        login_user=login_user,
-    )
     management_permission_ids = _management_permission_ids(object_type)
     caller_permission_ids = set()
     if management_permission_ids:
@@ -1111,6 +1115,19 @@ async def get_grantable_relation_models(
             object_type,
             object_id,
         )
+    if _uses_direct_management_permission(object_type):
+        if management_permission_ids and (management_permission_ids & caller_permission_ids):
+            return resp_200([RelationModelItem(**m) for m in raw])
+        return resp_200([])
+
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    caller_level = await PermissionService.get_permission_level(
+        user_id=login_user.user_id,
+        object_type=object_type,
+        object_id=object_id,
+        login_user=login_user,
+    )
     out = []
     for m in raw:
         ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'))
