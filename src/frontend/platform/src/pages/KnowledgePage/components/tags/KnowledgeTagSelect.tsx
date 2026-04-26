@@ -9,6 +9,7 @@ import {
     setFileTagsApi
 } from "@/controllers/API/knowledgeTags";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { truncateString } from "@/util/utils";
 import { Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,6 +24,7 @@ interface KnowledgeTagSelectProps {
 }
 
 const TAG_NAME_MAX_LENGTH = 100;
+const TAG_DISPLAY_MAX_LENGTH = 18;
 
 export default function KnowledgeTagSelect({
     knowledgeId,
@@ -203,7 +205,9 @@ export default function KnowledgeTagSelect({
                                 key={tag.id}
                                 className="flex h-[22px] items-center justify-center gap-1 whitespace-nowrap rounded-[4px] bg-[#f2f3f5] px-2 text-sm leading-[22px] text-[#4e5969]"
                             >
-                                {tag.name}
+                                <span className="max-w-[180px] truncate" title={tag.name}>
+                                    {truncateString(tag.name, TAG_DISPLAY_MAX_LENGTH)}
+                                </span>
                                 <button
                                     type="button"
                                     className="flex h-4 w-4 items-center justify-center text-[#86909c] hover:text-[#4e5969]"
@@ -252,7 +256,9 @@ export default function KnowledgeTagSelect({
                                             : "cursor-pointer bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb]"
                                             }`}
                                     >
-                                        {tag.name}
+                                        <span className="max-w-[180px] truncate" title={tag.name}>
+                                            {truncateString(tag.name, TAG_DISPLAY_MAX_LENGTH)}
+                                        </span>
                                         <button
                                             type="button"
                                             className="flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
