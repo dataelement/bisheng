@@ -1253,6 +1253,9 @@ export async function batchDownloadApi(
         `/api/v1/knowledge/space/${space_id}/files/batch-download`,
         data
     );
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "batch download failed");
+    }
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";
 }

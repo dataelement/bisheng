@@ -490,13 +490,14 @@ interface FileTableProps {
     permissionEntryIds?: Set<string>;
     renameEntryIds?: Set<string>;
     deleteEntryIds?: Set<string>;
+    downloadEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -556,6 +557,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 }
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
                                 canDelete={file.type === FileType.FOLDER ? Boolean(deleteEntryIds?.has(file.id)) : isAdmin}
+                                canDownload={file.type === FileType.FOLDER ? Boolean(downloadEntryIds?.has(file.id)) : true}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
@@ -598,6 +600,7 @@ function FileRow({
     onManagePermission,
     canRename = false,
     canDelete = false,
+    canDownload = false,
     columnWidths,
     showLeftShadow,
     showRightShadow,
@@ -618,6 +621,7 @@ function FileRow({
     onManagePermission?: () => void;
     canRename?: boolean;
     canDelete?: boolean;
+    canDownload?: boolean;
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
     showRightShadow: boolean;
@@ -653,7 +657,7 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin || canRename || canDelete || Boolean(onManagePermission);
+    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = rowHovered || moreMenuOpen;
@@ -661,17 +665,19 @@ function FileRow({
         <div
             className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
         >
-            <button
-                type="button"
-                className={FILE_ROW_ACTION_BTN_CLASS}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onDownload();
-                }}
-                title={localize("com_knowledge.download")}
-            >
-                <Download className="size-4" />
-            </button>
+            {canDownload && (
+                <button
+                    type="button"
+                    className={FILE_ROW_ACTION_BTN_CLASS}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDownload();
+                    }}
+                    title={localize("com_knowledge.download")}
+                >
+                    <Download className="size-4" />
+                </button>
+            )}
             {showMoreMenu && (
                 <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                     <DropdownMenuTrigger asChild>

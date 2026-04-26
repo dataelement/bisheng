@@ -181,6 +181,7 @@ export function KnowledgeSpaceContent({
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameFolderEntryIds, setRenameFolderEntryIds] = useState<Set<string>>(new Set());
     const [deleteFolderEntryIds, setDeleteFolderEntryIds] = useState<Set<string>>(new Set());
+    const [downloadFolderEntryIds, setDownloadFolderEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -307,6 +308,44 @@ export function KnowledgeSpaceContent({
         ).then((ids) => {
             if (!cancelled) {
                 setRenameFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [permissionEntryProbeKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const folders = displayFiles.filter(
+            (file) => file.type === FileType.FOLDER && !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (folders.length === 0) {
+            setDownloadFolderEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            folders.map(async (file) => {
+                const result = await checkPermission(
+                    "folder",
+                    file.id,
+                    "can_read",
+                    "download_folder",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setDownloadFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
             }
         });
 
@@ -464,6 +503,13 @@ export function KnowledgeSpaceContent({
 
     const handleBatchDownload = async () => {
         const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
+            file.type === FileType.FOLDER ? downloadFolderEntryIds.has(file.id) : true
+        );
+        if (!canDownloadSelected) {
+            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            return;
+        }
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
         try {
@@ -491,6 +537,10 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
+        if (isFolder && !downloadFolderEntryIds.has(fileId)) {
+            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            return;
+        }
         try {
             if (isFolder) {
                 // Folders must use batch download (returns zip)
@@ -665,6 +715,9 @@ export function KnowledgeSpaceContent({
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         file.type === FileType.FOLDER ? deleteFolderEntryIds.has(file.id) : isAdmin
     );
+    const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
+        file.type === FileType.FOLDER ? downloadFolderEntryIds.has(file.id) : true
+    );
 
     return (
         <div
@@ -708,6 +761,7 @@ export function KnowledgeSpaceContent({
                 hasFailedFiles={hasFailedFiles}
                 onClearSelection={() => setSelectedFiles(new Set())}
                 onBatchDownload={handleBatchDownload}
+                canBatchDownload={canBatchDownload}
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
@@ -777,6 +831,7 @@ export function KnowledgeSpaceContent({
                                     onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
                                     canRename={file.type === FileType.FOLDER && renameFolderEntryIds.has(file.id)}
                                     canDelete={file.type === FileType.FOLDER ? deleteFolderEntryIds.has(file.id) : isAdmin}
+                                    canDownload={file.type === FileType.FOLDER ? downloadFolderEntryIds.has(file.id) : true}
                                     mobileListMode={isH5 && viewMode === "list"}
                                 />
                             ))}
@@ -802,6 +857,7 @@ export function KnowledgeSpaceContent({
                                     permissionEntryIds={permissionEntryIds}
                                     renameEntryIds={renameFolderEntryIds}
                                     deleteEntryIds={deleteFolderEntryIds}
+                                    downloadEntryIds={downloadFolderEntryIds}
                                     onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

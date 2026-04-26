@@ -35,6 +35,7 @@ interface FileCardProps {
     onManagePermission?: () => void;
     canRename?: boolean;
     canDelete?: boolean;
+    canDownload?: boolean;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
     /** H5: render as list-row (not card tile). */
@@ -60,6 +61,7 @@ export function FileCard({
     onManagePermission,
     canRename = false,
     canDelete = false,
+    canDownload = false,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
     mobileListMode = false,
@@ -221,10 +223,10 @@ export function FileCard({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin || canRename || canDelete || Boolean(onManagePermission);
+    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
-    const showInlineDownloadButton = !hideDownloadActions && !showMoreMenu;
-    const showMenuDownloadItem = !hideDownloadActions;
+    const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
+    const showMenuDownloadItem = canDownload && !hideDownloadActions;
     const showCardActions = moreMenuOpen || hovered;
     const cardOpensPreviewOrFolder =
         !isCreating &&

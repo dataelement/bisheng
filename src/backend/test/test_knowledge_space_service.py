@@ -2171,8 +2171,32 @@ class TestFineGrainedPermissionRuntime:
                 await service.batch_download(1, [121], [])
 
     @pytest.mark.asyncio
+    async def test_batch_download_denied_without_download_folder_permission(self, service):
+        folder = _make_file(file_id=122, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
+        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=folder,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value={'view_folder'},
+        ):
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.batch_download(1, [], [122])
+
+    @pytest.mark.asyncio
     async def test_delete_file_denied_without_delete_file_permission(self, service):
-        file_record = _make_file(file_id=122, knowledge_id=1)
+        file_record = _make_file(file_id=123, knowledge_id=1)
         public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
 
         with patch(
@@ -2195,6 +2219,6 @@ class TestFineGrainedPermissionRuntime:
             new_callable=AsyncMock,
         ) as mock_delete_batch:
             with pytest.raises(SpacePermissionDeniedError):
-                await service.delete_file(122)
+                await service.delete_file(123)
 
         mock_delete_batch.assert_not_awaited()

@@ -1,5 +1,5 @@
 import request from "~/api/request";
-import { batchDeleteApi, createFolderApi, deleteFolderApi, getSquareSpacesApi, renameFolderApi, VisibilityType } from "./knowledge";
+import { batchDeleteApi, batchDownloadApi, createFolderApi, deleteFolderApi, getSquareSpacesApi, renameFolderApi, VisibilityType } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -135,6 +135,22 @@ describe("batchDeleteApi", () => {
     });
 
     await expect(batchDeleteApi("101", { folder_ids: [202] })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("batchDownloadApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(batchDownloadApi("101", { folder_ids: [202] })).rejects.toThrow("Permission denied");
   });
 });
 

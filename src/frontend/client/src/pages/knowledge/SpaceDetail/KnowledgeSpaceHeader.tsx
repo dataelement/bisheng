@@ -61,6 +61,7 @@ interface KnowledgeSpaceHeaderProps {
     hasFailedFiles: boolean;
     onClearSelection: () => void;
     onBatchDownload: () => void;
+    canBatchDownload?: boolean;
     onBatchTag: () => void;
     onBatchRetry: () => void;
     onBatchDelete: () => void;
@@ -95,6 +96,7 @@ export function KnowledgeSpaceHeader({
     hasFailedFiles,
     onClearSelection,
     onBatchDownload,
+    canBatchDownload = false,
     onBatchTag,
     onBatchRetry,
     onBatchDelete,
@@ -273,10 +275,12 @@ export function KnowledgeSpaceHeader({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
-                            <Download className="mr-2 size-4" />
-                            {localize("com_knowledge.batch_download")}
-                        </DropdownMenuItem>
+                        {canBatchDownload && (
+                            <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
+                                <Download className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_download")}
+                            </DropdownMenuItem>
+                        )}
                         {isAdmin && !hasFoldersSelected && (
                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                 <Tag className="mr-2 size-4" />
