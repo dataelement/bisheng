@@ -3,6 +3,7 @@ import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
 import request from '~/api/request';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
+import { canOpenPlatformAdminPanel } from '~/utils/platformAccess';
 import * as r from '~/types/chat/roles';
 import * as s from '~/types/chat/schemas';
 import type * as t from '~/types/chat/types';
@@ -125,13 +126,25 @@ export function getSearchEnabled(): Promise<boolean> {
 
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
-    const { user_id, user_name, create_time, update_time, role, web_menu, avatar, menu_approval_mode } = res.data;
+    const {
+      user_id,
+      user_name,
+      create_time,
+      update_time,
+      role,
+      web_menu,
+      avatar,
+      menu_approval_mode,
+      is_department_admin,
+    } = res.data;
     const canWorkspace =
       web_menu.includes('frontend') ||
       web_menu.includes('workstation');
-    const canManagement =
-      web_menu.includes('backend') ||
-      web_menu.includes('admin');
+    const canManagement = canOpenPlatformAdminPanel({
+      role,
+      plugins: web_menu,
+      is_department_admin: Boolean(is_department_admin),
+    });
     if (role !== 'admin' && !canWorkspace) {
       if (!canManagement) {
         // 无工作台也无管理端菜单 — 退出并回管理端登录
@@ -157,6 +170,7 @@ export function getUser(): Promise<t.TUser> {
       "provider": "local",
       "role": role,
       "plugins": web_menu,
+      "is_department_admin": Boolean(is_department_admin),
       "menu_approval_mode": Boolean(menu_approval_mode),
       "termsAccepted": false,
       "backupCodes": [],

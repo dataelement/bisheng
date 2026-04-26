@@ -25,6 +25,7 @@ const systemNoticeTodayKey = () => {
 };
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
+import { canOpenPlatformAdminPanel } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import { lastSectionPaths } from './appModuleNavPaths';
 
@@ -95,6 +96,16 @@ function Sidebar({
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
     ? ((user as any)?.plugins as string[])
     : null;
+  const canOpenPlatform = useMemo(
+    () =>
+      canOpenPlatformAdminPanel({
+        role: user?.role,
+        plugins,
+        is_department_admin: (user as { is_department_admin?: boolean } | undefined)
+          ?.is_department_admin,
+      }),
+    [plugins, user],
+  );
   const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
@@ -206,17 +217,16 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col gap-4 items-center">
-        {!isMobile &&
-          (user?.plugins?.includes('backend') || user?.plugins?.includes('admin')) && (
-            <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
-              <div
-                title={localize('com_nav_admin_panel')}
-                className="rounded-lg p-3 transition-colors hover:bg-[#e6edfc]"
-              >
-                <MonitorIcon className="size-5 text-[#818181]" />
-              </div>
-            </a>
-          )}
+        {!isMobile && canOpenPlatform && (
+          <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
+            <div
+              title={localize('com_nav_admin_panel')}
+              className="rounded-lg p-3 transition-colors hover:bg-[#e6edfc]"
+            >
+              <MonitorIcon className="size-5 text-[#818181]" />
+            </div>
+          </a>
+        )}
         <div className="w-full h-px bg-[#ececec]" />
 
         {/* 用户菜单：应用中心抽屉模式展示整行（含右箭头） */}
