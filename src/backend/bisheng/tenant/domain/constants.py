@@ -66,3 +66,14 @@ class UserTenantSyncTrigger(str, Enum):
     DEPT_CHANGE = 'dept_change'
     CELERY_RECONCILE = 'celery_reconcile'
     MANUAL = 'manual'
+    # Subtree backfill: dept newly mounted as a Child Tenant — every
+    # primary-dept user under the subtree is force-synced so the new Child's
+    # member list is populated immediately, instead of waiting for each
+    # user's next login (PRD §4.5 "自动成为该子租户成员" semantics).
+    MOUNT_BACKFILL = 'mount.backfill'
+    # Subtree re-derive: dept unmounted — users under it should fall back to
+    # the nearest surviving ancestor mount (typically Root).
+    UNMOUNT_REDERIVE = 'unmount.rederive'
+    # Subtree relocated: dept moved to a different parent — users may now
+    # belong to a different leaf tenant.
+    DEPT_MOVED = 'department.moved'
