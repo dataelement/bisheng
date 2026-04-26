@@ -1,5 +1,5 @@
 import { SubjectSearchUser } from "@/components/bs-comp/permission/SubjectSearchUser";
-import { getKnowledgeSpaceGrantUsersApi } from "@/controllers/API/permission";
+import { getResourceGrantUsersApi } from "@/controllers/API/permission";
 import { userContext } from "@/contexts/userContext";
 import {
   getGroupUsersApi,
@@ -23,7 +23,7 @@ vi.mock("@/controllers/API/user", () => ({
 }));
 
 vi.mock("@/controllers/API/permission", () => ({
-  getKnowledgeSpaceGrantUsersApi: vi.fn(),
+  getResourceGrantUsersApi: vi.fn(),
 }));
 
 vi.mock("@/components/bs-ui/input", () => ({
@@ -39,7 +39,7 @@ vi.mock("@/components/bs-ui/checkBox", () => ({
 const mockedGetUsersApi = vi.mocked(getUsersApi);
 const mockedGetGroupUsersApi = vi.mocked(getGroupUsersApi);
 const mockedGetUserMembershipGroupsApi = vi.mocked(getUserMembershipGroupsApi);
-const mockedGetKnowledgeSpaceGrantUsersApi = vi.mocked(getKnowledgeSpaceGrantUsersApi);
+const mockedGetResourceGrantUsersApi = vi.mocked(getResourceGrantUsersApi);
 
 describe("SubjectSearchUser", () => {
   beforeEach(() => {
@@ -73,7 +73,7 @@ describe("SubjectSearchUser", () => {
   });
 
   it("uses full-scope grant candidates for knowledge-space permission grants", async () => {
-    mockedGetKnowledgeSpaceGrantUsersApi.mockResolvedValue([
+    mockedGetResourceGrantUsersApi.mockResolvedValue([
       { user_id: 11, user_name: "Carol", primary_department_path: "总部/产品部" },
     ] as any);
 
@@ -92,7 +92,7 @@ describe("SubjectSearchUser", () => {
       expect(screen.getByText("Carol")).toBeInTheDocument();
     });
 
-    expect(mockedGetKnowledgeSpaceGrantUsersApi).toHaveBeenCalledWith("88", {
+    expect(mockedGetResourceGrantUsersApi).toHaveBeenCalledWith("knowledge_space", "88", {
       keyword: "",
       page: 1,
       page_size: 1000,

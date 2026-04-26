@@ -1,6 +1,6 @@
 import { Building2, MoreHorizontal, Pin, PinOff, Settings, UsersRound, LogOut } from "lucide-react";
 import { useState } from "react";
-import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
+import { KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -35,6 +35,9 @@ interface KnowledgeSpaceItemProps {
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
     onManageMembers?: (space: KnowledgeSpace) => void;
+    canEditSpace?: boolean;
+    canDeleteSpace?: boolean;
+    canManageMembers?: boolean;
 }
 
 export default function KnowledgeSpaceItem({
@@ -48,6 +51,9 @@ export default function KnowledgeSpaceItem({
     onPin,
     onSettings,
     onManageMembers,
+    canEditSpace = false,
+    canDeleteSpace = false,
+    canManageMembers = false,
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(false);
@@ -107,7 +113,7 @@ export default function KnowledgeSpaceItem({
                     />
                 ) : (
                     <div className="flex flex-1 min-w-0 items-center gap-1">
-                        <span onDoubleClick={() => setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
+                        <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
                             {space.name}
                         </span>
                         {space.isPinned && (
@@ -132,7 +138,7 @@ export default function KnowledgeSpaceItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {(type === "created" || type === "department") && (
+                        {canEditSpace && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onSettings?.(space)}
@@ -143,7 +149,7 @@ export default function KnowledgeSpaceItem({
                                 </span>
                             </DropdownMenuItem>
                         )}
-                        {(type === "created" || type === "department" || space.role === SpaceRole.ADMIN) && (
+                        {canManageMembers && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers?.(space)}
@@ -173,50 +179,31 @@ export default function KnowledgeSpaceItem({
 
                         <SidebarListMoreMenuDivider />
 
-                        {type !== "department" && (
+                        {(canDeleteSpace || type === "joined") && (
                             <DropdownMenuItem
                                 onClick={async () => {
-                                    const actionName = type === "created" ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
-                                    const description = type === "created" ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
+                                    const actionName = canDeleteSpace ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
+                                    const description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
                                     const ok = await confirm({
                                         title: localize("com_knowledge.prompt"),
                                         description,
-                                        confirmText: actionName === localize("com_knowledge.dissolve_space") ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
+                                        confirmText: canDeleteSpace ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
                                         cancelText: localize("com_knowledge.cancel")
                                     })
 
                                     if (ok) {
-                                        type === "created" ? onDelete(space.id) : onLeave(space.id);
+                                        canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
                                     }
                                 }}
                                 className={sidebarListMoreMenuDangerItemClassName}
                             >
-                                {type === "created" ? (
+                                {canDeleteSpace ? (
                                     <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
                                 ) : (
                                     <LogOut className={sidebarListMoreMenuDangerIconClassName} />
                                 )}
                                 <span className={sidebarListMoreMenuDangerLabelClassName}>
-                                    {type === "created" ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
-                                </span>
-                            </DropdownMenuItem>
-                        )}
-                        {type === "department" && space.role === SpaceRole.CREATOR && (
-                            <DropdownMenuItem
-                                onClick={async () => {
-                                    const ok = await confirm({
-                                        title: localize("com_knowledge.prompt"),
-                                        description: localize("com_knowledge.confirm_operation"),
-                                        confirmText: localize("com_knowledge.delete"),
-                                        cancelText: localize("com_knowledge.cancel")
-                                    })
-                                    if (ok) onDelete(space.id);
-                                }}
-                                className={sidebarListMoreMenuDangerItemClassName}
-                            >
-                                <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
-                                <span className={sidebarListMoreMenuDangerLabelClassName}>
-                                    {localize("com_knowledge.delete_space")}
+                                    {canDeleteSpace ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
                                 </span>
                             </DropdownMenuItem>
                         )}

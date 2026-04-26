@@ -20,21 +20,13 @@ customAxios.interceptors.request.use(function (config) {
     return Promise.reject(error);
 });
 
-customAxios.interceptors.response.use(function (response) {
-    if (response.data instanceof Blob) return response.data;
-    if (response.data.status_code === 200) {
-        return response.data.data;
-    }
-    if (response.data.status_code === 11010) {
-        return response.data;
-    }
-    // Silent mode: skip all global error handling, let the caller handle it
-    if (response.config.silent) {
-        return Promise.reject(response.data);
-    }
-    const statusCode = response.data.status_code
-    const statusMessage = String(response.data.status_message || "")
-    const i18Msg = i18next.t(`errors.${statusCode}`, response.data.data)
+// Backend unified envelope: { status_code, status_message, data }.
+// Picks the friendliest available message: i18n by status_code, then
+// status_message → i18n key map, finally the raw status_message.
+function decodeEnvelopeMessage(envelope: any) {
+    const statusCode = envelope?.status_code
+    const statusMessage = String(envelope?.status_message || "")
+    const i18Msg = i18next.t(`errors.${statusCode}`, envelope?.data)
 
     const statusMessageKeyMap: Record<string, string> = {
         "person id is required": "errors.21013",
@@ -62,13 +54,35 @@ customAxios.interceptors.response.use(function (response) {
     const normalizedStatusMessage = statusMessage.trim().toLowerCase()
     const mappedStatusMessageKey = statusMessageKeyMap[normalizedStatusMessage]
     const i18MsgFromStatus = mappedStatusMessageKey
-        ? i18next.t(mappedStatusMessageKey, response.data.data)
+        ? i18next.t(mappedStatusMessageKey, envelope?.data)
         : null
 
-    const errorMessage =
-        i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
-            ? i18MsgFromStatus
-            : (i18Msg !== `errors.${statusCode}` ? i18Msg : statusMessage)
+    return i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
+        ? i18MsgFromStatus
+        : (i18Msg !== `errors.${statusCode}` ? i18Msg : statusMessage)
+}
+
+// Detect the unified envelope shape so we can apply the same message
+// decoding whether the backend returned HTTP 200 with status_code != 200
+// or a non-2xx HTTP status carrying the envelope (e.g. F011 mount).
+function isEnvelope(data: any): boolean {
+    return data && typeof data === "object" && typeof data.status_code === "number"
+}
+
+customAxios.interceptors.response.use(function (response) {
+    if (response.data instanceof Blob) return response.data;
+    if (response.data.status_code === 200) {
+        return response.data.data;
+    }
+    if (response.data.status_code === 11010) {
+        return response.data;
+    }
+    // Silent mode: skip all global error handling, let the caller handle it
+    if (response.config.silent) {
+        return Promise.reject(response.data);
+    }
+    const statusCode = response.data.status_code
+    const errorMessage = decodeEnvelopeMessage(response.data)
 
     // 密码过期，标记后透传给业务层处理
     if (statusCode === 10601) {
@@ -126,6 +140,20 @@ customAxios.interceptors.response.use(function (response) {
     if (error.code === "ERR_CANCELED") return Promise.reject(error);
     // Silent mode: skip toast, let the caller handle it
     if (error.config?.silent) return Promise.reject(error);
+    // Backend may return our unified envelope on HTTP 4xx/5xx (e.g. F011
+    // tenant mount maps TenantTreeNestingForbiddenError → HTTP 400 with a
+    // structured body). Decode the envelope before falling back to the raw
+    // axios message so users see a friendly i18n string.
+    const envelope = error.response?.data
+    if (isEnvelope(envelope)) {
+        const errorMessage = decodeEnvelopeMessage(envelope)
+        toast({
+            title: `${i18next.t('prompt')}`,
+            variant: 'error',
+            description: String(errorMessage),
+        })
+        return Promise.reject(null);
+    }
     // app 弹窗
     toast({
         title: `${i18next.t('prompt')}`,

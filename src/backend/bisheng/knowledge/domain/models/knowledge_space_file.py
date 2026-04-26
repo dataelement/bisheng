@@ -83,6 +83,7 @@ class SpaceFileDao(KnowledgeFileDao):
         Paginated: page is 1-indexed.
         """
         if parent_id is None:
+            exact_path = ''
             path_filter = cls._root_path_filter()
         else:
             parent = await KnowledgeFileDao.query_by_id(parent_id)
@@ -174,6 +175,7 @@ class SpaceFileDao(KnowledgeFileDao):
         When parent_id is None, counts root-level items.
         """
         if parent_id is None:
+            exact_path = ''
             path_filter = cls._root_path_filter()
         else:
             parent = await KnowledgeFileDao.query_by_id(parent_id)

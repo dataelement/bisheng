@@ -943,7 +943,7 @@ async def get_grant_subject_users(
     page_size: int = Query(1000, ge=1, le=2000),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    if resource_type != 'knowledge_space':
+    if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if not await _has_resource_permission_management_access(
         resource_type=resource_type,
@@ -964,7 +964,7 @@ async def get_grant_subject_departments(
     resource_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    if resource_type != 'knowledge_space':
+    if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if not await _has_resource_permission_management_access(
         resource_type=resource_type,
@@ -982,7 +982,7 @@ async def get_grant_subject_user_groups(
     keyword: str = '',
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    if resource_type != 'knowledge_space':
+    if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if not await _has_resource_permission_management_access(
         resource_type=resource_type,

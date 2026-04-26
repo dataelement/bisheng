@@ -122,11 +122,12 @@ export async function getGrantableRelationModelsApi(
   })
 }
 
-export async function getKnowledgeSpaceGrantUsersApi(
+export async function getResourceGrantUsersApi(
+  resourceType: string,
   resourceId: string,
   params?: { keyword?: string; page?: number; page_size?: number },
 ): Promise<any[]> {
-  return await axios.get(`/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/users`, {
+  return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`, {
     params: {
       keyword: params?.keyword ?? "",
       page: params?.page ?? 1,
@@ -135,21 +136,43 @@ export async function getKnowledgeSpaceGrantUsersApi(
   })
 }
 
+export async function getResourceGrantDepartmentsApi(
+  resourceType: string,
+  resourceId: string,
+): Promise<any[]> {
+  return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`)
+}
+
+export async function getResourceGrantUserGroupsApi(
+  resourceType: string,
+  resourceId: string,
+  params?: { keyword?: string },
+): Promise<any[]> {
+  return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`, {
+    params: {
+      keyword: params?.keyword ?? "",
+    },
+  })
+}
+
+export async function getKnowledgeSpaceGrantUsersApi(
+  resourceId: string,
+  params?: { keyword?: string; page?: number; page_size?: number },
+): Promise<any[]> {
+  return await getResourceGrantUsersApi("knowledge_space", resourceId, params)
+}
+
 export async function getKnowledgeSpaceGrantDepartmentsApi(
   resourceId: string,
 ): Promise<any[]> {
-  return await axios.get(`/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/departments`)
+  return await getResourceGrantDepartmentsApi("knowledge_space", resourceId)
 }
 
 export async function getKnowledgeSpaceGrantUserGroupsApi(
   resourceId: string,
   params?: { keyword?: string },
 ): Promise<any[]> {
-  return await axios.get(`/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/user-groups`, {
-    params: {
-      keyword: params?.keyword ?? "",
-    },
-  })
+  return await getResourceGrantUserGroupsApi("knowledge_space", resourceId, params)
 }
 
 export async function createRelationModelApi(payload: {

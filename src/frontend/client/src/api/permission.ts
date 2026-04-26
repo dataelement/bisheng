@@ -169,13 +169,14 @@ export async function searchUsers(
   };
 }
 
-export async function getKnowledgeSpaceGrantUsers(
+export async function getResourceGrantUsers(
+  resourceType: ResourceType,
   resourceId: string,
   params?: { keyword?: string; page?: number; page_size?: number },
   config?: { signal?: AbortSignal }
 ): Promise<{ user_id: number; user_name: string }[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/users`,
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`,
     {
       params: {
         keyword: params?.keyword ?? "",
@@ -188,6 +189,14 @@ export async function getKnowledgeSpaceGrantUsers(
   return unwrapArray(res);
 }
 
+export async function getKnowledgeSpaceGrantUsers(
+  resourceId: string,
+  params?: { keyword?: string; page?: number; page_size?: number },
+  config?: { signal?: AbortSignal }
+): Promise<{ user_id: number; user_name: string }[]> {
+  return getResourceGrantUsers("knowledge_space", resourceId, params, config);
+}
+
 export async function getDepartmentTree(
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
@@ -198,15 +207,23 @@ export async function getDepartmentTree(
   return unwrapArray(res);
 }
 
-export async function getKnowledgeSpaceGrantDepartments(
+export async function getResourceGrantDepartments(
+  resourceType: ResourceType,
   resourceId: string,
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/departments`,
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`,
     withPermissionRequestOptions(config)
   );
   return unwrapArray(res);
+}
+
+export async function getKnowledgeSpaceGrantDepartments(
+  resourceId: string,
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  return getResourceGrantDepartments("knowledge_space", resourceId, config);
 }
 
 export async function getUserGroups(
@@ -221,17 +238,26 @@ export async function getUserGroups(
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function getKnowledgeSpaceGrantUserGroups(
+export async function getResourceGrantUserGroups(
+  resourceType: ResourceType,
   resourceId: string,
   params?: { keyword?: string },
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/knowledge_space/${resourceId}/grant-subjects/user-groups`,
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`,
     {
       params: { keyword: params?.keyword ?? "" },
       ...withPermissionRequestOptions(config),
     }
   );
   return unwrapArray(res);
+}
+
+export async function getKnowledgeSpaceGrantUserGroups(
+  resourceId: string,
+  params?: { keyword?: string },
+  config?: { signal?: AbortSignal }
+): Promise<any[]> {
+  return getResourceGrantUserGroups("knowledge_space", resourceId, params, config);
 }

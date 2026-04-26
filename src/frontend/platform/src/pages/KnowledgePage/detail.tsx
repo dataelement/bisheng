@@ -15,6 +15,8 @@ export default function FilesPage() {
     const [fileId, setFileId] = useState('')
     const [fileTitle, setFileTitle] = useState(true);
     const [permissionChecked, setPermissionChecked] = useState(false);
+    const [canEditKb, setCanEditKb] = useState(false);
+    const [canDeleteKb, setCanDeleteKb] = useState(false);
     const { id: knowledgeId } = useParams();
     const navigate = useNavigate();
     const { message } = useToast();
@@ -27,10 +29,20 @@ export default function FilesPage() {
                 navigate('/filelib');
                 return;
             }
-            const result = await captureAndAlertRequestErrorHoc(
-                checkPermission('knowledge_library', String(knowledgeId), 'can_read', 'view_kb')
-            );
+            const [result, editResult, deleteResult] = await Promise.all([
+                captureAndAlertRequestErrorHoc(
+                    checkPermission('knowledge_library', String(knowledgeId), 'can_read', 'view_kb')
+                ),
+                captureAndAlertRequestErrorHoc(
+                    checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb')
+                ),
+                captureAndAlertRequestErrorHoc(
+                    checkPermission('knowledge_library', String(knowledgeId), 'can_delete', 'delete_kb')
+                ),
+            ]);
             const allowed = !!result?.allowed;
+            setCanEditKb(!!editResult?.allowed);
+            setCanDeleteKb(!!deleteResult?.allowed);
             setPermissionChecked(true);
             if (!allowed) {
                 message({ variant: 'warning', description: t('noOperationPermission') });
@@ -72,10 +84,19 @@ export default function FilesPage() {
                 <div className="flex justify-between w-1/2 pt-4">
                     <Header fileTitle={fileTitle} showBackButton={true} />
                 </div>
-                <Files onPreview={onPreview} />
+                <Files
+                    onPreview={onPreview}
+                    canEditKb={canEditKb}
+                    canDeleteKb={canDeleteKb}
+                />
             </TabsContent>
             <TabsContent value="chunk" className="mt-0">
-                <Paragraphs fileId={fileId} onBack={handleBackFromChunk} />
+                <Paragraphs
+                    fileId={fileId}
+                    onBack={handleBackFromChunk}
+                    canEditKb={canEditKb}
+                    canDeleteKb={canDeleteKb}
+                />
             </TabsContent>
         </Tabs>
     </div>

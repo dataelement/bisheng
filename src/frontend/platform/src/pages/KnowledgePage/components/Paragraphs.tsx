@@ -23,13 +23,13 @@ import PreviewParagraph from './PreviewParagraph';
 // Import metadata components
 import { MainMetadataDialog, MetadataSideDialog } from './MetadataDialog';
 
-export default function Paragraphs({ fileId, onBack }) {
+export default function Paragraphs({ fileId, onBack, canEditKb = false, canDeleteKb = false }) {
     console.log('Props fileId:', fileId);
 
     const { t } = useTranslation('knowledge');
     const { id } = useParams();
     const navigate = useNavigate();
-    const { isEditable, selectedBbox } = useKnowledgeStore();
+    const { selectedBbox } = useKnowledgeStore();
     const [hasInited, setHasInited] = useState(false);
     const location = useLocation();
     const [chunkSwitchTrigger, setChunkSwitchTrigger] = useState(0);
@@ -40,7 +40,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
-    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false);
+    const isKnowledgeAdmin = canEditKb;
 
     // Metadata related states
     const [metadataDialog, setMetadataDialog] = useState({
@@ -207,6 +207,7 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [datalist, selectedFileId, chunkSwitchTrigger]);
 
     const handleChunkChange = useCallback((chunkIndex, text) => {
+        if (!canEditKb) return;
         let chunkIndexPage = chunkIndex % pageSize;
         console.log('Converted localIndex:', chunkIndexPage);
 
@@ -228,7 +229,7 @@ export default function Paragraphs({ fileId, onBack }) {
             (item) => item?.metadata?.chunk_index === chunkIndex,
             (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
         );
-    }, [id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
+    }, [canEditKb, id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
 
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('Getting file URL:', fileId);
@@ -499,6 +500,7 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [closeSideDialog, mainMetadataList, t]);
 
     const handleMetadataClick = useCallback(async () => {
+        if (!canEditKb) return;
         if (currentFile?.fullData) {
             try {
                 const res = await getMetaFile(currentFile.id);
@@ -532,10 +534,11 @@ export default function Paragraphs({ fileId, onBack }) {
                 });
             }
         }
-    }, [currentFile]);
+    }, [canEditKb, currentFile]);
 
     // Adjust segmentation strategy
     const handleAdjustSegmentation = useCallback(() => {
+        if (!canEditKb) return;
         const currentFileUrl = latestOriginalUrlRef.current;
         const currentPreviewUrl = latestPreviewUrlRef.current;
 
@@ -556,7 +559,7 @@ export default function Paragraphs({ fileId, onBack }) {
                 isAdjustMode: true
             }
         });
-    }, [id, selectedFileId, currentFile, navigate]);
+    }, [canEditKb, id, selectedFileId, currentFile, navigate]);
 
     // Parse segmentation strategy description (keep original logic)
     const splitRuleDesc = useCallback((file) => {
@@ -601,6 +604,7 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [t]);
 
     const handleDeleteChunk = useCallback(async (data) => {
+        if (!canDeleteKb) return;
         try {
             const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
             setChunks(updatedChunks);
@@ -624,6 +628,7 @@ export default function Paragraphs({ fileId, onBack }) {
             await reload();
         }
     }, [
+        canDeleteKb,
         id,
         reload,
         chunks,
@@ -754,11 +759,10 @@ export default function Paragraphs({ fileId, onBack }) {
         };
     }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
 
-    const handleWriteableChange = (writable: boolean) => {
-        setIsKnowledgeAdmin(writable);
-    }
+    const handleWriteableChange = () => {}
 
     const handleSaveUserMetadata = useCallback(async () => {
+        if (!canEditKb) return;
         const knowledge_id = selectedFileId
         const user_metadata_list = mainMetadataList.map(item => {
             if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
@@ -791,7 +795,7 @@ export default function Paragraphs({ fileId, onBack }) {
             console.error('Failed to save metadata:', error);
             setMetadataError(t('metadialog.saveFailed'));
         }
-    }, [mainMetadataList, selectedFileId, t]);
+    }, [canEditKb, mainMetadataList, selectedFileId, t]);
 
     return (
         <div className="relative flex flex-col h-[calc(100vh-64px)]">
@@ -826,13 +830,18 @@ export default function Paragraphs({ fileId, onBack }) {
                             disabled={!selectedFileId}
                         />
                     </div>
-                    <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
+                    <Button
+                        variant="outline"
+                        onClick={handleMetadataClick}
+                        disabled={!canEditKb}
+                        className="px-4 whitespace-nowrap disabled:pointer-events-auto"
+                    >
                         <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                         {t('metadialog.title')}
                     </Button>
-                    <Tip content={!isEditable && t('common.noPermission')} side='top'>
+                    <Tip content={!canEditKb && t('common.noPermission')} side='top'>
                         <Button
-                            disabled={!isEditable}
+                            disabled={!canEditKb}
                             onClick={handleAdjustSegmentation}
                             className={`px-4 whitespace-nowrap disabled:pointer-events-auto`}>
                             {t('segment.adjustStrategy')}
@@ -855,7 +864,7 @@ export default function Paragraphs({ fileId, onBack }) {
                         chunks={chunks}
                         setChunks={setChunks}
                         rules={previewRules}
-                        edit
+                        edit={canEditKb}
                     />
                 ) : (
                     !isParagraphVisible && (
@@ -874,7 +883,8 @@ export default function Paragraphs({ fileId, onBack }) {
                                 key={`preview-${selectedFileId}-${chunkSwitchTrigger}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
-                                edit={isEditable}
+                                edit={canEditKb}
+                                canDelete={canDeleteKb}
                                 page={page}
                                 className="h-[calc(100vh-206px)] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
@@ -929,7 +939,7 @@ export default function Paragraphs({ fileId, onBack }) {
             <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph(prev => ({ ...prev, show }))}>
                 <DialogContent close={false} className='size-full max-w-full sm:rounded-none p-0 border-none'>
                     <ParagraphEdit
-                        edit={isEditable}
+                        edit={canEditKb}
                         fileId={paragraph.fileId}
                         chunkId={paragraph.chunkId}
                         isUns={paragraph.isUns || ['etl4lm', 'un_etl4lm'].includes(paragraph.parseType)}

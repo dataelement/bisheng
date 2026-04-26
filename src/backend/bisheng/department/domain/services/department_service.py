@@ -659,6 +659,28 @@ class DepartmentService:
         ops = DepartmentChangeHandler.on_moved(dept.id, old_parent_id, data.new_parent_id)
         await DepartmentChangeHandler.execute_async(ops)
 
+        # Re-derive user_tenant for primary users under the moved subtree —
+        # crossing into a different parent's subtree may change the resolved
+        # leaf tenant (a different mount point upstream). Same-parent reorder
+        # never changes the leaf, so we skip it. Best-effort: a sync hiccup
+        # must not roll back the move that already committed; login-time
+        # lazy sync will pick up missed users on their next login.
+        if old_parent_id != data.new_parent_id:
+            try:
+                from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+                from bisheng.tenant.domain.services.user_tenant_sync_service import (
+                    UserTenantSyncService,
+                )
+                await UserTenantSyncService.sync_subtree_primary_users(
+                    dept_path=dept.path,
+                    trigger=UserTenantSyncTrigger.DEPT_MOVED,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    'sync_subtree_primary_users on dept move %s→%s failed: %s',
+                    old_parent_id, data.new_parent_id, exc,
+                )
+
         return dept
 
     @classmethod

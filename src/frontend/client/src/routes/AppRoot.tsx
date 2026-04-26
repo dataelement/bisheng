@@ -34,6 +34,7 @@ export default function AppRoot() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
+        if (from === 'center') return false;
         if (from === 'home-recommended' && entry === 'home') return true;
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
@@ -62,6 +63,11 @@ export default function AppRoot() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
+        // Explicit app-center source should always return to app center.
+        if (from === 'center') {
+            navigate('/apps');
+            return;
+        }
         if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
             navigate('/c/new');
             return;
@@ -132,8 +138,8 @@ export default function AppRoot() {
 
                     {/* Mobile overlay sidebar (covers content, does not push) */}
                     {isTabletOrMobile && sidebarVisible && (
-                        <div className="absolute inset-0 z-[55] flex">
-                            <div className="h-full w-[280px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                        <div className="absolute inset-0 z-[70] flex">
+                            <div className="h-full w-[280px] max-w-[280px] border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                                 <SideNav />
                             </div>
                             <button

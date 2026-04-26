@@ -14,7 +14,7 @@ import { Toaster } from "./components/bs-ui/toast";
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
-import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
+import { getAdminRouter, getPrivateRouter, publicRouter, resolveRoutePermissions } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
 import { useToast } from "./components/bs-ui/toast/use-toast";
 
@@ -170,15 +170,11 @@ export default function App() {
   const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.replace(__APP_ENV__.BASE_URL, '').split('/')?.[1] || ''
 
-  // 动态路由根据权限（部门管理员与超管类似需能访问「创建应用」等全量菜单路由；若后端 web_menu 未及时含 create_app，此处兜底合并）
+  // 动态路由根据权限：部门管理员补 create_app、子租户管理员补 sys（详见 resolveRoutePermissions）
   const router = useMemo(() => {
     if (user && user.role === 'admin') return getAdminRouter()
     if (!user?.user_id) return null
-    const wm = user.web_menu || []
-    const perms =
-      user.is_department_admin && !wm.includes('create_app')
-        ? [...wm, 'create_app']
-        : wm
+    const perms = resolveRoutePermissions(user)
     return getPrivateRouter(perms, { menuApprovalMode: Boolean(user.menu_approval_mode) })
   }, [user])
 

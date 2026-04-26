@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { getKnowledgeSpaceGrantUserGroups, getUserGroups } from "~/api/permission";
+import { getResourceGrantUserGroups, getUserGroups } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { Users, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -32,8 +32,8 @@ export function SubjectSearchUserGroup({
   useEffect(() => {
     const controller = new AbortController();
     const request =
-      resourceType === "knowledge_space" && resourceId
-        ? getKnowledgeSpaceGrantUserGroups(resourceId, undefined, { signal: controller.signal })
+      resourceType && resourceId
+        ? getResourceGrantUserGroups(resourceType, resourceId, undefined, { signal: controller.signal })
         : getUserGroups({ signal: controller.signal });
 
     setLoading(true);

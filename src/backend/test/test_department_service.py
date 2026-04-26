@@ -1052,3 +1052,172 @@ class TestAdminDepartmentsBypassTenantFilter:
 
         assert entered['value'] is False
         assert depts == []
+
+
+# =========================================================================
+# amove_department: subtree user_tenant re-derive on parent change.
+# Verifies the move handler invokes UserTenantSyncService.sync_subtree_primary_users
+# only when the parent actually changes, and never blocks the commit on a
+# downstream sync failure.
+# =========================================================================
+
+class TestMoveDepartmentSubtreeSync:
+
+    @staticmethod
+    def _move_test_setup(*, dept_path='/1/7/', new_parent_path='/1/9/', new_parent_id=9):
+        """Build the minimum mocks for amove_department to reach the sync hook.
+
+        Returns (session, fake_session, dept) so each test can override what
+        comes back from the new-parent select.
+        """
+        from bisheng.database.models.department import Department
+
+        dept = MagicMock(spec=Department)
+        dept.id = 7
+        dept.parent_id = 1
+        dept.path = dept_path
+        dept.status = 'active'
+        dept.tenant_id = 1
+
+        new_parent = MagicMock(spec=Department)
+        new_parent.id = new_parent_id
+        new_parent.path = new_parent_path
+        new_parent.status = 'active'
+
+        new_parent_result = MagicMock()
+        new_parent_result.first.return_value = new_parent
+
+        session = MagicMock()
+        session.exec = AsyncMock(return_value=new_parent_result)
+        session.execute = AsyncMock()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        session.add = MagicMock()
+
+        @asynccontextmanager
+        async def fake_session():
+            yield session
+
+        return session, fake_session, dept
+
+    @pytest.mark.asyncio
+    async def test_move_to_different_parent_triggers_sync(self):
+        from bisheng.department.domain.services.department_service import DepartmentService
+        from bisheng.department.domain.schemas.department_schema import DepartmentMoveRequest
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+
+        session, fake_session, dept = self._move_test_setup()
+        # Path after move: /1/9/7/
+        async def _check_perm(_session, _dept_id, _login_user):
+            return dept
+
+        login_user = _MockLoginUser(user_id=1, tenant_id=1)
+        sync_mock = AsyncMock(return_value={'synced': [101], 'failed': []})
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new=_check_perm,
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved',
+            return_value=[],
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
+            sync_mock,
+        ):
+            await DepartmentService.amove_department(
+                dept_id='7',
+                data=DepartmentMoveRequest(new_parent_id=9),
+                login_user=login_user,
+            )
+
+        sync_mock.assert_awaited_once()
+        kwargs = sync_mock.call_args.kwargs
+        # New path of moved dept = parent.path + dept.id + /
+        assert kwargs['dept_path'] == '/1/9/7/'
+        assert kwargs['trigger'] == UserTenantSyncTrigger.DEPT_MOVED
+
+    @pytest.mark.asyncio
+    async def test_move_to_same_parent_skips_sync(self):
+        """new_parent_id == old_parent_id → no leaf change, no sync needed."""
+        from bisheng.department.domain.services.department_service import DepartmentService
+        from bisheng.department.domain.schemas.department_schema import DepartmentMoveRequest
+
+        # dept currently has parent_id=1; new parent will also be id=1.
+        session, fake_session, dept = self._move_test_setup(
+            new_parent_path='/1/', new_parent_id=1,
+        )
+
+        async def _check_perm(_session, _dept_id, _login_user):
+            return dept
+
+        login_user = _MockLoginUser(user_id=1, tenant_id=1)
+        sync_mock = AsyncMock()
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new=_check_perm,
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved',
+            return_value=[],
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
+            sync_mock,
+        ):
+            await DepartmentService.amove_department(
+                dept_id='7',
+                data=DepartmentMoveRequest(new_parent_id=1),
+                login_user=login_user,
+            )
+
+        sync_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sync_failure_does_not_propagate(self):
+        from bisheng.department.domain.services.department_service import DepartmentService
+        from bisheng.department.domain.schemas.department_schema import DepartmentMoveRequest
+
+        session, fake_session, dept = self._move_test_setup()
+
+        async def _check_perm(_session, _dept_id, _login_user):
+            return dept
+
+        login_user = _MockLoginUser(user_id=1, tenant_id=1)
+        sync_mock = AsyncMock(side_effect=RuntimeError('downstream broken'))
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new=_check_perm,
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved',
+            return_value=[],
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
+            sync_mock,
+        ):
+            # Must NOT raise — sync hiccup is best-effort.
+            result = await DepartmentService.amove_department(
+                dept_id='7',
+                data=DepartmentMoveRequest(new_parent_id=9),
+                login_user=login_user,
+            )
+
+        assert result is dept
+        sync_mock.assert_awaited_once()

@@ -33,7 +33,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao
-from bisheng.tenant.domain.constants import TenantAuditAction
+from bisheng.tenant.domain.constants import TenantAuditAction, UserTenantSyncTrigger
 
 # When a Child is unmounted we keep the row for audit (status=archived) but
 # free up ``tenant_code`` so the same code can be remounted. Renaming with a
@@ -207,6 +207,15 @@ class TenantMountService:
             new_tenant.id, auto_distribute=auto_distribute,
         )
 
+        # Backfill user_tenant for primary-dept members under the subtree so
+        # the new Child's member list is populated synchronously instead of
+        # filling in opportunistically on each user's next login. Failures
+        # are swallowed — login-time lazy sync remains the long-term fallback.
+        sync_result = await _safe_sync_subtree(
+            getattr(dept, 'path', None),
+            UserTenantSyncTrigger.MOUNT_BACKFILL,
+        )
+
         await _safe_audit(
             tenant_id=new_tenant.id,
             operator_id=getattr(operator, 'user_id', 0),
@@ -222,6 +231,8 @@ class TenantMountService:
                 # snapshot of distributed resource ids (empty when False).
                 'auto_distribute': auto_distribute,
                 'distributed_resources': distributed_resources,
+                'synced_user_count': len(sync_result['synced']),
+                'failed_user_count': len(sync_result['failed']),
             },
         )
         return new_tenant
@@ -502,6 +513,16 @@ class TenantMountService:
         # later via the F013 compensator / housekeeping.
         await cls._on_child_unmounted(child_tenant_id)
 
+        # Re-derive user_tenant for users formerly under this Child. Must run
+        # AFTER ``is_tenant_root`` is back to 0 (above transaction) — otherwise
+        # TenantResolver would still walk up to this dept and re-pin the user
+        # to the now-archived Child. With the flag cleared, sync_user lands
+        # them on the nearest surviving ancestor mount (typically Root).
+        sync_result = await _safe_sync_subtree(
+            getattr(dept, 'path', None),
+            UserTenantSyncTrigger.UNMOUNT_REDERIVE,
+        )
+
         await _safe_audit(
             tenant_id=child_tenant_id,
             operator_id=getattr(operator, 'user_id', 0),
@@ -512,6 +533,8 @@ class TenantMountService:
             metadata={
                 'dept_id': dept_id,
                 'migrated_counts': migrated_counts,
+                'synced_user_count': len(sync_result['synced']),
+                'failed_user_count': len(sync_result['failed']),
             },
         )
         return {
@@ -674,3 +697,32 @@ async def _safe_audit(**kwargs: Any) -> None:
             'audit_log insert failed for action=%s: %s',
             kwargs.get('action'), exc,
         )
+
+
+async def _safe_sync_subtree(
+    dept_path: Optional[str], trigger: 'UserTenantSyncTrigger',
+) -> Dict[str, list]:
+    """Best-effort wrapper around ``UserTenantSyncService.sync_subtree_primary_users``.
+
+    Returns the ``{synced, failed}`` shape always — on any unhandled error
+    the function logs and returns empty lists so the mount/unmount/move
+    main flow is never blocked by a downstream sync hiccup. The
+    login-time lazy path will pick up missed users on their next login.
+    Local import keeps the tenant_mount_service ↔ user_tenant_sync_service
+    cycle off the top-level import graph.
+    """
+    if not dept_path:
+        return {'synced': [], 'failed': []}
+    try:
+        from bisheng.tenant.domain.services.user_tenant_sync_service import (
+            UserTenantSyncService,
+        )
+        return await UserTenantSyncService.sync_subtree_primary_users(
+            dept_path=dept_path, trigger=trigger,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            'sync_subtree_primary_users dispatch failed for path=%s trigger=%s: %s',
+            dept_path, getattr(trigger, 'value', trigger), exc,
+        )
+        return {'synced': [], 'failed': []}

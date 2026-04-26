@@ -11,7 +11,8 @@ interface SearchInputProps {
 /** 订阅文章列表工具栏搜索：与消息提醒弹窗同一套展开搜索交互与样式 */
 export function SearchInput({ value, onChange, placeholder, className }: SearchInputProps) {
     const localize = useLocalize();
-    const isMobileOrTablet = useMediaQuery("(max-width: 768px)");
+    const isWideDesktop = useMediaQuery("(min-width: 1440px)");
+    const shouldUseCollapsedSearch = isWideDesktop;
 
     return (
         <ExpandableSearchField
@@ -19,10 +20,9 @@ export function SearchInput({ value, onChange, placeholder, className }: SearchI
             onChange={onChange}
             placeholder={placeholder ?? localize("com_subscription.search")}
             titleWhenCollapsed={placeholder ?? localize("com_subscription.search")}
+            expandedWidthClassName={shouldUseCollapsedSearch ? "w-[220px]" : "w-full"}
             containerClassName={className}
-            alwaysExpanded={isMobileOrTablet}
-            containerClassName={className}
-            alwaysExpanded={isMobileOrTablet}
+            alwaysExpanded={!shouldUseCollapsedSearch}
             maxLength={100}
         />
     );

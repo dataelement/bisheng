@@ -41,7 +41,7 @@ async def get_open_citation_detail(
     if file_info is None or file_info.knowledge_id != payload.knowledgeId:
         raise NotFoundError()
     knowledge = await KnowledgeDao.aquery_by_id(file_info.knowledge_id)
-    if knowledge is None or not default_user.access_check(
+    if knowledge is None or not await default_user.async_access_check(
         knowledge.user_id,
         str(knowledge.id),
         AccessType.KNOWLEDGE,

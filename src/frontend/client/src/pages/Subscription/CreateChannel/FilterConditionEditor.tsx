@@ -241,7 +241,14 @@ export function FilterConditionEditor({
 
             <div className="space-y-0">
                 {groups.map((group, groupIndex) => (
-                    <div key={group.id} className={cn("relative pl-10", groupIndex > 0 && "pt-5")}>
+                    <div
+                        key={group.id}
+                        className={cn(
+                            "relative pl-10",
+                            groupIndex > 0 && "pt-2",
+                            group.conditions.length > 1 && !atTotalLimit && "pb-6"
+                        )}
+                    >
                         {/* 第二层：And/OR 在线的左侧，虚线包住当前组；底部小括号指向本层新增条件的加号 */}
                         {group.conditions.length > 1 && (
                             <>
@@ -271,12 +278,12 @@ export function FilterConditionEditor({
                                     <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                                 </button>
                                 {/* 第二层连接线：单元素连续圆角括号，更自然 */}
-                                <div className="absolute left-9 top-4 -bottom-3 w-[21px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
+                                <div className="absolute left-9 top-4 -bottom-0 w-[21px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
                                 {!atTotalLimit && (
                                     <button
                                         type="button"
                                         onClick={() => addConditionInGroup(groupIndex)}
-                                        className="absolute left-[57px] -bottom-6 flex h-8 w-8 items-center justify-center rounded text-[#86909C] transition-colors"
+                                        className="absolute left-[57px] -bottom-3 z-[2] flex h-8 w-8 items-center justify-center rounded text-[#86909C] transition-colors"
                                         title={localize("com_subscription.add_condition_under_current_relation")}
                                     >
                                         <ChannelPlusIcon className={FILTER_COND_ICON_MD} />
@@ -290,12 +297,16 @@ export function FilterConditionEditor({
                                 <div
                                     key={cond.id}
                                     className={cn(
-                                        "flex items-start gap-4",
-                                        group.conditions.length === 1 && "-ml-8"
+                                        "flex min-w-0 items-start gap-2",
+                                        group.conditions.length === 1 && "-ml-8",
+                                        group.conditions.length > 1 &&
+                                        condIndex === group.conditions.length - 1 &&
+                                        !atTotalLimit &&
+                                        "mb-2"
                                     )}
                                 >
                                     {/* 包含/不包含：外 6px 圆角，选中项内 4px 圆角 */}
-                                    <div className="mt-1 flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-1">
+                                    <div className="flex h-8 flex-shrink-0 items-center rounded-[6px] bg-[#F8F8F8] p-1">
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -304,7 +315,7 @@ export function FilterConditionEditor({
                                                 })
                                             }
                                             className={cn(
-                                                "flex-1 whitespace-nowrap rounded-[4px] px-2 py-1 text-center text-[13px] leading-[22px] transition-colors",
+                                                "flex h-6 items-center justify-center whitespace-nowrap rounded-[4px] px-2 text-center text-[13px] leading-6 transition-colors",
                                                 cond.include
                                                     ? "bg-[#335CFF26] text-[#335CFF]"
                                                     : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
@@ -318,7 +329,7 @@ export function FilterConditionEditor({
                                                 })
                                             }
                                             className={cn(
-                                                "flex-1 whitespace-nowrap rounded-[4px] px-2 py-1 text-center text-[13px] leading-[22px] transition-colors",
+                                                "flex h-6 items-center justify-center whitespace-nowrap rounded-[4px] px-2 text-center text-[13px] leading-6 transition-colors",
                                                 !cond.include
                                                     ? "bg-[#335CFF26] text-[#335CFF]"
                                                     : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
@@ -327,7 +338,7 @@ export function FilterConditionEditor({
                                     </div>
 
                                     {/* 关键词输入：单行起步，超出一行时自动向下扩展 */}
-                                    <div className="flex-1 min-w-[200px] mt-1 max-w-[620px]">
+                                    <div className="min-w-0 flex-1 max-w-[620px]">
                                         <TextareaAutosize
                                             value={cond.keywords}
                                             onChange={(e) =>
@@ -338,14 +349,15 @@ export function FilterConditionEditor({
                                                 )
                                             }
                                             minRows={1}
-                                            maxRows={4}
+                                            maxRows={1}
+                                            wrap="off"
                                             placeholder={localize("com_subscription.input_keywords_semicolon_separated")}
-                                            className="w-full px-3 py-1 text-[14px] text-[#212121] placeholder:text-[#999999] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
+                                            className="h-8 w-full overflow-x-auto overflow-y-hidden px-3 py-1 text-[14px] text-[#212121] placeholder:text-[#999999] placeholder:whitespace-nowrap rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
                                         />
                                     </div>
 
                                     {/* 第一层 & 第二层：可按配置隐藏首个条件删除 */}
-                                    <div className="flex items-center gap-1  flex-shrink-0">
+                                    <div className="flex items-center gap-1 flex-shrink-0">
                                         {/* 第一层：group 仅 1 条时，这一条既是第一层，也有 + */}
                                         {group.conditions.length === 1 && !atTotalLimit && (
                                             <button

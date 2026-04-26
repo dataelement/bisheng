@@ -24,6 +24,7 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { checkPermission } from "../../controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ImportQa } from "./components/ImportQa";
@@ -228,7 +229,8 @@ export default function QasPage() {
     const [selectAll, setSelectAll] = useState(false);
     const editRef = useRef(null)
     const importRef = useRef(null)
-    const [hasPermission, setHasPermission] = useState(false)
+    const [canEditKb, setCanEditKb] = useState(false)
+    const [canDeleteKb, setCanDeleteKb] = useState(false)
     const { toast } = useToast();
 
       const sourceTypeKeys = [
@@ -240,11 +242,30 @@ export default function QasPage() {
     ];
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
-        getQaList(id, param).then(res => {
-            setHasPermission(res.writeable)
-            return res
-        })
+        getQaList(id, param)
     )
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadPermissions = async () => {
+            if (!id) {
+                setCanEditKb(false);
+                setCanDeleteKb(false);
+                return;
+            }
+            const [editResult, deleteResult] = await Promise.all([
+                captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(id), 'can_edit', 'edit_kb')),
+                captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(id), 'can_delete', 'delete_kb')),
+            ]);
+            if (cancelled) return;
+            setCanEditKb(!!editResult?.allowed);
+            setCanDeleteKb(!!deleteResult?.allowed);
+        };
+        loadPermissions();
+        return () => {
+            cancelled = true;
+        };
+    }, [id]);
 
     // Polling effect to check if any item is in processing status
     useEffect(() => {
@@ -276,6 +297,7 @@ export default function QasPage() {
     }, []);
 
     const handleEnableSelected = async () => {
+        if (!canEditKb) return;
         if (!selectedItems.length) return;
 
         try {
@@ -322,6 +344,7 @@ export default function QasPage() {
     };
 
     const handleDisableSelected = async () => {
+        if (!canEditKb) return;
         if (!selectedItems.length) return;
 
         try {
@@ -400,6 +423,7 @@ export default function QasPage() {
     }, [datalist, selectedItems]);
 
     const handleDelete = (id) => {
+        if (!canDeleteKb) return;
         bsConfirm({
             desc: t('confirmDeleteSelectedQaData'),
             onOk(next) {
@@ -412,6 +436,7 @@ export default function QasPage() {
     }
 
     const handleDeleteSelected = () => {
+        if (!canDeleteKb) return;
         if (!selectedItems.length) return;
 
         bsConfirm({
@@ -431,6 +456,7 @@ export default function QasPage() {
     };
 
     const handleStatusClick = async (id: number, checked: boolean) => {
+        if (!canEditKb) return;
         const targetStatus = checked ? 1 : 0;
         const item = datalist.find(el => el.id === id);
 
@@ -471,18 +497,18 @@ export default function QasPage() {
                         </div>
                     </div>
                     <div className={selectedItems.length ? 'visible' : 'invisible'}>
-                        <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
-                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleDeleteSelected}>
+                        <Tip content={!canDeleteKb && t('noOperationPermission')} side='top'>
+                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!canDeleteKb} onClick={handleDeleteSelected}>
                                 <Trash2 className="mr-2 h-4 w-4" ></Trash2> {t('delete')}
                             </Button>
                         </Tip>
-                        <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
-                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleDisableSelected}>
+                        <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
+                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!canEditKb} onClick={handleDisableSelected}>
                                 <SquareX className="mr-2 h-4 w-4" /> {t('disable')}
                             </Button>
                         </Tip>
-                        <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
-                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleEnableSelected}>
+                        <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
+                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!canEditKb} onClick={handleEnableSelected}>
                                 <SquareCheckBig className="mr-2 h-4 w-4" /> {t('enable')}
                             </Button>
                         </Tip>
@@ -490,8 +516,8 @@ export default function QasPage() {
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
-                                <Button variant="outline" disabled={!hasPermission} className="disabled:pointer-events-auto px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>
+                            <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
+                                <Button variant="outline" disabled={!canEditKb} className="disabled:pointer-events-auto px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>
                             </Tip>
                             <Button variant="outline" className="px-8" onClick={() => {
                                 getQaFile(id).then(res => {
@@ -499,8 +525,8 @@ export default function QasPage() {
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
                             }}>{t('export')}</Button>
-                            <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
-                                <Button className="disabled:pointer-events-auto px-8" disabled={!hasPermission} onClick={() => editRef.current.open()}>{t('createQA')}</Button>
+                            <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
+                                <Button className="disabled:pointer-events-auto px-8" disabled={!canEditKb} onClick={() => editRef.current.open()}>{t('createQA')}</Button>
                             </Tip>
                         </div>
                     </div>
@@ -522,7 +548,7 @@ export default function QasPage() {
                         </TableHeader>
                         <TableBody>
                             {datalist.map(el => (
-                                <TableRow key={el.id} className={hasPermission ? "hover:bg-gray-100" : ""}>
+                                <TableRow key={el.id} className={canEditKb ? "hover:bg-gray-100" : ""}>
                                     <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
                                         <Checkbox
                                             checked={selectedItems.includes(el.id)}
@@ -533,7 +559,7 @@ export default function QasPage() {
 
                                     <TableCell
                                         className="font-medium cursor-pointer"
-                                        onClick={() => hasPermission && editRef.current.edit(el)}
+                                        onClick={() => canEditKb && editRef.current.edit(el)}
                                     >
                                         <div className="max-h-48 overflow-y-auto scrollbar-hide">
                                             {el.questions}
@@ -542,7 +568,7 @@ export default function QasPage() {
 
                                     <TableCell
                                         className="font-medium cursor-pointer"
-                                        onClick={() => hasPermission && editRef.current.edit(el)}
+                                        onClick={() => canEditKb && editRef.current.edit(el)}
                                     >
                                         <div className="max-h-48 overflow-y-auto scrollbar-hide">
                                             {el.answers}
@@ -551,7 +577,7 @@ export default function QasPage() {
 
                                     <TableCell
                                         className="cursor-pointer"
-                                        onClick={() => hasPermission && editRef.current.edit(el)}
+                                        onClick={() => canEditKb && editRef.current.edit(el)}
                                     >
                                         {/* {['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]} */}
                                         {t(sourceTypeKeys[el.source] || sourceTypeKeys[0])}
@@ -563,12 +589,12 @@ export default function QasPage() {
                                             <div className="flex items-center">
                                                 {el.status !== 2 && (
                                                     <Tip
-                                                        content={!hasPermission && t('noOperationPermission')}
+                                                        content={!canEditKb && t('noOperationPermission')}
                                                         side='top'>
                                                         <div>
                                                             <Switch
                                                                 checked={el.status === 1}
-                                                                disabled={!hasPermission}
+                                                                disabled={!canEditKb}
                                                                 className="disabled:pointer-events-auto"
                                                                 onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
                                                             />
@@ -583,14 +609,14 @@ export default function QasPage() {
                                                 )}
                                             </div>
                                             <Tip
-                                                content={!hasPermission && t('noOperationPermission')}
+                                                content={!canDeleteKb && t('noOperationPermission')}
                                                 styleClasses="-translate-x-6"
                                                 side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
                                                     className="disabled:pointer-events-auto"
-                                                    disabled={!hasPermission}
+                                                    disabled={!canDeleteKb}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDelete(el.id);

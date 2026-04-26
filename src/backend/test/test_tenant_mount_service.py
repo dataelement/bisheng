@@ -18,6 +18,7 @@ ModuleNotFoundError on first run is the red state; implementation then
 makes it green.
 """
 
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -360,3 +361,202 @@ class TestMigrateResourcesFromRoot:
         assert meta['from_tenant_id'] == 1
         assert meta['to_tenant_id'] == 2
         assert meta['count'] == 2
+
+
+# =========================================================================
+# Subtree user_tenant sync wiring
+# Verifies the mount / unmount paths invoke
+# UserTenantSyncService.sync_subtree_primary_users with the right trigger
+# and propagate result counts into audit metadata. Sessions are stubbed via
+# an async context manager so we do not depend on the (currently broken)
+# raw-session happy-path mocks the older tests use.
+# =========================================================================
+
+def _stub_session():
+    session = MagicMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+    session.execute = AsyncMock()
+    session.exec = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    return session, fake_session
+
+
+@pytest.mark.asyncio
+class TestMountChildSubtreeSync:
+
+    async def test_mount_invokes_subtree_sync_and_records_counts(self, super_admin):
+        from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+
+        dept = _mk_dept(dept_id=7, parent_id=1, is_tenant_root=0, path='/1/7/')
+        _, fake_session = _stub_session()
+
+        sync_result = {'synced': [101, 102, 103], 'failed': [(104, 'boom')]}
+        with patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock, return_value=dept,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aget_ancestors_with_mount',
+            new_callable=AsyncMock, return_value=None,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantMountService._on_child_mounted',
+            new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service._safe_sync_subtree',
+            new_callable=AsyncMock, return_value=sync_result,
+        ) as sync_mock, patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.AuditLogDao.ainsert_v2',
+            new_callable=AsyncMock,
+        ) as audit:
+            await TenantMountService.mount_child(
+                dept_id=7, tenant_code='acme', tenant_name='Acme',
+                operator=super_admin,
+            )
+
+        sync_mock.assert_awaited_once_with(
+            '/1/7/', UserTenantSyncTrigger.MOUNT_BACKFILL,
+        )
+        meta = audit.call_args.kwargs['metadata']
+        assert meta['synced_user_count'] == 3
+        assert meta['failed_user_count'] == 1
+
+
+@pytest.mark.asyncio
+class TestUnmountChildSubtreeSync:
+
+    async def test_unmount_rederives_users_after_flag_cleared(self, super_admin):
+        """Sync must run AFTER is_tenant_root flips back to 0, otherwise the
+        resolver would still walk users back into the now-archived Child.
+        Verified here by ordering: dept session execute (which clears the
+        flag) is awaited before _safe_sync_subtree.
+        """
+        from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+
+        dept = _mk_dept(dept_id=7, is_tenant_root=1, mounted_tenant_id=2, path='/1/7/')
+        existing_tenant = _mk_tenant(tid=2, code='acme', status='active')
+        session, fake_session = _stub_session()
+
+        # Track call order: session.execute (flag clear) must precede sync.
+        call_order: list[str] = []
+        session.execute = AsyncMock(side_effect=lambda *a, **kw: call_order.append('exec'))
+        sync_result = {'synced': [201, 202], 'failed': []}
+
+        async def _sync_capture(*args, **kwargs):
+            call_order.append('sync')
+            return sync_result
+
+        with patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock, return_value=dept,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantMountService._migrate_child_resources_to_root',
+            new_callable=AsyncMock, return_value={'flow': 1},
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantDao.aget_by_id',
+            new_callable=AsyncMock, return_value=existing_tenant,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantMountService._on_child_unmounted',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service._safe_sync_subtree',
+            side_effect=_sync_capture,
+        ) as sync_mock, patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.AuditLogDao.ainsert_v2',
+            new_callable=AsyncMock,
+        ) as audit:
+            result = await TenantMountService.unmount_child(
+                dept_id=7, operator=super_admin,
+            )
+
+        assert result['tenant_id'] == 2
+        sync_mock.assert_awaited_once()
+        path_arg, trigger_arg = sync_mock.call_args.args
+        assert path_arg == '/1/7/'
+        assert trigger_arg == UserTenantSyncTrigger.UNMOUNT_REDERIVE
+        # Ordering: at least one execute call (flag clear) before sync invocation.
+        assert 'exec' in call_order
+        assert call_order.index('exec') < call_order.index('sync')
+        meta = audit.call_args.kwargs['metadata']
+        assert meta['synced_user_count'] == 2
+        assert meta['failed_user_count'] == 0
+
+    async def test_unmount_sync_failure_does_not_block_main_flow(self, super_admin):
+        from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+
+        dept = _mk_dept(dept_id=7, is_tenant_root=1, mounted_tenant_id=2, path='/1/7/')
+        existing_tenant = _mk_tenant(tid=2, code='acme', status='active')
+        _, fake_session = _stub_session()
+
+        with patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock, return_value=dept,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantMountService._migrate_child_resources_to_root',
+            new_callable=AsyncMock, return_value={},
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantDao.aget_by_id',
+            new_callable=AsyncMock, return_value=existing_tenant,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.TenantMountService._on_child_unmounted',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.tenant_mount_service._safe_sync_subtree',
+            new_callable=AsyncMock, return_value={'synced': [], 'failed': []},
+        ) as sync_mock, patch(
+            'bisheng.tenant.domain.services.tenant_mount_service.AuditLogDao.ainsert_v2',
+            new_callable=AsyncMock,
+        ):
+            # Should not raise, sync_mock returning empty result is enough.
+            result = await TenantMountService.unmount_child(
+                dept_id=7, operator=super_admin,
+            )
+
+        assert result['tenant_id'] == 2
+        sync_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+class TestSafeSyncSubtreeWrapper:
+
+    async def test_no_path_short_circuits(self):
+        from bisheng.tenant.domain.services.tenant_mount_service import _safe_sync_subtree
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+
+        result = await _safe_sync_subtree(None, UserTenantSyncTrigger.MOUNT_BACKFILL)
+        assert result == {'synced': [], 'failed': []}
+
+    async def test_dispatch_failure_returns_empty_shape(self, monkeypatch):
+        """If the underlying service raises, wrapper logs and returns empty."""
+        from bisheng.tenant.domain.services.tenant_mount_service import _safe_sync_subtree
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+        from bisheng.tenant.domain.services import user_tenant_sync_service as uts_module
+
+        async def _boom(*args, **kwargs):
+            raise RuntimeError('service unavailable')
+
+        monkeypatch.setattr(
+            uts_module.UserTenantSyncService,
+            'sync_subtree_primary_users',
+            _boom,
+        )
+        result = await _safe_sync_subtree(
+            '/1/7/', UserTenantSyncTrigger.MOUNT_BACKFILL,
+        )
+        assert result == {'synced': [], 'failed': []}

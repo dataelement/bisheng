@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { getKnowledgeSpaceGrantUsers, searchUsers } from "~/api/permission";
+import { getResourceGrantUsers, searchUsers } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,8 +34,9 @@ export function SubjectSearchUser({
     abortRef.current = controller;
     setLoading(true);
     try {
-      if (resourceType === "knowledge_space" && resourceId) {
-        const rows = await getKnowledgeSpaceGrantUsers(
+      if (resourceType && resourceId) {
+        const rows = await getResourceGrantUsers(
+          resourceType,
           resourceId,
           { keyword: name, page: 1, page_size: 2000 },
           { signal: controller.signal }

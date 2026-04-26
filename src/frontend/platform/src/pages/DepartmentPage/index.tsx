@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { locationContext } from "@/contexts/locationContext"
+import { userContext } from "@/contexts/userContext"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
 import { DepartmentTree } from "./components/DepartmentTree"
@@ -14,7 +15,9 @@ import { MountTenantDialog } from "./components/MountTenantDialog"
 export default function DepartmentPage() {
   const { t } = useTranslation()
   const { appConfig } = useContext(locationContext)
+  const { user } = useContext(userContext)
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+  const canMountTenant = multiTenantEnabled && !!user?.is_global_super
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
@@ -207,7 +210,7 @@ export default function DepartmentPage() {
                 dept={selectedDept}
                 tree={tree}
                 onChanged={handleDepartmentSettingsChanged}
-                onMarkAsTenant={multiTenantEnabled ? handleMarkAsTenant : undefined}
+                onMarkAsTenant={canMountTenant ? handleMarkAsTenant : undefined}
               />
             </TabsContent>
           </Tabs>

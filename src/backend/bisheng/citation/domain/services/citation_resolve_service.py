@@ -34,7 +34,7 @@ class CitationResolveService:
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if knowledge is None:
             return False
-        return login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE)
+        return await login_user.async_access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE)
 
     @staticmethod
     async def _resolve_bbox(file_id: Optional[int], bbox: Optional[str]) -> Optional[str]:

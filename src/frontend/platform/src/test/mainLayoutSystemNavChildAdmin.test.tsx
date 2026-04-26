@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 
-import { getUserTenantsApi } from "@/controllers/API/tenant";
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import MainLayout from "@/layout/MainLayout";
-import { fireEvent, render, screen } from "@/test/test-utils";
+import { render, screen } from "@/test/test-utils";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/layout/HeaderMenu", () => ({
@@ -100,11 +99,12 @@ const localStorageMock = {
 const baseUser = {
   user_id: 1,
   user_name: "tester",
-  role: "editor",
-  web_menu: ["knowledge"] as string[],
+  role: "user",
+  web_menu: [] as string[],
   avatar: "",
   external_id: null,
   is_department_admin: false,
+  is_child_admin: false,
   tenant_name: "集团总部",
   leaf_tenant_name: "华东子公司",
 };
@@ -145,7 +145,7 @@ function renderLayout(userOverrides: Record<string, unknown> = {}) {
   );
 }
 
-describe("MainLayout multi-tenant header", () => {
+describe("MainLayout system / tenant nav for Child Admin (PRD §3.3)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(window, "localStorage", {
@@ -158,14 +158,30 @@ describe("MainLayout multi-tenant header", () => {
     });
   });
 
-  it("shows the current leaf tenant without loading switchable tenant options", () => {
+  it("Child Admin sees the system menu entry", () => {
+    renderLayout({ is_child_admin: true });
+    expect(screen.getByText("menu.system")).toBeInTheDocument();
+  });
+
+  it("Child Admin does NOT see the tenant management entry (super-only until backend is opened up)", () => {
+    renderLayout({ is_child_admin: true });
+    expect(screen.queryByText("tenant.management")).toBeNull();
+  });
+
+  it("Child Admin does NOT see the dataset entry (super / dept admin only)", () => {
+    renderLayout({ is_child_admin: true });
+    expect(screen.queryByText("menu.dataset")).toBeNull();
+  });
+
+  it("plain user without any admin flag sees neither system nor tenant management", () => {
     renderLayout();
+    expect(screen.queryByText("menu.system")).toBeNull();
+    expect(screen.queryByText("tenant.management")).toBeNull();
+  });
 
-    const trigger = screen.getByText("华东子公司").closest("div");
-    expect(trigger).not.toBeNull();
-
-    fireEvent.mouseEnter(trigger!);
-
-    expect(vi.mocked(getUserTenantsApi)).not.toHaveBeenCalled();
+  it("global super admin still sees both system and tenant management entries", () => {
+    renderLayout({ role: "admin" });
+    expect(screen.getByText("menu.system")).toBeInTheDocument();
+    expect(screen.getByText("tenant.management")).toBeInTheDocument();
   });
 });

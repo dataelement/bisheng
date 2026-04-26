@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { getDepartmentTree } from "~/api/permission";
+import { getDepartmentTree, getResourceGrantDepartments } from "~/api/permission";
 import type { SelectedSubject } from "~/api/permission";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 
@@ -10,13 +10,15 @@ jest.mock("~/hooks", () => ({
 
 jest.mock("~/api/permission", () => ({
   getDepartmentTree: jest.fn(),
-  getKnowledgeSpaceGrantDepartments: jest.fn(),
+  getResourceGrantDepartments: jest.fn(),
 }));
 
 const mockedGetDepartmentTree = jest.mocked(getDepartmentTree);
+const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
 
 describe("SubjectSearchDepartment", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     mockedGetDepartmentTree.mockResolvedValue([
       {
         id: 1,
@@ -32,6 +34,15 @@ describe("SubjectSearchDepartment", () => {
             children: [],
           },
         ],
+      },
+    ]);
+    mockedGetResourceGrantDepartments.mockResolvedValue([
+      {
+        id: 3,
+        dept_id: "dept-3",
+        name: "应用授权部门",
+        parent_id: null,
+        children: [],
       },
     ]);
   });
@@ -114,5 +125,29 @@ describe("SubjectSearchDepartment", () => {
         include_children: false,
       },
     ]);
+  });
+
+  it("uses resource-scoped department candidates when a resource is provided", async () => {
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("应用授权部门")).toBeInTheDocument();
+    });
+
+    expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
+      "workflow",
+      "wf-1",
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(mockedGetDepartmentTree).not.toHaveBeenCalled();
   });
 });

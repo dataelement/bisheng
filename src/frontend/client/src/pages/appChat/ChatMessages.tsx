@@ -37,20 +37,18 @@ export default function ChatMessages({
     onOpenCitationPanel,
     activeCitationMessageId = null,
 }: ChatMessagesProps) {
-    const { messageScrollRef, messages } = useMessage(readOnly)
-    const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
-    const chatState = useRecoilValue(currentChatState)
-    const localize = useLocalize()
+    const { messageScrollRef, messages } = useMessage(readOnly);
+    const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState);
+    const chatState = useRecoilValue(currentChatState);
+    const localize = useLocalize();
 
-    console.log('messages :>> ', chatState, messages, guideWord);
-    // 反馈
-    const thumbRef = useRef(null)
+    console.log("messages :>> ", chatState, messages, guideWord);
+    const thumbRef = useRef(null);
 
-    const remark = chatState?.flow?.guide_word
+    const remark = chatState?.flow?.guide_word;
 
 
     return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-44 px-4">
-        {/* 助手开场白 */}
         {remark && <MessageRemark
             readOnly={readOnly}
             logo={logo}
@@ -59,22 +57,19 @@ export default function ChatMessages({
         />
         }
 
-        {
-            messages.map((msg, index) => {
-                // 技能特殊消息
+        {messages.map((msg) => {
                 if (msg.files?.length) {
-                    return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />
+                    return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />;
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
-                    return <MessageRunlog key={msg.id || msg.extra} data={msg} />
+                    return <MessageRunlog key={msg.id || msg.extra} data={msg} />;
                 } else if (msg.thought) {
                     return <MessageSystem
                         logo={logo} title={title} key={msg.id} data={msg} />;
                 }
 
-                // output节点特殊msg
                 switch (msg.category) {
                     case 'input':
-                        return null
+                        return null;
                     case 'question':
                         return <MessageUser
                             readOnly={readOnly}
@@ -93,7 +88,7 @@ export default function ChatMessages({
                         />;
                     case 'output_msg':
                     case 'stream_msg':
-                    case "answer":
+                    case 'answer':
                         return <MessageBs
                             readOnly={readOnly}
                             key={msg.id}
@@ -106,9 +101,9 @@ export default function ChatMessages({
                             onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
                         />;
                     case 'divider':
-                        return <div key={msg.id} className={'flex items-center justify-center py-4 text-gray-400 text-sm'}>
+                        return <div key={msg.id} className="flex items-center justify-center py-4 text-gray-400 text-sm">
                             ----------- {localize(msg.message)} -----------
-                        </div>
+                        </div>;
                     case 'output_with_choose_msg':
                         return <MessageBsChoose
                             key={msg.id}
@@ -136,13 +131,12 @@ export default function ChatMessages({
                             data={msg} />;
                     case 'reasoning':
                     case 'reasoning_answer':
-                        return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />
+                        return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
                 }
-            })
-        }
-        {/* 只有引导问题没有开场白 => 上面得要有图标+应用名称 */}
+            })}
+
         {!remark
             && !messages.some(msg => msg.category === 'guide_word')
             && !!guideWord?.length
@@ -151,14 +145,12 @@ export default function ChatMessages({
                 title={title}
                 message={''}
             />}
-        {/* 引导词 */}
         {guideWord && !inputDisabled && !inputForm && !readOnly && <GuideWord data={guideWord} />}
-        {/* 表单 */}
         {inputForm && (chatState?.flow.flow_type === 10 ?
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :
             <InputFormSkill flow={chatState.flow} logo={logo} />
         )}
 
-        <MessageFeedbackForm ref={thumbRef}></MessageFeedbackForm>
+        <MessageFeedbackForm ref={thumbRef} />
     </div>
 };

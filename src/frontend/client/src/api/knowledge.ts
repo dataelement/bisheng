@@ -193,6 +193,7 @@ interface RawKnowledgeSpace {
     is_released?: boolean;
     is_pending?: boolean;
     is_followed?: boolean;
+    subscription_status?: string;
 }
 
 interface RawSpaceChild {
@@ -686,19 +687,26 @@ export async function getSquareSpacesApi(params?: {
             const authTypeVal = rawAny?.auth_type ?? itemAny?.auth_type ?? rawAny?.authType ?? itemAny?.authType;
             const visibility = (authTypeVal as VisibilityType) || VisibilityType.PRIVATE;
 
-            // status from subscription_status enum
-            const subscriptionStatus = String(itemAny?.subscription_status ?? rawAny?.subscription_status ?? "");
+            // status from subscription_status enum. Some square responses expose
+            // only is_pending/is_followed, so keep those flags authoritative too.
+            const subscriptionStatus = String(
+                itemAny?.subscription_status ??
+                rawAny?.subscription_status ??
+                itemAny?.status ??
+                rawAny?.status ??
+                ""
+            ).toLowerCase();
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
-            const isFollowed = subscriptionStatus === "subscribed";
-            const isPending = subscriptionStatus === "pending";
-            const squareStatus: "join" | "joined" | "pending" | "rejected" =
-                subscriptionStatus === "subscribed"
-                    ? "joined"
-                    : subscriptionStatus === "pending"
-                        ? "pending"
-                        : subscriptionStatus === "rejected"
-                            ? "rejected"
-                            : "join";
+            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed) || subscriptionStatus === "subscribed";
+            const isPending = Boolean(itemAny?.is_pending ?? rawAny?.is_pending) || subscriptionStatus === "pending";
+            let squareStatus: "join" | "joined" | "pending" | "rejected" = "join";
+            if (subscriptionStatus === "rejected") {
+                squareStatus = "rejected";
+            } else if (isFollowed) {
+                squareStatus = "joined";
+            } else if (isPending) {
+                squareStatus = "pending";
+            }
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =
@@ -731,6 +739,7 @@ export async function getSquareSpacesApi(params?: {
                 isFollowed,
                 isPending,
                 squareStatus,
+                subscriptionStatus: subscriptionStatus || undefined,
             };
         })
         // Keep entries without id but avoid "undefined" key; drawer won't open for them.

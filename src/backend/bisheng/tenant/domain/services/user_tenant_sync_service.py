@@ -23,11 +23,12 @@ Behaviour:
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from bisheng.common.errcode.tenant_resolver import TenantRelocateBlockedError
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.tenant import (
     ROOT_TENANT_ID,
     Tenant,
@@ -152,6 +153,63 @@ class UserTenantSyncService:
             )
 
         return new_leaf
+
+    @classmethod
+    async def sync_subtree_primary_users(
+        cls,
+        dept_path: str,
+        *,
+        trigger: UserTenantSyncTrigger,
+    ) -> Dict[str, Any]:
+        """Re-sync every primary-dept user under a department subtree.
+
+        Used by the mount / unmount / move event handlers to make the
+        ``user_tenant`` table reflect the new tree topology immediately,
+        rather than waiting for each user's next login (the PRD §4.5
+        "自动成为该子租户成员" semantics). The lazy login-time path stays
+        as a fallback for users this batch fails on or who join later.
+
+        Returns ``{'synced': [user_ids...], 'failed': [(user_id, err), ...]}``.
+        Single-user failures are logged and collected but never propagate —
+        the caller (mount/unmount/move) must not roll back its own commit
+        because a downstream user-sync hiccup hit a relocate-block or FGA
+        glitch.
+        """
+        if not dept_path:
+            return {'synced': [], 'failed': []}
+
+        dept_ids = await DepartmentDao.aget_subtree_ids(dept_path)
+        if not dept_ids:
+            return {'synced': [], 'failed': []}
+
+        user_ids: set[int] = set()
+        for dept_id in dept_ids:
+            ids = await UserDepartmentDao.aget_user_ids_by_department(
+                dept_id, is_primary=True,
+            )
+            user_ids.update(ids)
+        if not user_ids:
+            return {'synced': [], 'failed': []}
+
+        synced: list[int] = []
+        failed: list[tuple[int, str]] = []
+        for uid in sorted(user_ids):
+            try:
+                await cls.sync_user(uid, trigger=trigger)
+                synced.append(uid)
+            except Exception as exc:  # noqa: BLE001
+                failed.append((uid, repr(exc)))
+                logger.warning(
+                    'sync_subtree_primary_users: user=%s trigger=%s failed: %s',
+                    uid, cls._trigger_str(trigger), exc,
+                )
+
+        if failed:
+            logger.warning(
+                'sync_subtree_primary_users: trigger=%s synced=%d failed=%d',
+                cls._trigger_str(trigger), len(synced), len(failed),
+            )
+        return {'synced': synced, 'failed': failed}
 
     # --- Internals ------------------------------------------------------
 

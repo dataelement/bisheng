@@ -3,6 +3,7 @@ import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { rebUploadFile, retryKnowledgeFileApi } from "@/controllers/API";
+import { checkPermission } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -26,19 +27,39 @@ export default function AdjustFilesUpload() {
   const location = useLocation();
   const { message } = useToast();
   const { fileId: knowledgeId } = useParams();
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [hasEditPermission, setHasEditPermission] = useState(false);
 
   // Get initial data for adjustment mode from route state (must pass file data)
-  const initFileData = location.state?.fileData;
+  const hasInitFileData = Boolean(location.state?.fileData);
+  const initFileData = location.state?.fileData || {};
+  useEffect(() => {
+    const guardByPermission = async () => {
+      if (!knowledgeId) {
+        setPermissionChecked(true);
+        setHasEditPermission(false);
+        return;
+      }
+      const result = await captureAndAlertRequestErrorHoc(
+        checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb')
+      );
+      const allowed = !!result?.allowed;
+      setPermissionChecked(true);
+      setHasEditPermission(allowed);
+      if (!allowed) {
+        message({ variant: 'warning', description: t('noOperationPermission') });
+        navigate(`/filelib/${knowledgeId}`, { replace: true });
+      }
+    };
+    guardByPermission();
+  }, [knowledgeId, message, navigate, t]);
+
   useEffect(() => {
     // If no initialization data, it means direct access, redirect to /filelib
-    if (!initFileData) {
+    if (!hasInitFileData) {
       navigate('/filelib', { replace: true });
     }
-  }, [initFileData, navigate]);
-  if (!initFileData) {
-    navigate(-1); // Roll back when no data
-    return null;
-  }
+  }, [hasInitFileData, navigate]);
   // Adjustment mode exclusive state
   const [currentStep, setCurrentStep] = useState(1);
   const getParsedSplitRule = (rawSplitRule) => {
@@ -304,6 +325,18 @@ export default function AdjustFilesUpload() {
   const handleUnRetry = () => {
     setRepeatFiles([]);
     repeatCallBackRef.current();
+  }
+
+  if (!hasInitFileData) {
+    return null;
+  }
+
+  if (!permissionChecked || !hasEditPermission) {
+    return (
+      <div className="relative h-full flex items-center justify-center">
+        <LoadingIcon />
+      </div>
+    );
   }
 
   return (
