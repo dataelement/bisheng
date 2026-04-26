@@ -190,7 +190,7 @@ class AssistantService(BaseService, AssistantUtils):
                                               app_type=ApplicationTypeEnum.ASSISTANT
                                           ))
 
-        cls.create_assistant_hook(request, assistant, login_user)
+        await cls.create_assistant_hook_async(request, assistant, login_user)
 
         # F017: fan out group-sharing for Root-created assistants (D6).
         # share_on_create owns the Root-only gate + FGA + is_shared flip +
@@ -226,6 +226,22 @@ class AssistantService(BaseService, AssistantUtils):
         AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
 
         # WritelogoCeacle
+        cls.get_logo_share_link(assistant.logo)
+        return True
+
+    @classmethod
+    async def create_assistant_hook_async(cls, request: Request, assistant: Assistant, user_payload: UserPayload) -> bool:
+        """
+        Async variant for async FastAPI handlers; avoids sync-to-async bridge usage
+        on the running event loop.
+        """
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        try:
+            await OwnerService.write_owner_tuple(user_payload.user_id, 'assistant', str(assistant.id))
+        except Exception as e:
+            logger.warning('Failed to write owner tuple for assistant:%s: %s', assistant.id, e)
+
+        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
         cls.get_logo_share_link(assistant.logo)
         return True
 
@@ -313,7 +329,7 @@ class AssistantService(BaseService, AssistantUtils):
         if not assistant:
             raise AssistantNotExistsError()
 
-        cls.check_update_permission(assistant, login_user)
+        await cls.check_update_permission_async(assistant, login_user)
 
         # Update Assistant Data
         if req.name and req.name != assistant.name:
@@ -331,8 +347,9 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.update_time = datetime.now()
         assistant.max_token = req.max_token
         AssistantDao.update_assistant(assistant)
-        telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
-                                         trace_id=trace_id_var.get())
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                          trace_id=trace_id_var.get())
 
         # Update assistant association information
         if req.tool_list is not None:
@@ -375,7 +392,7 @@ class AssistantService(BaseService, AssistantUtils):
             raise AssistantNotExistsError()
         # Determine permissions
         required_permission = 'publish_app' if status == AssistantStatus.ONLINE.value else 'unpublish_app'
-        if not ApplicationPermissionService.has_any_permission_sync(
+        if not await ApplicationPermissionService.has_any_permission_async(
             login_user,
             'assistant',
             str(assistant.id),
@@ -396,49 +413,50 @@ class AssistantService(BaseService, AssistantUtils):
                 raise AssistantInitError(exception=e)
         assistant.status = status
         AssistantDao.update_assistant(assistant)
-        telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
-                                         trace_id=trace_id_var.get())
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                          trace_id=trace_id_var.get())
         cls.update_assistant_hook(request, login_user, assistant)
         return True
 
     @classmethod
-    def update_prompt(cls, assistant_id: str, prompt: str, user_payload: UserPayload) -> bool:
+    async def update_prompt(cls, assistant_id: str, prompt: str, user_payload: UserPayload) -> bool:
         """ Update assistant prompts """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
 
-        cls.check_update_permission(assistant, user_payload)
+        await cls.check_update_permission_async(assistant, user_payload)
 
         assistant.prompt = prompt
         AssistantDao.update_assistant(assistant)
-        telemetry_service.log_event_sync(user_id=user_payload.user_id,
-                                         event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
-                                         trace_id=trace_id_var.get())
+        await telemetry_service.log_event(user_id=user_payload.user_id,
+                                          event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                          trace_id=trace_id_var.get())
         return True
 
     @classmethod
-    def update_flow_list(cls, assistant_id: str, flow_list: List[str],
-                         user_payload: UserPayload) -> bool:
+    async def update_flow_list(cls, assistant_id: str, flow_list: List[str],
+                               user_payload: UserPayload) -> bool:
         """  Update Assistant Skills List """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
 
-        cls.check_update_permission(assistant, user_payload)
+        await cls.check_update_permission_async(assistant, user_payload)
 
         AssistantLinkDao.update_assistant_flow(assistant_id, flow_list=flow_list)
         return True
 
     @classmethod
-    def update_tool_list(cls, assistant_id: str, tool_list: List[int],
-                         user_payload: UserPayload) -> bool:
+    async def update_tool_list(cls, assistant_id: str, tool_list: List[int],
+                               user_payload: UserPayload) -> bool:
         """  Update Assistant Tool List """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
 
-        cls.check_update_permission(assistant, user_payload)
+        await cls.check_update_permission_async(assistant, user_payload)
 
         AssistantLinkDao.update_assistant_tool(assistant_id, tool_list=tool_list)
         return True
@@ -455,6 +473,20 @@ class AssistantService(BaseService, AssistantUtils):
             raise UnAuthorizedError()
 
         # Changes are not allowed when online
+        if assistant.status == AssistantStatus.ONLINE.value:
+            raise AssistantNotEditError()
+        return None
+
+    @classmethod
+    async def check_update_permission_async(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
+        if not await ApplicationPermissionService.has_any_permission_async(
+            user_payload,
+            'assistant',
+            str(assistant.id),
+            ['edit_app'],
+        ):
+            raise UnAuthorizedError()
+
         if assistant.status == AssistantStatus.ONLINE.value:
             raise AssistantNotEditError()
         return None

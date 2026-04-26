@@ -138,7 +138,7 @@ async def update_prompt(*,
                         assistant_id: str = Body(description='Assistant UniqueID', alias='id'),
                         prompt: str = Body(description='Used by Usersprompt'),
                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    AssistantService.update_prompt(assistant_id, prompt, login_user)
+    await AssistantService.update_prompt(assistant_id, prompt, login_user)
     return resp_200()
 
 
@@ -147,7 +147,7 @@ async def update_flow_list(*,
                            assistant_id: str = Body(description='Assistant UniqueID', alias='id'),
                            flow_list: List[str] = Body(description='List of user-selected skills'),
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    AssistantService.update_flow_list(assistant_id, flow_list, login_user)
+    await AssistantService.update_flow_list(assistant_id, flow_list, login_user)
     return resp_200()
 
 
@@ -157,7 +157,7 @@ async def update_tool_list(*,
                            tool_list: List[int] = Body(description='List of tools selected by the user'),
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Update the list of tools selected by the assistant """
-    AssistantService.update_tool_list(assistant_id, tool_list, login_user)
+    await AssistantService.update_tool_list(assistant_id, tool_list, login_user)
     return resp_200()
 
 

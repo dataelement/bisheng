@@ -414,7 +414,8 @@ async def test_update_status_uses_publish_and_unpublish_permissions():
         create=True,
     ), patch.object(
         assistant_module.ApplicationPermissionService,
-        'has_any_permission_sync',
+        'has_any_permission_async',
+        new_callable=AsyncMock,
         return_value=True,
         create=True,
     ) as mock_has_permission, patch.object(
@@ -423,14 +424,15 @@ async def test_update_status_uses_publish_and_unpublish_permissions():
         create=True,
     ), patch.object(
         assistant_module.telemetry_service,
-        'log_event_sync',
+        'log_event',
+        new_callable=AsyncMock,
     ), patch.object(
         AssistantService,
         'update_assistant_hook',
     ):
         await AssistantService.update_status(MagicMock(), login_user, 'asst-4', 0)
 
-    mock_has_permission.assert_called_once_with(
+    mock_has_permission.assert_awaited_once_with(
         login_user,
         'assistant',
         'asst-4',

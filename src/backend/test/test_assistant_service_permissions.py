@@ -371,6 +371,11 @@ async def test_get_assistant_info_checks_assistant_read_permission():
         'get_logo_share_link_async',
         new_callable=AsyncMock,
         return_value='logo-url',
+    ), patch.object(
+        module,
+        'user_may_share_app',
+        new_callable=AsyncMock,
+        return_value=True,
     ):
         result = await AssistantService.get_assistant_info('asst-1', login_user, None)
 
