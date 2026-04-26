@@ -1945,6 +1945,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "preview_url": preview_url,
         }
 
+    async def get_file_download(self, file_id: int, *, space_id: Optional[int] = None) -> dict:
+        file_record = await self._require_file_relation(file_id, 'can_read', space_id=space_id)
+        await self._require_permission_id('knowledge_file', file_id, 'download_file', space_id=file_record.knowledge_id)
+
+        original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+
+        return {
+            "original_url": original_url,
+            "preview_url": preview_url,
+        }
+
     # ──────────────────────────── Tags ───────────────────────────────────
     async def get_space_tags(self, space_id: int) -> List[Tag]:
         await self._require_read_permission(space_id)

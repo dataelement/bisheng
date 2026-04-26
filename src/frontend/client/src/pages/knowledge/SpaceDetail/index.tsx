@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useRecoilValue } from "recoil";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { ALLOWED_EXTENSIONS, DEFAULT_MAX_FILE_SIZE_MB, triggerUrlDownload } from "../knowledgeUtils";
@@ -578,10 +578,10 @@ export function KnowledgeSpaceContent({
                 triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
             } else {
                 // Single file: use preview_url for channel files, original_url for others
-                const previewData = await getFilePreviewApi(String(space.id), fileId);
+                const downloadData = await getFileDownloadApi(String(space.id), fileId);
                 const downloadUrl = file?.fileSource === 'channel'
-                    ? previewData.preview_url || previewData.original_url
-                    : previewData.original_url;
+                    ? downloadData.preview_url || downloadData.original_url
+                    : downloadData.original_url;
                 if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(downloadUrl, file?.name);
             }

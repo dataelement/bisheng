@@ -1535,6 +1535,57 @@ class TestTupleLifecycle:
         mock_share_url.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_get_file_download_denied_without_download_file_permission(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=98, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space', 'view_file'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
+            return_value=('original', 'preview'),
+        ) as mock_share_url:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.get_file_download(98)
+
+        mock_share_url.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_file_download_uses_download_file_permission(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=99, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space', 'view_file', 'download_file'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
+            return_value=('original', 'preview'),
+        ):
+            result = await service.get_file_download(99)
+
+        assert result['original_url'] == 'original'
+
+    @pytest.mark.asyncio
     async def test_list_space_children_filters_each_child_by_view_permission(self, service):
         folder = _make_file(file_id=201, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
         file_record = _make_file(file_id=202, knowledge_id=1, file_type=FileType.FILE.value, file_name='file.txt')

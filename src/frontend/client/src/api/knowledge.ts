@@ -1303,3 +1303,20 @@ export async function getFilePreviewApi(
         preview_url: data?.preview_url ?? "",
     };
 }
+
+/**
+ * Get file download URL. This is intentionally separate from preview because
+ * viewing a file does not imply download permission.
+ */
+export async function getFileDownloadApi(
+    space_id: string,
+    file_id: string
+): Promise<{ original_url: string; preview_url: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/download`);
+    const data = res?.data ?? res;
+    return {
+        original_url: data?.original_url ?? "",
+        preview_url: data?.preview_url ?? "",
+    };
+}
