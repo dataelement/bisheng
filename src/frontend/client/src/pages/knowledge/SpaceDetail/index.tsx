@@ -179,9 +179,9 @@ export function KnowledgeSpaceContent({
         type: "folder" | "knowledge_file";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
-    const [renameFolderEntryIds, setRenameFolderEntryIds] = useState<Set<string>>(new Set());
-    const [deleteFolderEntryIds, setDeleteFolderEntryIds] = useState<Set<string>>(new Set());
-    const [downloadFolderEntryIds, setDownloadFolderEntryIds] = useState<Set<string>>(new Set());
+    const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
+    const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
+    const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -282,12 +282,20 @@ export function KnowledgeSpaceContent({
     useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
-        const folders = displayFiles.filter(
-            (file) => file.type === FileType.FOLDER && !file.isCreating && /^\d+$/.test(String(file.id))
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
         );
 
-        if (folders.length === 0) {
-            setRenameFolderEntryIds(new Set());
+        if (isAdmin) {
+            setRenameEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setRenameEntryIds(new Set());
             return () => {
                 cancelled = true;
                 controller.abort();
@@ -295,19 +303,20 @@ export function KnowledgeSpaceContent({
         }
 
         Promise.all(
-            folders.map(async (file) => {
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
                 const result = await checkPermission(
-                    "folder",
+                    resourceType,
                     file.id,
                     "can_edit",
-                    "rename_folder",
+                    file.type === FileType.FOLDER ? "rename_folder" : "rename_file",
                     { signal: controller.signal },
                 ).catch(() => ({ allowed: false }));
                 return result.allowed ? file.id : null;
             })
         ).then((ids) => {
             if (!cancelled) {
-                setRenameFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+                setRenameEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
             }
         });
 
@@ -315,17 +324,25 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey]);
 
     useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
-        const folders = displayFiles.filter(
-            (file) => file.type === FileType.FOLDER && !file.isCreating && /^\d+$/.test(String(file.id))
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
         );
 
-        if (folders.length === 0) {
-            setDownloadFolderEntryIds(new Set());
+        if (isAdmin) {
+            setDownloadEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setDownloadEntryIds(new Set());
             return () => {
                 cancelled = true;
                 controller.abort();
@@ -333,19 +350,20 @@ export function KnowledgeSpaceContent({
         }
 
         Promise.all(
-            folders.map(async (file) => {
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
                 const result = await checkPermission(
-                    "folder",
+                    resourceType,
                     file.id,
                     "can_read",
-                    "download_folder",
+                    file.type === FileType.FOLDER ? "download_folder" : "download_file",
                     { signal: controller.signal },
                 ).catch(() => ({ allowed: false }));
                 return result.allowed ? file.id : null;
             })
         ).then((ids) => {
             if (!cancelled) {
-                setDownloadFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+                setDownloadEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
             }
         });
 
@@ -353,17 +371,25 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey]);
 
     useEffect(() => {
         let cancelled = false;
         const controller = new AbortController();
-        const folders = displayFiles.filter(
-            (file) => file.type === FileType.FOLDER && !file.isCreating && /^\d+$/.test(String(file.id))
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
         );
 
-        if (folders.length === 0) {
-            setDeleteFolderEntryIds(new Set());
+        if (isAdmin) {
+            setDeleteEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setDeleteEntryIds(new Set());
             return () => {
                 cancelled = true;
                 controller.abort();
@@ -371,19 +397,20 @@ export function KnowledgeSpaceContent({
         }
 
         Promise.all(
-            folders.map(async (file) => {
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
                 const result = await checkPermission(
-                    "folder",
+                    resourceType,
                     file.id,
                     "can_delete",
-                    "delete_folder",
+                    file.type === FileType.FOLDER ? "delete_folder" : "delete_file",
                     { signal: controller.signal },
                 ).catch(() => ({ allowed: false }));
                 return result.allowed ? file.id : null;
             })
         ).then((ids) => {
             if (!cancelled) {
-                setDeleteFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+                setDeleteEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
             }
         });
 
@@ -391,7 +418,7 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [permissionEntryProbeKey]);
+    }, [isAdmin, permissionEntryProbeKey]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -504,7 +531,7 @@ export function KnowledgeSpaceContent({
     const handleBatchDownload = async () => {
         const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
         const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
-            file.type === FileType.FOLDER ? downloadFolderEntryIds.has(file.id) : true
+            downloadEntryIds.has(file.id)
         );
         if (!canDownloadSelected) {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
@@ -537,7 +564,7 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
-        if (isFolder && !downloadFolderEntryIds.has(fileId)) {
+        if (!downloadEntryIds.has(fileId)) {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
             return;
         }
@@ -641,6 +668,10 @@ export function KnowledgeSpaceContent({
         if (!file) return;
 
         const isFolder = file.type === FileType.FOLDER;
+        if (!deleteEntryIds.has(fileId)) {
+            showToast({ message: localize("com_knowledge.delete_failed"), status: "error" });
+            return;
+        }
 
         const confirmed = await confirm({
             title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : localize("com_knowledge.confirm_delete_file"),
@@ -713,10 +744,10 @@ export function KnowledgeSpaceContent({
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
-        file.type === FileType.FOLDER ? deleteFolderEntryIds.has(file.id) : isAdmin
+        deleteEntryIds.has(file.id)
     );
     const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
-        file.type === FileType.FOLDER ? downloadFolderEntryIds.has(file.id) : true
+        downloadEntryIds.has(file.id)
     );
 
     return (
@@ -829,9 +860,9 @@ export function KnowledgeSpaceContent({
                                     onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                     onCancelCreate={onCancelCreateFolder}
                                     onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
-                                    canRename={file.type === FileType.FOLDER && renameFolderEntryIds.has(file.id)}
-                                    canDelete={file.type === FileType.FOLDER ? deleteFolderEntryIds.has(file.id) : isAdmin}
-                                    canDownload={file.type === FileType.FOLDER ? downloadFolderEntryIds.has(file.id) : true}
+                                    canRename={renameEntryIds.has(file.id)}
+                                    canDelete={deleteEntryIds.has(file.id)}
+                                    canDownload={downloadEntryIds.has(file.id)}
                                     mobileListMode={isH5 && viewMode === "list"}
                                 />
                             ))}
@@ -855,9 +886,9 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={permissionEntryIds}
-                                    renameEntryIds={renameFolderEntryIds}
-                                    deleteEntryIds={deleteFolderEntryIds}
-                                    downloadEntryIds={downloadFolderEntryIds}
+                                    renameEntryIds={renameEntryIds}
+                                    deleteEntryIds={deleteEntryIds}
+                                    downloadEntryIds={downloadEntryIds}
                                     onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

@@ -556,8 +556,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                         : undefined
                                 }
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
-                                canDelete={file.type === FileType.FOLDER ? Boolean(deleteEntryIds?.has(file.id)) : isAdmin}
-                                canDownload={file.type === FileType.FOLDER ? Boolean(downloadEntryIds?.has(file.id)) : true}
+                                canDelete={Boolean(deleteEntryIds?.has(file.id))}
+                                canDownload={Boolean(downloadEntryIds?.has(file.id))}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
