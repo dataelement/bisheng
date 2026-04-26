@@ -13,6 +13,10 @@ class OpenFGAConf(BaseModel):
     store_name: str = Field(default='bisheng', description='Store name (auto-created if not exists)')
     store_id: Optional[str] = Field(default=None, description='Existing store ID (skip auto-create)')
     model_id: Optional[str] = Field(default=None, description='Existing model ID (skip auto-write)')
+    force_write_model: bool = Field(
+        default=False,
+        description='Write a fresh authorization model on startup even when the store already has models',
+    )
     timeout: int = Field(default=5, description='HTTP request timeout in seconds')
 
     # F013 (v2.5.1) — Dual-model gray release. During the 2-week window after

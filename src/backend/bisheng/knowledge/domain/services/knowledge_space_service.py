@@ -416,6 +416,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_resource_permission(relation, 'folder', folder.id)
         return folder
 
+    async def _get_folder_for_action(self, space_id: int, folder_id: int) -> KnowledgeFile:
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
+        return self._ensure_space_folder(folder, space_id)
+
     async def _require_file_relation(
         self,
         file_id: int,
@@ -431,6 +435,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_record = self._ensure_space_file(file_record, actual_space_id)
         await self._require_resource_permission(relation, 'knowledge_file', file_record.id)
         return file_record
+
+    async def _get_file_for_action(
+        self,
+        file_id: int,
+        *,
+        space_id: Optional[int] = None,
+    ) -> KnowledgeFile:
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if not file_record:
+            raise SpaceFileNotFoundError()
+        return self._ensure_space_file(file_record, space_id or file_record.knowledge_id)
 
     async def _require_file_or_folder_relation(
         self,
@@ -900,7 +915,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def delete_space(self, space_id: int) -> None:
-        space = await self._require_delete_permission(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
         await self._require_permission_id('knowledge_space', space_id, 'delete_space')
         child_resources = await self._list_space_child_resources(space_id)
 
@@ -950,10 +967,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
 
         if auth_type is not None:
-            await self._require_manage_permission(space_id)
             await self._require_permission_id('knowledge_space', space_id, 'manage_space_relation')
         else:
-            await self._require_write_permission(space_id)
             await self._require_permission_id('knowledge_space', space_id, 'edit_space')
 
         old_auth_type = space.auth_type
@@ -1178,7 +1193,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Return user information and associated user groups
         - Sorting: Creators and administrators at the top, regular members sorted by user_id
         """
-        await self._require_manage_permission(space_id)
         await self._require_permission_id('knowledge_space', space_id, 'manage_space_relation')
 
         search_user_ids = None
@@ -1230,7 +1244,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Modifying the creator's role is not allowed
         """
         # 1. Verify can_manage permission via ReBAC
-        await self._require_manage_permission(req.space_id)
         await self._require_permission_id('knowledge_space', req.space_id, 'manage_space_relation')
 
         # Get current user's SCM role for business logic decisions
@@ -1292,7 +1305,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins cannot remove other admins or creators
         """
         # 1. Verify can_manage permission via ReBAC
-        await self._require_manage_permission(req.space_id)
         await self._require_permission_id('knowledge_space', req.space_id, 'manage_space_relation')
 
         # Get current user's SCM role for business logic decisions
@@ -1539,7 +1551,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_name: str,
         parent_id: Optional[int] = None,
     ) -> KnowledgeFile:
-        await self._require_write_permission(knowledge_id)
         if parent_id:
             await self._require_permission_id('folder', parent_id, 'create_folder', space_id=knowledge_id)
         else:
@@ -1550,7 +1561,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_resource_id = knowledge_id
 
         if parent_id:
-            parent_folder = await self._require_folder_relation(knowledge_id, parent_id, 'can_edit')
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
             level = parent_folder.level + 1
             if level > 10:
                 raise SpaceFolderDepthError()
@@ -1588,7 +1599,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or folder.file_type != 0:
             raise SpaceFolderNotFoundError()
-        folder = await self._require_folder_relation(folder.knowledge_id, folder_id, 'can_edit')
+        folder = self._ensure_space_folder(folder, folder.knowledge_id)
         await self._require_permission_id('folder', folder_id, 'rename_folder', space_id=folder.knowledge_id)
 
         if await SpaceFileDao.count_folder_by_name(
@@ -1604,7 +1615,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def delete_folder(self, space_id: int, folder_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
-        folder = await self._require_folder_relation(space_id, folder_id, 'can_delete')
+        folder = await self._get_folder_for_action(space_id, folder_id)
         await self._require_permission_id('folder', folder_id, 'delete_folder', space_id=space_id)
 
         prefix = f"{folder.file_level_path}/{folder.id}"
@@ -1679,7 +1690,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> List[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
-        await self._require_write_permission(knowledge_id)
         if parent_id:
             await self._require_permission_id('folder', parent_id, 'upload_file', space_id=knowledge_id)
         else:
@@ -1717,7 +1727,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_resource_id = knowledge_id
 
         if parent_id:
-            parent_folder = await self._require_folder_relation(knowledge_id, parent_id, 'can_edit')
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
             level = parent_folder.level + 1
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
             parent_type = 'folder'
@@ -1806,7 +1816,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self, file_id: int, new_name: str
     ) -> KnowledgeFile:
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_file_chunk
-        file_record = await self._require_file_relation(file_id, 'can_edit')
+        file_record = await self._get_file_for_action(file_id)
         await self._require_permission_id('knowledge_file', file_id, 'rename_file', space_id=file_record.knowledge_id)
 
         old_suffix = file_record.file_name.rsplit('.', 1)[-1] if '.' in file_record.file_name else ''
@@ -1829,7 +1839,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
-        file_record = await self._require_file_relation(file_id, 'can_delete')
+        file_record = await self._get_file_for_action(file_id)
         await self._require_permission_id('knowledge_file', file_id, 'delete_file', space_id=file_record.knowledge_id)
 
         await KnowledgeFileDao.adelete_batch([file_id])
@@ -1858,7 +1868,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return tags
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag:
-        await self._require_write_permission(space_id)
         await self._require_permission_id('knowledge_space', space_id, 'edit_space')
 
         existing_tags = await TagDao.get_tags_by_business(business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
@@ -1875,14 +1884,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await TagDao.ainsert_tag(new_tag)
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
-        await self._require_write_permission(space_id)
         await self._require_permission_id('knowledge_space', space_id, 'edit_space')
         return await TagDao.delete_business_tag(tag_id, business_id=str(space_id),
                                                 business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE)
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: List[int]):
         """ 2：支持对单文件的标签管理: Overwrite tags for a single file. """
-        await self._require_file_relation(file_id, 'can_edit', space_id=space_id)
+        await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_permission_id('knowledge_file', file_id, 'rename_file', space_id=space_id)
 
         resource_id = str(file_id)
@@ -1900,7 +1908,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         resource_type = ResourceTypeEnum.SPACE_FILE
         for file_record in files:
-            await self._require_resource_permission('can_edit', 'knowledge_file', file_record.id)
             await self._require_permission_id('knowledge_file', file_record.id, 'rename_file', space_id=space_id)
             await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
 
@@ -1998,7 +2005,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_ids:
             direct_files = []
             for file_id in self._dedupe_ids(file_ids):
-                file_record = await self._require_file_relation(file_id, 'can_delete', space_id=knowledge_id)
+                file_record = await self._get_file_for_action(file_id, space_id=knowledge_id)
                 await self._require_permission_id('knowledge_file', file_id, 'delete_file', space_id=knowledge_id)
                 direct_files.append(file_record)
             direct_file_ids = [file.id for file in direct_files]

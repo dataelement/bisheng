@@ -104,6 +104,14 @@ def _retry_single(fga, item, action: str, dao) -> None:
 
     except Exception as e:
         error_msg = str(e)[:500]
+        if _is_idempotent_tuple_error(action, error_msg):
+            dao.update_succeeded(item.id)
+            logger.info(
+                'Ignoring idempotent OpenFGA %s failure for FailedTuple %d: %s',
+                action, item.id, error_msg,
+            )
+            return
+
         if item.retry_count + 1 >= item.max_retries:
             dao.mark_dead(item.id, error_msg)
             logger.critical(
@@ -127,3 +135,19 @@ def _get_redis():
         return get_redis_client_sync()
     except Exception:
         return None
+
+
+def _is_idempotent_tuple_error(action: str, error_msg: str) -> bool:
+    text = error_msg.lower()
+    if action == 'write':
+        return (
+            'already exists' in text
+            or 'cannot write a tuple which already exists' in text
+        )
+    if action == 'delete':
+        return (
+            'does not exist' in text
+            or 'did not exist' in text
+            or 'tuple to be deleted did not exist' in text
+        )
+    return False

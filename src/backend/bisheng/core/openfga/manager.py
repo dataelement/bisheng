@@ -60,14 +60,19 @@ class FGAManager(BaseContextManager[FGAClient]):
             # 2. Resolve model_id
             model_id = config.model_id
             if not model_id:
-                # Always write the latest model (idempotent — OpenFGA creates new version)
-                model = get_authorization_model()
-                resp = await temp_http.post(
-                    f'/stores/{store_id}/authorization-models', json=model
-                )
-                resp.raise_for_status()
-                model_id = resp.json().get('authorization_model_id', '')
-                logger.info('Wrote OpenFGA authorization model: %s', model_id)
+                if not config.force_write_model:
+                    model_id = await self._latest_authorization_model_id(temp_http, store_id)
+                    if model_id:
+                        logger.info('Using existing OpenFGA authorization model: %s', model_id)
+
+                if not model_id:
+                    model = get_authorization_model()
+                    resp = await temp_http.post(
+                        f'/stores/{store_id}/authorization-models', json=model
+                    )
+                    resp.raise_for_status()
+                    model_id = resp.json().get('authorization_model_id', '')
+                    logger.info('Wrote OpenFGA authorization model: %s', model_id)
 
         finally:
             await temp_http.aclose()
@@ -88,6 +93,27 @@ class FGAManager(BaseContextManager[FGAClient]):
             store_id, model_id, legacy_id, config.dual_model_mode,
         )
         return client
+
+    @staticmethod
+    async def _latest_authorization_model_id(temp_http, store_id: str) -> str:
+        """Return the newest existing authorization model id for the store."""
+        try:
+            resp = await temp_http.get(f'/stores/{store_id}/authorization-models')
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.warning('Failed to list OpenFGA authorization models for store %s: %s', store_id, e)
+            return ''
+
+        model_ids: list[str] = []
+        for item in data.get('authorization_models') or []:
+            model_id = item.get('id') or item.get('authorization_model_id')
+            if model_id:
+                model_ids.append(model_id)
+        model_ids.extend(data.get('authorization_model_ids') or [])
+        if not model_ids:
+            return ''
+        return sorted(set(model_ids))[-1]
 
     def _sync_initialize(self) -> FGAClient:
         raise TypeError('FGAManager only supports async initialization')

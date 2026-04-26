@@ -459,7 +459,8 @@ class PermissionService:
             )
         if action == 'delete':
             return (
-                'did not exist' in text
+                'does not exist' in text
+                or 'did not exist' in text
                 or 'tuple to be deleted did not exist' in text
             )
         return False

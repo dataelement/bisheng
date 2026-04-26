@@ -113,6 +113,10 @@ def _validate_tier_relation(grant_tier: str, relation: str) -> bool:
     return False
 
 
+def _is_invalid_owner_subject(subject_type: str | None, relation: str | None) -> bool:
+    return relation == 'owner' and subject_type != 'user'
+
+
 def _normalize_relation_model_name(name: str | None) -> str:
     text = (name or '').strip()
     for title, label in _RELATION_MODEL_NAME_PREFIX_PAIRS:
@@ -770,6 +774,8 @@ async def authorize_resource(
     """
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
+    if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
+        return PermissionDeniedError.return_resp()
 
     from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -830,13 +836,20 @@ async def authorize_resource(
     revoke_signatures = {_tuple_signature(r) for r in (request.revokes or [])}
     rebind_only_signatures = grant_signatures & revoke_signatures
 
+    # Same subject/relation changes are model rebinds. Do not delete the tuple,
+    # but still issue an idempotent write so stale DB-only bindings are repaired.
+    rebind_only_grants = [
+        grant for grant in (request.grants or [])
+        if _tuple_signature(grant) in rebind_only_signatures
+    ]
     tuple_grants = [
         grant for grant in (request.grants or [])
         if _tuple_signature(grant) not in rebind_only_signatures
-    ]
+    ] + rebind_only_grants
     tuple_revokes = [
         revoke for revoke in (request.revokes or [])
         if _tuple_signature(revoke) not in rebind_only_signatures
+        and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
     ]
 
     self_owner_revokes = [
@@ -875,15 +888,19 @@ async def authorize_resource(
     bindings = await _get_bindings()
     bindings_map = {b.get('key'): b for b in bindings if b.get('key')}
     for revoke in (request.revokes or []):
-        for key in _binding_lookup_keys(
-            resource_type,
-            str(resource_id),
-            revoke.subject_type,
-            revoke.subject_id,
-            revoke.relation,
-            getattr(revoke, 'include_children', None),
-        ):
-            bindings_map.pop(key, None)
+        include_children_values = [getattr(revoke, 'include_children', None)]
+        if _is_invalid_owner_subject(revoke.subject_type, revoke.relation) and revoke.subject_type == 'department':
+            include_children_values = [True, False]
+        for include_children in include_children_values:
+            for key in _binding_lookup_keys(
+                resource_type,
+                str(resource_id),
+                revoke.subject_type,
+                revoke.subject_id,
+                revoke.relation,
+                include_children,
+            ):
+                bindings_map.pop(key, None)
     for grant in (request.grants or []):
         if not getattr(grant, 'model_id', None):
             continue
@@ -1168,18 +1185,30 @@ async def delete_relation_model(
 
     from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
     from bisheng.permission.domain.services.permission_service import PermissionService
-    for b in to_remove:
-        await PermissionService.authorize(
-            object_type=b.get('resource_type'),
-            object_id=str(b.get('resource_id')),
-            grants=[],
-            revokes=[AuthorizeRevokeItem(
-                subject_type=b.get('subject_type'),
-                subject_id=int(b.get('subject_id')),
-                relation=b.get('relation'),
-                include_children=bool(b.get('include_children')),
-            )],
-        )
+    try:
+        for b in to_remove:
+            if _is_invalid_owner_subject(b.get('subject_type'), b.get('relation')):
+                logger.warning(
+                    'delete_relation_model skip impossible owner revoke model=%s subject=%s:%s resource=%s:%s',
+                    model_id, b.get('subject_type'), b.get('subject_id'),
+                    b.get('resource_type'), b.get('resource_id'),
+                )
+                continue
+            await PermissionService.authorize(
+                object_type=b.get('resource_type'),
+                object_id=str(b.get('resource_id')),
+                grants=[],
+                revokes=[AuthorizeRevokeItem(
+                    subject_type=b.get('subject_type'),
+                    subject_id=int(b.get('subject_id')),
+                    relation=b.get('relation'),
+                    include_children=bool(b.get('include_children')),
+                )],
+                enforce_fga_success=True,
+            )
+    except Exception as e:
+        logger.error('delete_relation_model failed to revoke model=%s bindings=%d error=%s', model_id, len(to_remove), e)
+        return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
 
     remain_bindings = [b for b in bindings if b.get('model_id') != model_id]
     await _save_relation_models(remain_models)

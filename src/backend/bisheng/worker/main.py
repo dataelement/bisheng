@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import time
 from typing import List
@@ -49,10 +50,38 @@ def worker_alive_beat(all_queues: List[str]):
     logger.debug('Worker alive beat stopped.')
 
 
+async def _init_worker_openfga() -> None:
+    """Initialize OpenFGA context in Celery workers for retry/reconcile tasks."""
+    if not settings.openfga.enabled:
+        return
+    try:
+        from bisheng.core.context.manager import app_context
+        from bisheng.core.openfga.manager import FGAManager, aget_fga_client
+
+        try:
+            app_context.get_context('openfga')
+        except KeyError:
+            app_context.register_context(FGAManager(openfga_config=settings.openfga), optional=True)
+
+        await aget_fga_client()
+        logger.info("Celery worker OpenFGA context initialized.")
+    except Exception as e:  # noqa: BLE001 - OpenFGA is optional at worker startup.
+        logger.warning("Celery worker OpenFGA context initialization failed: {}", e)
+
+
+def _init_worker_openfga_sync() -> None:
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_init_worker_openfga())
+    finally:
+        loop.close()
+
+
 @celeryd_after_setup.connect
 def on_worker_init(*args, **kwargs):
     global _WORKER_START
     """Worker initialization signal handler."""
+    _init_worker_openfga_sync()
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():
