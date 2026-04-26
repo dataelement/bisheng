@@ -9,16 +9,16 @@ import type {
   RelationLevel,
   ResourceType,
   RelationModel,
+  RevokeItem,
 } from "~/api/permission";
 import { Avatar, AvatarName } from "~/components/ui/Avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react";
+import { Building2, ChevronDown, Loader2, RotateCcw, Search, Trash2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -215,7 +215,57 @@ export function PermissionListTab({
     }
   };
 
-  const handleRevoke = async (entry: PermissionEntry) => {
+  const getSubjectEntries = useCallback(
+    (entry: PermissionEntry) =>
+      entries.filter(
+        (candidate) =>
+          candidate.subject_type === entry.subject_type &&
+          candidate.subject_id === entry.subject_id,
+      ),
+    [entries],
+  );
+
+  const canDeleteSubject = useCallback(
+    (entry: PermissionEntry) => {
+      const relatedEntries = getSubjectEntries(entry);
+      const subjectOwnerCount = relatedEntries.filter(
+        (candidate) => candidate.subject_type === "user" && candidate.relation === "owner",
+      ).length;
+      return subjectOwnerCount === 0 || ownerEntryCount > subjectOwnerCount;
+    },
+    [getSubjectEntries, ownerEntryCount],
+  );
+
+  const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
+    const seen = new Set<string>();
+    return getSubjectEntries(entry).reduce<RevokeItem[]>((items, candidate) => {
+      const includeChildren =
+        candidate.subject_type === "department"
+          ? Boolean(candidate.include_children)
+          : undefined;
+      const key = [
+        candidate.subject_type,
+        candidate.subject_id,
+        candidate.relation,
+        includeChildren === undefined ? "" : String(includeChildren),
+      ].join(":");
+      if (seen.has(key)) {
+        return items;
+      }
+      seen.add(key);
+      items.push({
+        subject_type: candidate.subject_type,
+        subject_id: candidate.subject_id,
+        relation: candidate.relation,
+        ...(candidate.subject_type === "department"
+          ? { include_children: includeChildren }
+          : {}),
+      });
+      return items;
+    }, []);
+  };
+
+  const handleDeleteSubject = async (entry: PermissionEntry) => {
     const ok = await confirm({
       title: localize("com_permission.action_revoke"),
       description: localize("com_permission.confirm_revoke"),
@@ -223,21 +273,14 @@ export function PermissionListTab({
       cancelText: localize("com_ui_cancel"),
     });
     if (!ok) return;
+    const revokes = buildRevokeItemsForSubject(entry);
+    if (revokes.length === 0) return;
     try {
       await authorizeResource(
         resourceType,
         resourceId,
         [],
-        [
-          {
-            subject_type: entry.subject_type,
-            subject_id: entry.subject_id,
-            relation: entry.relation,
-            ...(entry.subject_type === "department"
-              ? { include_children: Boolean(entry.include_children) }
-              : {}),
-          },
-        ],
+        revokes,
       );
       showToast({ message: localize("com_permission.success_revoke"), status: "success" });
       loadData();
@@ -387,6 +430,7 @@ export function PermissionListTab({
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
+                const canDeleteEntrySubject = canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
 
@@ -417,7 +461,7 @@ export function PermissionListTab({
                       {entryCaption}
                     </p>
 
-                    <div className="flex w-[96px] shrink-0 justify-end">
+                    <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
                       {!isOwner || canManageOwnerEntry ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -452,21 +496,25 @@ export function PermissionListTab({
                                 </DropdownMenuItem>
                               );
                             })}
-                            <DropdownMenuSeparator className="mx-0 my-1 bg-[#EBECF0]" />
-                            <DropdownMenuItem
-                              className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]"
-                              onSelect={() => {
-                                void handleRevoke(entry);
-                              }}
-                            >
-                              {localize("com_permission.remove")}
-                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
                         <span className="truncate text-[14px] leading-[22px] text-[#999999]">
                           {getPermissionLabel(entry)}
                         </span>
+                      )}
+                      {canDeleteEntrySubject && (
+                        <button
+                          type="button"
+                          aria-label={localize("com_permission.remove")}
+                          title={localize("com_permission.remove")}
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-[#999999] transition-colors hover:bg-[#FFF2F0] hover:text-[#F53F3F]"
+                          onClick={() => {
+                            void handleDeleteSubject(entry);
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
                       )}
                     </div>
                   </div>

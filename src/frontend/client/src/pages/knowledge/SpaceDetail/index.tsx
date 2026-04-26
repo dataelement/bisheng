@@ -10,9 +10,9 @@ import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
+import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { PermissionDialog } from "~/components/permission";
 import { canOpenPermissionDialog } from "~/api/permission";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn, getFullWidthLength } from "~/utils";
@@ -699,7 +699,7 @@ export function KnowledgeSpaceContent({
             />
 
             {permTarget && (
-                <PermissionDialog
+                <KnowledgeSpaceShareDialog
                     open={!!permTarget}
                     onOpenChange={(open) => {
                         if (!open) {
@@ -709,6 +709,10 @@ export function KnowledgeSpaceContent({
                     resourceType={permTarget.type}
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
+                    currentUserRole={space.role}
+                    showShareTab={false}
+                    showMembersTab={false}
+                    showPermissionTab
                 />
             )}
         </div>

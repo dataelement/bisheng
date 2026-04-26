@@ -24,12 +24,14 @@ jest.mock("~/components/KnowledgeSpaceMemberManagementPanel", () => ({
 }));
 
 jest.mock("~/components/permission/PermissionListTab", () => ({
-  PermissionListTab: ({ fixedSubjectType }: any) => <div>{`list:${fixedSubjectType}`}</div>,
+  PermissionListTab: ({ resourceType, resourceId, fixedSubjectType }: any) => (
+    <div>{`list:${resourceType}:${resourceId}:${fixedSubjectType}`}</div>
+  ),
 }));
 
 jest.mock("~/components/permission/PermissionGrantTab", () => ({
-  PermissionGrantTab: ({ fixedSubjectType, includeChildren }: any) => (
-    <div>{`grant:${fixedSubjectType}:${includeChildren ? "include" : "exclude"}`}</div>
+  PermissionGrantTab: ({ resourceType, resourceId, fixedSubjectType, includeChildren }: any) => (
+    <div>{`grant:${resourceType}:${resourceId}:${fixedSubjectType}:${includeChildren ? "include" : "exclude"}`}</div>
   ),
 }));
 
@@ -86,9 +88,9 @@ describe("KnowledgeSpaceShareDialog", () => {
     await waitFor(() => {
       expect(mockedGetGrantableRelationModels).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getAllByText("list:user")).toHaveLength(1);
-    expect(screen.queryByText("list:department")).not.toBeInTheDocument();
-    expect(screen.queryByText("list:user_group")).not.toBeInTheDocument();
+    expect(screen.getAllByText("list:knowledge_space:space-59:user")).toHaveLength(1);
+    expect(screen.queryByText("list:knowledge_space:space-59:department")).not.toBeInTheDocument();
+    expect(screen.queryByText("list:knowledge_space:space-59:user_group")).not.toBeInTheDocument();
   });
 
   it("passes the include-children toggle state into the grant form", async () => {
@@ -113,9 +115,30 @@ describe("KnowledgeSpaceShareDialog", () => {
     }).at(-1);
     expect(grantDepartmentTab).toBeTruthy();
     fireEvent.click(grantDepartmentTab!);
-    expect(await screen.findByText("grant:department:include")).toBeInTheDocument();
+    expect(await screen.findByText("grant:knowledge_space:space-59:department:include")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(await screen.findByText("grant:department:exclude")).toBeInTheDocument();
+    expect(await screen.findByText("grant:knowledge_space:space-59:department:exclude")).toBeInTheDocument();
+  });
+
+  it("can manage a file resource with the same grant dialog", async () => {
+    render(
+      <KnowledgeSpaceShareDialog
+        open
+        onOpenChange={jest.fn()}
+        resourceType="knowledge_file"
+        resourceId="file-9"
+        resourceName="File 9"
+        showShareTab={false}
+        showMembersTab={false}
+        showPermissionTab
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetGrantableRelationModels).toHaveBeenCalledWith("knowledge_file", "file-9");
+    });
+    expect(screen.getByText("list:knowledge_file:file-9:user")).toBeInTheDocument();
+    expect(screen.getByText("grant:knowledge_file:file-9:user:include")).toBeInTheDocument();
   });
 });

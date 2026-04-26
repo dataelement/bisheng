@@ -20,7 +20,7 @@ import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 import { getGrantableRelationModels } from "~/api/permission";
-import type { RelationModel } from "~/api/permission";
+import type { RelationModel, ResourceType } from "~/api/permission";
 
 const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
@@ -29,6 +29,7 @@ const PERMISSION_TAB = "permission";
 interface KnowledgeSpaceShareDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    resourceType?: ResourceType;
     resourceId: string;
     resourceName: string;
     currentUserRole?: SpaceRole | null;
@@ -40,6 +41,7 @@ interface KnowledgeSpaceShareDialogProps {
 export function KnowledgeSpaceShareDialog({
     open,
     onOpenChange,
+    resourceType = "knowledge_space",
     resourceId,
     resourceName,
     currentUserRole = null,
@@ -80,7 +82,7 @@ export function KnowledgeSpaceShareDialog({
         if (!open) return;
 
         setGrantableModelsLoaded(false);
-        getGrantableRelationModels("knowledge_space", resourceId)
+        getGrantableRelationModels(resourceType, resourceId)
             .then((res) => {
                 setGrantableModels(Array.isArray(res) ? res : []);
                 setGrantableModelsLoaded(true);
@@ -89,7 +91,7 @@ export function KnowledgeSpaceShareDialog({
                 setGrantableModels([]);
                 setGrantableModelsLoaded(true);
             });
-    }, [open, resourceId]);
+    }, [open, resourceId, resourceType]);
 
     const shareLink = useMemo(() => {
         if (typeof window === "undefined") return "";
@@ -199,7 +201,7 @@ export function KnowledgeSpaceShareDialog({
                 className="mt-3 min-h-0 flex-1 p-0"
             >
                 <PermissionListTab
-                    resourceType="knowledge_space"
+                    resourceType={resourceType}
                     resourceId={resourceId}
                     refreshKey={refreshKey}
                     fixedSubjectType={currentSubjectType}
@@ -276,7 +278,7 @@ export function KnowledgeSpaceShareDialog({
 
                         <div className="mt-4 min-h-0 flex-1 overflow-hidden">
                             <PermissionGrantTab
-                                resourceType="knowledge_space"
+                                resourceType={resourceType}
                                 resourceId={resourceId}
                                 onSuccess={handleGrantSuccess}
                                 prefetchedGrantableModels={grantableModels}
