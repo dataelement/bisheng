@@ -4,9 +4,9 @@ import {
   authorizeResource,
   getDepartmentTree,
   getGrantableRelationModels,
-  getKnowledgeSpaceGrantDepartments,
-  getKnowledgeSpaceGrantUserGroups,
-  getKnowledgeSpaceGrantUsers,
+  getResourceGrantDepartments,
+  getResourceGrantUserGroups,
+  getResourceGrantUsers,
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
@@ -22,17 +22,17 @@ jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getDepartmentTree: jest.fn(),
   getGrantableRelationModels: jest.fn(),
-  getKnowledgeSpaceGrantDepartments: jest.fn(),
-  getKnowledgeSpaceGrantUserGroups: jest.fn(),
-  getKnowledgeSpaceGrantUsers: jest.fn(),
+  getResourceGrantDepartments: jest.fn(),
+  getResourceGrantUserGroups: jest.fn(),
+  getResourceGrantUsers: jest.fn(),
 }));
 
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 const mockedGetDepartmentTree = jest.mocked(getDepartmentTree);
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
-const mockedGetKnowledgeSpaceGrantDepartments = jest.mocked(getKnowledgeSpaceGrantDepartments);
-const mockedGetKnowledgeSpaceGrantUserGroups = jest.mocked(getKnowledgeSpaceGrantUserGroups);
-const mockedGetKnowledgeSpaceGrantUsers = jest.mocked(getKnowledgeSpaceGrantUsers);
+const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
+const mockedGetResourceGrantUserGroups = jest.mocked(getResourceGrantUserGroups);
+const mockedGetResourceGrantUsers = jest.mocked(getResourceGrantUsers);
 
 describe("PermissionGrantTab", () => {
   beforeEach(() => {
@@ -56,8 +56,8 @@ describe("PermissionGrantTab", () => {
         children: [],
       },
     ]);
-    mockedGetKnowledgeSpaceGrantUsers.mockResolvedValue([]);
-    mockedGetKnowledgeSpaceGrantDepartments.mockResolvedValue([
+    mockedGetResourceGrantUsers.mockResolvedValue([]);
+    mockedGetResourceGrantDepartments.mockResolvedValue([
       {
         id: 7,
         dept_id: "dept-7",
@@ -67,7 +67,7 @@ describe("PermissionGrantTab", () => {
         children: [],
       },
     ]);
-    mockedGetKnowledgeSpaceGrantUserGroups.mockResolvedValue([]);
+    mockedGetResourceGrantUserGroups.mockResolvedValue([]);
   });
 
   it("submits the current include-children checkbox value for department grants", async () => {
@@ -100,7 +100,8 @@ describe("PermissionGrantTab", () => {
         [],
       );
     });
-    expect(mockedGetKnowledgeSpaceGrantDepartments).toHaveBeenCalledWith(
+    expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
+      "knowledge_space",
       "space-1",
       { signal: expect.any(AbortSignal) },
     );

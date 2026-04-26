@@ -1,6 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
-import { getKnowledgeSpaceGrantUserGroupsApi } from "@/controllers/API/permission"
+import { getResourceGrantUserGroupsApi } from "@/controllers/API/permission"
 import { getUserGroupsApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Users } from "lucide-react"
@@ -33,8 +33,8 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     setLoading(true)
-    const request = resourceType === "knowledge_space" && resourceId
-      ? getKnowledgeSpaceGrantUserGroupsApi(resourceId)
+    const request = resourceType && resourceId
+      ? getResourceGrantUserGroupsApi(resourceType, resourceId)
       : getUserGroupsApi({})
     captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setGroups(Array.isArray(res) ? res : [])

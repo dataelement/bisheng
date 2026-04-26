@@ -1,6 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
-import { getKnowledgeSpaceGrantUsersApi } from "@/controllers/API/permission"
+import { getResourceGrantUsersApi } from "@/controllers/API/permission"
 import { getGroupUsersApi, getUserMembershipGroupsApi, getUsersApi } from "@/controllers/API/user"
 import { userContext } from "@/contexts/userContext"
 import { User as UserIcon } from "lucide-react"
@@ -105,8 +105,8 @@ export function SubjectSearchUser({
 
     setLoading(true)
     try {
-      if (resourceType === "knowledge_space" && resourceId) {
-        const rows = await getKnowledgeSpaceGrantUsersApi(resourceId, {
+      if (resourceType && resourceId) {
+        const rows = await getResourceGrantUsersApi(resourceType, resourceId, {
           keyword: name,
           page: 1,
           page_size: 1000,

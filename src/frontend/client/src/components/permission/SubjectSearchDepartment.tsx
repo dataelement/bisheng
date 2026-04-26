@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { getDepartmentTree, getKnowledgeSpaceGrantDepartments } from "~/api/permission";
+import { getDepartmentTree, getResourceGrantDepartments } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -74,8 +74,8 @@ export function SubjectSearchDepartment({
   useEffect(() => {
     const controller = new AbortController();
     const request =
-      resourceType === "knowledge_space" && resourceId
-        ? getKnowledgeSpaceGrantDepartments(resourceId, { signal: controller.signal })
+      resourceType && resourceId
+        ? getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
         : getDepartmentTree({ signal: controller.signal });
 
     setLoading(true);

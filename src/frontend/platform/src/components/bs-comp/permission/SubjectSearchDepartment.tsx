@@ -1,6 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
-import { getKnowledgeSpaceGrantDepartmentsApi } from "@/controllers/API/permission"
+import { getResourceGrantDepartmentsApi } from "@/controllers/API/permission"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentTreeNode } from "@/types/api/department"
@@ -85,8 +85,8 @@ export function SubjectSearchDepartment({
 
   useEffect(() => {
     setLoading(true)
-    const request = resourceType === "knowledge_space" && resourceId
-      ? getKnowledgeSpaceGrantDepartmentsApi(resourceId)
+    const request = resourceType && resourceId
+      ? getResourceGrantDepartmentsApi(resourceType, resourceId)
       : getDepartmentTreeApi()
     captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setTree(res)

@@ -367,6 +367,40 @@ class TestPermissionApiIntegration:
         assert body['data'][0]['name'] == '研发部'
         mock_list_departments.assert_awaited_once()
 
+    def test_workflow_grant_subject_departments_endpoint_uses_permission_access_not_department_admin(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_has_access, patch(
+            'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_departments',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 10,
+                'dept_id': 'BS@10',
+                'name': '研发部',
+                'parent_id': None,
+                'path': '/10/',
+                'sort_order': 0,
+                'source': 'local',
+                'status': 'active',
+                'member_count': 0,
+                'children': [],
+            }],
+        ) as mock_list_departments:
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/resources/workflow/wf-1/grant-subjects/departments',
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['name'] == '研发部'
+        mock_has_access.assert_awaited_once()
+        mock_list_departments.assert_awaited_once()
+
     def test_knowledge_space_grant_subject_user_groups_endpoint_returns_full_scope_groups(self):
         app = _make_app(_ViewerUser)
 

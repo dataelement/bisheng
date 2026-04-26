@@ -1,8 +1,8 @@
 import { SubjectSearchDepartment } from "@/components/bs-comp/permission/SubjectSearchDepartment";
 import { SubjectSearchUserGroup } from "@/components/bs-comp/permission/SubjectSearchUserGroup";
 import {
-  getKnowledgeSpaceGrantDepartmentsApi,
-  getKnowledgeSpaceGrantUserGroupsApi,
+  getResourceGrantDepartmentsApi,
+  getResourceGrantUserGroupsApi,
 } from "@/controllers/API/permission";
 import { render, screen, waitFor } from "@/test/test-utils";
 import { fireEvent, within } from "@testing-library/react";
@@ -15,8 +15,8 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/controllers/API/permission", () => ({
-  getKnowledgeSpaceGrantDepartmentsApi: vi.fn(),
-  getKnowledgeSpaceGrantUserGroupsApi: vi.fn(),
+  getResourceGrantDepartmentsApi: vi.fn(),
+  getResourceGrantUserGroupsApi: vi.fn(),
 }));
 
 vi.mock("@/controllers/request", () => ({
@@ -41,8 +41,8 @@ vi.mock("@/components/bs-ui/checkBox", () => ({
   ),
 }));
 
-const mockedGetKnowledgeSpaceGrantDepartmentsApi = vi.mocked(getKnowledgeSpaceGrantDepartmentsApi);
-const mockedGetKnowledgeSpaceGrantUserGroupsApi = vi.mocked(getKnowledgeSpaceGrantUserGroupsApi);
+const mockedGetResourceGrantDepartmentsApi = vi.mocked(getResourceGrantDepartmentsApi);
+const mockedGetResourceGrantUserGroupsApi = vi.mocked(getResourceGrantUserGroupsApi);
 
 describe("Knowledge-space grant subject sources", () => {
   beforeEach(() => {
@@ -50,7 +50,7 @@ describe("Knowledge-space grant subject sources", () => {
   });
 
   it("loads the full department tree for knowledge-space permission grants", async () => {
-    mockedGetKnowledgeSpaceGrantDepartmentsApi.mockResolvedValue([
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
       {
         id: 10,
         dept_id: "BS@10",
@@ -78,11 +78,43 @@ describe("Knowledge-space grant subject sources", () => {
       expect(screen.getByText("研发部")).toBeInTheDocument();
     });
 
-    expect(mockedGetKnowledgeSpaceGrantDepartmentsApi).toHaveBeenCalledWith("88");
+    expect(mockedGetResourceGrantDepartmentsApi).toHaveBeenCalledWith("knowledge_space", "88");
+  });
+
+  it("loads department candidates through the resource-scoped endpoint for app grants", async () => {
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "BS@10",
+        name: "研发部",
+        parent_id: null,
+        path: "/10/",
+        sort_order: 0,
+        source: "local",
+        status: "active",
+        member_count: 0,
+        children: [],
+      },
+    ] as any);
+
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={vi.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("研发部")).toBeInTheDocument();
+    });
+
+    expect(mockedGetResourceGrantDepartmentsApi).toHaveBeenCalledWith("workflow", "wf-1");
   });
 
   it("shows descendants as checked when an ancestor department includes children", async () => {
-    mockedGetKnowledgeSpaceGrantDepartmentsApi.mockResolvedValue([
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
       {
         id: 10,
         dept_id: "BS@10",
@@ -141,7 +173,7 @@ describe("Knowledge-space grant subject sources", () => {
   });
 
   it("materializes inherited selections before removing include-children mode", async () => {
-    mockedGetKnowledgeSpaceGrantDepartmentsApi.mockResolvedValue([
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
       {
         id: 10,
         dept_id: "BS@10",
@@ -218,7 +250,7 @@ describe("Knowledge-space grant subject sources", () => {
   });
 
   it("loads the full user-group list for knowledge-space permission grants", async () => {
-    mockedGetKnowledgeSpaceGrantUserGroupsApi.mockResolvedValue([
+    mockedGetResourceGrantUserGroupsApi.mockResolvedValue([
       { id: 3, group_name: "产品组" },
     ] as any);
 
@@ -235,6 +267,6 @@ describe("Knowledge-space grant subject sources", () => {
       expect(screen.getByText("产品组")).toBeInTheDocument();
     });
 
-    expect(mockedGetKnowledgeSpaceGrantUserGroupsApi).toHaveBeenCalledWith("88");
+    expect(mockedGetResourceGrantUserGroupsApi).toHaveBeenCalledWith("knowledge_space", "88");
   });
 });
