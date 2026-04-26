@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 from asyncio import Semaphore
 from concurrent.futures import ThreadPoolExecutor
@@ -292,8 +293,14 @@ class BaseTelemetryService(object):
             if not self._index_initialized:
                 self._ensure_index_sync()
 
-            # Perform synchronization tasks using thread pools
+            # Perform synchronization tasks using thread pools.
+            # ThreadPoolExecutor.submit does not propagate ContextVars across
+            # threads (unlike asyncio.create_task). Without copy_context, the
+            # worker thread loses tenant context and the ORM tenant filter
+            # raises NoTenantContextError under multi_tenant.enabled=True.
+            ctx = contextvars.copy_context()
             self.thread_pool.submit(
+                ctx.run,
                 self._record_event_task_sync,
                 user_id,
                 event_type,
