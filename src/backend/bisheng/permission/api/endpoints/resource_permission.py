@@ -471,6 +471,10 @@ def _uses_direct_management_permission(resource_type: str) -> bool:
     return resource_type in _MANAGE_PERMISSION_BY_RESOURCE
 
 
+def _lineage_binding_can_override(resource_type: str) -> bool:
+    return resource_type in {'folder', 'knowledge_file'}
+
+
 async def _has_resource_permission_management_access(
     *,
     resource_type: str,
@@ -483,12 +487,13 @@ async def _has_resource_permission_management_access(
     if management_permission_ids:
         from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
-        return await FineGrainedPermissionService.has_any_permission_async(
+        effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
             login_user,
             resource_type,
             resource_id,
-            management_permission_ids,
+            nearest_binding_wins=_lineage_binding_can_override(resource_type),
         )
+        return bool(management_permission_ids & effective_permission_ids)
 
     return await PermissionService.check(
         user_id=login_user.user_id,
@@ -806,6 +811,7 @@ async def authorize_resource(
                 login_user,
                 resource_type,
                 resource_id,
+                nearest_binding_wins=_lineage_binding_can_override(resource_type),
             )
 
         if _uses_direct_management_permission(resource_type):
@@ -1114,6 +1120,7 @@ async def get_grantable_relation_models(
             login_user,
             object_type,
             object_id,
+            nearest_binding_wins=_lineage_binding_can_override(object_type),
         )
     if _uses_direct_management_permission(object_type):
         if management_permission_ids and (management_permission_ids & caller_permission_ids):
