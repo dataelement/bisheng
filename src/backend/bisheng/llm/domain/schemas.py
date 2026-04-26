@@ -28,6 +28,14 @@ class LLMServerInfo(LLMServerBase):
         default=False,
         description="True when this Root-owned server is currently shared to children",
     )
+    # Display name of the owning tenant. Hydrated by the Service layer for
+    # Root-owned rows so the frontend "Root 共享 · 只读" badge can render
+    # the actual Root tenant name (e.g. "默认租户") instead of a hard-coded
+    # "Root". None on Child-owned rows — the badge is not shown for those.
+    tenant_name: Optional[str] = Field(
+        default=None,
+        description="Display name of the owning tenant, populated for Root rows",
+    )
 
     # Sensitive Data Desensitization
     @model_validator(mode='after')

@@ -701,6 +701,7 @@
     "serviceProviderName": "Service Provider Name",
     "serviceProviderNameTooltip": "Give a name to this service provider configuration for easy identification",
     "shareToChildren": "Share with child tenants",
+    "tenantSharedReadonly": "Shared by {{tenantName}} · Read-only",
     "silicon": "Silicon Flow",
     "tengXunYun": "Tencent Cloud",
     "timesPerDay": "times/day",

@@ -145,14 +145,42 @@ class LLMService:
         # row only renders the Root-share readonly Badge (driven by
         # is_root_shared_readonly); the truthful per-server share_to_children
         # is hydrated by ``get_one_llm`` when the user opens the edit view.
+
+        # Root-tenant resources are writable only by a global super admin
+        # operating from a Root scope. Anyone else seeing them — child
+        # callers, super admins under admin-scope=child, and (the case
+        # caught after the v2.5.1 backfill incident) Root-tenant *regular*
+        # users — must see them as readonly so the UI greys out the edit
+        # affordance. The backend write path also rejects these via
+        # ``_assert_root_writable``; this flag keeps the UI honest.
+        is_super = (
+            operator is not None
+            and await _check_is_global_super(operator.user_id)
+        )
+
+        # Resolve Root tenant display name once (only when at least one row
+        # is Root-owned) so the readonly badge can show the actual Root
+        # tenant name instead of a hard-coded "Root".
+        root_tenant_name: Optional[str] = None
+        if any(s.tenant_id == ROOT_TENANT_ID for s in llm_servers):
+            from bisheng.database.models.tenant import TenantDao
+            with bypass_tenant_filter():
+                root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
+            root_tenant_name = (
+                root_tenant.tenant_name if root_tenant is not None else None
+            )
+
         ret = []
         server_ids = []
         for one in llm_servers:
             server_ids.append(one.id)
             info = LLMServerInfo(**one.model_dump(exclude={'config'}))
             info.is_root_shared_readonly = (
-                one.tenant_id == ROOT_TENANT_ID and leaf_id != ROOT_TENANT_ID
+                one.tenant_id == ROOT_TENANT_ID
+                and not (leaf_id == ROOT_TENANT_ID and is_super)
             )
+            if one.tenant_id == ROOT_TENANT_ID:
+                info.tenant_name = root_tenant_name
             ret.append(info)
 
         # Bypass so Child callers see models under Root servers granted
@@ -233,7 +261,11 @@ class LLMService:
         raise LLMModelNotAccessibleError.http_exception()
 
     @classmethod
-    async def get_one_llm(cls, server_id: int) -> LLMServerInfo:
+    async def get_one_llm(
+        cls,
+        server_id: int,
+        operator: Optional['UserPayload'] = None,
+    ) -> LLMServerInfo:
         """ Get a service provider's details Containskeyand other sensitive configuration information """
         leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
 
@@ -264,19 +296,34 @@ class LLMService:
         models = [LLMModelInfo(**one.model_dump()) for one in models]
         info = LLMServerInfo(**llm.model_dump(), models=models)
 
-        # Hydrate share_to_children for Root-owned servers when the caller
-        # is in Root scope (super admin / root admin). Drives the
-        # ModelConfig "share with child tenants" toggle in edit mode.
-        # Per-object FGA query is necessary here — OpenFGA /read demands
-        # either user or object filter, so a relation-only call returns 0.
-        if llm.tenant_id == ROOT_TENANT_ID and leaf_id == ROOT_TENANT_ID:
+        # Only the global super in Root scope is allowed to flip the
+        # share_to_children toggle, so only that caller needs the truthful
+        # FGA-derived value. Everyone else (Child callers, scope=child
+        # super admins, Root-tenant regular users) sees the schema default
+        # ``False`` — they cannot write the field anyway.
+        is_super = (
+            operator is not None
+            and await _check_is_global_super(operator.user_id)
+        )
+        if (
+            llm.tenant_id == ROOT_TENANT_ID
+            and leaf_id == ROOT_TENANT_ID
+            and is_super
+        ):
             shared_children = await ResourceShareService.list_sharing_children(
                 'llm_server', str(server_id),
             )
             info.share_to_children = bool(shared_children)
         info.is_root_shared_readonly = (
-            llm.tenant_id == ROOT_TENANT_ID and leaf_id != ROOT_TENANT_ID
+            llm.tenant_id == ROOT_TENANT_ID
+            and not (leaf_id == ROOT_TENANT_ID and is_super)
         )
+        if llm.tenant_id == ROOT_TENANT_ID:
+            from bisheng.database.models.tenant import TenantDao
+            with bypass_tenant_filter():
+                root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
+            if root_tenant is not None:
+                info.tenant_name = root_tenant.tenant_name
         return info
 
     @classmethod
@@ -304,7 +351,7 @@ class LLMService:
             operator=login_user,
         )
 
-        ret = await cls.get_one_llm(db_server.id)
+        ret = await cls.get_one_llm(db_server.id, operator=login_user)
         success_models = []
         success_msg = ''
         failed_models = []
@@ -541,7 +588,7 @@ class LLMService:
         db_server = await LLMDao.update_server_with_models(
             exist_server, list(model_dict.values()), operator=login_user,
         )
-        new_server_info = await cls.get_one_llm(db_server.id)
+        new_server_info = await cls.get_one_llm(db_server.id, operator=login_user)
         if hasattr(server, 'share_to_children') and exist_server.tenant_id == ROOT_TENANT_ID:
             await _write_llm_audit(
                 login_user, TenantAuditAction.LLM_SERVER_TOGGLE_SHARE.value, db_server,

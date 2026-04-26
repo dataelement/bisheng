@@ -489,6 +489,7 @@
     "serviceProviderName": "サービスプロバイダ名",
     "serviceProviderNameTooltip": "このサービスプロバイダを識別しやすいように名前をつけてください",
     "shareToChildren": "子テナントと共有",
+    "tenantSharedReadonly": "{{tenantName}} で共有 · 読み取り専用",
     "silicon": "硅基流动",
     "tengXunYun": "Tencent Cloud",
     "timesPerDay": "回/日",

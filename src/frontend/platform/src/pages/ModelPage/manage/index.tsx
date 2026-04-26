@@ -43,7 +43,10 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                 <span>{data.name}</span>
                 {isRootShared && (
                     <Badge variant="secondary" className="ml-2">
-                        {t('model.rootSharedReadonly', 'Root 共享 · 只读')}
+                        {t('model.tenantSharedReadonly', {
+                            tenantName: data.tenant_name || 'Root',
+                            defaultValue: '{{tenantName}} 共享 · 只读',
+                        })}
                     </Badge>
                 )}
             </div>

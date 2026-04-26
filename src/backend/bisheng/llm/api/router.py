@@ -50,7 +50,7 @@ async def update_llm_server(request: Request,
 async def get_one_llm(request: Request,
                       login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
                       server_id: int = Query(..., description="Service Provider UniqueID")):
-    ret = await LLMService.get_one_llm(server_id)
+    ret = await LLMService.get_one_llm(server_id, operator=login_user)
     return resp_200(data=ret)
 
 
