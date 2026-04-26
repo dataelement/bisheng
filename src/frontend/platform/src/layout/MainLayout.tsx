@@ -68,12 +68,17 @@ export default function MainLayout() {
     // 系统超管（租户超管仍走自定义角色 web_menu；部门管理员由服务端合并全量菜单）
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
     const isDeptAdmin = Boolean(user.is_department_admin)
-    // 侧栏：数据集 / 日志 / 系统管理 — 超管与部门管理员
+    const isChildAdmin = Boolean(user.is_child_admin)
+    // 侧栏：数据集 / 日志 — 超管与部门管理员
     const isFullAdminShell = isSuperAdmin || isDeptAdmin
+    // 侧栏：系统管理 — 超管 / 部门管理员 / Child Admin。SystemPage 内部按
+    // PRD §3.3 已为 Child Admin 分了 Tab 视角（组织 + 角色）
+    const showSystemNav = isFullAdminShell || isChildAdmin
     const menuApprovalMode = Boolean(user.menu_approval_mode)
     const hasAdminEntry =
         isSuperAdmin
         || isDeptAdmin
+        || isChildAdmin
         || Boolean(user.web_menu?.includes("admin") || user.web_menu?.includes("backend"))
 
     const isMenu = (menu: string) => {
@@ -207,7 +212,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            isFullAdminShell && <>
+                            showSystemNav && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
