@@ -489,13 +489,14 @@ interface FileTableProps {
     onCancelCreate?: () => void;
     permissionEntryIds?: Set<string>;
     renameEntryIds?: Set<string>;
+    deleteEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -554,6 +555,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                         : undefined
                                 }
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
+                                canDelete={file.type === FileType.FOLDER ? Boolean(deleteEntryIds?.has(file.id)) : isAdmin}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
@@ -595,6 +597,7 @@ function FileRow({
     onCancelCreate,
     onManagePermission,
     canRename = false,
+    canDelete = false,
     columnWidths,
     showLeftShadow,
     showRightShadow,
@@ -614,6 +617,7 @@ function FileRow({
     onCancelCreate?: () => void;
     onManagePermission?: () => void;
     canRename?: boolean;
+    canDelete?: boolean;
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
     showRightShadow: boolean;
@@ -649,7 +653,7 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin || canRename || Boolean(onManagePermission);
+    const showMoreMenu = isAdmin || canRename || canDelete || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = rowHovered || moreMenuOpen;
@@ -723,7 +727,7 @@ function FileRow({
                                 {localize("com_permission.manage_permission")}
                             </DropdownMenuItem>
                         )}
-                        {isAdmin && (
+                        {canDelete && (
                             <DropdownMenuItem
                                 className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
                                 onClick={(e) => {

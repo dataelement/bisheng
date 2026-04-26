@@ -1338,8 +1338,35 @@ class TestTupleLifecycle:
         ]
 
     @pytest.mark.asyncio
-    async def test_rename_folder_uses_rename_folder_permission(self, service):
+    async def test_delete_folder_uses_delete_folder_permission(self, service):
         folder = _make_file(file_id=94, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
+
+        with patch.object(
+            service, '_get_folder_for_action', new_callable=AsyncMock,
+            return_value=folder,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ) as mock_require_permission_id, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_children_by_prefix',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.delete_resource_tuples',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            await service.delete_folder(1, 94)
+
+        mock_require_permission_id.assert_awaited_once_with('folder', 94, 'delete_folder', space_id=1)
+
+    @pytest.mark.asyncio
+    async def test_rename_folder_uses_rename_folder_permission(self, service):
+        folder = _make_file(file_id=95, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
 
         query_mock = AsyncMock(return_value=folder)
 
@@ -1367,13 +1394,13 @@ class TestTupleLifecycle:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
             new_callable=AsyncMock,
         ):
-            await service.rename_folder(94, 'renamed-folder')
+            await service.rename_folder(95, 'renamed-folder')
 
-        mock_require_permission_id.assert_awaited_once_with('folder', 94, 'rename_folder', space_id=1)
+        mock_require_permission_id.assert_awaited_once_with('folder', 95, 'rename_folder', space_id=1)
 
     @pytest.mark.asyncio
     async def test_delete_file_uses_delete_file_permission(self, service):
-        file_record = _make_file(file_id=95, knowledge_id=1)
+        file_record = _make_file(file_id=96, knowledge_id=1)
 
         with patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
@@ -1398,9 +1425,9 @@ class TestTupleLifecycle:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
             new_callable=AsyncMock,
         ):
-            await service.delete_file(95)
+            await service.delete_file(96)
 
-        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 95, 'delete_file', space_id=1)
+        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 96, 'delete_file', space_id=1)
 
     @pytest.mark.asyncio
     async def test_get_file_preview_uses_knowledge_file_can_read(self, service):

@@ -1,5 +1,5 @@
 import request from "~/api/request";
-import { createFolderApi, getSquareSpacesApi, renameFolderApi, VisibilityType } from "./knowledge";
+import { batchDeleteApi, createFolderApi, deleteFolderApi, getSquareSpacesApi, renameFolderApi, VisibilityType } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -8,6 +8,7 @@ jest.mock("~/api/request", () => ({
     post: jest.fn(),
     postMultiPart: jest.fn(),
     put: jest.fn(),
+    delete: jest.fn(),
   },
 }));
 
@@ -15,6 +16,7 @@ const mockGet = request.get as jest.Mock;
 const mockPost = request.post as jest.Mock;
 const mockPostMultiPart = request.postMultiPart as jest.Mock;
 const mockPut = request.put as jest.Mock;
+const mockDelete = request.delete as jest.Mock;
 
 describe("getSquareSpacesApi", () => {
   it("maps pending square items from is_pending when subscription_status is absent", async () => {
@@ -101,6 +103,38 @@ describe("renameFolderApi", () => {
     });
 
     await expect(renameFolderApi("101", "202", "Renamed")).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("deleteFolderApi", () => {
+  beforeEach(() => {
+    mockDelete.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    mockDelete.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(deleteFolderApi("101", "202")).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("batchDeleteApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(batchDeleteApi("101", { folder_ids: [202] })).rejects.toThrow("Permission denied");
   });
 });
 

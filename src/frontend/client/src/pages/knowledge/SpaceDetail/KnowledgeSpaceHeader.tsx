@@ -64,6 +64,7 @@ interface KnowledgeSpaceHeaderProps {
     onBatchTag: () => void;
     onBatchRetry: () => void;
     onBatchDelete: () => void;
+    canBatchDelete?: boolean;
     onGoKnowledgeSquare?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
@@ -97,6 +98,7 @@ export function KnowledgeSpaceHeader({
     onBatchTag,
     onBatchRetry,
     onBatchDelete,
+    canBatchDelete = false,
     onGoKnowledgeSquare,
     onToggleAiAssistant,
     isAiAssistantOpen,
@@ -287,7 +289,7 @@ export function KnowledgeSpaceHeader({
                                 {localize("com_knowledge.batch_retry")}
                             </DropdownMenuItem>
                         )}
-                        {isAdmin && (
+                        {canBatchDelete && (
                             <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
                                 <Trash2 className="mr-2 size-4" />
                                 {localize("com_knowledge.batch_delete")}

@@ -180,6 +180,7 @@ export function KnowledgeSpaceContent({
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameFolderEntryIds, setRenameFolderEntryIds] = useState<Set<string>>(new Set());
+    const [deleteFolderEntryIds, setDeleteFolderEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -306,6 +307,44 @@ export function KnowledgeSpaceContent({
         ).then((ids) => {
             if (!cancelled) {
                 setRenameFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [permissionEntryProbeKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const folders = displayFiles.filter(
+            (file) => file.type === FileType.FOLDER && !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (folders.length === 0) {
+            setDeleteFolderEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            folders.map(async (file) => {
+                const result = await checkPermission(
+                    "folder",
+                    file.id,
+                    "can_delete",
+                    "delete_folder",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setDeleteFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
             }
         });
 
@@ -525,7 +564,11 @@ export function KnowledgeSpaceContent({
 
         if (!confirmed) return;
 
-        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        if (!canBatchDelete) {
+            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
+            return;
+        }
+
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
 
@@ -618,6 +661,10 @@ export function KnowledgeSpaceContent({
         )
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
+    const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+    const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
+        file.type === FileType.FOLDER ? deleteFolderEntryIds.has(file.id) : isAdmin
+    );
 
     return (
         <div
@@ -664,6 +711,7 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
+                canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
@@ -728,6 +776,7 @@ export function KnowledgeSpaceContent({
                                     onCancelCreate={onCancelCreateFolder}
                                     onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
                                     canRename={file.type === FileType.FOLDER && renameFolderEntryIds.has(file.id)}
+                                    canDelete={file.type === FileType.FOLDER ? deleteFolderEntryIds.has(file.id) : isAdmin}
                                     mobileListMode={isH5 && viewMode === "list"}
                                 />
                             ))}
@@ -752,6 +801,7 @@ export function KnowledgeSpaceContent({
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={permissionEntryIds}
                                     renameEntryIds={renameFolderEntryIds}
+                                    deleteEntryIds={deleteFolderEntryIds}
                                     onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

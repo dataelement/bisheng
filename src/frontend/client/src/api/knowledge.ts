@@ -1123,7 +1123,12 @@ export async function renameFolderApi(
  * Delete a folder (recursively deletes all children)
  */
 export async function deleteFolderApi(space_id: string, folder_id: string): Promise<void> {
-    return request.delete(`/api/v1/knowledge/space/${space_id}/folders/${folder_id}`);
+    const res = await request.delete(
+        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`
+    ) as ApiResponse<null> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "delete folder failed");
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -1228,7 +1233,13 @@ export async function batchDeleteApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
 ): Promise<void> {
-    return request.post(`/api/v1/knowledge/space/${space_id}/files/batch-delete`, data);
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/files/batch-delete`,
+        data
+    ) as ApiResponse<null> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "batch delete failed");
+    }
 }
 
 /**
