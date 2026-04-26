@@ -52,6 +52,7 @@ interface KnowledgeSpaceHeaderProps {
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
+    canCreateFolder?: boolean;
 
     // Batch Operation Props
     selectedCount: number;
@@ -85,6 +86,7 @@ export function KnowledgeSpaceHeader({
     onSort,
     onCreateFolder,
     onTriggerUpload,
+    canCreateFolder = false,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -291,7 +293,7 @@ export function KnowledgeSpaceHeader({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
-            {isAdmin && (
+            {(canCreateFolder || isAdmin) && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
@@ -300,14 +302,18 @@ export function KnowledgeSpaceHeader({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                            <FolderPlus className="mr-2 size-4" />
-                            {localize("com_knowledge.new_folder")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
-                            <Upload className="mr-2 size-4" />
-                            {localize("com_knowledge.upload_file")}
-                        </DropdownMenuItem>
+                        {canCreateFolder && (
+                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                <FolderPlus className="mr-2 size-4" />
+                                {localize("com_knowledge.new_folder")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && (
+                            <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
+                                <Upload className="mr-2 size-4" />
+                                {localize("com_knowledge.upload_file")}
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}

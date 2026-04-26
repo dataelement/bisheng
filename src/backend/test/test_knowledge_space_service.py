@@ -1049,7 +1049,7 @@ class TestTupleLifecycle:
             service, '_require_write_permission', new_callable=AsyncMock,
         ), patch.object(
             service, '_require_permission_id', new_callable=AsyncMock,
-        ), patch(
+        ) as mock_require_permission_id, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name',
             new_callable=AsyncMock,
             return_value=0,
@@ -1070,11 +1070,62 @@ class TestTupleLifecycle:
             result = await service.add_folder(1, 'folder')
 
         assert result.id == 71
+        mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'create_folder')
         parent_tuple = mock_batch_write.await_args.args[0][0]
         assert parent_tuple.user == 'knowledge_space:1'
         assert parent_tuple.relation == 'parent'
         assert parent_tuple.object == 'folder:71'
         mock_write_owner.assert_awaited_once_with(service.login_user.user_id, 'folder', '71')
+
+    @pytest.mark.asyncio
+    async def test_add_subfolder_uses_parent_folder_create_permission(self, service):
+        parent_folder = _make_file(
+            file_id=70,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name='parent',
+        )
+        added_folder = _make_file(
+            file_id=72,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name='child',
+            file_level_path='/70',
+            level=1,
+        )
+
+        with patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ) as mock_require_permission_id, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=parent_folder,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file',
+            new_callable=AsyncMock,
+            return_value=added_folder,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples',
+            new_callable=AsyncMock,
+        ) as mock_batch_write, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            result = await service.add_folder(1, 'child', parent_id=70)
+
+        assert result.id == 72
+        mock_require_permission_id.assert_awaited_once_with('folder', 70, 'create_folder', space_id=1)
+        parent_tuple = mock_batch_write.await_args.args[0][0]
+        assert parent_tuple.user == 'folder:70'
+        assert parent_tuple.relation == 'parent'
+        assert parent_tuple.object == 'folder:72'
 
     @pytest.mark.asyncio
     async def test_add_file_initializes_file_owner_and_parent_tuples(self, service):

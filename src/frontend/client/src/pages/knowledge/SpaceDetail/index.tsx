@@ -13,7 +13,7 @@ import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { canOpenPermissionDialog } from "~/api/permission";
+import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
@@ -41,6 +41,7 @@ interface KnowledgeSpaceContentProps {
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     currentPath: Array<{ id?: string; name: string }>;
+    currentFolderId?: string;
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
@@ -71,6 +72,7 @@ export function KnowledgeSpaceContent({
     onEditTags,
     onRetryFile,
     currentPath,
+    currentFolderId,
     onDragStateChange,
     uploadingFiles = [],
     creatingFolder,
@@ -168,6 +170,7 @@ export function KnowledgeSpaceContent({
         space.id,
         "share_space",
     );
+    const [canCreateFolder, setCanCreateFolder] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -182,6 +185,31 @@ export function KnowledgeSpaceContent({
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+
+        const objectType = currentFolderId ? "folder" : "knowledge_space";
+        const objectId = currentFolderId || space.id;
+
+        checkPermission(
+            objectType,
+            objectId,
+            "can_edit",
+            "create_folder",
+            { signal: controller.signal },
+        ).then((res) => {
+            if (!cancelled) setCanCreateFolder(Boolean(res?.allowed));
+        }).catch(() => {
+            if (!cancelled) setCanCreateFolder(false);
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [currentFolderId, space.id]);
 
     useEffect(() => {
         let cancelled = false;
@@ -565,6 +593,7 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
+                canCreateFolder={canCreateFolder}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
