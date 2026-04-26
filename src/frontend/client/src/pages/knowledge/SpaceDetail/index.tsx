@@ -179,6 +179,7 @@ export function KnowledgeSpaceContent({
         type: "folder" | "knowledge_file";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
+    const [renameFolderEntryIds, setRenameFolderEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -275,6 +276,44 @@ export function KnowledgeSpaceContent({
         isAdmin,
         permissionEntryProbeKey,
     ]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const folders = displayFiles.filter(
+            (file) => file.type === FileType.FOLDER && !file.isCreating && /^\d+$/.test(String(file.id))
+        );
+
+        if (folders.length === 0) {
+            setRenameFolderEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            folders.map(async (file) => {
+                const result = await checkPermission(
+                    "folder",
+                    file.id,
+                    "can_edit",
+                    "rename_folder",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            })
+        ).then((ids) => {
+            if (!cancelled) {
+                setRenameFolderEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [permissionEntryProbeKey]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -688,6 +727,7 @@ export function KnowledgeSpaceContent({
                                     onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                     onCancelCreate={onCancelCreateFolder}
                                     onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                    canRename={file.type === FileType.FOLDER && renameFolderEntryIds.has(file.id)}
                                     mobileListMode={isH5 && viewMode === "list"}
                                 />
                             ))}
@@ -711,6 +751,7 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={permissionEntryIds}
+                                    renameEntryIds={renameFolderEntryIds}
                                     onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

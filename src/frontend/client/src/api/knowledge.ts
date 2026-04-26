@@ -1110,7 +1110,13 @@ export async function renameFolderApi(
     folder_id: string,
     name: string
 ): Promise<void> {
-    return request.put(`/api/v1/knowledge/space/${space_id}/folders/${folder_id}`, { name });
+    const res = await request.put(
+        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`,
+        { name }
+    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "rename folder failed");
+    }
 }
 
 /**

@@ -1,5 +1,5 @@
 import request from "~/api/request";
-import { createFolderApi, getSquareSpacesApi, VisibilityType } from "./knowledge";
+import { createFolderApi, getSquareSpacesApi, renameFolderApi, VisibilityType } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -7,12 +7,14 @@ jest.mock("~/api/request", () => ({
     get: jest.fn(),
     post: jest.fn(),
     postMultiPart: jest.fn(),
+    put: jest.fn(),
   },
 }));
 
 const mockGet = request.get as jest.Mock;
 const mockPost = request.post as jest.Mock;
 const mockPostMultiPart = request.postMultiPart as jest.Mock;
+const mockPut = request.put as jest.Mock;
 
 describe("getSquareSpacesApi", () => {
   it("maps pending square items from is_pending when subscription_status is absent", async () => {
@@ -83,6 +85,22 @@ describe("createFolderApi", () => {
     });
 
     await expect(createFolderApi("101", { name: "New folder" })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("renameFolderApi", () => {
+  beforeEach(() => {
+    mockPut.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    mockPut.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(renameFolderApi("101", "202", "Renamed")).rejects.toThrow("Permission denied");
   });
 });
 
