@@ -8,6 +8,7 @@ import LinkIcon from '~/components/ui/icon/Link';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
+import { canOpenWorkbench } from '~/utils/platformAccess';
 
 export type HubModuleSection = 'home' | 'apps' | 'channel' | 'knowledge';
 
@@ -46,6 +47,13 @@ export function useHubModuleLinks(): HubModuleLink[] {
   const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
     ? (user as { plugins: string[] }).plugins
     : null;
+  const canOpenWorkbenchEntry =
+    !Array.isArray(plugins) ||
+    canOpenWorkbench({
+      role: user?.role,
+      plugins,
+      is_department_admin: (user as { is_department_admin?: boolean } | undefined)?.is_department_admin,
+    });
   const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
@@ -55,8 +63,9 @@ export function useHubModuleLinks(): HubModuleLink[] {
   const showAppsTab = showWorkbenchItem('apps');
 
   return useMemo(
-    () =>
-      [
+    () => {
+      if (!canOpenWorkbenchEntry) return [];
+      return [
         {
           section: 'home',
           to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
@@ -96,8 +105,9 @@ export function useHubModuleLinks(): HubModuleLink[] {
         if (link.section === 'channel') return showSubscriptionTab;
         if (link.section === 'knowledge') return showKnowledgeSpaceTab;
         return true;
-      }),
-    [localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
+      });
+    },
+    [canOpenWorkbenchEntry, localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
   );
 }
 

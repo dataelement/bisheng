@@ -30,6 +30,7 @@ import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
 import { useAuthContext } from '@/hooks';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
+import { canOpenWorkbench } from '@/utils/platformAccess';
 
 function HomeEntryRedirect() {
   const { user } = useAuthContext();
@@ -37,6 +38,14 @@ function HomeEntryRedirect() {
   const approval = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
   if (!Array.isArray(plugins)) {
     return <Navigate to="/c/new" replace />;
+  }
+  const canOpenWorkbenchEntry = canOpenWorkbench({
+    role: user?.role,
+    plugins,
+    is_department_admin: (user as { is_department_admin?: boolean } | null)?.is_department_admin,
+  });
+  if (!canOpenWorkbenchEntry) {
+    return <Navigate to="/404" replace />;
   }
   const has = (id: string) => plugins.includes(id);
   if (has('home') || approval) {

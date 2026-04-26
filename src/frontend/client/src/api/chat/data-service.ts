@@ -3,7 +3,7 @@ import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
 import request from '~/api/request';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenPlatformAdminPanel } from '~/utils/platformAccess';
+import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
 import * as r from '~/types/chat/roles';
 import * as s from '~/types/chat/schemas';
 import type * as t from '~/types/chat/types';
@@ -137,9 +137,11 @@ export function getUser(): Promise<t.TUser> {
       menu_approval_mode,
       is_department_admin,
     } = res.data;
-    const canWorkspace =
-      web_menu.includes('frontend') ||
-      web_menu.includes('workstation');
+    const canWorkspace = canOpenWorkbench({
+      role,
+      plugins: web_menu,
+      is_department_admin: Boolean(is_department_admin),
+    });
     const canManagement = canOpenPlatformAdminPanel({
       role,
       plugins: web_menu,
