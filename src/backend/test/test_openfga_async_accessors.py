@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -104,6 +104,51 @@ async def test_permission_migration_script_prefers_async_fga_accessor():
 
     async_get_fga.assert_awaited_once()
     sync_get_fga.assert_not_called()
+    fake_migrator.run.assert_awaited_once()
+    assert exit_code == 0
+
+
+@pytest.mark.asyncio
+async def test_permission_migration_force_clears_checkpoint():
+    from bisheng.script.permission_rbac_to_rebac_migration import run_migration
+
+    fake_fga = AsyncMock()
+    fake_redis = SimpleNamespace(
+        aget=AsyncMock(return_value='done'),
+        asetNx=AsyncMock(return_value=True),
+        aset=AsyncMock(),
+        adelete=AsyncMock(),
+    )
+    fake_stats = SimpleNamespace(total=0, to_dict=lambda: {})
+    fake_migrator = SimpleNamespace(
+        run=AsyncMock(return_value=fake_stats),
+        clear_checkpoint=Mock(),
+    )
+
+    with patch(
+        'bisheng.core.openfga.manager.aget_fga_client',
+        new_callable=AsyncMock,
+        return_value=fake_fga,
+    ), patch(
+        'bisheng.core.openfga.manager.get_fga_client',
+        return_value=None,
+    ), patch(
+        'bisheng.core.cache.redis_manager.get_redis_client',
+        new_callable=AsyncMock,
+        return_value=fake_redis,
+    ), patch(
+        'bisheng.core.context.initialize_app_context',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.core.context.close_app_context',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.permission.migration.migrate_rbac_to_rebac.RBACToReBACMigrator',
+        return_value=fake_migrator,
+    ):
+        exit_code = await run_migration(force=True)
+
+    fake_migrator.clear_checkpoint.assert_called_once()
     fake_migrator.run.assert_awaited_once()
     assert exit_code == 0
 

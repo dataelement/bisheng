@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
+import tempfile
 import time
 from datetime import datetime
 
@@ -49,12 +50,26 @@ async def run_migration(
 
         try:
             started_at = time.time()
-            migrator = RBACToReBACMigrator(
-                dry_run=dry_run,
-                verify_only=verify,
-                start_step=step,
-            )
-            result = await migrator.run()
+
+            if dry_run:
+                with tempfile.TemporaryDirectory(prefix='bisheng-permission-migration-dry-run-') as checkpoint_dir:
+                    migrator = RBACToReBACMigrator(
+                        dry_run=True,
+                        verify_only=False,
+                        start_step=step,
+                        checkpoint_dir=checkpoint_dir,
+                    )
+                    result = await migrator.run()
+            else:
+                migrator = RBACToReBACMigrator(
+                    dry_run=dry_run,
+                    verify_only=verify,
+                    start_step=step,
+                )
+                if force and not verify:
+                    migrator.clear_checkpoint()
+                result = await migrator.run()
+
             elapsed = time.time() - started_at
 
             if verify:
