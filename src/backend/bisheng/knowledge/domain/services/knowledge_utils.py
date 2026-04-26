@@ -215,9 +215,10 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def _build_schema_init_metadata(cls, knowledge_id: int) -> dict:
+        from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
         from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 
-        return Metadata(
+        metadata = Metadata(
             document_id=0,
             knowledge_id=knowledge_id,
             document_name="",
@@ -230,7 +231,9 @@ class KnowledgeUtils(BaseService):
             uploader="",
             updater="",
             user_metadata={},
-        ).model_dump()
+        ).model_dump(exclude_none=True)
+        allowed_fields = {item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA}
+        return {key: value for key, value in metadata.items() if key in allowed_fields}
 
     @classmethod
     def ensure_milvus_schema_ready(cls, invoke_user_id: int, knowledge, vector_client=None):
