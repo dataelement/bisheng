@@ -610,10 +610,10 @@ export default function KnowledgeFile() {
                                                             handleCopy(el);
                                                         break;
                                                     case 'set':
-                                                        handleOpenSettings(el);
+                                                        canEdit(el) && el.copiable && handleOpenSettings(el);
                                                         break;
                                                     case 'delete':
-                                                        el.copiable && handleDelete(el.id);
+                                                        canDelete(el) && el.copiable && handleDelete(el.id);
                                                         break;
                                                 }
                                             }}

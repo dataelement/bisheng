@@ -73,7 +73,7 @@ export default function FilesUpload() {
         setHasEditPermission(false);
         return;
       }
-      const result = await captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(knowledgeId), 'can_edit'));
+      const result = await captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(knowledgeId), 'can_edit', 'edit_kb'));
       const allowed = !!result?.allowed;
       setHasEditPermission(allowed);
       setPermissionChecked(true);

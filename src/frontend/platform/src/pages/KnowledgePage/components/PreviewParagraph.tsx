@@ -152,10 +152,10 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
     return <div ref={domRef} className={`${hidden ? 'hidden' : ''} overflow-y-auto border-none file-vditor`}></div>;
 });
 
-const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
+const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDelete = false, onClick, onDel, onChange, onPositionClick }) => {
     const { t } = useTranslation('knowledge');
 
-    const [edit, setEdit] = useState(false); // 编辑原始格式
+    const [showSourceEdit, setShowSourceEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
 
     const [value, setValue] = useState(data.text) // 不支持动态更新,更新文本请重新创建该组件
@@ -167,11 +167,11 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
     const vditorRef = useRef(null);
     useEffect(() => {
         const { index, txt } = needCoverData
-        if (data.chunkIndex === index) {
+        if (edit && data.chunkIndex === index && vditorRef.current) {
             vditorRef.current.setValue(txt)
             onChange(data.chunkIndex, txt)
         }
-    }, [needCoverData])
+    }, [needCoverData, edit, data.chunkIndex, onChange])
 
     const { toast } = useToast()
     const handleBlur = (newValue, restore) => {
@@ -186,8 +186,8 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
                 description: t('chunkContentCannotBeEmpty'),
             })
         }
-        // Edit mode does not judge 
-        if (!edit && _value === _newValue) return // 无需保存
+        if (!edit) return
+        if (!showSourceEdit && _value === _newValue) return // 无需保存
         // chunk diff
         onChange(data.chunkIndex, newValue)
     }
@@ -218,18 +218,18 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
                             ><LocateFixed size={18} /></Button>
                         </Tip>
                     }
-                    {edit
+                    {edit && (showSourceEdit
                         ? <div
-                            className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50')}
-                            onClick={() => setEdit(!edit)}><FileCode size={18} /></div>
+                            className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", showSourceEdit && 'bg-primary text-gray-50')}
+                            onClick={() => setShowSourceEdit(!showSourceEdit)}><FileCode size={18} /></div>
                         : <Tip content={t('clickShowMarkdownEdit')} side={"top"}  >
                             <div
-                                className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50')}
-                                onClick={() => setEdit(!edit)}><FileCode size={18} /></div>
-                        </Tip>}
+                                className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", showSourceEdit && 'bg-primary text-gray-50')}
+                                onClick={() => setShowSourceEdit(!showSourceEdit)}><FileCode size={18} /></div>
+                        </Tip>)}
                 </div>
             </div>
-            {!oneLeft &&
+            {!oneLeft && canDelete &&
                 <Tip content={t('clickDeleteChunk')} side={"top"}  >
                     <Button
                         size="icon"
@@ -242,14 +242,18 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
         </div>
 
         {/* 所见即所得Markdown编辑器 */}
-        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
+        {edit ? (
+            <VditorEditor ref={vditorRef} hidden={showSourceEdit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
+        ) : (
+            <MessageMarkDown message={value} />
+        )}
         {/* 普通Markdown编辑器 */}
-        <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
+        {edit && <AceEditorCom hidden={!showSourceEdit} markdown={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />}
     </div>
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, canDelete = false, fileSuffix, loading, chunks, className, onDel, onChange }) {
     const { t } = useTranslation('knowledge');
 
     const containerRef = useRef(null);
@@ -305,11 +309,13 @@ export default function PreviewParagraph({ fileId, page = 1, previewCount, edit,
         >
             <div className="space-y-6">
                 {chunks.slice(0, visibleItems).map((chunk) => (
-                    edit
+                    (edit || canDelete)
                         ? <EditMarkdown
                             key={fileId + previewCount + chunk.chunkIndex}
                             data={chunk}
                             fileSuffix={fileSuffix}
+                            edit={edit}
+                            canDelete={canDelete}
                             active={selectedChunkIndex === chunk.chunkIndex}
                             onClick={setSelectedChunkIndex}
                             onPositionClick={setSelectedChunkDistanceFactor}

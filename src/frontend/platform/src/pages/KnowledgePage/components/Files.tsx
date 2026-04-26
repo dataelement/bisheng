@@ -104,17 +104,14 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
     return BadgeContent;
 };
 
-export default function Files({ onPreview }) {
+export default function Files({ onPreview, canEditKb = false, canDeleteKb = false }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const { toast } = useToast()
 
-    const { isEditable, setEditable } = useKnowledgeStore();
+    const { setEditable } = useKnowledgeStore();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
-            setEditable(res.writeable)
-            return res
-        })
+        readFileByLibDatabase({ ...param, id, name: param.keyword })
     )
     const [metadataOpen, setMetadataOpen] = useState(false);
     const navigate = useNavigate()
@@ -127,6 +124,10 @@ export default function Files({ onPreview }) {
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
+    useEffect(() => {
+        setEditable(canEditKb);
+    }, [canEditKb, setEditable]);
+
     // Polling during parsing
     const timerRef = useRef(null)
     useEffect(() => {
@@ -164,6 +165,7 @@ export default function Files({ onPreview }) {
     };
 
     const handleDelete = (id) => {
+        if (!canDeleteKb) return;
         bsConfirm({
             title: t('prompt'),
             desc: t('confirmDeleteFile'),
@@ -179,6 +181,7 @@ export default function Files({ onPreview }) {
 
     // Retry parsing (preserving original file parameter structure)
     const handleRetry = (files) => {
+        if (!canEditKb) return;
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
@@ -222,6 +225,7 @@ export default function Files({ onPreview }) {
 
     // Batch delete
     const handleBatchDelete = () => {
+        if (!canDeleteKb) return;
         bsConfirm({
             title: t('prompt'),
             desc: t('confirmDeleteSelectedFiles', { count: selectedFileObjs.length }),
@@ -241,7 +245,7 @@ export default function Files({ onPreview }) {
 
     // Batch Download
     const [isDownloading, setIsDownloading] = useState(false);
-    const canBatchEditTags = isEditable && selectedFileObjs.length > 0 && selectedFileObjs.every(file => file.status === 2);
+    const canBatchEditTags = canEditKb && selectedFileObjs.length > 0 && selectedFileObjs.every(file => file.status === 2);
     const handleBatchDownload = async () => {
         setIsDownloading(true);
         try {
@@ -277,6 +281,7 @@ export default function Files({ onPreview }) {
 
     // Batch retry
     const handleBatchRetry = () => {
+        if (!canEditKb) return;
         // Filter failed files, preserving complete parameters
         const failedFiles = selectedFileObjs.filter(file => file.status === 3);
 
@@ -396,7 +401,7 @@ export default function Files({ onPreview }) {
                             {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
                             <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
                         </Button>
-                        <Tip content={!isEditable ? t('noOperationPermission') : !canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
+                        <Tip content={!canEditKb ? t('noOperationPermission') : !canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
                             <KnowledgeTagSelect
                                 knowledgeId={id}
                                 fileIds={selectedFileObjs.map(f => Number(f.id))}
@@ -414,11 +419,11 @@ export default function Files({ onPreview }) {
                                 </Button>
                             </KnowledgeTagSelect>
                         </Tip>
-                        <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
+                        <Tip content={!canDeleteKb && t('noOperationPermission')} side='bottom'>
                             <Button
                                 variant="outline"
                                 onClick={handleBatchDelete}
-                                disabled={!isEditable}
+                                disabled={!canDeleteKb}
                                 className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                             >
                                 <Trash2 size={16} />
@@ -426,11 +431,11 @@ export default function Files({ onPreview }) {
                             </Button>
                         </Tip>
                         {hasSelectedFailedFiles && (
-                            <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
+                            <Tip content={!canEditKb && t('noOperationPermission')} side='bottom'>
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchRetry}
-                                    disabled={!isEditable}
+                                    disabled={!canEditKb}
                                     className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                                 >
                                     <RotateCw size={16} />
@@ -451,12 +456,13 @@ export default function Files({ onPreview }) {
                     <Button
                         variant="outline"
                         onClick={() => setMetadataOpen(true)}
+                        disabled={!canEditKb}
                         className="px-2 md:px-4 whitespace-nowrap h-9"
                     >
                         <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
                         <span className="hidden md:inline">{t('metaData')}</span>
                     </Button>
-                    {isEditable && (
+                    {canEditKb && (
                         <Link to={`/filelib/upload/${id}`}>
                             <Button className="px-4 md:px-8 h-9">{t('uploadFile')}</Button>
                         </Link>
@@ -630,7 +636,7 @@ export default function Files({ onPreview }) {
                                         knowledgeId={id}
                                         fileId={el.id}
                                         tags={el.tags || []}
-                                        isEditable={isEditable && el.status === 2}
+                                        isEditable={canEditKb && el.status === 2}
                                         onUpdate={reload}
                                     />
                                 </TableCell>
@@ -654,11 +660,11 @@ export default function Files({ onPreview }) {
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Tip content={!isEditable && t('noOperationPermission')} side='top'>
+                                            <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    disabled={!isEditable}
+                                                    disabled={!canEditKb}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object
@@ -671,7 +677,7 @@ export default function Files({ onPreview }) {
                                             </Tip>
                                         )}
                                         <Tip
-                                            content={!isEditable && t('noOperationPermission')}
+                                            content={!canDeleteKb && t('noOperationPermission')}
                                             side='top'
                                             styleClasses="-translate-x-6"
                                         >
@@ -683,7 +689,7 @@ export default function Files({ onPreview }) {
                                                     e.stopPropagation();
                                                     handleDelete(el.id);
                                                 }}
-                                                disabled={!isEditable}
+                                                disabled={!canDeleteKb}
                                                 title={t('delete')}
                                             >
                                                 <Trash2 size={16} />
@@ -712,7 +718,7 @@ export default function Files({ onPreview }) {
                 open={metadataOpen}
                 onOpenChange={() => setMetadataOpen(false)}
                 onSave={() => { }}
-                hasManagePermission={isEditable}
+                hasManagePermission={canEditKb}
                 id={id}
                 initialMetadata={metadataFields}
             />

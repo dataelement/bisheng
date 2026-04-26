@@ -492,10 +492,10 @@ export default function KnowledgeQa(params) {
                                                             handleCopy(el);
                                                         break;
                                                     case 'set':
-                                                        handleOpenSettings(el);
+                                                        canEdit(el) && el.copiable && handleOpenSettings(el);
                                                         break;
                                                     case 'delete':
-                                                        (el.copiable || user.role === 'admin') && handleDelete(el.id);
+                                                        canDelete(el) && (el.copiable || user.role === 'admin') && handleDelete(el.id);
                                                         break;
                                                 }
                                             }}
