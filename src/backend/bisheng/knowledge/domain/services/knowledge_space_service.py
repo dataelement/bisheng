@@ -1709,9 +1709,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_tuples_to_cleanup = [('folder', folder_id)]
         for child in children:
             if child.file_type == FileType.DIR.value:
+                await self._require_permission_id('folder', child.id, 'delete_folder', space_id=space_id)
                 floder_ids.append(child.id)
                 resource_tuples_to_cleanup.append(('folder', child.id))
             else:
+                await self._require_permission_id('knowledge_file', child.id, 'delete_file', space_id=space_id)
                 file_ids.append(child.id)
                 resource_tuples_to_cleanup.append(('knowledge_file', child.id))
 
@@ -2145,6 +2147,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id('folder', folder_id, 'download_folder', space_id=space_id)
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
+            for descendant in descendants:
+                if descendant.file_type == FileType.DIR.value:
+                    await self._require_permission_id(
+                        'folder', descendant.id, 'download_folder', space_id=space_id
+                    )
+                else:
+                    await self._require_permission_id(
+                        'knowledge_file', descendant.id, 'download_file', space_id=space_id
+                    )
             folder_db_records.append(folder)
             folder_db_records.extend(descendants)
 
