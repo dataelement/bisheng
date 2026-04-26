@@ -90,6 +90,7 @@ async def test_async_list_children_allows_root_status_filter():
     sql = _compile_sql(session.statement)
     assert "file_level_path = ''" in sql
     assert "file_level_path IS NULL" in sql
+    assert "knowledgefile.file_type = 0 AND (knowledgefile.status IN (1, 2, 4, 5, 6)" in sql
     assert "concat('', '/', knowledgefile.id)" in sql
 
 
@@ -110,6 +111,7 @@ async def test_async_count_children_allows_root_status_filter():
     sql = _compile_sql(session.statement)
     assert "file_level_path = ''" in sql
     assert "file_level_path IS NULL" in sql
+    assert "knowledgefile.file_type = 0 AND (knowledgefile.status IN (1, 2, 4, 5, 6)" in sql
     assert "concat('', '/', knowledgefile.id)" in sql
 
 

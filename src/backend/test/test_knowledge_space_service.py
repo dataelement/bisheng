@@ -1380,6 +1380,40 @@ class TestTupleLifecycle:
         ]
 
     @pytest.mark.asyncio
+    async def test_list_space_children_filters_each_child_by_view_permission(self, service):
+        folder = _make_file(file_id=201, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
+        file_record = _make_file(file_id=202, knowledge_id=1, file_type=FileType.FILE.value, file_name='file.txt')
+
+        async def fake_effective_permissions(object_type, object_id, **kwargs):
+            if object_type == 'folder' and object_id == 201:
+                return set()
+            if object_type == 'knowledge_file' and object_id == 202:
+                return {'view_file'}
+            return {'view_space'}
+
+        with patch.object(
+            service, '_require_read_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.async_list_children',
+            new_callable=AsyncMock,
+            return_value=[folder, file_record],
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            side_effect=fake_effective_permissions,
+        ), patch.object(
+            service, '_handle_file_folder_extra_info',
+            new_callable=AsyncMock,
+            side_effect=lambda items: [{'id': item.id} for item in items],
+        ):
+            result = await service.list_space_children(1, page=1, page_size=20)
+
+        assert result['total'] == 1
+        assert result['data'] == [{'id': 202}]
+
+    @pytest.mark.asyncio
     async def test_public_subscribe_updates_membership_without_rebac_tuple(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
 
@@ -1808,6 +1842,96 @@ class TestFineGrainedPermissionRuntime:
             )
 
         assert permission_ids == {'view_file'}
+
+    @pytest.mark.asyncio
+    async def test_child_direct_binding_overrides_inherited_space_permissions(self, service):
+        file_record = _make_file(file_id=121, knowledge_id=1)
+        private_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PRIVATE)
+        fake_fga = _FakeReadTuplesFGA({
+            'knowledge_file:121': [
+                {'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_file:121'},
+            ],
+            'knowledge_space:1': [
+                {'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_space:1'},
+            ],
+        })
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=private_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[
+                {
+                    'resource_type': 'knowledge_file',
+                    'resource_id': '121',
+                    'subject_type': 'user',
+                    'subject_id': 7,
+                    'relation': 'viewer',
+                    'model_id': 'file_download_only',
+                    'include_children': None,
+                },
+                {
+                    'resource_type': 'knowledge_space',
+                    'resource_id': '1',
+                    'subject_type': 'user',
+                    'subject_id': 7,
+                    'relation': 'viewer',
+                    'model_id': 'space_viewer',
+                    'include_children': None,
+                },
+            ],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={
+                'file_download_only': {
+                    'id': 'file_download_only',
+                    'relation': 'viewer',
+                    'permissions': ['download_file'],
+                    'is_system': False,
+                },
+                'space_viewer': {
+                    'id': 'space_viewer',
+                    'relation': 'viewer',
+                    'permissions': ['view_file'],
+                    'is_system': False,
+                },
+            },
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=_make_member(user_id=service.login_user.user_id),
+        ):
+            permission_ids = await service._get_effective_permission_ids(
+                'knowledge_file',
+                121,
+                space_id=1,
+            )
+
+        assert permission_ids == {'download_file'}
+        assert 'view_file' not in permission_ids
 
     @pytest.mark.asyncio
     async def test_public_space_without_rebac_relation_has_no_default_permission_ids(self, service):

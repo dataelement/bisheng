@@ -246,6 +246,8 @@ class FineGrainedPermissionService:
         binding_department_paths: dict[int, str] | None = None,
         user_subject_strings: set[str] | None = None,
         lineage: list[tuple[str, str | int]] | None = None,
+        nearest_binding_wins: bool = False,
+        return_match_metadata: bool = False,
     ) -> set[str]:
         if models is None:
             models = await cls.get_relation_models_map()
@@ -259,11 +261,14 @@ class FineGrainedPermissionService:
             lineage = await cls.build_resource_lineage(object_type, object_id)
 
         effective_permissions: set[str] = set()
+        matched_lineage_binding = False
         saw_bound_model_tuple = False
         saw_legacy_subscription_viewer_tuple = False
         fga = PermissionService._get_fga()
         if fga is not None:
             for resource_type, resource_id in lineage:
+                level_permissions: set[str] = set()
+                level_saw_tuple = False
                 for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
                     tuples = await fga.read_tuples(object=f'{tuple_resource_type}:{resource_id}')
                     binding_resource_type = (
@@ -295,9 +300,15 @@ class FineGrainedPermissionService:
                         model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
                         if binding and binding.get('model_id'):
                             saw_bound_model_tuple = True
-                        effective_permissions.update(
+                        level_saw_tuple = True
+                        level_permissions.update(
                             cls._permission_ids_for_relation(resource_type, relation, model),
                         )
+                if nearest_binding_wins and level_saw_tuple:
+                    matched_lineage_binding = True
+                    effective_permissions.update(level_permissions)
+                    break
+                effective_permissions.update(level_permissions)
 
         implicit_level = await PermissionService.get_implicit_permission_level(
             user_id=login_user.user_id,
@@ -310,6 +321,8 @@ class FineGrainedPermissionService:
             cls.default_permission_ids_for_relation(object_type, implicit_relation or ''),
         )
         if effective_permissions or saw_bound_model_tuple or saw_legacy_subscription_viewer_tuple:
+            if return_match_metadata:
+                return effective_permissions, matched_lineage_binding
             return effective_permissions
 
         level = await PermissionService.get_permission_level(
@@ -319,7 +332,10 @@ class FineGrainedPermissionService:
             login_user=login_user,
         )
         relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
-        return cls.default_permission_ids_for_relation(object_type, relation or '')
+        effective_permissions = cls.default_permission_ids_for_relation(object_type, relation or '')
+        if return_match_metadata:
+            return effective_permissions, matched_lineage_binding
+        return effective_permissions
 
     @classmethod
     async def has_any_permission_async(

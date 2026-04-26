@@ -771,7 +771,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         bindings = await self._get_relation_bindings()
         binding_department_paths = await self._get_binding_department_paths(bindings)
         models = await self._get_relation_models_map()
-        effective_permissions = await FineGrainedPermissionService.get_effective_permission_ids_async(
+        lineage_binding_can_override = object_type in {'folder', 'knowledge_file'}
+        effective_permissions, matched_lineage_binding = await FineGrainedPermissionService.get_effective_permission_ids_async(
             self.login_user,
             object_type,
             object_id,
@@ -780,10 +781,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
             lineage=lineage,
+            nearest_binding_wins=lineage_binding_can_override,
+            return_match_metadata=True,
         )
         for lineage_type, lineage_id in lineage:
             if lineage_type == 'knowledge_space':
-                effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
+                if not (lineage_binding_can_override and matched_lineage_binding):
+                    effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
         return effective_permissions
 
@@ -1489,6 +1493,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
+    async def _filter_visible_child_items(
+        self,
+        items: List[KnowledgeFile],
+        *,
+        space_id: int,
+    ) -> List[KnowledgeFile]:
+        async def can_view(item: KnowledgeFile) -> bool:
+            object_type = 'folder' if item.file_type == FileType.DIR.value else 'knowledge_file'
+            permission_id = 'view_folder' if item.file_type == FileType.DIR.value else 'view_file'
+            effective_permissions = await self._get_effective_permission_ids(
+                object_type,
+                item.id,
+                space_id=space_id,
+            )
+            return permission_id in effective_permissions
+
+        visibility = await asyncio.gather(*(can_view(item) for item in items))
+        return [item for item, allowed in zip(items, visibility) if allowed]
+
+    @staticmethod
+    def _paginate_items(items: List[KnowledgeFile], page: int, page_size: int) -> List[KnowledgeFile]:
+        if not page or not page_size:
+            return items
+        start = (page - 1) * page_size
+        return items[start:start + page_size]
+
     async def list_space_children(
         self,
         space_id: int,
@@ -1511,13 +1541,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id('folder', parent_id, 'view_folder', space_id=space_id)
         else:
             await self._require_permission_id('knowledge_space', space_id, 'view_space')
-        total, items = await asyncio.gather(
-            SpaceFileDao.async_count_children(space_id, parent_id, file_ids=file_ids, file_status=file_status),
-            SpaceFileDao.async_list_children(space_id, parent_id, file_ids=file_ids, order_field=order_field,
-                                             order_sort=order_sort, file_status=file_status, page=page,
-                                             page_size=page_size),
+        items = await SpaceFileDao.async_list_children(
+            space_id,
+            parent_id,
+            file_ids=file_ids,
+            order_field=order_field,
+            order_sort=order_sort,
+            file_status=file_status,
+            page=0,
+            page_size=0,
         )
-        data = await self._handle_file_folder_extra_info(items)
+        visible_items = await self._filter_visible_child_items(items, space_id=space_id)
+        total = len(visible_items)
+        data = await self._handle_file_folder_extra_info(self._paginate_items(visible_items, page, page_size))
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
@@ -1585,13 +1621,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                           extra_file_ids=extra_file_ids, status=file_status,
                                                           file_level_path=file_level_path, order_by="file_type",
-                                                          order_field=order_field, order_sort=order_sort,
-                                                          page=page, page_size=page_size)
-        total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
-                                                              extra_file_ids=extra_file_ids, status=file_status,
-                                                              file_level_path=file_level_path)
-
-        data = await self._handle_file_folder_extra_info(res)
+                                                          order_field=order_field, order_sort=order_sort)
+        visible_items = await self._filter_visible_child_items(res, space_id=space_id)
+        total = len(visible_items)
+        data = await self._handle_file_folder_extra_info(self._paginate_items(visible_items, page, page_size))
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
