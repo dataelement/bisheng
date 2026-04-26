@@ -218,6 +218,7 @@ export default function CitationReferencesDrawer({
   // <=768: 走抽屉（不内联分栏）；<=576: 抽屉全屏覆盖
   const isNarrowLayout = usePrefersMobileLayout();
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
+  const isFullBleedMobile = isPhoneViewport;
   const isMobileLikeViewport = isNarrowLayout;
   const matchesExpandedDesktopPreview = useMediaQuery(`(min-width: ${CITATION_PANEL_EXPANDED_BREAKPOINT + 1}px)`);
   const useExpandedDesktopPreview = desktopPreviewVariant === 'expanded'
@@ -434,18 +435,14 @@ export default function CitationReferencesDrawer({
   };
   const handleOpenButtonClick = () => {
     if (isDesktopInlinePanel) {
-      if (isOpen && !panelOnly) {
-        onOpenChange?.(false);
-      } else {
-        onDesktopOpen?.({
-          messageId,
-          content,
-          webContent,
-          citations,
-          referenceItems: references,
-        });
-        onOpenChange?.(true);
-      }
+      onDesktopOpen?.({
+        messageId,
+        content,
+        webContent,
+        citations,
+        referenceItems: references,
+      });
+      onOpenChange?.(true);
       return;
     }
 
@@ -659,12 +656,20 @@ export default function CitationReferencesDrawer({
 
   if (panelOnly) {
     return (
-      <section
-        className={cn('flex h-full min-h-0 flex-col bg-white', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
-        aria-label="参考资料"
-      >
-        {panelContent}
-      </section>
+      <>
+        <section
+          className={cn('flex h-full min-h-0 flex-col bg-white', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
+          aria-label="参考资料"
+        >
+          {panelContent}
+        </section>
+        {!isDesktopInlinePanel && (
+          <CitationDocumentPreviewDrawer
+            preview={documentPreview}
+            onClose={() => setDocumentPreview(null)}
+          />
+        )}
+      </>
     );
   }
 
@@ -705,17 +710,31 @@ export default function CitationReferencesDrawer({
       </div>
 
       {!isDesktopInlinePanel && isOpen && (
-        <aside
-          className={cn(
-            'fixed flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
-            isMobileLikeViewport
-              ? 'z-50 inset-0'
-              : 'z-[9] right-0 top-14 bottom-0 w-[min(520px,calc(100vw-24px))]',
-          )}
-          aria-label="参考资料"
-        >
-          {panelContent}
-        </aside>
+        isFullBleedMobile ? (
+          <aside
+            className="fixed inset-0 z-[120] flex flex-col overflow-hidden overscroll-contain bg-white touch-pan-y"
+            aria-label="参考资料"
+          >
+            {panelContent}
+          </aside>
+        ) : (
+          <div className="pointer-events-none fixed inset-0 z-[120] flex justify-end">
+            <button
+              type="button"
+              aria-label="关闭参考资料"
+              className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
+              onClick={() => setOpenState(false)}
+            />
+            <aside
+              className="relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
+              aria-label="参考资料"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {panelContent}
+            </aside>
+          </div>
+        )
       )}
       {!isDesktopInlinePanel && (
         <CitationDocumentPreviewDrawer

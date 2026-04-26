@@ -23,7 +23,7 @@ import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
-import useMediaQuery from '~/hooks/useMediaQuery';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
@@ -406,6 +406,10 @@ const Citation = ({
   initialDetail,
   webContent,
   loadCitationDetail,
+  popoverKey,
+  activePopoverKey,
+  onActivePopoverKeyChange,
+  onClosePopover,
   onOpenDocumentPreview,
 }: {
   data: Partial<CitationDisplayData>;
@@ -413,12 +417,16 @@ const Citation = ({
   initialDetail?: ChatCitation | null;
   webContent?: any;
   loadCitationDetail: CitationDetailLoader;
+  popoverKey: string;
+  activePopoverKey: string | null;
+  onActivePopoverKeyChange: (key: string | null) => void;
+  onClosePopover: (key: string) => void;
   onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
 }) => {
   const data = rawData ?? ({} as Partial<CitationDisplayData>);
   const hasData = !!rawData;
 
-  const [open, setOpen] = useState(false);
+  const isOpen = activePopoverKey === popoverKey;
   const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -507,7 +515,7 @@ const Citation = ({
       window.clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
-    setOpen(nextOpen);
+    onActivePopoverKeyChange(nextOpen ? popoverKey : null);
     if (nextOpen) {
       void fetchDetail();
     }
@@ -518,7 +526,7 @@ const Citation = ({
       window.clearTimeout(closeTimerRef.current);
     }
     closeTimerRef.current = window.setTimeout(() => {
-      setOpen(false);
+      onClosePopover(popoverKey);
     }, 120);
   };
 
@@ -527,10 +535,11 @@ const Citation = ({
   }
 
   return (
-    <Popover.Root open={open} onOpenChange={handleOpenChange}>
+    <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
       <Popover.Trigger asChild>
         <button
           type="button"
+          data-citation-trigger="true"
           data-citation-ref={data.ref}
           data-citation-id={data.citationId}
           data-citation-item-id={data.itemId}
@@ -580,9 +589,13 @@ const Markdown = memo(({
   onOpenCitationPanel,
 }: TContentProps & { webContent: any }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
-  const isMobileLayout = useMediaQuery('(max-width: 576px)');
+  const isMobileLayout = usePrefersMobileLayout();
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
+  const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
+  const handleCloseCitationPopover = useCallback((popoverKey: string) => {
+    setActiveCitationPopoverKey((currentKey) => currentKey === popoverKey ? null : currentKey);
+  }, []);
 
   function filterMermaidBlocks(input) {
     const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
@@ -771,6 +784,22 @@ const Markdown = memo(({
     });
   }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
 
+  useEffect(() => {
+    if (!documentPreview || isMobileLayout || !onOpenCitationPanel) {
+      return;
+    }
+
+    onOpenCitationPanel({
+      messageId,
+      content,
+      webContent,
+      citations,
+      referenceItems: [],
+      initialDocumentPreview: documentPreview,
+    });
+    setDocumentPreview(null);
+  }, [citations, content, documentPreview, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
+
   // Cursor
   if (isInitializing) {
     return (
@@ -821,6 +850,10 @@ const Markdown = memo(({
                             key={`legacy-${matchIndex}`}
                             webContent={webContent}
                             loadCitationDetail={loadCitationDetail}
+                            popoverKey={`legacy-${matchIndex}`}
+                            activePopoverKey={activeCitationPopoverKey}
+                            onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                            onClosePopover={handleCloseCitationPopover}
                             onOpenDocumentPreview={handleOpenDocumentPreview}
                             data={{
                               label: legacyIndex,
@@ -855,6 +888,9 @@ const Markdown = memo(({
                               data={citationData}
                               initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
                               loadCitationDetail={loadCitationDetail}
+                              popoverKey={`rag-legacy-${matchIndex}`}
+                              activePopoverKey={activeCitationPopoverKey}
+                              onActivePopoverKeyChange={setActiveCitationPopoverKey}
                               onOpenDocumentPreview={handleOpenDocumentPreview}
                             >
                               {legacyIndexValue}
@@ -871,6 +907,10 @@ const Markdown = memo(({
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
                             loadCitationDetail={loadCitationDetail}
+                            popoverKey={`private-${matchIndex}`}
+                            activePopoverKey={activeCitationPopoverKey}
+                            onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                            onClosePopover={handleCloseCitationPopover}
                             onOpenDocumentPreview={handleOpenDocumentPreview}
                           >
                             {citationData.label}
