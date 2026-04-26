@@ -28,7 +28,7 @@ def super_admin_payload():
     p.user_id = 1
     p.user_name = 'root'
     p.tenant_id = 1
-    p.is_global_super = MagicMock(return_value=True)
+    p.is_global_super = True
     p.is_admin = MagicMock(return_value=True)
     return p
 
@@ -39,7 +39,7 @@ def child_admin_payload():
     p.user_id = 55
     p.user_name = 'child_admin'
     p.tenant_id = 5
-    p.is_global_super = MagicMock(return_value=False)
+    p.is_global_super = False
     p.is_admin = MagicMock(return_value=True)
     return p
 
@@ -110,20 +110,37 @@ class TestMountTenantEndpoint:
         assert resp.status_code == 400
         assert resp.json()['status_code'] == 22001
 
-    def test_delete_mount_archive_policy(self, super_admin_payload):
+    def test_delete_mount_no_body(self, super_admin_payload):
+        """v2.5.1 唯一路径：DELETE 不需要 body，行为固定为迁回 Root + 归档。"""
         app = _build_app(super_admin_payload)
         client = TestClient(app)
         with patch(
             'bisheng.tenant.api.endpoints.tenant_mount.TenantMountService.unmount_child',
             new_callable=AsyncMock,
-            return_value={'policy': 'archive', 'tenant_id': 2},
+            return_value={'tenant_id': 2, 'migrated_counts': {'flow': 3}},
+        ):
+            resp = client.request(
+                'DELETE', '/api/v1/departments/7/mount-tenant',
+            )
+        assert resp.status_code == 200
+        assert resp.json()['data']['tenant_id'] == 2
+        assert resp.json()['data']['migrated_counts'] == {'flow': 3}
+
+    def test_delete_mount_legacy_body_ignored(self, super_admin_payload):
+        """旧客户端发 {policy: 'archive'} body 也应通过（兼容），实际走 migrate。"""
+        app = _build_app(super_admin_payload)
+        client = TestClient(app)
+        with patch(
+            'bisheng.tenant.api.endpoints.tenant_mount.TenantMountService.unmount_child',
+            new_callable=AsyncMock,
+            return_value={'tenant_id': 2, 'migrated_counts': {}},
         ):
             resp = client.request(
                 'DELETE', '/api/v1/departments/7/mount-tenant',
                 json={'policy': 'archive'},
             )
         assert resp.status_code == 200
-        assert resp.json()['data']['policy'] == 'archive'
+        assert resp.json()['data']['tenant_id'] == 2
 
 
 # =========================================================================

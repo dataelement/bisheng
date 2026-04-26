@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import {
     type KnowledgeSpace,
@@ -82,6 +82,7 @@ export function KnowledgeSpaceMemberDialog({
     const [members, setMembers] = useState<SpaceMember[]>([]);
     const [removeTarget, setRemoveTarget] = useState<SpaceMember | null>(null);
     const [serverTotal, setServerTotal] = useState(0);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
 
     const currentUserRole = (space?.role || null) as SpaceRole | null;
     const canCreatorManage = currentUserRole === SpaceRole.CREATOR;
@@ -146,6 +147,14 @@ export function KnowledgeSpaceMemberDialog({
     useEffect(() => {
         setPage(1);
     }, [keyword]);
+
+    useEffect(() => {
+        if (!open) return;
+        // Prevent mobile keyboard pop-up caused by any residual autofocus.
+        requestAnimationFrame(() => {
+            searchInputRef.current?.blur();
+        });
+    }, [open]);
 
     const handlePromoteAdmin = async (m: SpaceMember) => {
         if (!space?.id || !canCreatorManage) return;
@@ -293,23 +302,25 @@ export function KnowledgeSpaceMemberDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent
                     overlayClassName="z-[100]"
-                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden p-0 rounded-[10px]"
+                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 touch-mobile:fixed touch-mobile:inset-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
                     close={false}
                 >
-                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 px-6 py-0 sm:text-left">
-                        <DialogTitle className="m-0 inline-flex items-center text-[16px] font-semibold leading-[24px] text-[#1D2129]">
+                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 touch-mobile:h-auto touch-mobile:min-h-[56px] touch-mobile:px-4 sm:text-left">
+                        <DialogTitle className="m-0 inline-flex items-center text-left text-[16px] font-semibold leading-[24px] text-[#1D2129] touch-mobile:text-[20px] touch-mobile:font-medium touch-mobile:leading-7 touch-mobile:text-[#212121]">
                             {localize("com_subscription.management_member")}
                         </DialogTitle>
-                        <DialogClose className="inline-flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                        <DialogClose className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-0 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                             <X className="size-4" aria-hidden />
                             <span className="sr-only">Close</span>
                         </DialogClose>
                     </DialogHeader>
 
-                    <div className="flex min-h-0 flex-1 flex-col px-6 pt-3 pb-0">
+                    <div className="flex min-h-0 flex-1 flex-col px-6 pt-6 pb-0 touch-mobile:px-4 touch-mobile:pt-6">
                         <div className="relative mb-3">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C9CDD4]" />
                             <input
+                                ref={searchInputRef}
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}

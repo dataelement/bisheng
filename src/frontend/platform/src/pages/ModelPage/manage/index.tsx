@@ -1,12 +1,11 @@
 import { SettingIcon } from "@/components/bs-icons"
-import { AdminScopeSelector, type TenantOption } from "@/components/AdminScopeSelector"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Switch } from "@/components/bs-ui/switch"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
-import { useContext, useEffect, useMemo, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
 import { LoadingIcon } from "@/components/bs-icons/loading"
@@ -14,12 +13,12 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useAdminScope } from "@/hooks/useAdminScope"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
 import { useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
+import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
@@ -44,7 +43,10 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                 <span>{data.name}</span>
                 {isRootShared && (
                     <Badge variant="secondary" className="ml-2">
-                        {t('model.rootSharedReadonly', 'Root 共享 · 只读')}
+                        {t('model.tenantSharedReadonly', {
+                            tenantName: data.tenant_name || 'Root',
+                            defaultValue: '{{tenantName}} 共享 · 只读',
+                        })}
                     </Badge>
                 )}
             </div>
@@ -129,28 +131,6 @@ export default function Management() {
         }
     }, [searchParams, setSearchParams, data])
 
-    const isSuper = !!user?.is_global_super
-    const multiTenantEnabled = !!appConfig?.multiTenantEnabled
-    // Hook is always called; `enabled` gates network traffic so non-super
-    // callers never produce a spurious 403 on the initial GET.
-    const scopeHook = useAdminScope({ enabled: isSuper && multiTenantEnabled })
-    // MVP: two fixed tabs (Root + caller leaf). A fuller tenant tree
-    // requires a list API from TenantDao and is a separate iteration.
-    const tenantOptions = useMemo<TenantOption[]>(() => {
-        if (!isSuper) return []
-        const opts: TenantOption[] = [
-            { value: 'global', label: t('model.scopeGlobal', '全部') },
-            { value: 1, label: t('model.scopeRoot', 'Root') },
-        ]
-        if (user?.tenant_id && user.tenant_id !== 1) {
-            opts.push({
-                value: user.tenant_id,
-                label: user.tenant_name || `Tenant ${user.tenant_id}`,
-            })
-        }
-        return opts
-    }, [isSuper, user?.tenant_id, user?.tenant_name, t])
-
     const reload = async () => {
         setLoading(true)
         setData(await getModelListApi())
@@ -204,31 +184,21 @@ export default function Management() {
             </div>
         )}
         <div className="h-full overflow-y-auto">
-            {isSuper && multiTenantEnabled && tenantOptions.length > 0 && (
-                <div className="flex items-center justify-start gap-2 pb-2">
-                    <span className="text-sm text-muted-foreground">
-                        {t('model.scopeLabel', '管理视图：')}
-                    </span>
-                    <AdminScopeSelector
-                        value={scopeHook.scope.scope_tenant_id ?? 'global'}
-                        tenants={tenantOptions}
-                        disabled={scopeHook.loading}
-                        onChange={async (v) => {
-                            await scopeHook.setScope(v === 'global' ? null : v)
-                            reload()
-                        }}
-                    />
+            {/* v2.5.1 F019: scope switcher lives here (LLM is the only page
+                whose data actually changes with scope). System-level config
+                stays super-admin only regardless of active scope. */}
+            <div className="flex items-center justify-between gap-4">
+                <div>
+                    {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
                 </div>
-            )}
-            {/* System-level config stays super-admin only regardless of
-                active scope; Child Admins never see the button. */}
-            <div className="flex justify-end gap-4">
-                {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
-                    <SettingIcon className="text-red-500" />
-                    {t('model.systemModelSettings')}
-                </Button>}
-                {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
-                <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
+                <div className="flex gap-4">
+                    {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                        <SettingIcon className="text-red-500" />
+                        {t('model.systemModelSettings')}
+                    </Button>}
+                    {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                    <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
+                </div>
             </div>
             <div className="h-[85%]">
                 <div className="flex h-10 justify-between items-center font-medium text-muted-foreground text-sm">

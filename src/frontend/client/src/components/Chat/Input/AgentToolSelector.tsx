@@ -120,7 +120,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
       >
         <div className="flex min-w-0 gap-1.5 items-center">
           <ApiAppIcon size="15" className={cn("shrink-0 text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
-          <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(40vw,160px)]">
+          <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)]">
             {localize("com_tools_title")}
             {/* {isActive ? ` (${activeCount})` : ""} */}
           </span>

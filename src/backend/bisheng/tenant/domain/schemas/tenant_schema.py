@@ -120,12 +120,21 @@ class UserTenantItem(BaseModel):
 # ---------------------------------------------------------------------------
 
 class MountTenantRequest(BaseModel):
-    tenant_code: str = Field(..., min_length=1, max_length=64)
+    # Optional: when omitted the service auto-generates ``t{dept_id}``.
+    # Pattern still enforced for callers that pass an explicit code.
+    tenant_code: Optional[str] = Field(
+        None, pattern=r'^[a-zA-Z][a-zA-Z0-9_-]{1,63}$', max_length=64,
+    )
     tenant_name: str = Field(..., min_length=1, max_length=128)
 
 
 class UnmountTenantRequest(BaseModel):
-    policy: Literal['migrate', 'archive', 'manual']
+    """Body kept for backwards compatibility; ignored.
+
+    v2.5.1 收窄到唯一路径（资源迁回 Root + Child 归档）。旧客户端可能仍发
+    ``{"policy": ...}``，本字段保留以避免 422，但任何值都走 migrate 行为。
+    """
+    policy: Optional[Literal['migrate', 'archive', 'manual']] = None
 
 
 class MigrateFromRootRequest(BaseModel):

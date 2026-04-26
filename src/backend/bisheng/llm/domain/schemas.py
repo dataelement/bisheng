@@ -20,6 +20,22 @@ class LLMServerInfo(LLMServerBase):
         default=False,
         description='True when the caller sees this server via Root→Child share',
     )
+    # Filled by the Service layer for super-admin callers viewing Root-owned
+    # servers, by reading the FGA ``shared_with`` tuple set. Drives the
+    # ModelConfig "share with child tenants" toggle. Always False for child
+    # callers (they consume ``is_root_shared_readonly`` instead — no leak).
+    share_to_children: bool = Field(
+        default=False,
+        description="True when this Root-owned server is currently shared to children",
+    )
+    # Display name of the owning tenant. Hydrated by the Service layer for
+    # Root-owned rows so the frontend "Root 共享 · 只读" badge can render
+    # the actual Root tenant name (e.g. "默认租户") instead of a hard-coded
+    # "Root". None on Child-owned rows — the badge is not shown for those.
+    tenant_name: Optional[str] = Field(
+        default=None,
+        description="Display name of the owning tenant, populated for Root rows",
+    )
 
     # Sensitive Data Desensitization
     @model_validator(mode='after')

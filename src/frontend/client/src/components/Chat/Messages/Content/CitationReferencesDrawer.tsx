@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, Loader2, X } from 'lucide-react';
+import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
-import { useMediaQuery, usePrefersMobileLayout } from '~/hooks';
+import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
+import store from '~/store';
 import { cn } from '~/utils';
 import {
   buildCitationDocumentPreview,
@@ -212,9 +214,11 @@ export default function CitationReferencesDrawer({
   initialDocumentPreview,
   desktopPreviewVariant = 'auto',
 }: CitationReferencesDrawerProps) {
+  const localize = useLocalize();
   // <=768: 走抽屉（不内联分栏）；<=576: 抽屉全屏覆盖
   const isNarrowLayout = usePrefersMobileLayout();
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
+  const isMobileLikeViewport = isNarrowLayout;
   const matchesExpandedDesktopPreview = useMediaQuery(`(min-width: ${CITATION_PANEL_EXPANDED_BREAKPOINT + 1}px)`);
   const useExpandedDesktopPreview = desktopPreviewVariant === 'expanded'
     ? true
@@ -227,6 +231,7 @@ export default function CitationReferencesDrawer({
   const [errorMap, setErrorMap] = useState<Record<string, boolean>>({});
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const [desktopView, setDesktopView] = useState<CitationDesktopView>('list');
+  const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
@@ -363,6 +368,17 @@ export default function CitationReferencesDrawer({
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
   useEffect(() => {
+    if (!isNarrowLayout || !isOpen) {
+      return;
+    }
+
+    setChatMobileNavHidden(true);
+    return () => {
+      setChatMobileNavHidden(false);
+    };
+  }, [isNarrowLayout, isOpen, setChatMobileNavHidden]);
+
+  useEffect(() => {
     if (!isOpen && !panelOnly) {
       setDesktopView('list');
       setDocumentPreview(null);
@@ -483,11 +499,11 @@ export default function CitationReferencesDrawer({
     <>
       <div className={cn(
         'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
-        isPhoneViewport ? 'h-11 px-2' : 'h-14 px-3',
+        isMobileLikeViewport ? 'h-11 px-2' : 'h-14 px-3',
       )}>
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
-            参考资料
+            {localize('com_msg_source_reference')}
           </h2>
           <span className="inline-flex h-4 w-4 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
             {references.length}
@@ -498,7 +514,7 @@ export default function CitationReferencesDrawer({
           onClick={() => setOpenState(false)}
           className={cn(
             'inline-flex items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
-            isPhoneViewport ? 'size-8 rounded-md' : 'size-6 rounded-[6px]',
+            isMobileLikeViewport ? 'size-8 rounded-md' : 'size-6 rounded-[6px]',
           )}
           aria-label="关闭参考资料"
         >
@@ -638,7 +654,7 @@ export default function CitationReferencesDrawer({
   return (
     <>
       <div
-        className={cn('flex h-6 items-center', actionButtons ? 'w-[196px] gap-3' : 'w-[112px]', buttonClassName)}
+        className={cn('flex h-6 shrink-0 items-center', actionButtons ? 'w-[196px] gap-3' : 'w-[112px]', buttonClassName)}
       >
         {actionButtons && <div className="flex items-center gap-1">{actionButtons}</div>}
         <button
@@ -646,7 +662,7 @@ export default function CitationReferencesDrawer({
           data-citation-references-trigger="true"
           onClick={handleOpenButtonClick}
           className={cn(
-            'flex h-6 w-[112px] items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors',
+            'flex h-6 w-[112px] min-w-[112px] shrink-0 items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors',
             isOpen ? 'bg-[#F2F3F5]' : 'bg-transparent hover:bg-[#F7F7F7]',
           )}
         >
@@ -664,9 +680,9 @@ export default function CitationReferencesDrawer({
         <aside
           className={cn(
             'fixed flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
-            isPhoneViewport
+            isMobileLikeViewport
               ? 'z-50 inset-0'
-              : 'z-[9] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))]',
+              : 'z-[9] right-0 top-14 bottom-0 w-[min(520px,calc(100vw-24px))]',
           )}
           aria-label="参考资料"
         >

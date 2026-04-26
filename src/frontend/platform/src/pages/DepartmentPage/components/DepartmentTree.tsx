@@ -195,7 +195,12 @@ export function DepartmentTree({
                 <span className="block h-3.5 w-3.5" aria-hidden />
               )}
             </span>
-            <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Building2
+              className={cn(
+                "mr-1.5 h-4 w-4 shrink-0",
+                node.is_tenant_root ? "text-primary" : "text-muted-foreground",
+              )}
+            />
             <TooltipProvider delayDuration={250}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -206,9 +211,22 @@ export function DepartmentTree({
                 </TooltipTrigger>
                 <TooltipContent className="max-w-md break-all">
                   {node.name}
+                  {node.is_tenant_root && (
+                    <span className="ml-1 text-primary">
+                      {" "}· {t("bs:tenant.mountedBadge", { defaultValue: "子租户挂载点" })}
+                    </span>
+                  )}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {node.is_tenant_root && (
+              <span
+                className="mr-1 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary"
+                title={t("bs:tenant.mountedBadge", { defaultValue: "子租户挂载点" })}
+              >
+                {t("bs:tenant.mountedTag", { defaultValue: "子租户" })}
+              </span>
+            )}
             <span className="mr-1 text-xs text-muted-foreground tabular-nums">{node.member_count}</span>
             {/* Quick create child button — hidden for archived departments */}
             {!isArchived && (

@@ -14,10 +14,19 @@ import MessageRemark from "./components/MessageRemark";
 import MessageRunlog from "./components/MessageRunlog";
 import MessageSystem from "./components/MessageSystem";
 import MessageUser from "./components/MessageUser";
-import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
+type ChatMessagesProps = {
+    useName?: string;
+    readOnly: any;
+    title: string;
+    logo: React.ReactNode;
+    disabledSearch?: boolean;
+    isGuestMode?: boolean;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+};
 export default function ChatMessages({
     useName,
     readOnly,
@@ -26,18 +35,9 @@ export default function ChatMessages({
     disabledSearch = false,
     isGuestMode = false,
     onOpenCitationPanel,
-    activeCitationMessageId,
-}: {
-    useName?: string;
-    readOnly?: string;
-    title: string;
-    logo: React.ReactNode;
-    disabledSearch?: boolean;
-    isGuestMode?: boolean;
-    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
-    activeCitationMessageId?: string | null;
-}) {
-    const { messageScrollRef, chatId, messages } = useMessage(readOnly)
+    activeCitationMessageId = null,
+}: ChatMessagesProps) {
+    const { messageScrollRef, messages } = useMessage(readOnly)
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
     const localize = useLocalize()
@@ -45,8 +45,6 @@ export default function ChatMessages({
     console.log('messages :>> ', chatState, messages, guideWord);
     // 反馈
     const thumbRef = useRef(null)
-    // 溯源
-    const sourceRef = useRef(null)
 
     const remark = chatState?.flow?.guide_word
 
@@ -106,7 +104,6 @@ export default function ChatMessages({
                             onOpenCitationPanel={onOpenCitationPanel}
                             activeCitationMessageId={activeCitationMessageId}
                             onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
-                            onSource={isGuestMode ? undefined : (data) => { sourceRef.current?.openModal({ ...data, chatId }) }}
                         />;
                     case 'divider':
                         return <div key={msg.id} className={'flex items-center justify-center py-4 text-gray-400 text-sm'}>
@@ -163,6 +160,5 @@ export default function ChatMessages({
         )}
 
         <MessageFeedbackForm ref={thumbRef}></MessageFeedbackForm>
-        {!isGuestMode && <ResouceModal ref={sourceRef}></ResouceModal>}
     </div>
 };

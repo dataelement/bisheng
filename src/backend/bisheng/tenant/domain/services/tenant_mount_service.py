@@ -4,9 +4,9 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
 
   - ``mount_child``: global-super marks a department as a Child Tenant
     mount point. Enforces INV-T1 (2-layer lock), records audit_log.
-  - ``unmount_child``: removes a Child mount with policy A (migrate
-    resources to Root), B (archive in-place), or C (manual — MVP falls
-    back to policy B + warning; UI flow deferred).
+  - ``unmount_child``: removes a Child mount. v2.5.1 收窄到唯一路径
+    （资源迁回 Root + Child 归档）。旧的 archive / manual 策略已删除——
+    "冻结子公司不迁移资源" 的需求归到 §5.1.3 的 disable Child 动作。
   - ``migrate_resources_from_root``: AC-04d Root→Child resource sinking
     (INV-T10 — the one path that does NOT go through F018 transfer-owner).
 """
@@ -14,7 +14,7 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Literal, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from bisheng.common.errcode.tenant_tree import (
     TenantTreeMigrateConflictError,
@@ -24,10 +24,59 @@ from bisheng.common.errcode.tenant_tree import (
     TenantTreeNestingForbiddenError,
     TenantTreeRootDeptMountError,
 )
+import time
+
+from sqlalchemy import update as sa_update
+
+from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao
 from bisheng.tenant.domain.constants import TenantAuditAction
+
+# When a Child is unmounted we keep the row for audit (status=archived) but
+# free up ``tenant_code`` so the same code can be remounted. Renaming with a
+# deterministic, unique-by-timestamp suffix preserves the link from audit_log
+# to the tenant id while side-stepping the UNIQUE index. Format chosen so the
+# original code is trivially recoverable (split on ``ARCHIVED_CODE_SEPARATOR``).
+ARCHIVED_CODE_SEPARATOR = '#archived#'
+
+
+def archived_tenant_code(original_code: str) -> str:
+    """Build an archive-suffixed tenant_code, e.g. ``keji#archived#1745601234``.
+
+    Idempotent: passing an already-archived code is a no-op so retrying
+    the unmount path doesn't double-suffix.
+    """
+    if ARCHIVED_CODE_SEPARATOR in original_code:
+        return original_code
+    return f'{original_code}{ARCHIVED_CODE_SEPARATOR}{int(time.time())}'
+
+
+def display_tenant_code(stored_code: str) -> str:
+    """Strip the archive suffix from ``stored_code`` for UI/audit display.
+
+    Mirror of :func:`archived_tenant_code` — pass any tenant_code and get
+    back the operator-facing string. Active rows are returned unchanged.
+    """
+    if not stored_code or ARCHIVED_CODE_SEPARATOR not in stored_code:
+        return stored_code
+    return stored_code.split(ARCHIVED_CODE_SEPARATOR, 1)[0]
+
+
+def default_tenant_code(dept_id: int) -> str:
+    """Default tenant_code derived from dept_id, e.g. ``t3``.
+
+    Used when callers don't supply an explicit code at mount time. dept_id
+    is the department PK so uniqueness is automatic; the leading ``t``
+    keeps the value letter-initial to satisfy the schema regex. On unmount
+    the row's code is rewritten via :func:`archived_tenant_code` so a
+    future remount of the same dept regenerates the same value without
+    colliding on the UNIQUE index.
+    """
+    return f't{dept_id}'
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +106,15 @@ _UNMOUNT_MIGRATE_TABLES: List[str] = [
 ]
 
 
-def _require_super(operator) -> None:
-    """Gate: raise 22010 if the operator is not a global super admin."""
-    check = getattr(operator, 'is_global_super', None)
-    if check is None or not check():
+async def _require_super(operator) -> None:
+    """Gate: raise 22010 if the operator is not a global super admin.
+
+    Reads the pre-resolved ``is_global_super`` field on LoginUser, which
+    ``init_login_user`` populates from ``_check_is_global_super`` (FGA
+    tuple + RBAC AdminRole fallback). Kept ``async`` so existing call
+    sites that ``await`` it stay unchanged.
+    """
+    if not getattr(operator, 'is_global_super', False):
         raise TenantTreeMigratePermissionError()
 
 
@@ -75,7 +129,7 @@ class TenantMountService:
     async def mount_child(
         cls,
         dept_id: int,
-        tenant_code: str,
+        tenant_code: Optional[str],
         tenant_name: str,
         operator,
         auto_distribute: bool = True,
@@ -96,7 +150,7 @@ class TenantMountService:
         (and, on True, the list of distributed resource ids). F011 callers
         that do not care keep the default and observe the pre-F017 shape.
         """
-        _require_super(operator)
+        await _require_super(operator)
         dept = await DepartmentDao.aget_by_id(dept_id)
         if dept is None:
             raise TenantTreeMountConflictError()
@@ -110,14 +164,40 @@ class TenantMountService:
             # Any ancestor already a mount point → INV-T1 2-layer lock.
             raise TenantTreeNestingForbiddenError()
 
-        new_tenant = Tenant(
-            tenant_code=tenant_code,
-            tenant_name=tenant_name,
-            parent_tenant_id=ROOT_TENANT_ID,
-            status='active',
-        )
-        new_tenant = await TenantDao.acreate_tenant(new_tenant)
-        await DepartmentDao.aset_mount(dept_id, new_tenant.id)
+        # UI hides the tenant_code input; non-UI API callers may still pass
+        # an explicit code, in which case the schema regex has already
+        # validated it. ``default_tenant_code`` derives a unique fallback
+        # from the dept_id when omitted. ``not tenant_code`` covers both
+        # None and the empty string a misbehaving client might submit
+        # (the pattern check skips empty values for Optional fields).
+        if not tenant_code:
+            tenant_code = default_tenant_code(dept_id)
+
+        # Single-session transaction: INSERT tenant + UPDATE department happen
+        # atomically. If the dept update fails (or anything in between raises)
+        # the session exits without commit and SQLAlchemy rolls the INSERT
+        # back, so we never leave a tenant_code-occupied orphan.
+        # Also writes ``tenant.root_dept_id`` so the bidirectional link
+        # (dept.mounted_tenant_id ↔ tenant.root_dept_id) is set in one shot —
+        # downstream readers (e.g. TenantUserDialog member-picker scope) rely
+        # on this column being populated.
+        async with get_async_db_session() as session:
+            new_tenant = Tenant(
+                tenant_code=tenant_code,
+                tenant_name=tenant_name,
+                parent_tenant_id=ROOT_TENANT_ID,
+                status='active',
+                root_dept_id=dept_id,
+            )
+            session.add(new_tenant)
+            await session.flush()  # populate new_tenant.id for the dept update
+            await session.execute(
+                sa_update(Department)
+                .where(Department.id == dept_id)
+                .values(is_tenant_root=1, mounted_tenant_id=new_tenant.id)
+            )
+            await session.commit()
+            await session.refresh(new_tenant)
 
         # F017 hook: fan out the Root ``shared_to`` relation + snapshot the
         # resources that are now reachable. Failures are swallowed to keep
@@ -169,6 +249,48 @@ class TenantMountService:
                 '[F017] distribute_to_child failed for child %s: %s',
                 new_child_id, e,
             )
+
+        # LLM uses resource-level shared_with (different mechanism from the
+        # tenant-level shared_to written above — see ResourceShareService
+        # docstring). distribute_to_child does NOT cover llm_server, so the
+        # new Child would otherwise see no Root LLMs. Fan out per-resource
+        # tuples here, only for this Child (already-mounted Children keep
+        # their existing tuples untouched).
+        #
+        # Gated by tenant.share_default_to_children to honour the
+        # "Root-only" intent: customers who turned the flag off in the
+        # admin UI expect new Children NOT to inherit Root LLMs.
+        try:
+            from sqlalchemy import text as sa_text
+
+            from bisheng.core.database import get_async_db_session
+            from bisheng.core.openfga.manager import get_fga_client
+            from bisheng.database.models.tenant import TenantDao
+
+            root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
+            share_default = bool(getattr(
+                root_tenant, 'share_default_to_children', True,
+            )) if root_tenant else True
+            fga = get_fga_client()
+            if share_default and fga is not None:
+                async with get_async_db_session() as session:
+                    res = await session.exec(sa_text(
+                        'SELECT id FROM llm_server WHERE tenant_id = :t'
+                    ).bindparams(t=ROOT_TENANT_ID))
+                    server_ids = [r[0] for r in res.all()]
+                if server_ids:
+                    writes = [{
+                        'user': f'tenant:{new_child_id}',
+                        'relation': 'shared_with',
+                        'object': f'llm_server:{sid}',
+                    } for sid in server_ids]
+                    await fga.write_tuples(writes=writes)
+        except Exception as e:  # pragma: no cover — compensator handles retry
+            logger.warning(
+                '[F029] llm_server fanout to child %s failed: %s',
+                new_child_id, e,
+            )
+
         try:
             return await cls._list_root_shared_resources()
         except Exception as e:  # pragma: no cover
@@ -294,39 +416,85 @@ class TenantMountService:
     async def unmount_child(
         cls,
         dept_id: int,
-        policy: Literal['migrate', 'archive', 'manual'],
         operator,
     ) -> Dict[str, Any]:
-        """Reverse a mount. ``policy`` drives resource handling (AC-04a/b/c)."""
-        _require_super(operator)
-        dept = await DepartmentDao.aget_by_id(dept_id)
-        if dept is None or not getattr(dept, 'mounted_tenant_id', None):
-            raise TenantTreeMountConflictError()
-        child_tenant_id: int = dept.mounted_tenant_id
+        """Reverse a mount.
 
-        migrated_counts: Optional[Dict[str, int]] = None
-        if policy == 'migrate':
-            migrated_counts = await cls._migrate_child_resources_to_root(
-                child_tenant_id,
-            )
-            # Archive the (now empty) Child so the record survives for audit.
-            await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-            await DepartmentDao.aunset_mount(dept_id)
-        elif policy == 'archive':
-            await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-            await DepartmentDao.aunset_mount(dept_id)
-        elif policy == 'manual':
-            # MVP: spec AC-04c defers the UI flow. Fall back to archive
-            # + warn; callers intending true manual handling should go
-            # through F018 transfer-owner per resource first.
-            logger.warning(
-                'Manual unmount policy for dept %s: MVP falls back to archive',
-                dept_id,
-            )
-            await TenantDao.aupdate_tenant(child_tenant_id, status='archived')
-            await DepartmentDao.aunset_mount(dept_id)
-        else:
+        v2.5.1 收窄到唯一路径：资源整体迁回 Root + Child 归档（PRD §5.2.2）。
+        旧的 archive / manual 策略已删除——"冻结子公司不迁移资源"的需求归到
+        §5.1.3 的 disable Child Tenant 动作，与 unmount 完全分开。
+
+        Stale-flag idempotency: if a department carries ``is_tenant_root=1``
+        but ``mounted_tenant_id IS NULL`` (legacy/half-written rows from
+        early v2.5 builds), clear the dangling flag and return success
+        rather than 22002. Resource migration / tenant archive are skipped —
+        there is no Child tenant to migrate from.
+        """
+        await _require_super(operator)
+        dept = await DepartmentDao.aget_by_id(dept_id)
+        if dept is None:
             raise TenantTreeMountConflictError()
+
+        child_tenant_id: Optional[int] = getattr(dept, 'mounted_tenant_id', None)
+        if not child_tenant_id:
+            if getattr(dept, 'is_tenant_root', 0) == 1:
+                await DepartmentDao.aunset_mount(dept_id)
+                await _safe_audit(
+                    tenant_id=ROOT_TENANT_ID,
+                    operator_id=getattr(operator, 'user_id', 0),
+                    operator_tenant_id=ROOT_TENANT_ID,
+                    action=TenantAuditAction.UNMOUNT.value,
+                    target_type='department',
+                    target_id=str(dept_id),
+                    metadata={
+                        'dept_id': dept_id,
+                        'stale_flag_cleared': True,
+                        'migrated_counts': {},
+                    },
+                )
+                return {
+                    'tenant_id': None,
+                    'migrated_counts': {},
+                    'stale_flag_cleared': True,
+                }
+            raise TenantTreeMountConflictError()
+
+        # 1. 资源迁移：Child 名下所有 tenant_aware 业务表批量改为 Root
+        migrated_counts = await cls._migrate_child_resources_to_root(
+            child_tenant_id,
+        )
+
+        # 2 + 3 in one transaction: archive the Child + free up tenant_code
+        # via #archived#<ts> suffix + clear dept mount flag. Pre-fix split
+        # these into independent commits — if step 3 succeeded but step 2
+        # didn't (or vice versa) the dept and tenant ended up in
+        # inconsistent states. Now they commit or roll back together.
+        # The code-renaming is what lets ``mount_child`` reuse the original
+        # code on a future remount without 1062 — UNIQUE on tenant_code stays
+        # intact while the audit row is preserved with id unchanged.
+        existing_tenant = await TenantDao.aget_by_id(child_tenant_id)
+        new_archived_code = (
+            archived_tenant_code(existing_tenant.tenant_code)
+            if existing_tenant is not None
+            else None
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                if new_archived_code is not None:
+                    await session.execute(
+                        sa_update(Tenant)
+                        .where(Tenant.id == child_tenant_id)
+                        .values(
+                            status='archived',
+                            tenant_code=new_archived_code,
+                        )
+                    )
+                await session.execute(
+                    sa_update(Department)
+                    .where(Department.id == dept_id)
+                    .values(is_tenant_root=0, mounted_tenant_id=None)
+                )
+                await session.commit()
 
         # F017 hook: revoke the ``tenant:{child}#shared_to → tenant:{root}``
         # tuple + the Child-scoped tenant-level tuples before we write the
@@ -334,9 +502,6 @@ class TenantMountService:
         # later via the F013 compensator / housekeeping.
         await cls._on_child_unmounted(child_tenant_id)
 
-        meta: Dict[str, Any] = {'policy': policy, 'dept_id': dept_id}
-        if migrated_counts is not None:
-            meta['migrated_counts'] = migrated_counts
         await _safe_audit(
             tenant_id=child_tenant_id,
             operator_id=getattr(operator, 'user_id', 0),
@@ -344,12 +509,15 @@ class TenantMountService:
             action=TenantAuditAction.UNMOUNT.value,
             target_type='tenant',
             target_id=str(child_tenant_id),
-            metadata=meta,
+            metadata={
+                'dept_id': dept_id,
+                'migrated_counts': migrated_counts,
+            },
         )
-        result: Dict[str, Any] = {'policy': policy, 'tenant_id': child_tenant_id}
-        if migrated_counts is not None:
-            result['migrated_counts'] = migrated_counts
-        return result
+        return {
+            'tenant_id': child_tenant_id,
+            'migrated_counts': migrated_counts,
+        }
 
     @classmethod
     async def _migrate_child_resources_to_root(
@@ -360,12 +528,48 @@ class TenantMountService:
         Thin delegate over ``TenantDao.abulk_update_tenant_id`` so the
         service layer does not own raw SQL — kept only as a semantic
         wrapper (fixed table whitelist, fixed from=child / to=Root).
+
+        Skips tables that are not present in the current deployment's
+        schema (deployments that haven't run later alembic migrations may
+        be missing ``dataset`` / ``linsight_*`` etc).
         """
+        existing = await cls._filter_existing_tables(_UNMOUNT_MIGRATE_TABLES)
         return await TenantDao.abulk_update_tenant_id(
-            tables=_UNMOUNT_MIGRATE_TABLES,
+            tables=existing,
             from_tenant_id=child_tenant_id,
             to_tenant_id=ROOT_TENANT_ID,
         )
+
+    @classmethod
+    async def _filter_existing_tables(cls, candidate: List[str]) -> List[str]:
+        """Return only the tables that currently exist in the live schema.
+
+        Queries ``information_schema.tables`` directly — works on MySQL and
+        PostgreSQL without needing a sync inspector. Some 114-style dev
+        deployments are missing tables from later alembic migrations
+        (``dataset``, ``linsight_*`` etc); skipping silently keeps the
+        unmount transaction whole.
+        """
+        from sqlalchemy import text as sa_text
+
+        from bisheng.core.database import get_async_db_session
+
+        async with get_async_db_session() as session:
+            res = await session.execute(
+                sa_text(
+                    'SELECT table_name FROM information_schema.tables '
+                    'WHERE table_schema = DATABASE()'
+                )
+            )
+            present = {row[0] for row in res.fetchall()}
+        kept = [t for t in candidate if t in present]
+        missing = [t for t in candidate if t not in present]
+        if missing:
+            logger.warning(
+                'unmount migrate skipping missing tables: %s',
+                missing,
+            )
+        return kept
 
     # -----------------------------------------------------------------------
     # migrate_resources_from_root (AC-04d)
@@ -390,7 +594,7 @@ class TenantMountService:
 
         Returns ``{migrated: N, failed: [{resource_id, reason}, ...]}``.
         """
-        _require_super(operator)
+        await _require_super(operator)
         if resource_type not in _MIGRATABLE_RESOURCE_TABLES:
             # 22006 distinguishes "unknown resource_type" from 22002 "mount conflict".
             raise TenantTreeMigrateConflictError()

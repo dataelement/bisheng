@@ -21,14 +21,22 @@ export default function index() {
   const { t } = useTranslation()
   const isSuperAdmin = user?.role === "admin"
   const isDeptAdmin = !!user?.is_department_admin
-  const showOrgTab = isSuperAdmin || isDeptAdmin
-  const canAccessSystemConfig = isSuperAdmin || isDeptAdmin
+  const isChildAdmin = !!user?.is_child_admin
+  /** PRD §3.3: org tab is per-Tenant. Super admin sees full tree;
+   *  Child Admin manages own Child; dept admin manages own subtree. */
+  const showOrgTab = isSuperAdmin || isDeptAdmin || isChildAdmin
+  /** PRD §3.3 / §5.5: role mgmt scoped to admins (super / Child / dept). */
+  const showRoleTab = isSuperAdmin || isDeptAdmin || isChildAdmin
+  /** System config edits instance-level config.yaml; theme writes
+   *  instance-level CSS vars/logo. Neither has per-Tenant semantics,
+   *  so restrict to global super admin only. */
+  const canAccessSystemConfig = isSuperAdmin
   /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
   const showOrgSyncTab = isSuperAdmin
   const showUserGroupTab =
     user?.role === "admin" || !!user?.can_manage_user_groups
-  /** 仅非部门管理员、非超管展示旧版扁平用户表（依赖用户组维度） */
-  const showLegacyUserTab = !isSuperAdmin && !isDeptAdmin
+  /** Legacy flat user table is for accounts without org-tab access. */
+  const showLegacyUserTab = !showOrgTab
 
   const defaultTab = showOrgTab
     ? "organization"
@@ -53,7 +61,9 @@ export default function index() {
           {showUserGroupTab && (
             <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
           )}
-          <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
+          {showRoleTab && (
+            <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
+          )}
           {showOrgSyncTab && (
             <TabsTrigger value="orgSync">{t("orgSync:title", "组织同步")}</TabsTrigger>
           )}
@@ -79,9 +89,11 @@ export default function index() {
             <UserGroups />
           </TabsContent>
         )}
-        <TabsContent value="role" className="min-h-0 flex-1 overflow-hidden">
-          <RolesAndPermissions />
-        </TabsContent>
+        {showRoleTab && (
+          <TabsContent value="role" className="min-h-0 flex-1 overflow-hidden">
+            <RolesAndPermissions />
+          </TabsContent>
+        )}
         {showOrgSyncTab && (
           <TabsContent value="orgSync" className="min-h-0 flex-1 overflow-hidden">
             <OrgSync />

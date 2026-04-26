@@ -92,7 +92,8 @@ export default function UserGroups() {
 
     const canDeleteGroup = (ug: UserGroupV2) => {
         if (user?.role === "admin") return true
-        if (user?.is_department_admin && ug.create_user === user?.user_id) return true
+        const isTenantScopedAdmin = user?.is_department_admin || user?.is_child_admin
+        if (isTenantScopedAdmin && ug.create_user === user?.user_id) return true
         return false
     }
 

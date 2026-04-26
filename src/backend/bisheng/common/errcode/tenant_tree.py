@@ -60,3 +60,17 @@ class TenantTreeMigratePermissionError(BaseErrorCode):
 class TenantTreeMigrateSourceError(BaseErrorCode):
     Code: int = 22011
     Msg: str = 'migrate-from-root requires resource.tenant_id == 1 (Root)'
+
+
+class TenantArchivedNotResumableError(BaseErrorCode):
+    """Reject any status transition out of ``archived``.
+
+    ``archived`` is the terminal state assigned by ``unmount_child`` —
+    the dept mount flag has already been cleared and resources migrated
+    back to Root. Resuming the row to ``active`` (or ``disabled``) would
+    leave the tenant with no mount point, unable to receive members or
+    own resources, indistinguishable from the orphans we explicitly fixed
+    in F030. The only valid post-archive operation is physical delete.
+    """
+    Code: int = 22012
+    Msg: str = 'Archived tenant is terminal; resume to active/disabled is forbidden'

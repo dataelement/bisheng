@@ -73,7 +73,7 @@ export function ArticleList({
     onGoChannelSquare,
     onCreateChannel,
 }: ArticleListProps) {
-    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] fine-pointer:hover:bg-[#F7F8FA]";
     const localize = useLocalize();
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -276,39 +276,41 @@ export function ArticleList({
     }, [channel.id, updateTabsScrollShadow]);
 
     return (
-        <div className="flex h-full w-full flex-1 flex-col">
+        <div className="flex h-full w-full flex-1 flex-col overflow-x-hidden touch-mobile:h-auto touch-mobile:min-h-full touch-mobile:overflow-y-auto">
             {/* header — 结构与知识空间页保持一致 */}
             <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
                         {/* H5 第一行：仅展开 / 创建，与标题区分开 */}
-                        <div
-                            className={cn(
-                                "flex h-8 items-center gap-2",
-                                onOpenChannelNav && onCreateChannel && "justify-between",
-                                !onOpenChannelNav && onCreateChannel && "justify-end",
-                            )}
-                        >
-                            {onOpenChannelNav ? (
-                                <button
-                                    type="button"
-                                    onClick={onOpenChannelNav}
-                                    aria-label={localize("com_nav_open_sidebar")}
-                                    className={mobileHeadIconBtnClassName}
-                                >
-                                    <Menu className="size-4" />
-                                </button>
-                            ) : null}
-                            {onCreateChannel ? (
-                                <button
-                                    type="button"
-                                    onClick={onCreateChannel}
-                                    aria-label={localize("com_subscription.create")}
-                                    className={mobileHeadIconBtnClassName}
-                                >
-                                    <Plus className="size-4" strokeWidth={2} />
-                                </button>
-                            ) : null}
+                        <div className="touch-mobile:-mx-4 touch-mobile:sticky touch-mobile:top-0 touch-mobile:z-10 touch-mobile:bg-white touch-mobile:pt-[env(safe-area-inset-top,0px)]">
+                            <div
+                                className={cn(
+                                    "flex h-10 items-center gap-2 px-2",
+                                    onOpenChannelNav && onCreateChannel && "justify-between",
+                                    !onOpenChannelNav && onCreateChannel && "justify-end",
+                                )}
+                            >
+                                {onOpenChannelNav ? (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenChannelNav}
+                                        aria-label={localize("com_nav_open_sidebar")}
+                                        className={mobileHeadIconBtnClassName}
+                                    >
+                                        <Menu className="size-4" />
+                                    </button>
+                                ) : null}
+                                {onCreateChannel ? (
+                                    <button
+                                        type="button"
+                                        onClick={onCreateChannel}
+                                        aria-label={localize("com_subscription.create")}
+                                        className={mobileHeadIconBtnClassName}
+                                    >
+                                        <Plus className="size-4" strokeWidth={2} />
+                                    </button>
+                                ) : null}
+                            </div>
                         </div>
                         {/* H5 第二行：订阅 + 前往频道广场（在展开按钮下方） */}
                         <div className="flex min-w-0 items-end gap-2">
@@ -319,7 +321,7 @@ export function ArticleList({
                                 <button
                                     type="button"
                                     onClick={onGoChannelSquare}
-                                    className="inline-flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
+                                    className="inline-flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] fine-pointer:hover:bg-[#F7F8FA]"
                                 >
                                     <ChannelBlocksArrowsIcon className="size-4 shrink-0 text-[#86909C]" />
                                     <span className="truncate text-[12px] leading-5 font-normal text-[#212121]">
@@ -339,7 +341,7 @@ export function ArticleList({
                         </h1>
                         <Tooltip>
                             <TooltipTrigger className="hidden shrink-0 cursor-pointer fine-pointer:inline-flex">
-                                <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
+                                <Info className="size-4 text-[#86909c] outline-none fine-pointer:hover:text-[#165dff]" />
                             </TooltipTrigger>
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-[240px]">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
@@ -399,7 +401,7 @@ export function ArticleList({
                                     "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     !selectedSubChannelName
                                         ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                        : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                        : "border-transparent text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",
                                 )}
                             >{localize("com_subscription.all")}</button>
                             {subChannels.map(sub => (
@@ -411,7 +413,7 @@ export function ArticleList({
                                         "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                         selectedSubChannelName === sub.name
                                             ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                            : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                            : "border-transparent text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",
                                     )}
                                 >
                                     {sub.name}
@@ -457,7 +459,7 @@ export function ArticleList({
                                     "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                        : "border-[#E5E6EB] bg-white text-gray-800 hover:bg-gray-50 touch-mobile:border-[#E5E6EB] touch-mobile:bg-white touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
+                                        : "border-[#E5E6EB] bg-white text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-[#E5E6EB] touch-mobile:bg-white touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
                         </div>
@@ -467,11 +469,11 @@ export function ArticleList({
 
             {/* Article list area */}
             <div
-                className="flex-1 overflow-y-auto scroll-on-scroll"
+                className="flex-1 overflow-y-auto overflow-x-hidden scroll-on-scroll touch-mobile:flex-none touch-mobile:overflow-visible touch-mobile:overflow-x-hidden"
                 onScroll={handleListScroll}
                 data-scrolling={isListScrolling ? "true" : "false"}
             >
-                <div className="mx-auto w-full max-w-[1000px] px-4">
+                <div className="mx-auto w-full min-w-0 max-w-[1000px] overflow-x-hidden px-4">
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
                         <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">

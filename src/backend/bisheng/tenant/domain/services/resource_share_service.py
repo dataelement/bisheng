@@ -104,6 +104,18 @@ class ResourceShareService:
             logger.info('[F017] No active children to share %s:%s', object_type, object_id)
             return []
 
+        # FGA's write_tuples raises 400 on duplicates, so read the current
+        # set first and only write the gap. Keeps enable_sharing idempotent
+        # under retries and safe when called concurrently with a freshly-
+        # mounted Child whose backfill already wrote a partial tuple set.
+        existing = await fga.read_tuples(
+            relation='shared_with',
+            object=f'{object_type}:{object_id}',
+        )
+        already_shared_users = {
+            t['user'] for t in existing
+            if t.get('user', '').startswith('tenant:')
+        }
         writes = [
             {
                 'user': f'tenant:{cid}',
@@ -111,9 +123,15 @@ class ResourceShareService:
                 'object': f'{object_type}:{object_id}',
             }
             for cid in child_ids
+            if f'tenant:{cid}' not in already_shared_users
         ]
+        if not writes:
+            logger.info('[F017] %s:%s already shared with all %d children — no-op',
+                        object_type, object_id, len(child_ids))
+            return child_ids
         await fga.write_tuples(writes=writes)
-        logger.info('[F017] Shared %s:%s with %d children', object_type, object_id, len(child_ids))
+        logger.info('[F017] Shared %s:%s with %d new children (total %d)',
+                    object_type, object_id, len(writes), len(child_ids))
         return child_ids
 
     @classmethod

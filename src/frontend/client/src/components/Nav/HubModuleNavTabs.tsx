@@ -22,10 +22,16 @@ export interface HubModuleLink {
 }
 
 /** Shared row styles: matches MainLayout narrow SidebarItem (p-3, rounded-lg, #e6edfc). */
-const hubNavItemClassName = (navActive: boolean, routeActive: boolean, equalWidth: boolean) =>
+const hubNavItemClassName = (
+  navActive: boolean,
+  routeActive: boolean,
+  equalWidth: boolean,
+  squareItems: boolean,
+) =>
   cn(
-    'flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors hover:bg-[#e6edfc]',
-    equalWidth && 'min-w-0 flex-1',
+    'flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors fine-pointer:hover:bg-[#e6edfc] coarse-pointer:hover:bg-transparent',
+    squareItems && 'h-12 w-12 p-0 shrink-0',
+    equalWidth && !squareItems && 'min-w-0 flex-1',
     !equalWidth && 'shrink-0',
     (navActive || routeActive) && 'bg-[#e6edfc]',
   );
@@ -98,11 +104,18 @@ export function useHubModuleLinks(): HubModuleLink[] {
 interface HubModuleNavTabsProps {
   /** Equal-width cells (e.g. app chat sidebar); default is compact centered icons like H5 drawers. */
   equalWidth?: boolean;
+  /** Render fixed square tab buttons. */
+  squareItems?: boolean;
   onLinkClick?: (link: HubModuleLink) => void;
   className?: string;
 }
 
-export function HubModuleNavTabs({ equalWidth = false, onLinkClick, className }: HubModuleNavTabsProps) {
+export function HubModuleNavTabs({
+  equalWidth = false,
+  squareItems = false,
+  onLinkClick,
+  className,
+}: HubModuleNavTabsProps) {
   const links = useHubModuleLinks();
 
   return (
@@ -110,7 +123,7 @@ export function HubModuleNavTabs({ equalWidth = false, onLinkClick, className }:
       className={cn(
         'flex shrink-0 gap-2 border-b border-[#e5e6eb] px-2 py-2 touch-mobile:border-b-0',
         equalWidth && 'w-full min-w-0',
-        equalWidth ? 'items-stretch' : 'items-center justify-center',
+        squareItems ? 'items-center justify-between' : equalWidth ? 'items-stretch' : 'items-center justify-center',
         className,
       )}
     >
@@ -124,7 +137,7 @@ export function HubModuleNavTabs({ equalWidth = false, onLinkClick, className }:
             aria-label={link.label}
             onClick={() => onLinkClick?.(link)}
             className={({ isActive: navActive }) =>
-              hubNavItemClassName(navActive, link.isActive, equalWidth)
+              hubNavItemClassName(navActive, link.isActive, equalWidth, squareItems)
             }
           >
             {({ isActive: navActive }) => {

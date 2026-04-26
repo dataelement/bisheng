@@ -620,7 +620,14 @@ class DepartmentDao:
 
         Uses FGAClient.list_objects() which respects admin inheritance from parent.
         Returns empty list if FGA is unavailable.
+
+        Department admin is a cross-tenant relation (FGA stores it without a
+        tenant scope), and this DAO is invoked from tenant-exempt paths such
+        as ``/user/login`` and SSO callbacks where no tenant context exists.
+        Bypass the tenant filter on the row fetch so those callers don't
+        ``raise NoTenantContextError`` when the FGA result is non-empty.
         """
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.core.openfga.manager import aget_fga_client
 
         fga = await aget_fga_client()
@@ -638,7 +645,8 @@ class DepartmentDao:
         dept_ids = [int(obj.split(':', 1)[1]) for obj in raw if ':' in obj]
         if not dept_ids:
             return []
-        return await cls.aget_by_ids(dept_ids)
+        with bypass_tenant_filter():
+            return await cls.aget_by_ids(dept_ids)
 
     # -----------------------------------------------------------------------
     # v2.5.1 F014: SSO realtime sync DAO (spec §5.1/§5.2, INV-T12).

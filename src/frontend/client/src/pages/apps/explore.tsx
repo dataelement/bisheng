@@ -28,9 +28,9 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
             className={cn(
                 "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
                 "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
-                "hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover:after:opacity-100",
-                "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
+                "fine-pointer:hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
+                "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
             )}
         >
             {/* 左侧图标 */}
@@ -53,13 +53,13 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                                 "flex shrink-0 items-center justify-end gap-[10px] transition-opacity",
                                 compactActionsAlwaysVisible
                                     ? "opacity-100 pointer-events-auto"
-                                    : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                                    : "opacity-0 pointer-events-none fine-pointer:group-hover:opacity-100 fine-pointer:group-hover:pointer-events-auto"
                             )}
                         >
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] hover:bg-[#F2F3F5]"
+                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F2F3F5]"
                                 aria-label={localize('com_app_share_app')}
                             >
                                 <ShareOutlineIcon className="size-3.5" />
@@ -67,7 +67,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] hover:bg-[#F2F3F5]"
+                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F2F3F5]"
                                 aria-label={localize('com_app_start_chat')}
                             >
                                 <img
@@ -84,7 +84,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 <p
                     className={cn(
                         "mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2",
-                        !showCompactActions && "group-hover:hidden"
+                        !showCompactActions && "fine-pointer:group-hover:hidden"
                     )}
                 >
                     {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
@@ -92,18 +92,18 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
 
                 {/* 按纽区域：平时隐藏，hover时显示 */}
                 {!showCompactActions && (
-                    <div className="hidden group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
+                    <div className="hidden fine-pointer:group-hover:flex flex-[1_0_0] gap-[4px] items-center justify-center min-h-px w-full mt-auto">
                         {agent.can_share === true ? (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                                className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
+                                className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] transition-colors fine-pointer:hover:bg-gray-50"
                             >
                                 {localize('com_app_share_app')}
                             </button>
                         ) : null}
                         <button
                             onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                            className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
+                            className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] transition-colors fine-pointer:hover:bg-blue-600"
                         >
                             {localize('com_app_start_chat')}
                         </button>
@@ -247,7 +247,7 @@ export default function ExplorePlaza() {
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335CFF]"
+                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-[#335CFF]"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>

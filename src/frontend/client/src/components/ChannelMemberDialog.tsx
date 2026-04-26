@@ -335,6 +335,7 @@ export function ChannelMemberDialog({
                 <DialogContent
                     overlayClassName="z-[100]"
                     className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 touch-mobile:fixed touch-mobile:inset-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
                     close={false}
                 >
                     <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 touch-mobile:h-auto touch-mobile:min-h-[56px] touch-mobile:px-4 sm:text-left">

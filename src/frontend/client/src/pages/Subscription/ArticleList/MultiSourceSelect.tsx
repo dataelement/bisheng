@@ -104,7 +104,7 @@ export function MultiSourceSelect({
                 <div className="p-3">
                     {/* 全部信息源 选项 */}
                     <div
-                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors hover:bg-slate-100"
+                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors fine-pointer:hover:bg-slate-100"
                         onClick={handleSelectAll}
                     >
                         <Checkbox
@@ -125,7 +125,7 @@ export function MultiSourceSelect({
                         {options.map((option) => (
                             <div
                                 key={option.id}
-                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors hover:bg-slate-100"
+                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors fine-pointer:hover:bg-slate-100"
                                 onClick={() => handleToggleItem(option.id)}
                             >
                                 <Checkbox

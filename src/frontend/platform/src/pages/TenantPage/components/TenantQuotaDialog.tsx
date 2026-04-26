@@ -3,6 +3,7 @@ import { toast } from "@/components/bs-ui/toast/use-toast";
 import { getTenantQuotaApi, setTenantQuotaApi } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import type { Tenant, TenantQuota } from "@/types/api/tenant";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -46,18 +47,14 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
   };
 
   const quotaFields = [
-    { key: "storage_gb", label: t("tenant.storageUsage") + " (GB)" },
-    { key: "user_count", label: t("tenant.userCount") },
-    { key: "knowledge_space", label: t("knowledge") },
-    { key: "workflow", label: t("menu.workflow") },
-    { key: "assistant", label: t("menu.assistant") },
+    { key: "storage_gb", label: t("tenant.knowledgeStorageUsage") + " (GB)" },
   ];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-background rounded-lg p-6 w-[480px] shadow-lg">
         <h3 className="text-lg font-semibold mb-4">
-          {t("tenant.quota")} - {tenant.tenant_name}
+          {t("tenant.quota")} - {displayTenantName(tenant.tenant_name)}
         </h3>
 
         {quota && (

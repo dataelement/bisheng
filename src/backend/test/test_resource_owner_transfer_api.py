@@ -37,7 +37,7 @@ def _mk_payload(user_id: int, *, is_super: bool = False,
     p.user_id = user_id
     p.user_name = f'user_{user_id}'
     p.tenant_id = tenant_id
-    p.is_global_super = MagicMock(return_value=is_super)
+    p.is_global_super = bool(is_super)
     p.is_admin = MagicMock(return_value=is_admin)
     p.admin_scope_tenant_id = None
     return p

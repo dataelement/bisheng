@@ -117,7 +117,6 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                        {appConfig.multiTenantEnabled && <TenantSwitcher user={user} isAdmin={isSuperAdmin} />}
                         <SelectHover
                             className={"-top-4"}
                             triagger={
@@ -304,33 +303,3 @@ const useLanguage = (user: User) => {
     }
 }
 
-// Multi-tenant header entry: v2.5.1 no longer exposes manual tenant switching.
-function TenantSwitcher({ user, isAdmin }: { user: User; isAdmin: boolean }) {
-    const { t } = useTranslation("bs");
-    const currentTenant = user.leaf_tenant_name || user.tenant_name || user.tenant_code || '';
-
-    return <>
-        {isAdmin ? (
-            <SelectHover
-                className={"-top-4"}
-                triagger={
-                    <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
-                        <span className="text-sm leading-8 max-w-24 truncate">{currentTenant || t('tenant.management')}</span>
-                        <ChevronDown className="ml-1 w-4 h-4" />
-                    </div>
-                }>
-                <SelectHoverItem onClick={() => { location.href = '/tenant'; }}>
-                    <SystemIcon className="w-4 h-4 mr-1" /><span>{t('tenant.management')}</span>
-                </SelectHoverItem>
-            </SelectHover>
-        ) : (
-                <div
-                    className="h-8 px-3 bg-header-icon rounded-lg my-4 flex items-center justify-center"
-                    title={currentTenant || t('tenant.management')}
-                >
-                    <span className="text-sm leading-8 max-w-24 truncate">{currentTenant || t('tenant.management')}</span>
-                </div>
-        )}
-        <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-    </>;
-}

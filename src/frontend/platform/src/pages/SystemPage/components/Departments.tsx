@@ -9,6 +9,7 @@ import { MemberTable } from "@/pages/DepartmentPage/components/MemberTable"
 import { DepartmentSettings } from "@/pages/DepartmentPage/components/DepartmentSettings"
 import { DepartmentTrafficControl } from "@/pages/DepartmentPage/components/DepartmentTrafficControl"
 import { CreateDepartmentDialog } from "@/pages/DepartmentPage/components/CreateDepartmentDialog"
+import { MountTenantDialog } from "@/pages/DepartmentPage/components/MountTenantDialog"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 
@@ -24,6 +25,8 @@ export default function Departments() {
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
+  const [mountTarget, setMountTarget] = useState<{ id: number; name: string } | null>(null)
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
   const [memberHighlightUserId, setMemberHighlightUserId] = useState<number | null>(null)
   const [treeScrollRequest, setTreeScrollRequest] = useState<{
@@ -84,6 +87,15 @@ export default function Departments() {
 
   const handleCreated = useCallback(() => {
     setCreateOpen(false)
+    loadTree()
+  }, [loadTree])
+
+  const handleMarkAsTenant = useCallback((deptId: number, deptName: string) => {
+    setMountTarget({ id: deptId, name: deptName })
+  }, [])
+
+  const handleMounted = useCallback(() => {
+    setMountTarget(null)
     loadTree()
   }, [loadTree])
 
@@ -231,7 +243,12 @@ export default function Departments() {
               />
             </TabsContent>
             <TabsContent value="settings">
-              <DepartmentSettings dept={selectedDept} tree={tree} onChanged={handleTreeChange} />
+              <DepartmentSettings
+                dept={selectedDept}
+                tree={tree}
+                onChanged={handleTreeChange}
+                onMarkAsTenant={multiTenantEnabled ? handleMarkAsTenant : undefined}
+              />
             </TabsContent>
             {showTrafficControlTab && (
               <TabsContent value="traffic-control">
@@ -252,6 +269,15 @@ export default function Departments() {
           defaultParentId={createParentId}
           onCreated={handleCreated}
           onClose={() => setCreateOpen(false)}
+        />
+      )}
+
+      {mountTarget && (
+        <MountTenantDialog
+          deptId={mountTarget.id}
+          deptName={mountTarget.name}
+          onMounted={handleMounted}
+          onClose={() => setMountTarget(null)}
         />
       )}
     </div>

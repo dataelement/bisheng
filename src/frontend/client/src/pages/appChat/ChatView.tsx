@@ -1,10 +1,12 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { useAuthContext, useLocalize } from "~/hooks";
+import usePrefersMobileLayout from "~/hooks/usePrefersMobileLayout";
+import store from "~/store";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
 import { ChatEmptyState } from "./components/ChatEmptyState";
@@ -27,6 +29,8 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     const running = useRecoilValue(currentRunningState);
     const conversations = useRecoilValue(appConversationsState);
     const [, setConversations] = useRecoilState(appConversationsState);
+    const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
+    const isTabletOrMobile = usePrefersMobileLayout();
 
     // Lightweight createNewChat — avoids importing useAppSidebar which would
     // spin up a second auto-fetch/auto-select effect and overwrite placeholders.
@@ -56,6 +60,18 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     const headerTitle = [activeConversation?.title, data?.name]
         .map((item) => String(item || "").trim())
         .find(Boolean) || localize('com_ui_new_chat');
+
+    useEffect(() => {
+        setChatMobileHeader({
+            title: headerTitle,
+            conversationId: cid || '',
+            flowId: data?.id || '',
+            flowType: data?.flow_type || 15,
+            readOnly: !!readOnly,
+            hideShare: false,
+        });
+        return () => setChatMobileHeader(null);
+    }, [setChatMobileHeader, headerTitle, cid, data?.id, data?.flow_type, readOnly]);
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
         conversations.length === 0 &&
@@ -67,7 +83,6 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     const Logo = useMemo(() => {
         return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />
     }, [data]);
-
 
     return <div className="relative h-full flex flex-col">
         <HeaderTitle

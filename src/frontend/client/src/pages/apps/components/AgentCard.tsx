@@ -37,8 +37,8 @@ export function AgentCard({
     <div
       className={cn(
         'group/card relative flex h-[132px] cursor-pointer flex-col justify-between overflow-hidden rounded-[6px] border border-solid p-2 transition-all',
-        'border-[#ebecf0] border-[0.5px] bg-white hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
-        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[6px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover/card:after:opacity-100',
+        'border-[#ebecf0] border-[0.5px] bg-white fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[6px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
         'bg-[linear-gradient(123.519deg,_rgb(249,251,254)_0%,_rgb(255,255,255)_50%,_rgb(249,251,254)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
@@ -57,7 +57,7 @@ export function AgentCard({
             className={cn(
               "flex items-center gap-1 shrink-0 transition-opacity",
               shouldUseHoverActionsInMobileCard
-                ? "opacity-0 pointer-events-none group-hover/card:opacity-100 group-hover/card:pointer-events-auto"
+                ? "opacity-0 pointer-events-none fine-pointer:group-hover/card:opacity-100 fine-pointer:group-hover/card:pointer-events-auto"
                 : "opacity-100 pointer-events-auto",
             )}
           >
@@ -74,7 +74,7 @@ export function AgentCard({
                 <button
                   type="button"
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E6EB] bg-white text-[#86909C] hover:bg-[#F7F8FA]"
+                  className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E6EB] bg-white text-[#86909C] fine-pointer:hover:bg-[#F7F8FA]"
                   aria-label={localize('com_ui_more')}
                 >
                   <MoreVertical className="size-4" />
@@ -114,12 +114,12 @@ export function AgentCard({
                   }}
                   className={cn(
                     'group/pin flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] p-1 transition-colors',
-                    'border border-transparent hover:border-[#E5E6EB] hover:bg-[#f7f8fa]',
+                    'border border-transparent fine-pointer:hover:border-[#E5E6EB] fine-pointer:hover:bg-[#f7f8fa]',
                     isPinned
                       ? 'opacity-100'
                       : shouldUseHoverActions
-                        ? 'opacity-0 pointer-events-none group-hover/card:pointer-events-auto group-hover/card:opacity-100'
-                        : 'opacity-100 pointer-events-auto',
+                        ? 'opacity-0 pointer-events-none fine-pointer:group-hover/card:pointer-events-auto fine-pointer:group-hover/card:opacity-100'
+                      : 'opacity-100 pointer-events-auto',
                   )}
                   aria-label={
                     isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
@@ -127,8 +127,8 @@ export function AgentCard({
                 >
                   {isPinned ? (
                     <span className="relative inline-flex size-[18px] items-center justify-center">
-                      <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
-                      <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
+                      <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity fine-pointer:group-hover/pin:opacity-0" />
+                      <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity fine-pointer:group-hover/pin:opacity-100" />
                     </span>
                   ) : (
                     <ChannelPinGrayIcon className="size-[18px] shrink-0" />
@@ -170,9 +170,9 @@ export function AgentCard({
             }}
             variant="outline"
             className={cn(
-              "h-6 shrink-0 rounded-[6px] border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] hover:bg-[#F7F8FA] transition-opacity",
+              "h-6 shrink-0 rounded-[6px] border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] transition-opacity fine-pointer:hover:bg-[#F7F8FA]",
               shouldUseHoverActionsInMobileCard
-                ? "opacity-0 pointer-events-none group-hover/card:opacity-100 group-hover/card:pointer-events-auto"
+                ? "opacity-0 pointer-events-none fine-pointer:group-hover/card:opacity-100 fine-pointer:group-hover/card:pointer-events-auto"
                 : "opacity-100 pointer-events-auto",
             )}
           >
@@ -183,7 +183,7 @@ export function AgentCard({
         <div
           className={cn(
             'h-[28px] w-full min-w-0 items-stretch justify-center gap-1',
-            shouldUseHoverActions ? 'hidden group-hover/card:flex' : 'flex',
+            shouldUseHoverActions ? 'hidden fine-pointer:group-hover/card:flex' : 'flex',
           )}
         >
           {agent.can_share === true ? (

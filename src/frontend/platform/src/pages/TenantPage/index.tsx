@@ -19,6 +19,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { locationContext } from "@/contexts/locationContext";
 import { useTable } from "@/util/hook";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate } from "react-router-dom";
@@ -33,6 +34,11 @@ const statusColors: Record<string, string> = {
   archived:
     "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
 };
+
+// Root tenant is system-protected (INV-T11): disable/archive/delete are
+// rejected server-side with errcode 22008. Hide the disable button to avoid
+// surfacing an error path; edit/quota remain allowed.
+const isRootTenant = (tenant: Tenant) => tenant.id === 1;
 
 export default function TenantPage() {
   const { t } = useTranslation("bs");
@@ -126,18 +132,6 @@ export default function TenantPage() {
         </div>
       </div>
 
-      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-        <p className="font-medium">
-          {t("tenant.v251Title", { defaultValue: "v2.5.1 租户创建方式已调整" })}
-        </p>
-        <p className="mt-1 leading-6">
-          {t("tenant.v251Desc", {
-            defaultValue:
-              "Root Tenant 由系统自动初始化；新增子租户需通过部门挂载流程完成。当前页面仅保留现有 Tenant 的查看、编辑、配额和成员管理。",
-          })}
-        </p>
-      </div>
-
       <div className="h-[calc(100vh-200px)] overflow-y-auto">
         <Table>
           <TableHeader>
@@ -152,7 +146,9 @@ export default function TenantPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tenants.map((tenant: Tenant) => (
+            {tenants.map((tenant: Tenant) => {
+              const tenantLabel = displayTenantName(tenant.tenant_name);
+              return (
               <TableRow key={tenant.id}>
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
@@ -164,10 +160,10 @@ export default function TenantPage() {
                       />
                     ) : (
                       <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-xs font-bold">
-                        {tenant.tenant_name.charAt(0)}
+                        {tenantLabel.charAt(0)}
                       </div>
                     )}
-                    {tenant.tenant_name}
+                    {tenantLabel}
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
@@ -222,29 +218,40 @@ export default function TenantPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <button
-                      className="text-primary hover:underline text-sm"
-                      onClick={() => {
-                        setEditTenant(tenant);
-                        setCreateOpen(true);
-                      }}
-                    >
-                      {t("edit")}
-                    </button>
-                    <button
-                      className="text-primary hover:underline text-sm"
-                      onClick={() => setQuotaDialogTenant(tenant)}
-                    >
-                      {t("tenant.quota")}
-                    </button>
-                    <button
-                      className="text-primary hover:underline text-sm"
-                      onClick={() => handleToggleStatus(tenant)}
-                    >
-                      {tenant.status === "active"
-                        ? t("tenant.disable")
-                        : t("tenant.enable")}
-                    </button>
+                    {/* archived = terminal post-unmount state. The row is
+                        read-only: no edit / quota / toggle, only physical
+                        delete. Treating archived as "non-active and therefore
+                        enable-able" was the bug that resurrected unmounted
+                        tenants with no mount point. */}
+                    {tenant.status !== "archived" && (
+                      <>
+                        <button
+                          className="text-primary hover:underline text-sm"
+                          onClick={() => {
+                            setEditTenant(tenant);
+                            setCreateOpen(true);
+                          }}
+                        >
+                          {t("edit")}
+                        </button>
+                        <button
+                          className="text-primary hover:underline text-sm"
+                          onClick={() => setQuotaDialogTenant(tenant)}
+                        >
+                          {t("tenant.quota")}
+                        </button>
+                        {!isRootTenant(tenant) && (
+                          <button
+                            className="text-primary hover:underline text-sm"
+                            onClick={() => handleToggleStatus(tenant)}
+                          >
+                            {tenant.status === "active"
+                              ? t("tenant.disable")
+                              : t("tenant.enable")}
+                          </button>
+                        )}
+                      </>
+                    )}
                     {tenant.status !== "active" && (
                       <button
                         className="text-red-500 hover:underline text-sm"
@@ -256,7 +263,8 @@ export default function TenantPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

@@ -51,10 +51,17 @@ from bisheng.utils.http_middleware import (
 # and wrapping the whole API surface with it would change business flows
 # (chat, workflow execute, knowledge ingest) — not wanted. Adding a new
 # prefix is a small, auditable change; keep it narrow.
+#
+# v2.5.1 originally listed ``/api/v1/roles`` and ``/api/v1/audit_log`` here.
+# A product review concluded super admins don't need scope switching for
+# either: roles use a global-view + field-filter pattern, and audit logs
+# are global for super admins / naturally subtree-bounded for child admins
+# via ``visible_tenant_ids`` (CustomMiddleware). The ``/api/v1/audit_log``
+# literal was also dead code — the real router prefix is ``/api/v1/audit``,
+# so it never matched. Both prefixes were removed; scope now only affects
+# the LLM management surface (and the admin endpoints used to set it).
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     '/api/v1/llm',
-    '/api/v1/roles',
-    '/api/v1/audit_log',
     '/api/v1/admin',
 )
 

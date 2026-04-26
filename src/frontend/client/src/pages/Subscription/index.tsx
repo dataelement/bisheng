@@ -464,9 +464,11 @@ export default function Subscription() {
                                     onChannelSquare={handleChannelSquare}
                                     onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                                     onManageMembers={(channel) => {
-                                        openChannelPermissionDialog(channel);
+                                        setChannelListDrawerOpen(false);
+                                        openChannelShareDialog(channel, "members");
                                     }}
                                     onChannelSettings={(channel) => {
+                                        setChannelListDrawerOpen(false);
                                         setEditingChannel(null);
                                         (async () => {
                                             try {

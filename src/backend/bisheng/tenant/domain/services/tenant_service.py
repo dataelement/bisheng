@@ -15,10 +15,15 @@ from bisheng.common.errcode.tenant import (
     TenantNotFoundError,
     TenantSwitchForbiddenError,
 )
-from bisheng.common.errcode.tenant_tree import TenantTreeRootProtectedError
+from bisheng.common.errcode.tenant_tree import (
+    TenantArchivedNotResumableError,
+    TenantTreeRootProtectedError,
+)
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao, UserTenantDao
+from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.schemas.tenant_schema import (
     TenantCreate,
     TenantDetail,
@@ -138,12 +143,19 @@ class TenantService:
         tenant_ids = [t.id for t in tenants]
         user_counts = await TenantDao.acount_tenant_users_batch(tenant_ids)
 
+        # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
+        # operators see the original code in the tenant list. The stored value
+        # only carries the suffix to keep the UNIQUE index on tenant_code free
+        # for a remount under the same code (see ``archived_tenant_code``).
+        from bisheng.tenant.domain.services.tenant_mount_service import (
+            display_tenant_code,
+        )
         items = []
         for t in tenants:
             items.append(TenantListItem(
                 id=t.id,
                 tenant_name=t.tenant_name,
-                tenant_code=t.tenant_code,
+                tenant_code=display_tenant_code(t.tenant_code),
                 logo=t.logo,
                 status=t.status,
                 user_count=user_counts.get(t.id, 0),
@@ -164,10 +176,13 @@ class TenantService:
         user_count = await TenantDao.acount_tenant_users(tenant_id)
         admin_users = await cls._get_tenant_admin_users(tenant_id)
 
+        from bisheng.tenant.domain.services.tenant_mount_service import (
+            display_tenant_code,
+        )
         detail = TenantDetail(
             id=tenant.id,
             tenant_name=tenant.tenant_name,
-            tenant_code=tenant.tenant_code,
+            tenant_code=display_tenant_code(tenant.tenant_code),
             logo=tenant.logo,
             status=tenant.status,
             user_count=user_count,
@@ -204,8 +219,28 @@ class TenantService:
     async def aupdate_tenant_status(
         cls, tenant_id: int, data: TenantStatusUpdate, login_user,
     ) -> dict:
-        """Update tenant status and manage Redis blacklist."""
+        """Update tenant status and manage Redis blacklist.
+
+        On a transition into ``disabled`` we additionally revoke active JWTs
+        for every user whose active leaf is this tenant (PRD §5.1.3 step 1)
+        so the frontend hits a 401 and redirects to login instead of just
+        silently 403-ing every request.
+        """
         _guard_default_tenant(tenant_id)
+
+        with bypass_tenant_filter():
+            prior = await TenantDao.aget_by_id(tenant_id)
+        if not prior:
+            raise TenantNotFoundError()
+        # ``archived`` is terminal — see TenantArchivedNotResumableError.
+        # Without this guard, the frontend's "enable" button silently brings
+        # an unmounted tenant back to ``active`` with no mount point.
+        if prior.status == 'archived' and data.status != 'archived':
+            raise TenantArchivedNotResumableError()
+        became_disabled = (
+            prior.status != 'disabled' and data.status == 'disabled'
+        )
+
         tenant = await TenantDao.aupdate_tenant(tenant_id, status=data.status)
         if not tenant:
             raise TenantNotFoundError()
@@ -217,7 +252,49 @@ class TenantService:
         else:
             await redis_client.adelete(key)
 
+        if became_disabled:
+            await cls._revoke_active_jwts_for_tenant(
+                tenant_id, operator_id=getattr(login_user, 'user_id', 0),
+            )
+
         return _safe_tenant_dump(tenant)
+
+    @classmethod
+    async def _revoke_active_jwts_for_tenant(
+        cls, tenant_id: int, operator_id: int,
+    ) -> None:
+        """PRD §5.1.3 step 1: bump token_version for every active leaf user."""
+        from bisheng.user.domain.services.user import UserService
+
+        user_ids = await UserTenantDao.aget_active_user_ids_by_tenant(tenant_id)
+        for uid in user_ids:
+            try:
+                await UserService.ainvalidate_jwt_after_account_disabled(uid)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    'JWT revoke failed user_id=%s tenant_id=%s: %s',
+                    uid, tenant_id, exc,
+                )
+
+        try:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=tenant_id,
+                operator_id=operator_id,
+                operator_tenant_id=ROOT_TENANT_ID,
+                action=TenantAuditAction.DISABLE.value,
+                target_type='tenant',
+                target_id=str(tenant_id),
+                metadata={
+                    'revoked_user_ids': user_ids,
+                    'revoked_count': len(user_ids),
+                    'jwt_revoke': True,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                'audit log failed for tenant.disable tenant_id=%s: %s',
+                tenant_id, exc,
+            )
 
     @classmethod
     async def adelete_tenant(cls, tenant_id: int, login_user) -> None:

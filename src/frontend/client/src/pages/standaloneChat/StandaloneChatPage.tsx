@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { Menu } from 'lucide-react';
 import { useAuthContext, usePrefersMobileLayout } from '~/hooks';
 import { AuthContext } from '~/hooks/AuthContext';
+import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import AppChat from '~/pages/appChat';
@@ -142,37 +142,30 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
             />
           )}
 
-          {/* Floating toggle (collapsed state) */}
-          <div
-            className={cn(
-              'absolute top-[20px] left-[12px] z-[40] flex items-center gap-[8px] transition-all duration-300',
-              sidebarVisible ? 'opacity-0 pointer-events-none' : 'opacity-100 top-3',
-            )}
-          >
-            {isTabletOrMobile && (
-              <button
-                onClick={toggleSidebar}
-                className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
-                aria-label="Open sidebar"
-              >
-                <Menu size={16} className="text-[#212121]" />
-              </button>
-            )}
-          </div>
-
           {/* Chat panel */}
           <div
             className={cn(
               'relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden',
-              'p-2',
+              'p-2 touch-mobile:p-0',
             )}
           >
+            {isTabletOrMobile && (
+              <MobileNav
+                variant="chat"
+                navVisible={sidebarVisible}
+                setNavVisible={setSidebarVisible}
+                persistNavVisibleInLocalStorage={false}
+                navigateToNewChatPath={false}
+                onNewChat={createNewChat}
+              />
+            )}
             <div
               className={cn(
                 'min-h-0 min-w-0 flex-1 overflow-hidden',
                 isGuestMode
                   ? 'rounded-xl bg-white'
                   : 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
+                'touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none',
               )}
             >
               {activeChatId ? (

@@ -52,6 +52,33 @@ export async function restoreDepartmentApi(deptId: string): Promise<any> {
   return await axios.post(`/api/v1/departments/${depSeg(deptId)}/restore`)
 }
 
+// ── Mount as Child Tenant ──────────────────────────────
+// mount-tenant uses the integer PK (not the BS@... business id) per
+// `MountTenantRequest` on the backend; see tenant_mount.py:79.
+
+export interface MountTenantPayload {
+  // Optional: backend auto-generates ``t{dept_id}`` when omitted.
+  tenant_code?: string
+  tenant_name: string
+}
+
+export async function mountTenantApi(
+  deptIdInt: number,
+  data: MountTenantPayload
+): Promise<{ id: number; tenant_code: string; tenant_name: string; parent_tenant_id: number; status: string }> {
+  return await axios.post(`/api/v1/departments/${deptIdInt}/mount-tenant`, data)
+}
+
+/** v2.5.1 收窄到唯一路径：资源迁回 Root + Child 归档。
+ *
+ * Returns ``migrated_counts`` mapping table → row count moved into Root.
+ */
+export async function unmountTenantApi(
+  deptIdInt: number,
+): Promise<{ tenant_id: number; migrated_counts: Record<string, number> }> {
+  return await axios.delete(`/api/v1/departments/${deptIdInt}/mount-tenant`)
+}
+
 // ── Move ───────────────────────────────────────────────
 
 export async function moveDepartmentApi(

@@ -7,7 +7,6 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
 import MessageButtons from "./MessageButtons";
-import MessageSource from "./MessageSource";
 import useLocalize from "~/hooks/useLocalize";
 
 
@@ -42,28 +41,26 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-
+type MessageBsProps = {
+    logo: React.ReactNode;
+    title: string;
+    data: ChatMessageType;
+    onUnlike?: any;
+    isGuestMode?: boolean;
+    readOnly?: any;
+    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
+    activeCitationMessageId?: string | null;
+};
 export default function MessageBs({
     logo,
     title,
     data,
     onUnlike = () => { },
     readOnly,
-    onSource,
     isGuestMode = false,
     onOpenCitationPanel,
     activeCitationMessageId,
-}: {
-    logo: React.ReactNode;
-    title: string;
-    data: ChatMessageType;
-    onUnlike?: any;
-    readOnly?: string;
-    onSource?: any;
-    isGuestMode?: boolean;
-    onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
-    activeCitationMessageId?: string | null;
-}) {
+}: MessageBsProps) {
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
@@ -148,30 +145,9 @@ export default function MessageBs({
                         messageId={String(data.id)}
                         desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
                         open={onOpenCitationPanel ? activeCitationMessageId === String(data.id) : undefined}
-                        onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
-                            if (!nextOpen && activeCitationMessageId === String(data.id)) {
-                                onOpenCitationPanel({
-                                    messageId: String(data.id),
-                                    content: referenceContent,
-                                    webContent: referenceWebContent,
-                                    citations: (data as any).citations,
-                                    referenceItems: [],
-                                });
-                            }
-                        }) : undefined}
                         onDesktopOpen={onOpenCitationPanel}
                         buttonClassName="ml-4"
                     />
-                    {!isGuestMode && <MessageSource
-                        extra={data.extra || {}}
-                        end={data.end}
-                        source={data.source}
-                        className="pl-4"
-                        onSource={() => onSource?.({
-                            messageId: data.id,
-                            message,
-                        })}
-                    />}
                     {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}

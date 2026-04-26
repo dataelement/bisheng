@@ -60,6 +60,30 @@ export async function setTenantQuotaApi(
   return await axios.put(`/api/v1/tenants/${tenantId}/quota`, { quota_config })
 }
 
+// ── Tenant Admins ────────────────────────────────────────
+
+export async function listTenantAdminsApi(
+  tenantId: number
+): Promise<{ user_ids: number[] }> {
+  return await axios.get(`/api/v1/tenants/${tenantId}/admins`)
+}
+
+export async function grantTenantAdminApi(
+  tenantId: number,
+  userId: number
+): Promise<any> {
+  return await axios.post(`/api/v1/tenants/${tenantId}/admins`, {
+    user_id: userId,
+  })
+}
+
+export async function revokeTenantAdminApi(
+  tenantId: number,
+  userId: number
+): Promise<any> {
+  return await axios.delete(`/api/v1/tenants/${tenantId}/admins/${userId}`)
+}
+
 // ── Tenant Users ─────────────────────────────────────────
 
 export async function getTenantUsersApi(
