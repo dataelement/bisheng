@@ -1143,7 +1143,7 @@ class TestTupleLifecycle:
             service, '_require_write_permission', new_callable=AsyncMock,
         ), patch.object(
             service, '_require_permission_id', new_callable=AsyncMock,
-        ), patch(
+        ) as mock_require_permission_id, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
             return_value=space,
@@ -1175,11 +1175,29 @@ class TestTupleLifecycle:
             result = await service.add_file(1, ['/tmp/doc.txt'])
 
         assert result[0].id == 81
+        mock_require_permission_id.assert_any_await('knowledge_space', 1, 'upload_file')
         parent_tuple = mock_batch_write.await_args.args[0][0]
         assert parent_tuple.user == 'knowledge_space:1'
         assert parent_tuple.relation == 'parent'
         assert parent_tuple.object == 'knowledge_file:81'
         mock_write_owner.assert_awaited_once_with(service.login_user.user_id, 'knowledge_file', '81')
+
+    @pytest.mark.asyncio
+    async def test_add_file_uses_parent_folder_upload_permission(self, service):
+        with patch.object(
+            service,
+            '_require_permission_id',
+            new_callable=AsyncMock,
+            side_effect=SpacePermissionDeniedError(),
+        ) as mock_require_permission_id, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+        ) as mock_query_space:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.add_file(1, ['/tmp/doc.txt'], parent_id=70)
+
+        mock_require_permission_id.assert_awaited_once_with('folder', 70, 'upload_file', space_id=1)
+        mock_query_space.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_add_file_routes_department_space_to_approval_service(self, service):
