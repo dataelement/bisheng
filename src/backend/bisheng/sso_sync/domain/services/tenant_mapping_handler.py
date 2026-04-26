@@ -45,16 +45,22 @@ class TenantMappingHandler:
         cls,
         mappings: Iterable[TenantMappingItem],
         request_ip: str = '',
+        dept_source: str = SSO_SOURCE,
     ) -> None:
         for item in mappings or []:
-            await cls._process_one(item, request_ip=request_ip)
+            await cls._process_one(
+                item, request_ip=request_ip, dept_source=dept_source,
+            )
 
     @classmethod
     async def _process_one(
-        cls, item: TenantMappingItem, request_ip: str,
+        cls,
+        item: TenantMappingItem,
+        request_ip: str,
+        dept_source: str = SSO_SOURCE,
     ) -> None:
         dept = await DepartmentDao.aget_by_source_external_id(
-            cls.SOURCE, item.dept_external_id,
+            dept_source, item.dept_external_id,
         )
         if dept is None or dept.is_deleted == 1:
             logger.warning(

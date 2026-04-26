@@ -48,11 +48,11 @@ class RoleListResponse(BaseModel):
 
 class EffectiveQuotaItem(BaseModel):
     resource_type: str
-    role_quota: int  # multi-role max, -1=unlimited
+    role_quota: int | float  # multi-role max, -1=unlimited; GB may be one-decimal float
     tenant_quota: int  # tenant limit, -1=unlimited
     tenant_used: int  # tenant total usage
     user_used: int  # user's own usage
-    effective: int  # min(tenant_remaining, role_quota), -1=unlimited
+    effective: int | float  # min(tenant_remaining, role_quota), -1=unlimited
 
 
 class MenuUpdateRequest(BaseModel):

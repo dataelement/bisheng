@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";
+import { cname } from "@/components/bs-ui/utils";
 import { FileIcon } from "@/components/bs-icons/file";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";
 import ExcelPreview from "@/pages/KnowledgePage/components/ExcelPreview";
@@ -36,6 +37,31 @@ type CitationDocumentPreviewContentProps = {
   compactMode?: boolean;
   className?: string;
 };
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(query);
+    const handleChange = () => setMatches(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, [query]);
+
+  return matches;
+}
 
 function getExtFromUrl(url: string) {
   const path = url.split("?")[0].split("#")[0];
@@ -236,6 +262,25 @@ export default function CitationDocumentPreviewDrawer({
   onClose,
 }: CitationDocumentPreviewDrawerProps) {
   const { effectiveDetail } = useResolvedCitationDetail(preview);
+  const isPhoneViewport = useMediaQuery("(max-width: 576px)");
+  const isNarrowLayout = useMediaQuery("(max-width: 768px)");
+  const isFullBleedMobile = isPhoneViewport;
+
+  useEffect(() => {
+    if (!preview || !isRagCitation(effectiveDetail) || !isNarrowLayout) {
+      return;
+    }
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [effectiveDetail, isNarrowLayout, preview]);
 
   if (!preview || !isRagCitation(effectiveDetail)) {
     return null;
@@ -255,25 +300,51 @@ export default function CitationDocumentPreviewDrawer({
     document.body.removeChild(link);
   };
 
-  return (
-    <>
+  const drawer = (
+    <aside
+      className={cname(
+        "fixed flex flex-col bg-white",
+        isFullBleedMobile && "inset-0 z-[120] overflow-hidden overscroll-contain touch-pan-y",
+        !isFullBleedMobile && "inset-y-0 right-0 z-[121] w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]",
+      )}
+      aria-label="文档预览"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
       <div
-        className="fixed inset-0 z-[58] bg-black/10"
-        aria-hidden="true"
-        onClick={onClose}
-      />
-      <aside
-        className="fixed inset-y-0 right-0 z-[60] flex w-[min(520px,calc(100vw-24px))] flex-col border-l border-[#E5E6EB] bg-white shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
-        aria-label="文档预览"
+        className={cname(
+          "flex shrink-0 items-center justify-between border-b border-[#F2F3F5]",
+          isFullBleedMobile ? "h-11 px-2 pt-[env(safe-area-inset-top,0px)]" : "h-14 px-3",
+        )}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#F2F3F5] px-5">
-          <div className="flex min-w-0 items-center gap-2">
-            <FileText className="size-4 shrink-0 text-[#165DFF]" />
-            <h2 className="min-w-0 truncate text-[16px] font-semibold leading-6 text-[#1D2129]" title={fileName}>
-              {fileName}
-            </h2>
-          </div>
-          <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-2">
+          {(!isNarrowLayout || isFullBleedMobile) && <FileText className="size-4 shrink-0 text-[#165DFF]" />}
+          <h2
+            className={cname(
+              "min-w-0 truncate font-semibold text-[#1D2129]",
+              isNarrowLayout ? "text-[14px] leading-5" : "text-[16px] leading-6",
+            )}
+            title={fileName}
+          >
+            {fileName}
+          </h2>
+          {isNarrowLayout && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!downloadFileUrl}
+              className={cname(
+                "shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]",
+                isFullBleedMobile ? "inline-flex size-8 rounded-md" : "inline-flex size-6 rounded-[6px]",
+              )}
+              aria-label="下载文档"
+            >
+              <Download className="size-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {!isNarrowLayout && (
             <button
               type="button"
               onClick={handleDownload}
@@ -283,21 +354,40 @@ export default function CitationDocumentPreviewDrawer({
             >
               <Download className="size-4" />
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex size-8 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
-              aria-label="关闭文档预览"
-            >
-              <X className="size-5" />
-            </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className={cname(
+              "items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]",
+              isFullBleedMobile ? "inline-flex size-8 rounded-md" : "inline-flex size-6 rounded-[6px]",
+            )}
+            aria-label="关闭文档预览"
+          >
+            <X className="size-4" strokeWidth={1.5} />
+          </button>
         </div>
+      </div>
 
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-          <CitationDocumentPreviewContent preview={preview} />
-        </div>
-      </aside>
-    </>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+        <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
+      </div>
+    </aside>
+  );
+
+  if (isFullBleedMobile) {
+    return drawer;
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[120]">
+      <button
+        type="button"
+        aria-label="关闭文档预览"
+        className="pointer-events-auto absolute inset-0 z-0 bg-transparent"
+        onClick={onClose}
+      />
+      {drawer}
+    </div>
   );
 }

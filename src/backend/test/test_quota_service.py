@@ -335,3 +335,24 @@ class TestValidateQuotaConfig:
 
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'knowledge_space': -5})
+
+    def test_knowledge_space_file_one_decimal_gb(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        QuotaService.validate_quota_config({'knowledge_space_file': 0.1})
+        QuotaService.validate_quota_config({'knowledge_space_file': 1.5})
+        QuotaService.validate_quota_config({'knowledge_space_file': 999})
+        QuotaService.validate_quota_config({'knowledge_space_file': -1})
+
+    def test_knowledge_space_file_invalid_range_or_precision(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+        from bisheng.common.errcode.role import QuotaConfigInvalidError
+
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'knowledge_space_file': 0})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'knowledge_space_file': 0.05})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'knowledge_space_file': 1000})
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'knowledge_space_file': 1.55})

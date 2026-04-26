@@ -15,6 +15,7 @@ import LoginBridge from './loginBridge';
 import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
 import { ldapLoginApi, getSSOurlApi } from '@/controllers/API/pro';
+import { getWorkspaceClientUrl } from '@/utils/workspaceUrl';
 
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -146,11 +147,13 @@ export const LoginPage = () => {
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
                 } else {
-                    // Always enter admin router entry after login, then let
-                    // userContext dispatch to the first permitted route.
-                    // This avoids staying on a stale URL (e.g. /sys) from the
-                    // previous user session and falling into /404.
-                    location.href = `${__APP_ENV__.BASE_URL}/admin`
+                    const entry = (res as { default_entry?: string }).default_entry
+                    if (entry === 'workspace') {
+                        location.href = getWorkspaceClientUrl('/')
+                    } else {
+                        // Both areas or admin-only: default to admin shell first.
+                        location.href = `${__APP_ENV__.BASE_URL}/admin`
+                    }
                 }
             }), (error) => {
                 if (error?.code === 10601) { // 密码过期

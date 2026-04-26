@@ -43,6 +43,10 @@ export default defineConfig(({ mode }) => {
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
   const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+  const app_env_define = {
+    ...app_env,
+    WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN || '',
+  };
 
   const apiProxyConfig = createProxyConfig(target);
   const fileServiceProxyConfig = createProxyConfig(fileServiceTarget);
@@ -124,7 +128,7 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     define: {
-      __APP_ENV__: JSON.stringify(app_env)
+      __APP_ENV__: JSON.stringify(app_env_define)
     },
     server: {
       host: '0.0.0.0',

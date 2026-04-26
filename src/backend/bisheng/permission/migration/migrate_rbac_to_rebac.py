@@ -296,6 +296,16 @@ class RBACToReBACMigrator:
         except OSError as e:
             logger.warning(f'Failed to save checkpoint: {e}')
 
+    def clear_checkpoint(self):
+        path = self._checkpoint_path()
+        if not os.path.exists(path):
+            return
+        try:
+            os.remove(path)
+            logger.info(f'Checkpoint cleared: {path}')
+        except OSError as e:
+            logger.warning(f'Failed to clear checkpoint: {e}')
+
     # ── Migration Steps ──────────────────────────────────────────
 
     async def step1_super_admin(self) -> int:

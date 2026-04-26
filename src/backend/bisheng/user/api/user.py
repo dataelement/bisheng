@@ -162,7 +162,6 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_department_admin=is_department_admin,
     )
     menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
-    can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
 
     # Tenant-tree admin flags for the frontend. Any failure here degrades
     # to defaults so a transient FGA outage never blocks login.
@@ -197,6 +196,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     except Exception as exc:  # noqa: BLE001 — never block /user/info
         logger.debug('admin-flag detection failed: %s', exc)
 
+    # PRD §4.5: Child Admin manages own tenant's user groups → enable tab.
+    can_manage_user_groups = bool(
+        login_user.is_admin() or is_department_admin or is_child_admin
+    )
+
+    entry = await LoginUser.user_entry_payload_for_read(db_user)
     return resp_200(await UserService.build_user_read(
         db_user,
         role=str(role),
@@ -209,6 +214,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_child_admin=is_child_admin,
         leaf_tenant_id=leaf_tenant_id,
         leaf_tenant_name=leaf_tenant_name,
+        **entry,
     ))
 
 
@@ -466,10 +472,22 @@ async def update(*,
                                        UserRole.user_id == user.user_id)).first()
         if admin:
             raise HTTPException(status_code=500, detail='Cannot operate admin')
+        if (
+            user.delete == 0
+            and int(getattr(db_user, 'delete', 0) or 0) == 1
+            and getattr(db_user, 'disable_source', None)
+            and not login_user.is_admin()
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail='Account disabled by organization sync; only a super admin can re-enable.',
+            )
         if user.delete == db_user.delete:
             return resp_200()
         disabled_just_now = user.delete == 1
         db_user.delete = user.delete
+        if user.delete == 0 and login_user.is_admin():
+            db_user.disable_source = None
     if db_user.delete == 0:  # Enable User
         # Count of cleanup password errors
         clear_error_password_key(db_user.user_id)

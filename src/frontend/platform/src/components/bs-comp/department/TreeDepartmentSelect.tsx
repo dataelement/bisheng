@@ -288,7 +288,12 @@ export function TreeDepartmentSelect({
             aria-expanded={open}
             aria-haspopup="listbox"
           >
-            <span className="min-w-0 flex-1 truncate text-left">{displayLabel}</span>
+            <span
+              className="min-w-0 flex-1 truncate text-left"
+              title={value != null ? displayLabel : undefined}
+            >
+              {displayLabel}
+            </span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
           </Button>
         </PopoverTrigger>

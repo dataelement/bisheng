@@ -136,17 +136,24 @@ export function getUser(): Promise<t.TUser> {
       avatar,
       menu_approval_mode,
       is_department_admin,
+      has_workbench: hbApi,
+      has_admin_console: haApi,
     } = res.data;
-    const canWorkspace = canOpenWorkbench({
-      role,
-      plugins: web_menu,
-      is_department_admin: Boolean(is_department_admin),
-    });
-    const canManagement = canOpenPlatformAdminPanel({
-      role,
-      plugins: web_menu,
-      is_department_admin: Boolean(is_department_admin),
-    });
+    const wm = Array.isArray(web_menu) ? web_menu : [];
+    const canWorkspace =
+      hbApi
+      ?? canOpenWorkbench({
+        role,
+        plugins: wm,
+        is_department_admin: Boolean(is_department_admin),
+      });
+    const canManagement =
+      haApi
+      ?? canOpenPlatformAdminPanel({
+        role,
+        plugins: wm,
+        is_department_admin: Boolean(is_department_admin),
+      });
     if (role !== 'admin' && !canWorkspace) {
       if (!canManagement) {
         // 无工作台也无管理端菜单 — 退出并回管理端登录
@@ -156,6 +163,7 @@ export function getUser(): Promise<t.TUser> {
       }
       location.href = getPlatformAdminPanelUrl('error=90002');
     }
+    // 仅管理后台：由 WorkbenchAccessGuard 提示并 history.back / fallback
     return {
       "_id": user_id,
       "name": user_name,
@@ -171,9 +179,11 @@ export function getUser(): Promise<t.TUser> {
         : "",
       "provider": "local",
       "role": role,
-      "plugins": web_menu,
+      "plugins": wm,
       "is_department_admin": Boolean(is_department_admin),
       "menu_approval_mode": Boolean(menu_approval_mode),
+      has_workbench: canWorkspace,
+      has_admin_console: canManagement,
       "termsAccepted": false,
       "backupCodes": [],
       "refreshToken": [],

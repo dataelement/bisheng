@@ -48,6 +48,9 @@ from bisheng.database.models.department import (
     DepartmentDao,
     UserDepartmentDao,
 )
+from bisheng.department.domain.services.department_archive_cleanup_service import (
+    DepartmentArchiveCleanupService,
+)
 from bisheng.org_sync.domain.constants import (
     AuditAction,
     EventLevel,
@@ -396,6 +399,14 @@ class OrgReconcileService:
                 source=config.provider, external_id=op.external_id,
                 last_sync_ts=op.incoming_ts,
             )
+            try:
+                await DepartmentArchiveCleanupService.arun_for_archived_department(
+                    int(existing.id), reason='celery_reconcile_archive',
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    'archive_cleanup failed for dept %s: %s', existing.id, e,
+                )
             try:
                 await DepartmentDeletionHandler.on_deleted(
                     existing.id, DeletionSource.CELERY_RECONCILE,

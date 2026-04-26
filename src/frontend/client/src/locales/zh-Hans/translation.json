@@ -439,6 +439,7 @@
     "com_msg_source_reference": "参考来源",
     "com_nav_account_settings": "账户设置",
     "com_nav_admin_panel": "管理后台",
+    "com_auth_no_workspace_access": "当前用户没有访问工作台的权限",
     "com_nav_always_make_prod": "始终应用新版本",
     "com_nav_app_center": "应用",
     "com_nav_archive_created_at": "归档时间",

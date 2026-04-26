@@ -218,6 +218,7 @@ export default function CitationReferencesDrawer({
   // <=768: 走抽屉（不内联分栏）；<=576: 抽屉全屏覆盖
   const isNarrowLayout = usePrefersMobileLayout();
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
+  const isFullBleedMobile = isPhoneViewport;
   const isMobileLikeViewport = isNarrowLayout;
   const matchesExpandedDesktopPreview = useMediaQuery(`(min-width: ${CITATION_PANEL_EXPANDED_BREAKPOINT + 1}px)`);
   const useExpandedDesktopPreview = desktopPreviewVariant === 'expanded'
@@ -381,6 +382,9 @@ export default function CitationReferencesDrawer({
   }, [detailMap, desktopMode, internalOpen, isNarrowLayout, loadCitationDetail, open, panelOnly, references, shouldAutoResolveCitationDetail]);
 
   const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
+  const referenceIconCount = Math.min(referenceEntryIcons.length, 3);
+  const referenceButtonWidth = referenceIconCount <= 1 ? 'w-24 min-w-24' : referenceIconCount === 2 ? 'w-[104px] min-w-[104px]' : 'w-28 min-w-28';
+  const referenceIconStackWidth = referenceIconCount <= 1 ? 'w-5' : referenceIconCount === 2 ? 'w-7' : 'w-9';
   const isDesktopInlinePanel = !isNarrowLayout
     && desktopMode === 'inline-panel'
     && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
@@ -434,18 +438,14 @@ export default function CitationReferencesDrawer({
   };
   const handleOpenButtonClick = () => {
     if (isDesktopInlinePanel) {
-      if (isOpen && !panelOnly) {
-        onOpenChange?.(false);
-      } else {
-        onDesktopOpen?.({
-          messageId,
-          content,
-          webContent,
-          citations,
-          referenceItems: references,
-        });
-        onOpenChange?.(true);
-      }
+      onDesktopOpen?.({
+        messageId,
+        content,
+        webContent,
+        citations,
+        referenceItems: references,
+      });
+      onOpenChange?.(true);
       return;
     }
 
@@ -659,12 +659,20 @@ export default function CitationReferencesDrawer({
 
   if (panelOnly) {
     return (
-      <section
-        className={cn('flex h-full min-h-0 flex-col bg-white', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
-        aria-label="参考资料"
-      >
-        {panelContent}
-      </section>
+      <>
+        <section
+          className={cn('flex h-full min-h-0 flex-col bg-white', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
+          aria-label="参考资料"
+        >
+          {panelContent}
+        </section>
+        {!isDesktopInlinePanel && (
+          <CitationDocumentPreviewDrawer
+            preview={documentPreview}
+            onClose={() => setDocumentPreview(null)}
+          />
+        )}
+      </>
     );
   }
 
@@ -690,32 +698,46 @@ export default function CitationReferencesDrawer({
           data-citation-references-trigger="true"
           onClick={handleOpenButtonClick}
           className={cn(
-            'flex h-6 w-[112px] min-w-[112px] shrink-0 items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors',
-            isOpen ? 'bg-[#F2F3F5]' : 'bg-transparent hover:bg-[#F7F7F7]',
+            'flex h-6 shrink-0 items-center justify-end gap-1 rounded-[6px] bg-transparent px-1 py-0.5 text-[#818181] transition-colors hover:bg-[#F7F7F7]',
+            referenceButtonWidth,
           )}
         >
-          <div className="flex h-5 w-11 shrink-0 items-center overflow-hidden">
+          <div className={cn('flex h-5 shrink-0 items-center', referenceIconStackWidth)}>
             <CitationSourceIconStack icons={referenceEntryIcons} />
           </div>
-          <div className="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap">
-            <span className="whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+          <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
+            <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
             <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
           </div>
         </button>
       </div>
 
       {!isDesktopInlinePanel && isOpen && (
-        <aside
-          className={cn(
-            'fixed flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
-            isMobileLikeViewport
-              ? 'z-50 inset-0'
-              : 'z-[9] right-0 top-14 bottom-0 w-[min(520px,calc(100vw-24px))]',
-          )}
-          aria-label="参考资料"
-        >
-          {panelContent}
-        </aside>
+        isFullBleedMobile ? (
+          <aside
+            className="fixed inset-0 z-[120] flex flex-col overflow-hidden overscroll-contain bg-white touch-pan-y"
+            aria-label="参考资料"
+          >
+            {panelContent}
+          </aside>
+        ) : (
+          <div className="pointer-events-none fixed inset-0 z-[120] flex justify-end">
+            <button
+              type="button"
+              aria-label="关闭参考资料"
+              className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
+              onClick={() => setOpenState(false)}
+            />
+            <aside
+              className="relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
+              aria-label="参考资料"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {panelContent}
+            </aside>
+          </div>
+        )
       )}
       {!isDesktopInlinePanel && (
         <CitationDocumentPreviewDrawer

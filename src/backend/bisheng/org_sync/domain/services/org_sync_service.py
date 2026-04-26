@@ -21,7 +21,10 @@ from bisheng.common.errcode.org_sync import (
     OrgSyncConfigDisabledError,
     OrgSyncConfigNotFoundError,
 )
-from bisheng.database.constants import DefaultRole
+from bisheng.database.constants import (
+    DefaultRole,
+    USER_DISABLE_SOURCE_ORG_SYNC,
+)
 from bisheng.database.models.group import DefaultGroup, GroupDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.department import (
@@ -31,7 +34,13 @@ from bisheng.database.models.department import (
     UserDepartmentDao,
 )
 from bisheng.database.models.tenant import UserTenant, UserTenantDao
+from bisheng.department.domain.services.department_archive_cleanup_service import (
+    DepartmentArchiveCleanupService,
+)
 from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
+from bisheng.department.domain.services.department_sync_rbac_service import (
+    DepartmentSyncRBACService,
+)
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.tenant.domain.constants import DeletionSource
 from bisheng.tenant.domain.services.department_deletion_handler import (
@@ -396,6 +405,10 @@ class OrgSyncService:
                 f'DepartmentDeletionHandler.on_deleted failed for '
                 f'dept {op.local.id}: {exc}',
             )
+        if op.local.id is not None:
+            await DepartmentArchiveCleanupService.arun_for_archived_department(
+                int(op.local.id), reason='org_sync_archive',
+            )
 
     # ------------------------------------------------------------------
     # Member operations
@@ -492,6 +505,10 @@ class OrgSyncService:
                 dept_id, [user.user_id],
             )
             await DepartmentChangeHandler.execute_async(tuple_ops)
+        for dept_id in all_dept_ids:
+            await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
+                int(user.user_id), int(dept_id),
+            )
 
     @classmethod
     async def _ensure_default_user_group_membership(cls, user_id: int) -> list[int]:
@@ -548,42 +565,79 @@ class OrgSyncService:
         cls, op: TransferMember, config: OrgSyncConfig,
         ext_to_local_dept: dict[str, int],
     ) -> None:
-        # Primary department change
-        if op.old_primary_dept_id is not None:
-            new_primary_id = ext_to_local_dept.get(op.new_primary_dept_external_id)
-            if new_primary_id:
-                # Remove old primary membership
-                await UserDepartmentDao.aremove_member(op.user_id, op.old_primary_dept_id)
-                tuple_ops = DepartmentChangeHandler.on_member_removed(
-                    op.old_primary_dept_id, op.user_id,
-                )
-                await DepartmentChangeHandler.execute_async(tuple_ops)
+        new_primary_id = ext_to_local_dept.get(
+            op.new_primary_dept_external_id,
+        ) if op.new_primary_dept_external_id else None
 
-                # Add new primary membership
+        for dept_id in op.remove_secondary_dept_ids:
+            if op.old_primary_dept_id and int(dept_id) == int(op.old_primary_dept_id):
+                continue
+            await DepartmentSyncRBACService.arevoke_user_roles_in_department(
+                op.user_id, int(dept_id),
+            )
+
+        if op.touch_primary and new_primary_id and op.old_primary_dept_id is not None:
+            await DepartmentSyncRBACService.arevoke_user_roles_in_department(
+                op.user_id, int(op.old_primary_dept_id),
+            )
+
+        if op.touch_primary and new_primary_id and op.old_primary_dept_id is not None:
+            await UserDepartmentDao.aremove_member(op.user_id, op.old_primary_dept_id)
+            tuple_ops = DepartmentChangeHandler.on_member_removed(
+                op.old_primary_dept_id, op.user_id,
+            )
+            await DepartmentChangeHandler.execute_async(tuple_ops)
+
+            await UserDepartmentDao.aadd_member(
+                op.user_id, new_primary_id, is_primary=1, source=config.provider,
+            )
+            tuple_ops = DepartmentChangeHandler.on_members_added(
+                new_primary_id, [op.user_id],
+            )
+            await DepartmentChangeHandler.execute_async(tuple_ops)
+            await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
+                op.user_id, int(new_primary_id),
+            )
+        elif op.touch_primary and new_primary_id and op.old_primary_dept_id is None:
+            existing = await UserDepartmentDao.aget_membership(
+                op.user_id, int(new_primary_id),
+            )
+            if existing is not None:
+                await UserDepartmentDao.aset_primary_flag(
+                    op.user_id, int(new_primary_id), is_primary=1,
+                )
+            else:
                 await UserDepartmentDao.aadd_member(
                     op.user_id, new_primary_id, is_primary=1, source=config.provider,
                 )
-                tuple_ops = DepartmentChangeHandler.on_members_added(
-                    new_primary_id, [op.user_id],
-                )
-                await DepartmentChangeHandler.execute_async(tuple_ops)
+            tuple_ops = DepartmentChangeHandler.on_members_added(
+                new_primary_id, [op.user_id],
+            )
+            await DepartmentChangeHandler.execute_async(tuple_ops)
+            await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
+                op.user_id, int(new_primary_id),
+            )
 
-        # Add new secondary departments
         for ext_id in op.add_secondary_external_ids:
             dept_id = ext_to_local_dept.get(ext_id)
-            if dept_id:
-                await UserDepartmentDao.aadd_member(
-                    op.user_id, dept_id, is_primary=0, source=config.provider,
-                )
-                tuple_ops = DepartmentChangeHandler.on_members_added(
-                    dept_id, [op.user_id],
-                )
-                await DepartmentChangeHandler.execute_async(tuple_ops)
+            if not dept_id:
+                continue
+            await UserDepartmentDao.aadd_member(
+                op.user_id, dept_id, is_primary=0, source=config.provider,
+            )
+            tuple_ops = DepartmentChangeHandler.on_members_added(
+                dept_id, [op.user_id],
+            )
+            await DepartmentChangeHandler.execute_async(tuple_ops)
+            await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
+                op.user_id, int(dept_id),
+            )
 
-        # Remove old secondary departments
         for dept_id in op.remove_secondary_dept_ids:
             await UserDepartmentDao.aremove_member(op.user_id, dept_id)
-            tuple_ops = DepartmentChangeHandler.on_member_removed(dept_id, op.user_id)
+            tuple_ops = DepartmentChangeHandler.on_member_removed(
+                int(dept_id), op.user_id,
+            )
             await DepartmentChangeHandler.execute_async(tuple_ops)
 
     @classmethod
@@ -592,6 +646,7 @@ class OrgSyncService:
         if not user:
             return
         user.delete = 1
+        user.disable_source = USER_DISABLE_SOURCE_ORG_SYNC
         await UserDao.aupdate_user(user)
         from bisheng.user.domain.services.user import UserService
         await UserService.ainvalidate_jwt_after_account_disabled(op.user_id)
@@ -612,6 +667,7 @@ class OrgSyncService:
             return
         user.delete = 0
         user.source = config.provider
+        user.disable_source = None
         await UserDao.aupdate_user(user)
 
         # Rebuild department memberships
@@ -636,6 +692,10 @@ class OrgSyncService:
                 dept_id, [op.user_id],
             )
             await DepartmentChangeHandler.execute_async(tuple_ops)
+        for dept_id in all_dept_ids:
+            await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
+                op.user_id, int(dept_id),
+            )
 
     # ------------------------------------------------------------------
     # Redis lock helpers

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +30,6 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
@@ -54,7 +54,6 @@ from bisheng.permission.domain.services.fine_grained_permission_service import F
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.knowledge import file_worker
 
@@ -1819,21 +1818,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type = 'folder'
             parent_resource_id = parent_id
 
-        # GB → bytes cap for space owner; multi-role 取各角色上限的最大值；-1 表示不限制
-        default_file_size_limit = 40
-
-        roles = await UserRoleDao.aget_user_roles(db_knowledge.user_id)
-        if roles:
-            role_rows = await RoleDao.aget_role_by_ids([one.role_id for one in roles])
-            for one in role_rows:
-                gb = QuotaService.role_knowledge_space_file_limit_gb(one)
-                if gb == -1:
-                    default_file_size_limit = 10 ** 9
-                    break
-                if gb > 0:
-                    default_file_size_limit = max(default_file_size_limit, gb)
-        default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
-        logger.debug(f"space_file_size_limit: {default_file_size_limit}")
+        # Upload cap: 实际上传人 login_user 的角色配额（多角色取 max），再与租户链取 min；超管不限
+        limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        logger.debug('space_file_upload_limit_bytes=%s user_id=%s', limit_bytes, self.login_user.user_id)
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
         folder_id2name = {}
@@ -1859,8 +1846,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
         for one in file_path:
-            if current_total_file_size > default_file_size_limit:
-                raise SpaceFileSizeLimitError()
+            if limit_bytes is not None:
+                try:
+                    incoming_size = os.path.getsize(one)
+                except OSError as exc:
+                    logger.warning('Cannot stat upload path %s: %s', one, exc)
+                    raise SpaceFileSizeLimitError() from exc
+                if incoming_size > limit_bytes or current_total_file_size + incoming_size > limit_bytes:
+                    raise SpaceFileSizeLimitError()
             db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
                                                         file_info=KnowledgeFileOne(
                                                             file_path=one,

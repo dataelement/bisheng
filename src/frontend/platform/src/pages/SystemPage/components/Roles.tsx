@@ -65,6 +65,26 @@ const ADMIN_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
   build: ["create_app"],
   knowledge: ["create_knowledge"],
 }
+
+/** Knowledge-space total upload quota (GB); one decimal, inclusive bounds. */
+const KB_SPACE_FILE_GB_MIN = 0.1
+const KB_SPACE_FILE_GB_MAX = 999
+
+function normalizeKnowledgeSpaceFileGb(raw: string): number | null {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  const r = Math.round(n * 10) / 10
+  if (r < KB_SPACE_FILE_GB_MIN || r > KB_SPACE_FILE_GB_MAX) return null
+  if (Math.abs(r - n) > 1e-6) return null
+  return r
+}
+
+function formatKnowledgeSpaceGbInput(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "500"
+  const r = Math.round(n * 10) / 10
+  if (r < KB_SPACE_FILE_GB_MIN || r > KB_SPACE_FILE_GB_MAX) return "500"
+  return Number.isInteger(r) ? String(r) : r.toFixed(1)
+}
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
   "home",
@@ -240,7 +260,7 @@ export default function Roles() {
         role.role_name || "",
         role.department_id ? String(role.department_id) : "none",
         fileLimit === -1,
-        fileLimit > 0 ? String(fileLimit) : "500",
+        fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500",
         channelLimit === -1,
         channelLimit >= 0 ? String(channelLimit) : "10",
         ids,
@@ -255,10 +275,11 @@ export default function Roles() {
     setActiveRole(role)
     setRoleName(role.role_name || "")
     setDepartmentId(role.department_id ? String(role.department_id) : "none")
-    const fileLimit = Number(qc.knowledge_space_file ?? -1)
+    const rawFile = qc.knowledge_space_file
+    const fileLimit = typeof rawFile === "number" ? rawFile : Number(rawFile ?? -1)
     const channelLimit = Number(qc.channel ?? 10)
     setQuotaFileUnlimited(fileLimit === -1)
-    setQuotaFileGb(fileLimit > 0 ? String(fileLimit) : "500")
+    setQuotaFileGb(fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500")
     setQuotaChannelUnlimited(channelLimit === -1)
     setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
     setMenuIds([])
@@ -271,7 +292,9 @@ export default function Roles() {
     const base: Record<string, unknown> = activeRole?.quota_config
       ? { ...(activeRole.quota_config as Record<string, unknown>) }
       : {}
-    base.knowledge_space_file = quotaFileUnlimited ? -1 : Math.max(0, Number(quotaFileGb || 0))
+    base.knowledge_space_file = quotaFileUnlimited
+      ? -1
+      : (normalizeKnowledgeSpaceFileGb(quotaFileGb) ?? KB_SPACE_FILE_GB_MIN)
     base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
     base.menu_approval_mode = menuApprovalMode
     return base
@@ -279,6 +302,10 @@ export default function Roles() {
 
   const submitRole = async () => {
     if (isSaving || !roleName.trim() || isMenuLoading || menuLoadFailed) return
+    if (!quotaFileUnlimited && normalizeKnowledgeSpaceFileGb(quotaFileGb) === null) {
+      message({ variant: "error", description: t("system.knowledgeSpaceFileQuotaInvalid") })
+      return
+    }
     setIsSaving(true)
     const quota_config = buildQuotaConfig()
     // 保存前清理依赖：父项未开则不应持久化依赖项（例如 build 关闭时移除 create_app）。
@@ -387,10 +414,13 @@ export default function Roles() {
 
   const formatKnowledgeSpaceUploadQuota = (el: ROLE) => {
     const qc = (el.quota_config || {}) as Record<string, unknown>
-    const v = Number(qc.knowledge_space_file ?? -1)
+    const raw = qc.knowledge_space_file
+    const v = typeof raw === "number" ? raw : Number(raw ?? -1)
     if (Number.isNaN(v)) return "-"
     if (v === -1) return t("system.unlimited")
-    return `${v} GB`
+    const r = Math.round(v * 10) / 10
+    const label = Number.isInteger(r) ? String(r) : r.toFixed(1)
+    return `${label} GB`
   }
 
   const formatChannelCreationLimit = (el: ROLE) => {
@@ -635,8 +665,6 @@ export default function Roles() {
             <DialogTitle>{activeRole ? t("system.roleEditTitle") : t("system.roleCreateTitle")}</DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-            <p className="text-xs text-muted-foreground">{t("system.roleFormIntro")}</p>
-
             <div>
               <Label>{t("system.roleName")}</Label>
               <Input value={roleName} onChange={(e) => setRoleName(e.target.value)} className="mt-1" maxLength={128} />
@@ -671,7 +699,9 @@ export default function Roles() {
                   <>
                     <Input
                       type="number"
-                      min={0}
+                      min={KB_SPACE_FILE_GB_MIN}
+                      max={KB_SPACE_FILE_GB_MAX}
+                      step={0.1}
                       value={quotaFileGb}
                       onChange={(e) => setQuotaFileGb(e.target.value)}
                       className="w-[120px]"
@@ -730,7 +760,8 @@ export default function Roles() {
                     className="h-auto p-0 text-xs"
                     onClick={() => {
                       const qc = activeRole.quota_config || {}
-                      const fileLimit = Number(qc.knowledge_space_file ?? -1)
+                      const rawF = qc.knowledge_space_file
+                      const fileLimit = typeof rawF === "number" ? rawF : Number(rawF ?? -1)
                       const channelLimit = Number(qc.channel ?? 10)
                       void loadRoleMenus(activeRole, fileLimit, channelLimit)
                     }}

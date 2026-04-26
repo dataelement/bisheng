@@ -27,6 +27,7 @@ import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
+import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { lastSectionPaths } from './appModuleNavPaths';
 
 interface SidebarItemProps {
@@ -124,6 +125,13 @@ function Sidebar({
   const showKnowledgeSpaceTab = showWorkbenchItem('knowledge_space');
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
+
+  const showAdminPanelShortcut =
+    (user as { has_admin_console?: boolean } | null)?.has_admin_console
+    ?? (
+      user?.role === 'admin'
+      || Boolean(plugins?.includes('backend') || plugins?.includes('admin'))
+    );
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo(() => {
@@ -231,7 +239,7 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col gap-4 items-center">
-        {!isMobile && canOpenPlatform && (
+        {!isMobile && (canOpenPlatform || showAdminPanelShortcut) && (
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
               title={localize('com_nav_admin_panel')}
@@ -367,6 +375,7 @@ export default function MainLayout() {
 
   return (
     <div className="relative flex h-[100dvh] w-screen overflow-hidden bg-[#F9F9F9]">
+      <WorkbenchAccessGuard />
       {shouldHideSidebarOnMobileAppsArea ? null : (
         <Sidebar
           mobileSidebarOpen={mobileSidebarOpen}

@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Loader2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from "@/controllers/API";
 import { cname } from "@/components/bs-ui/utils";
 import {
   buildCitationDocumentPreview,
   buildCitationReferenceItems,
   createCitationDetailMap,
+  getCitationDocumentDownloadUrl,
   getCitationDocumentFileType,
+  getCitationDocumentName,
   isRagCitation,
   isRagCitationMissingPreviewUrl,
   normalizeCitationType,
+  toAbsolutePreviewUrl,
   type CitationPreview,
   type CitationReferenceItem,
 } from "./citationUtils";
-import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from "./CitationDocumentPreviewDrawer";
+import CitationDocumentPreviewDrawer, {
+  CitationDocumentPreviewContent,
+  type CitationDocumentPreviewState,
+} from "./CitationDocumentPreviewDrawer";
 import {
   buildCitationSourceIconStackData,
   CitationSourceIcon,
@@ -27,6 +33,33 @@ type CitationReferencesDrawerProps = {
   buttonClassName?: string;
   allowRemoteCitationResolve?: boolean;
 };
+
+type CitationPanelView = "list" | "document-preview";
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(query);
+    const handleChange = () => setMatches(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, [query]);
+
+  return matches;
+}
 
 function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === "web";
@@ -73,7 +106,7 @@ function CitationReferenceCard({
   detail: ChatCitation | null;
   isLoading: boolean;
   hasError: boolean;
-  onOpenDocumentPreview: (detail: ChatCitation) => void;
+  onOpenDocumentPreview: (item: CitationReferenceItem, detail: ChatCitation) => void;
 }) {
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
@@ -93,7 +126,7 @@ function CitationReferenceCard({
       {canOpenDocument ? (
         <button
           type="button"
-          onClick={() => onOpenDocumentPreview(detail!)}
+          onClick={() => onOpenDocumentPreview(item, detail!)}
           className={cname(
             "flex w-full min-w-0 items-center gap-1 rounded-[4px] text-left",
             nameRowTextClass,
@@ -323,85 +356,234 @@ export default function CitationReferencesDrawer({
     });
   }, [allowRemoteCitationResolve, detailMap, loadCitationDetail, open, references]);
 
+  const isPhoneViewport = useMediaQuery("(max-width: 576px)");
+  const isNarrowLayout = useMediaQuery("(max-width: 768px)");
+  const isFullBleedMobile = isPhoneViewport;
+  const [panelView, setPanelView] = useState<CitationPanelView>("list");
+
+  useEffect(() => {
+    if (!open) {
+      setPanelView("list");
+      setDocumentPreview(null);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !isNarrowLayout) {
+      return;
+    }
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [isNarrowLayout, open]);
+
   if (!references.length) {
     return null;
   }
 
   const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
+  const referenceIconCount = Math.min(referenceEntryIcons.length, 3);
+  const referenceButtonWidth = referenceIconCount <= 1 ? "w-24 min-w-24" : referenceIconCount === 2 ? "w-[104px] min-w-[104px]" : "w-28 min-w-28";
+  const referenceIconStackWidth = referenceIconCount <= 1 ? "w-5" : referenceIconCount === 2 ? "w-7" : "w-9";
+
+  const handleClosePanel = () => {
+    setOpen(false);
+  };
+
+  const handleOpenDocumentPreview = (item: CitationReferenceItem, detail: ChatCitation) => {
+    setDocumentPreview({
+      detail,
+      itemId: item.data.itemId,
+      locateChunk: false,
+    });
+    setPanelView("document-preview");
+  };
+
+  const handleDownloadDocument = () => {
+    if (!documentPreview) {
+      return;
+    }
+
+    const fileName = getCitationDocumentName(documentPreview.detail);
+    const fileUrl = toAbsolutePreviewUrl(getCitationDocumentDownloadUrl(documentPreview.detail));
+    if (!fileUrl) {
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = fileName;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const documentHeaderTitle = documentPreview
+    ? splitDocumentTitle(getCitationDocumentName(documentPreview.detail), documentPreview.detail, null)
+    : { name: "文档预览", extension: "" };
+
+  const referenceListContent = (
+    <>
+      <div className={cname(
+        "flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white",
+        isNarrowLayout ? "h-11 px-2" : "h-14 px-3",
+      )}>
+        <div className="flex items-center gap-2">
+          <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">参考资料</h2>
+          <span className="inline-flex h-4 w-4 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
+            {references.length}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleClosePanel}
+          className={cname(
+            "inline-flex items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]",
+            isNarrowLayout ? "size-8 rounded-md" : "size-6 rounded-[6px]",
+          )}
+          aria-label="关闭参考资料"
+        >
+          <X className="size-4" strokeWidth={1.5} />
+        </button>
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+        {references.map((item) => {
+          const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
+          return (
+            <CitationReferenceCard
+              key={item.key}
+              item={item}
+              detail={detail}
+              isLoading={!!loadingMap[item.data.citationId]}
+              hasError={!!errorMap[item.data.citationId]}
+              onOpenDocumentPreview={handleOpenDocumentPreview}
+            />
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const documentPreviewContent = (
+    <div className="flex min-h-0 flex-1 flex-col bg-white">
+      <div className="flex h-14 w-full min-w-0 shrink-0 items-center gap-2 border-b border-[#ECECEC] bg-white px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setPanelView("list");
+              setDocumentPreview(null);
+            }}
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#4E5969] hover:bg-[#F2F3F5]"
+            aria-label="返回参考资料列表"
+          >
+            <ChevronLeft className="size-4" strokeWidth={1.75} />
+          </button>
+          <div className="flex min-w-0 items-center">
+            <h2
+              className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]"
+              title={documentPreview ? getCitationDocumentName(documentPreview.detail) : ""}
+            >
+              {documentHeaderTitle.name}
+            </h2>
+            {documentHeaderTitle.extension ? (
+              <span className="shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]">
+                {documentHeaderTitle.extension}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownloadDocument}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#024DE3] transition-colors hover:bg-[#F2F7FF]"
+          aria-label="下载文档"
+        >
+          <Download className="size-4" strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleClosePanel}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#A9AEB8] transition-colors hover:bg-[#F7F8FA]"
+          aria-label="关闭参考资料"
+        >
+          <X className="size-4" strokeWidth={1.5} />
+        </button>
+      </div>
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
+        <CitationDocumentPreviewContent
+          preview={documentPreview}
+          compactMode
+          className="min-h-0 w-full flex-1 bg-[#fbfbfb]"
+        />
+      </div>
+    </div>
+  );
+
+  const panelContent = panelView === "document-preview" && documentPreview ? documentPreviewContent : referenceListContent;
 
   return (
     <>
       <button
         type="button"
+        data-citation-references-trigger="true"
         onClick={() => setOpen(true)}
         className={cname(
-          "inline-flex h-6 items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors hover:bg-[#F7F7F7]",
+          "flex h-6 shrink-0 items-center justify-end gap-1 rounded-[6px] bg-transparent px-1 py-0.5 text-[#818181] transition-colors hover:bg-[#F7F7F7]",
+          referenceButtonWidth,
           buttonClassName,
         )}
       >
-        <div className="flex h-5 w-11 shrink-0 items-center overflow-hidden">
+        <div className={cname("flex h-5 shrink-0 items-center", referenceIconStackWidth)}>
           <CitationSourceIconStack icons={referenceEntryIcons} />
         </div>
-        <div className="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap">
-          <span className="whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+        <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
+          <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
           <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
         </div>
       </button>
 
       {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-transparent"
-            aria-hidden="true"
-            onClick={() => setOpen(false)}
-          />
+        isFullBleedMobile ? (
           <aside
-            className="fixed inset-y-0 right-0 z-50 flex w-[min(520px,calc(100vw-24px))] flex-col border-l border-[#E5E6EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+            className="fixed inset-0 z-[120] flex flex-col overflow-hidden overscroll-contain bg-white touch-pan-y"
             aria-label="参考资料"
           >
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white px-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">参考资料</h2>
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] leading-[18px] text-[#024DE3]">
-                  {references.length}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]"
-                aria-label="关闭参考资料"
-              >
-                <X className="size-4" strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
-              {references.map((item) => {
-                const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
-                return (
-                  <CitationReferenceCard
-                    key={item.key}
-                    item={item}
-                    detail={detail}
-                    isLoading={!!loadingMap[item.data.citationId]}
-                    hasError={!!errorMap[item.data.citationId]}
-                    onOpenDocumentPreview={(detail) => {
-                      setDocumentPreview({
-                        detail,
-                        locateChunk: false,
-                      });
-                    }}
-                  />
-                );
-              })}
-            </div>
+            {panelContent}
           </aside>
-          <CitationDocumentPreviewDrawer
-            preview={documentPreview}
-            onClose={() => setDocumentPreview(null)}
-          />
-        </>
+        ) : (
+          <div className="pointer-events-none fixed inset-0 z-[120] flex justify-end">
+            <button
+              type="button"
+              aria-label="关闭参考资料"
+              className="pointer-events-auto absolute inset-0 z-0 bg-transparent"
+              onClick={handleClosePanel}
+            />
+            <aside
+              className="pointer-events-auto relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+              aria-label="参考资料"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {panelContent}
+            </aside>
+          </div>
+        )
+      )}
+      {panelView !== "document-preview" && (
+        <CitationDocumentPreviewDrawer
+          preview={documentPreview}
+          onClose={() => setDocumentPreview(null)}
+        />
       )}
     </>
   );

@@ -169,6 +169,13 @@ class TestCheckpoint:
         m._save_checkpoint(5)
         assert m._load_checkpoint() == 5
 
+    def test_clear_checkpoint(self, tmp_checkpoint_dir):
+        m = RBACToReBACMigrator(checkpoint_dir=tmp_checkpoint_dir)
+        m._save_checkpoint(4)
+        assert m._load_checkpoint() == 4
+        m.clear_checkpoint()
+        assert m._load_checkpoint() == 0
+
     def test_corrupt_checkpoint(self, tmp_checkpoint_dir):
         path = os.path.join(tmp_checkpoint_dir, 'migration_f006_checkpoint.json')
         with open(path, 'w') as f:

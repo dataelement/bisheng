@@ -40,6 +40,14 @@ class UserBase(SQLModelSerializable):
         ),
     )
     delete: int = Field(default=0, index=False)
+    disable_source: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(32), nullable=True,
+            index=True,
+            comment='Set when delete=1 was forced by org sync/SSO; blocks non-super re-enable',
+        ),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -107,6 +115,11 @@ class UserRead(UserBase):
     is_child_admin: Optional[bool] = None
     leaf_tenant_id: Optional[int] = None
     leaf_tenant_name: Optional[str] = None
+    # Effective WEB_MENU area flags (v2.5 entry routing). Optional for older clients.
+    has_workbench: Optional[bool] = None
+    has_admin_console: Optional[bool] = None
+    # ``platform`` | ``workspace`` — both areas open → platform (管理后台).
+    default_entry: Optional[str] = None
 
 
 class UserQuery(UserBase):

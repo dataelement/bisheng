@@ -66,6 +66,9 @@ class TransferMember:
     old_primary_dept_id: Optional[int] = None
     add_secondary_external_ids: list[str] = field(default_factory=list)
     remove_secondary_dept_ids: list[int] = field(default_factory=list)
+    # False when only secondary depts differ (``old_primary_dept_id`` is still None
+    # in that case — do not run primary membership branch).
+    touch_primary: bool = True
 
 
 @dataclass
@@ -411,4 +414,5 @@ def _check_dept_changes(
             old_primary_dept_id=current_primary_dept_id if primary_changed else None,
             add_secondary_external_ids=add_ext,
             remove_secondary_dept_ids=list(to_remove_secondary),
+            touch_primary=primary_changed,
         ))

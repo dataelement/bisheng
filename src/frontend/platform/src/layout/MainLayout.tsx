@@ -90,6 +90,11 @@ export default function MainLayout() {
         return user.web_menu?.includes(menu) || isSuperAdmin
     }
 
+    const u = user as User
+    const hasWorkbenchEntry =
+        u.has_workbench
+        ?? (isMenu('workstation'))
+
     /** 需审批模式：无显式权限时仍展示侧栏入口，路由落到空白占位页 */
     const showAdminNav = (menu: string) => isMenu(menu) || (menuApprovalMode && hasAdminEntry)
 
@@ -148,7 +153,7 @@ export default function MainLayout() {
                                     {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            {isMenu('workstation') && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
+                            {hasWorkbenchEntry && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>

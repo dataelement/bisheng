@@ -145,6 +145,20 @@ async def _check_permission(
                 'PermissionService.check failed for dept admin, user=%d dept=%d',
                 login_user.user_id, dept_internal_id,
             )
+    # L3: Tenant admin → permitted within the user's mount-subtree (Child Admin
+    # reach per PRD §4.5). Root tenant returns None from
+    # ``_aget_user_tenant_root_path`` and falls through to the deny below;
+    # Root admins are sys-admins that already passed L1.
+    if dept_internal_id is not None and await _is_tenant_admin(login_user):
+        tenant_root_path = await _aget_user_tenant_root_path(login_user)
+        if tenant_root_path:
+            target = await DepartmentDao.aget_by_id(int(dept_internal_id))
+            if (
+                target is not None
+                and target.path
+                and target.path.startswith(tenant_root_path)
+            ):
+                return
     raise DepartmentPermissionDeniedError()
 
 
@@ -172,6 +186,29 @@ async def _is_tenant_admin(login_user) -> bool:
             e,
         )
         return False
+
+
+async def _aget_user_tenant_root_path(login_user) -> Optional[str]:
+    """Path of the user's leaf-tenant mount department, or None.
+
+    Used by the tenant-admin scope check: a Child Admin reaches departments
+    under (and including) their tenant's mount point. Returns ``None`` for
+    Root tenant — Root admins are super admins and bypass the path filter.
+    """
+    tenant_id = getattr(login_user, 'tenant_id', None)
+    if tenant_id is None:
+        return None
+    from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+
+    if int(tenant_id) == ROOT_TENANT_ID:
+        return None
+    tenant = await TenantDao.aget_by_id(int(tenant_id))
+    if tenant is None or tenant.root_dept_id is None:
+        return None
+    mount = await DepartmentDao.aget_by_id(int(tenant.root_dept_id))
+    if mount is None or not mount.path:
+        return None
+    return mount.path
 
 
 def _get_dept_id_prefix() -> str:
@@ -359,7 +396,10 @@ class DepartmentService:
 
     @classmethod
     async def aget_tree(cls, login_user) -> List[DepartmentTreeNode]:
-        # System admin and tenant admin see full tree; dept admin sees subtree only.
+        # System admin → full tree. Otherwise return the union of
+        # dept-admin subtrees and tenant-admin mount subtree (PRD §4.5).
+        # Both flags are queried independently so a user who is both
+        # gets the union, not just the first hit.
         is_sys_admin = _is_admin(login_user)
         is_tenant_admin = False
         admin_depts = []
@@ -367,8 +407,7 @@ class DepartmentService:
             admin_depts = await DepartmentDao.aget_user_admin_departments(
                 login_user.user_id,
             )
-            if not admin_depts:
-                is_tenant_admin = await _is_tenant_admin(login_user)
+            is_tenant_admin = await _is_tenant_admin(login_user)
             if not admin_depts and not is_tenant_admin:
                 raise DepartmentPermissionDeniedError()
 
@@ -390,15 +429,21 @@ class DepartmentService:
                 if not depts:
                     return []
 
-            # Filter to dept admin's subtree if not system admin
-            if not is_sys_admin and not is_tenant_admin:
-                admin_paths = {d.path for d in admin_depts}
-                depts = [
-                    d for d in depts
-                    if any(d.path.startswith(p) for p in admin_paths)
-                ]
-                if not depts:
-                    return []
+            # Subtree filter for non-sys-admin: union of dept-admin subtrees
+            # and the tenant-admin mount subtree (Child Admin per PRD §4.5).
+            if not is_sys_admin:
+                admin_paths: Set[str] = {d.path for d in admin_depts if d.path}
+                if is_tenant_admin:
+                    tenant_root_path = await _aget_user_tenant_root_path(login_user)
+                    if tenant_root_path:
+                        admin_paths.add(tenant_root_path)
+                if admin_paths:
+                    depts = [
+                        d for d in depts
+                        if d.path and any(d.path.startswith(p) for p in admin_paths)
+                    ]
+                    if not depts:
+                        return []
 
             # Batch get member counts
             dept_ids = [d.id for d in depts]
@@ -971,6 +1016,7 @@ class DepartmentService:
                     User.create_time.label('user_create_time'),
                     User.update_time.label('user_update_time'),
                     User.delete.label('user_deleted'),
+                    User.disable_source.label('user_disable_source'),
                 )
                 .join(User, User.user_id == UserDepartment.user_id)
                 .where(
@@ -1066,6 +1112,7 @@ class DepartmentService:
                 'create_time': r.member_join_time,
                 'update_time': _last_modified(r),
                 'enabled': r.user_deleted == 0,
+                'disable_source': getattr(r, 'user_disable_source', None),
                 'user_groups': user_groups_map.get(r.user_id, []),
                 'roles': roles_map.get(r.user_id, []),
                 'is_department_admin': r.user_id in admin_uids,

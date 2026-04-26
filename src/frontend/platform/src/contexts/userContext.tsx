@@ -1,4 +1,7 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
+import { navigateBackOrFallback } from "@/utils/navigation";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
+import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
@@ -152,14 +155,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
             // 部门管理员在 v2.5 允许进入管理端（至少可管理其权限范围内数据）；
             // 仅依赖 web_menu 会把这类账号误判成无权限（error=90001）。
             const canAccessPlatform =
-                res.role === 'admin'
-                || Boolean(res.is_department_admin)
-                || Boolean(res.can_manage_user_groups)
-                || web_menu.some((k: string) => adminMenuKeys.has(k))
+                res.has_admin_console
+                ?? (
+                    res.role === 'admin'
+                    || Boolean(res.is_department_admin)
+                    || Boolean(res.can_manage_user_groups)
+                    || web_menu.some((k: string) => adminMenuKeys.has(k))
+                )
             if (!canAccessPlatform) {
-                // 避免把用户踢回工作台并携带 error=90001（影响登录体验）；
-                // 无后台权限时在管理端内落到 403，由后端接口继续做细粒度鉴权。
-                history.pushState(null, '', BASE_URL + '/403')
+                toast({
+                    variant: 'error',
+                    description: i18next.t('menu.noAdminConsoleAccess'),
+                })
+                navigateBackOrFallback(getWorkspaceClientUrl('/'))
                 return
             }
 

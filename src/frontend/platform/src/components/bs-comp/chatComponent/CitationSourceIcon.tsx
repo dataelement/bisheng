@@ -298,9 +298,13 @@ export function CitationSourceIcon({
 }) {
   const icon = buildCitationSourceIconData({ detail, preview, type, fallbackKey });
 
+  const wrapperClassName = icon.type === "web" || ragIconVariant === "knowledge"
+    ? "inline-flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full"
+    : "inline-flex size-4 shrink-0 items-center justify-center";
+
   return (
     <span
-      className={cname("inline-flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full", className)}
+      className={cname(wrapperClassName, className)}
       title={icon.title}
     >
       {icon.type === "web" ? (
@@ -320,17 +324,17 @@ export function CitationSourceIconStack({ icons }: { icons: CitationSourceIconDa
   }
 
   return (
-    <span className="inline-flex shrink-0 -space-x-1.5">
+    <span className="inline-flex shrink-0 -space-x-3">
       {icons.map((icon) => (
         <span
           key={icon.key}
-          className="flex size-5 items-center justify-center overflow-hidden rounded-full border-[4px] border-white bg-white shadow-sm"
+          className="flex size-5 items-center justify-center overflow-hidden rounded-full border border-[#E0E0E0] bg-[#F4F5F8]"
           title={icon.title}
         >
           {icon.type === "web" ? (
             <WebSourceIcon icon={icon} iconClassName="size-full" />
           ) : (
-            <CitationFileTypeIcon fileType={icon.fileType || "txt"} className="size-4" />
+            <CitationFileTypeIcon fileType={icon.fileType || "txt"} className="size-3.5" />
           )}
         </span>
       ))}
