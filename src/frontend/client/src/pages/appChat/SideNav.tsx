@@ -84,6 +84,11 @@ export function SideNav() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
+        // Explicit app-center source should always return to app center.
+        if (from === 'center') {
+            navigate('/apps');
+            return;
+        }
         if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
             navigate('/c/new');
             return;
@@ -117,24 +122,27 @@ export function SideNav() {
     const showShareApp = flowData?.can_share === true;
 
     return (
-        <div className="relative h-full w-[280px] overflow-hidden border-r border-[#ececec] bg-white p-2 text-[#212121] flex flex-col gap-4">
-            {/* H5 brand icon */}
-            {bsConfig?.sidebarIcon?.image ? (
-                <img
-                    src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
-                    alt="logo"
-                    className="absolute left-3 top-3 z-20 hidden size-6 object-contain max-[768px]:block"
-                />
-            ) : null}
-            {/* H5 overlay: close sidebar — PC uses NavToggle to collapse */}
-            <button
-                type="button"
-                onClick={() => setSidebarVisible(false)}
-                className="absolute right-3 top-3 z-20 hidden size-[28px] shrink-0 items-center justify-center rounded-[6px] transition-colors fine-pointer:hover:bg-[#f7f8fa] touch-mobile:flex"
-                aria-label={localize('com_nav_close_sidebar')}
-            >
-                <X size={16} className="text-[#4E5969]" />
-            </button>
+        <div className="relative h-full w-[280px] overflow-hidden border-r border-[#ececec] bg-white px-3 pb-2 pt-3 text-[#212121] flex flex-col gap-4">
+            {/* H5 header: fixed baseline for mobile side-menu content start */}
+            <div className="hidden shrink-0 items-center justify-between touch-mobile:flex">
+                {bsConfig?.sidebarIcon?.image ? (
+                    <img
+                        src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
+                        alt="logo"
+                        className="size-8 rounded-md object-contain"
+                    />
+                ) : (
+                    <div className="size-8 rounded-md bg-[#F2F3F5]" />
+                )}
+                <button
+                    type="button"
+                    onClick={() => setSidebarVisible(false)}
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
+                    aria-label={localize('com_nav_close_sidebar')}
+                >
+                    <X size={16} className="text-[#4E5969]" />
+                </button>
+            </div>
 
             {/* PC: back + title — original desktop sidebar chrome */}
             <div className="hidden touch-desktop:flex shrink-0 items-center gap-2">
@@ -152,7 +160,7 @@ export function SideNav() {
             </div>
 
             {/* Top module tabs — 应用内对话侧栏固定展示 */}
-            <div className="hidden touch-mobile:block pt-8">
+            <div className="hidden touch-mobile:block pt-1">
                 <SideNavModuleTabs />
             </div>
 

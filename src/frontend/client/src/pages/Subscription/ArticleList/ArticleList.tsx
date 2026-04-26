@@ -434,7 +434,7 @@ export function ArticleList({
                             value={searchKey}
                             onChange={setSearchQuery}
                             placeholder={localize("com_subscription.search_articles_of_interest")}
-                            className="min-w-0"
+                            className="min-w-0 w-full min-[1440px]:w-auto"
                         />
 
                         {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排；576–768 与桌面同为单行 */}

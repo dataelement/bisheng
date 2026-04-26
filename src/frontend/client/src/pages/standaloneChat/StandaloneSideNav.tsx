@@ -91,27 +91,31 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
     '';
 
   return (
-    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden pl-3 pr-2 pt-3 pb-2 text-[#212121]">
-      {bsConfig?.sidebarIcon?.image ? (
-        <img
-          src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
-          alt="logo"
-          className="absolute left-3 top-3 z-20 hidden size-6 object-contain max-[768px]:block"
-        />
-      ) : null}
-      <button
-        type="button"
-        onClick={onCloseSidebar}
-        className={cn(
-          'absolute right-3 top-3 z-20 hidden shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors',
-          onCloseSidebar ? 'max-[768px]:flex' : '',
+    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden px-3 pb-2 pt-3 text-[#212121]">
+      <div className="hidden shrink-0 items-center justify-between max-[768px]:flex">
+        {bsConfig?.sidebarIcon?.image ? (
+          <img
+            src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
+            alt="logo"
+            className="size-8 rounded-md object-contain"
+          />
+        ) : (
+          <div className="size-8 rounded-md bg-[#F2F3F5]" />
         )}
-        aria-label={localize('com_nav_close_sidebar')}
-      >
-        <X size={16} className="text-[#4E5969]" />
-      </button>
+        <button
+          type="button"
+          onClick={onCloseSidebar}
+          className={cn(
+            'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#f7f8fa]',
+            onCloseSidebar ? '' : 'pointer-events-none opacity-0',
+          )}
+          aria-label={localize('com_nav_close_sidebar')}
+        >
+          <X size={16} className="text-[#4E5969]" />
+        </button>
+      </div>
       {/* App card */}
-      <div className="shrink-0 pt-8">
+      <div className="shrink-0 pt-1">
         {isGuest ? (
           <div
             className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"

@@ -708,6 +708,8 @@ export function AddToKnowledgeModal({
 
     const useFlexTree =
         embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen;
+    const isChannelSyncMobileFooter =
+        mode === "channel_sync" && (embedInChannelSheet || isChannelSyncCenteredMobile);
 
     const pickerBody = (
         <>
@@ -824,9 +826,9 @@ export function AddToKnowledgeModal({
                 ref={actionFooterRef}
                 className={
                     embedInChannelSheet
-                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 sm:px-5 sm:py-3.5"
+                        ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-5 sm:py-3.5"
                         : isChannelSyncCenteredMobile
-                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] bg-white px-4 py-3"
+                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]"
                             : isArticleMobileFullScreen
                                 ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
                             : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-4 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
@@ -834,7 +836,8 @@ export function AddToKnowledgeModal({
             >
                 <div
                     className={cn(
-                        "ml-auto min-w-0",
+                        "min-w-0",
+                        !isChannelSyncMobileFooter && "ml-auto",
                         embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen
                             ? "flex w-full items-center gap-2"
                             : "grid w-[176px] shrink-0 grid-cols-2 gap-2",
@@ -845,6 +848,9 @@ export function AddToKnowledgeModal({
                         onClick={goBackToChannelForm}
                         className={cn(
                             "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
+                            isChannelSyncMobileFooter &&
+                            "h-11 rounded-lg border-[#E5E6EB] text-[15px] text-[#4E5969] hover:bg-[#F7F8FA]",
+                            isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
                         )}
@@ -854,6 +860,9 @@ export function AddToKnowledgeModal({
                         disabled={!selectedId || isConfirming}
                         className={cn(
                             "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
+                            isChannelSyncMobileFooter &&
+                            "h-11 rounded-lg text-[15px] enabled:bg-[#165DFF] enabled:text-white enabled:hover:bg-[#4080FF] disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
+                            isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
                         )}

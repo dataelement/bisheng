@@ -117,8 +117,8 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
           {/* Mobile overlay sidebar */}
           {isTabletOrMobile && sidebarVisible && (
-            <div className="absolute inset-0 z-[55] flex">
-              <div className="h-full w-[280px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+            <div className="absolute inset-0 z-[70] flex">
+              <div className="h-full w-[280px] max-w-[280px] border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                 <StandaloneSideNav sidebar={sidebar} onCloseSidebar={toggleSidebar} />
               </div>
               <button

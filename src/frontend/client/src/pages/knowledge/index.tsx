@@ -602,7 +602,7 @@ export default function Knowledge() {
                     aria-modal="true"
                     aria-label={localize("com_knowledge.knowledge_space")}
                 >
-                    <div className="relative flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+                    <div className="relative flex h-full w-[280px] max-w-[280px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                         <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-[1] w-px bg-[#e5e6eb]" />
                         <KnowledgeSpaceSidebar
                             mobileDrawerMode
