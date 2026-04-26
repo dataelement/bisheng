@@ -14,6 +14,10 @@ import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { canOpenPermissionDialog } from "~/api/permission";
+import {
+    hasKnowledgeSpacePermission,
+    useKnowledgeSpaceActionPermissions,
+} from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn, getFullWidthLength } from "~/utils";
 
@@ -158,6 +162,12 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
+    const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "share_space",
+    );
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -566,6 +576,7 @@ export function KnowledgeSpaceContent({
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
+                canShareSpace={canShareSpace}
             />
 
             {/* Content Container (Scrollable) */}

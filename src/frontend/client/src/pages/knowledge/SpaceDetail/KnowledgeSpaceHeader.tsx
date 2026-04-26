@@ -66,6 +66,7 @@ interface KnowledgeSpaceHeaderProps {
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     enableCardMode?: boolean;
+    canShareSpace?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -96,6 +97,7 @@ export function KnowledgeSpaceHeader({
     onToggleAiAssistant,
     isAiAssistantOpen,
     enableCardMode = true,
+    canShareSpace = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -117,7 +119,7 @@ export function KnowledgeSpaceHeader({
     }, []);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
-    const showShare = space.visibility !== VisibilityType.PRIVATE;
+    const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
     const showToolbarActions = isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
