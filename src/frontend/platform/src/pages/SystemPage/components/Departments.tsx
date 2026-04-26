@@ -247,7 +247,7 @@ export default function Departments() {
                 dept={selectedDept}
                 tree={tree}
                 onChanged={handleTreeChange}
-                onMarkAsTenant={multiTenantEnabled ? handleMarkAsTenant : undefined}
+                onMarkAsTenant={multiTenantEnabled && user?.is_global_super ? handleMarkAsTenant : undefined}
               />
             </TabsContent>
             {showTrafficControlTab && (
