@@ -1018,10 +1018,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
 
-        if auth_type is not None:
-            await self._require_permission_id('knowledge_space', space_id, 'manage_space_relation')
-        else:
-            await self._require_permission_id('knowledge_space', space_id, 'edit_space')
+        await self._require_permission_id('knowledge_space', space_id, 'edit_space')
 
         old_auth_type = space.auth_type
 

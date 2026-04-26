@@ -835,7 +835,7 @@ class TestManagePermissionBoundaries:
         mock_require_write.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_update_space_uses_manage_permission_when_auth_type_is_present(self, service):
+    async def test_update_space_uses_edit_permission_when_auth_type_is_present(self, service):
         existing_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         updated_space = _make_space(auth_type=AuthTypeEnum.APPROVAL)
 
@@ -860,7 +860,7 @@ class TestManagePermissionBoundaries:
         ):
             await service.update_knowledge_space(1, auth_type=AuthTypeEnum.APPROVAL)
 
-        mock_require_permission_id.assert_any_await('knowledge_space', 1, 'manage_space_relation')
+        mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'edit_space')
         mock_require_manage.assert_not_awaited()
         mock_require_write.assert_not_awaited()
 
