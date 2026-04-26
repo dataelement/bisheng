@@ -83,10 +83,16 @@ async def _is_department_admin(login_user) -> bool:
 
 
 async def _can_open_user_group_management(login_user) -> bool:
-    """Who may use user-group management APIs (PRD 3.2.2): 超管 / 部门管理员。"""
+    """Who may use user-group management APIs: 超管 / 部门管理员 / 子租户管理员
+    (PRD 3.2.2 + §4.5)."""
     if _is_admin(login_user):
         return True
-    return await _is_department_admin(login_user)
+    if await _is_department_admin(login_user):
+        return True
+    from bisheng.department.domain.services.department_service import (
+        _is_tenant_admin,
+    )
+    return await _is_tenant_admin(login_user)
 
 
 async def _user_can_view_group(login_user, group: Group) -> bool:

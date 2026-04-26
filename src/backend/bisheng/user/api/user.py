@@ -162,7 +162,6 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_department_admin=is_department_admin,
     )
     menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
-    can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
 
     # Tenant-tree admin flags for the frontend. Any failure here degrades
     # to defaults so a transient FGA outage never blocks login.
@@ -196,6 +195,11 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
                 )
     except Exception as exc:  # noqa: BLE001 — never block /user/info
         logger.debug('admin-flag detection failed: %s', exc)
+
+    # PRD §4.5: Child Admin manages own tenant's user groups → enable tab.
+    can_manage_user_groups = bool(
+        login_user.is_admin() or is_department_admin or is_child_admin
+    )
 
     return resp_200(await UserService.build_user_read(
         db_user,
