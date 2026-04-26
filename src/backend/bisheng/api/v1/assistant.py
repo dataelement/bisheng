@@ -17,6 +17,7 @@ from bisheng.common.schemas.api import PageData
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.database.models.assistant import Assistant
+from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
@@ -169,6 +170,17 @@ async def chat(*,
                chat_id: Optional[str] = None,
                login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     try:
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'assistant',
+            str(assistant_id),
+            ['use_app'],
+        ):
+            await websocket.close(
+                code=http_status.WS_1008_POLICY_VIOLATION,
+                reason='No permission to use this app',
+            )
+            return
         await chat_manager.dispatch_client(websocket, assistant_id, chat_id, login_user,
                                            WorkType.GPTS, websocket)
     except WebSocketException as exc:

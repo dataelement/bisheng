@@ -164,6 +164,17 @@ async def workflow_ws(*,
                       chat_id: Optional[str] = None,
                       login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     try:
+        if not await ApplicationPermissionService.has_any_permission_async(
+            login_user,
+            'workflow',
+            str(workflow_id),
+            ['use_app'],
+        ):
+            await websocket.close(
+                code=http_status.WS_1008_POLICY_VIOLATION,
+                reason='No permission to use this app',
+            )
+            return
         await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
