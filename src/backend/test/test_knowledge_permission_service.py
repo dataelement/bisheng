@@ -52,28 +52,41 @@ async def test_check_access_async_uses_view_permission_id():
 
 
 @pytest.mark.asyncio
-async def test_ensure_knowledge_write_async_uses_knowledge_library_rebac():
+async def test_ensure_knowledge_write_async_uses_edit_permission_id():
     service = KnowledgePermissionService()
     login_user = SimpleNamespace(user_id=7)
 
     with patch(
-        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService.check',
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.check_permission_id_async',
         new_callable=AsyncMock,
         return_value=True,
-    ) as mock_check:
+    ) as mock_check_permission_id:
         await service.ensure_knowledge_write_async(
             login_user=login_user,
             owner_user_id=99,
             knowledge_id=18,
         )
 
-    mock_check.assert_awaited_once_with(
-        user_id=7,
-        relation='can_edit',
-        object_type='knowledge_library',
-        object_id='18',
-        login_user=login_user,
-    )
+    mock_check_permission_id.assert_awaited_once_with(login_user, 18, 'edit_kb')
+
+
+@pytest.mark.asyncio
+async def test_ensure_knowledge_delete_async_uses_delete_permission_id():
+    service = KnowledgePermissionService()
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.check_permission_id_async',
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_check_permission_id:
+        await service.ensure_knowledge_delete_async(
+            login_user=login_user,
+            owner_user_id=99,
+            knowledge_id=19,
+        )
+
+    mock_check_permission_id.assert_awaited_once_with(login_user, 19, 'delete_kb')
 
 
 @pytest.mark.asyncio

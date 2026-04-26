@@ -416,7 +416,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
 
         try:
-            cls.permission_service.ensure_knowledge_write_sync(
+            cls.permission_service.ensure_knowledge_delete_sync(
                 login_user=login_user,
                 owner_user_id=knowledge.user_id,
                 knowledge_id=knowledge_id,

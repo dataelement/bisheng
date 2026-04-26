@@ -355,27 +355,22 @@ export default function KnowledgeFile() {
     // Permission levels for badge display
     const resourceIds = datalist.map((el: any) => String(el.id));
     const { permissions: permIds } = usePermissionIds('knowledge_library', resourceIds, KB_PERMISSION_IDS);
-    const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
     const visibleLibs = datalist;
     const canEdit = (el: any) =>
-        user.role === 'admin' || isCreator(el) || hasPermissionId(permIds, el.id, 'edit_kb');
+        hasPermissionId(permIds, el.id, 'edit_kb');
     const canDelete = (el: any) =>
-        user.role === 'admin' || isCreator(el) || hasPermissionId(permIds, el.id, 'delete_kb');
+        hasPermissionId(permIds, el.id, 'delete_kb');
     // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
-        user.role === 'admin' ||
-        isCreator(el) ||
         hasPermissionId(permIds, el.id, 'view_kb');
     /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
-        user.role === 'admin' ||
-        isCreator(el) ||
         KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
 
     // Enable polling during copying
@@ -610,10 +605,10 @@ export default function KnowledgeFile() {
                                                             handleCopy(el);
                                                         break;
                                                     case 'set':
-                                                        canEdit(el) && el.copiable && handleOpenSettings(el);
+                                                        canEdit(el) && handleOpenSettings(el);
                                                         break;
                                                     case 'delete':
-                                                        canDelete(el) && el.copiable && handleDelete(el.id);
+                                                        canDelete(el) && handleDelete(el.id);
                                                         break;
                                                 }
                                             }}
@@ -668,10 +663,10 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canEdit(el)) && t('noOperationPermission')} side='top'>
+                                                <Tip content={!canEdit(el) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!canEdit(el) || !el.copiable}
+                                                        disabled={!canEdit(el)}
                                                         className="data-[disabled]:pointer-events-auto"
                                                         showIcon={false}
                                                     >
@@ -681,12 +676,12 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canDelete(el)) && t('noOperationPermission')} side='top'>
+                                                <Tip content={!canDelete(el) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!canDelete(el) || !el.copiable}
+                                                        disabled={!canDelete(el)}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />
