@@ -56,6 +56,19 @@ export interface ChatCitation {
 const citationDetailMemoryCache: Record<string, ChatCitation> = {};
 const citationResolveRequestCache: Record<string, Promise<ChatCitation[]>> = {};
 
+function isRagCitationDetail(detail?: ChatCitation | null) {
+    const normalizedType = detail?.type?.toLowerCase();
+    return normalizedType !== "web" && normalizedType !== "websearch";
+}
+
+function hasCitationDocumentUrl(detail?: ChatCitation | null) {
+    return !!detail?.sourcePayload?.downloadUrl;
+}
+
+function canUseCachedCitationDetail(detail?: ChatCitation | null) {
+    return !!detail && (!isRagCitationDetail(detail) || hasCitationDocumentUrl(detail));
+}
+
 // v2.5 Agent-mode tool call shape (server emits these in agent_tool_call SSE events
 // and persists an array of them inside agent_answer messages).
 export type AgentToolType = "tool" | "knowledge" | "web" | string;
@@ -243,7 +256,7 @@ export async function deleteConversation(
 }
 
 export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
-    if (citationDetailMemoryCache[citationId]) {
+    if (canUseCachedCitationDetail(citationDetailMemoryCache[citationId])) {
         return citationDetailMemoryCache[citationId];
     }
 
@@ -259,7 +272,7 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
 export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {
     const uniqueCitationIds = Array.from(new Set(
         citationIds.filter((citationId) => citationId && !citationId.startsWith("citation:")),
-    )).filter((citationId) => !citationDetailMemoryCache[citationId]);
+    )).filter((citationId) => !canUseCachedCitationDetail(citationDetailMemoryCache[citationId]));
 
     if (!uniqueCitationIds.length) {
         return citationIds

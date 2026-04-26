@@ -104,7 +104,7 @@ function CitationReferenceCard({
   detail: ChatCitation | null;
   isLoading: boolean;
   hasError: boolean;
-  onOpenDocumentPreview: (detail: ChatCitation) => void;
+  onOpenDocumentPreview: (item: CitationReferenceItem, detail: ChatCitation) => void;
 }) {
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
@@ -125,7 +125,7 @@ function CitationReferenceCard({
       {canOpenDocument ? (
         <button
           type="button"
-          onClick={() => onOpenDocumentPreview(detail!)}
+          onClick={() => onOpenDocumentPreview(item, detail!)}
           className={cn(
             'flex w-full min-w-0 items-center gap-1 rounded-[4px] text-left',
             nameRowTextClass,
@@ -235,6 +235,7 @@ export default function CitationReferencesDrawer({
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
+  const autoResolveAttemptRef = useRef<Set<string>>(new Set());
 
   const references = useMemo(
     () => (referenceItems && referenceItems.length > 0
@@ -255,16 +256,34 @@ export default function CitationReferencesDrawer({
     }));
   }, [citations]);
 
+  const shouldResolveCitationDetail = useCallback((citationId?: string, detail?: ChatCitation | null) => {
+    if (!citationId || citationId.startsWith('citation:')) {
+      return false;
+    }
+    if (!detail) {
+      return true;
+    }
+    return isRagCitation(detail) && !getCitationDocumentUrl(detail);
+  }, []);
+
+  const shouldAutoResolveCitationDetail = useCallback((citationId?: string, detail?: ChatCitation | null) => {
+    return !!citationId && !autoResolveAttemptRef.current.has(citationId) && shouldResolveCitationDetail(citationId, detail);
+  }, [shouldResolveCitationDetail]);
+
   useEffect(() => {
     const citationIds = Array.from(new Set(
       references
         .map((item) => item.data.citationId)
-        .filter((citationId) => citationId && !citationId.startsWith('citation:') && !detailCacheRef.current[citationId]),
+        .filter((citationId) => shouldAutoResolveCitationDetail(citationId, detailCacheRef.current[citationId])),
     ));
 
     if (!citationIds.length) {
       return;
     }
+
+    citationIds.forEach((citationId) => {
+      autoResolveAttemptRef.current.add(citationId);
+    });
 
     const requestKey = citationIds.sort().join('|');
     if (batchRequestKeyRef.current === requestKey) {
@@ -293,7 +312,7 @@ export default function CitationReferencesDrawer({
         console.error('Failed to resolve citation details:', error);
         batchRequestKeyRef.current = '';
       });
-  }, [references]);
+  }, [references, shouldAutoResolveCitationDetail]);
 
   const loadCitationDetail = useCallback(async (citationId: string) => {
     if (!citationId || citationId.startsWith('citation:')) {
@@ -301,7 +320,7 @@ export default function CitationReferencesDrawer({
     }
 
     const cachedDetail = detailCacheRef.current[citationId];
-    if (cachedDetail) {
+    if (cachedDetail && !shouldResolveCitationDetail(citationId, cachedDetail)) {
       return cachedDetail;
     }
 
@@ -338,7 +357,7 @@ export default function CitationReferencesDrawer({
 
     requestCacheRef.current[citationId] = request;
     return request;
-  }, []);
+  }, [shouldResolveCitationDetail]);
 
   useEffect(() => {
     const shouldUseDesktopInlinePanel = !isNarrowLayout
@@ -352,13 +371,14 @@ export default function CitationReferencesDrawer({
     const citationIds = Array.from(new Set(
       references
         .map((item) => item.data.citationId)
-        .filter((citationId) => citationId && !citationId.startsWith('citation:') && !detailMap[citationId]),
+        .filter((citationId) => shouldAutoResolveCitationDetail(citationId, detailMap[citationId])),
     ));
 
     citationIds.forEach((citationId) => {
+      autoResolveAttemptRef.current.add(citationId);
       void loadCitationDetail(citationId);
     });
-  }, [detailMap, desktopMode, internalOpen, isNarrowLayout, loadCitationDetail, open, panelOnly, references]);
+  }, [detailMap, desktopMode, internalOpen, isNarrowLayout, loadCitationDetail, open, panelOnly, references, shouldAutoResolveCitationDetail]);
 
   const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
   const isDesktopInlinePanel = !isNarrowLayout
@@ -431,9 +451,17 @@ export default function CitationReferencesDrawer({
 
     setOpenState(true);
   };
-  const handleOpenDocumentPreview = (detail: ChatCitation) => {
+  const handleOpenDocumentPreview = async (item: CitationReferenceItem, detail: ChatCitation) => {
+    const latestDetail = shouldResolveCitationDetail(item.data.citationId, detail)
+      ? await loadCitationDetail(item.data.citationId)
+      : detail;
+
+    if (!latestDetail) {
+      return;
+    }
+
     const nextPreview = {
-      detail,
+      detail: latestDetail,
       locateChunk: false,
     };
 
