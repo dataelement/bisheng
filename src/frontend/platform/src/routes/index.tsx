@@ -167,6 +167,29 @@ function hasRoutePermission(permissions: string[], key: string) {
   return permissions.includes(key)
 }
 
+/**
+ * 把后端下发的 web_menu 转成路由层用的 permissions 数组。
+ *
+ * - 部门管理员补 `create_app`（后端来不及下发时的兜底，原有行为）。
+ * - 子租户管理员（Child Admin）补 `sys`：后端 web_menu 不下发 sys/system_config 给非
+ *   超管/非部门管理员，但 SystemPage 内部按 Tab 控制权限（org + role），需要前端先放行
+ *   /sys 路由。判断与侧栏 `MainLayout.showSystemNav` 一致。
+ */
+export function resolveRoutePermissions(user: {
+  web_menu?: string[]
+  is_department_admin?: boolean | null
+  is_child_admin?: boolean | null
+}): string[] {
+  let perms = user.web_menu ?? []
+  if (user.is_department_admin && !perms.includes("create_app")) {
+    perms = [...perms, "create_app"]
+  }
+  if (user.is_child_admin && !perms.includes("sys")) {
+    perms = [...perms, "sys"]
+  }
+  return perms
+}
+
 export const getPrivateRouter = (
   permissions: string[],
   opts?: { menuApprovalMode?: boolean },
