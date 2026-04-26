@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import contextvars
 import threading
 import time
 from typing import Dict, List, Set, Tuple
@@ -30,7 +31,15 @@ class ThreadPoolManager:
                 future = asyncio.create_task(self.acontext_wrapper(fn, *args, **kwargs))
                 self.async_task[key].append(future)
             else:
-                future = self.executor.submit(self.context_wrapper, fn, *args, **kwargs)
+                # ThreadPoolExecutor.submit does not copy contextvars across
+                # threads — without copy_context the worker loses tenant
+                # context and the ORM tenant filter raises NoTenantContextError
+                # under multi_tenant.enabled=True. asyncio.create_task above
+                # already snapshots Context, so only the sync path needs this.
+                ctx = contextvars.copy_context()
+                future = self.executor.submit(
+                    ctx.run, self.context_wrapper, fn, *args, **kwargs,
+                )
                 self.future_dict[key].append(future)
             return future
 
