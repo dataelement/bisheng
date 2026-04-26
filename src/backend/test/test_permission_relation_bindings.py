@@ -76,7 +76,7 @@ class TestRelationModelBindings:
         }]
 
     @pytest.mark.asyncio
-    async def test_rebinding_same_relation_skips_tuple_write(self, mock_admin_user):
+    async def test_rebinding_same_relation_repairs_tuple_write(self, mock_admin_user):
         from bisheng.permission.api.endpoints.resource_permission import authorize_resource
         from bisheng.permission.domain.schemas.permission_schema import (
             AuthorizeGrantItem,
@@ -128,7 +128,10 @@ class TestRelationModelBindings:
                 login_user=mock_admin_user,
             )
 
-        mock_authorize.assert_not_awaited()
+        mock_authorize.assert_awaited_once()
+        assert mock_authorize.await_args.kwargs['grants'] == request.grants
+        assert mock_authorize.await_args.kwargs['revokes'] == []
+        assert mock_authorize.await_args.kwargs['enforce_fga_success'] is True
         saved = mock_save_bindings.await_args.args[0]
         assert saved == [{
             'key': 'workflow:1:user:2:viewer:-',
@@ -140,6 +143,82 @@ class TestRelationModelBindings:
             'include_children': None,
             'model_id': 'custom_viewer',
         }]
+
+    @pytest.mark.asyncio
+    async def test_authorize_rejects_non_user_owner_grant(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import authorize_resource
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRequest
+
+        request = AuthorizeRequest(
+            grants=[
+                AuthorizeGrantItem(
+                    subject_type='department',
+                    subject_id=3,
+                    relation='owner',
+                    model_id='owner',
+                ),
+            ],
+        )
+
+        with patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            resp = await authorize_resource(
+                resource_type='workflow',
+                resource_id='1',
+                request=request,
+                login_user=mock_admin_user,
+            )
+
+        assert resp.status_code == 19000
+        mock_authorize.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_authorize_allows_invalid_owner_revoke_as_binding_cleanup(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import authorize_resource
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRequest, AuthorizeRevokeItem
+
+        request = AuthorizeRequest(
+            revokes=[
+                AuthorizeRevokeItem(
+                    subject_type='department',
+                    subject_id=3,
+                    relation='owner',
+                    model_id='owner',
+                ),
+            ],
+        )
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[{
+                'key': 'workflow:1:department:3:owner:0',
+                'resource_type': 'workflow',
+                'resource_id': '1',
+                'subject_type': 'department',
+                'subject_id': 3,
+                'relation': 'owner',
+                'include_children': False,
+                'model_id': 'owner',
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings, patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            await authorize_resource(
+                resource_type='workflow',
+                resource_id='1',
+                request=request,
+                login_user=mock_admin_user,
+            )
+
+        mock_authorize.assert_not_awaited()
+        assert mock_save_bindings.await_args.args[0] == []
 
     @pytest.mark.asyncio
     async def test_delete_relation_model_uses_bound_include_children(self, mock_admin_user):
@@ -186,6 +265,104 @@ class TestRelationModelBindings:
 
         revoke = mock_authorize.await_args.kwargs['revokes'][0]
         assert revoke.include_children is False
+
+    @pytest.mark.asyncio
+    async def test_delete_relation_model_skips_invalid_owner_revoke(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import delete_relation_model
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 'custom_owner',
+                'name': 'Custom Owner',
+                'relation': 'owner',
+                'grant_tier': 'owner',
+                'permissions': [],
+                'is_system': False,
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[{
+                'key': 'assistant:9:department:3:owner:0',
+                'resource_type': 'assistant',
+                'resource_id': '9',
+                'subject_type': 'department',
+                'subject_id': 3,
+                'relation': 'owner',
+                'include_children': False,
+                'model_id': 'custom_owner',
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
+            new_callable=AsyncMock,
+        ) as mock_save_relation_models, patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings, patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            await delete_relation_model(
+                model_id='custom_owner',
+                login_user=mock_admin_user,
+            )
+
+        mock_authorize.assert_not_awaited()
+        assert mock_save_relation_models.await_args.args[0] == []
+        assert mock_save_bindings.await_args.args[0] == []
+
+    @pytest.mark.asyncio
+    async def test_delete_relation_model_keeps_db_when_revoke_fails(self, mock_admin_user):
+        from bisheng.core.openfga.exceptions import FGAWriteError
+        from bisheng.permission.api.endpoints.resource_permission import delete_relation_model
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 'custom_viewer',
+                'name': 'Custom Viewer',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'is_system': False,
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[{
+                'key': 'workflow:9:user:3:viewer:-',
+                'resource_type': 'workflow',
+                'resource_id': '9',
+                'subject_type': 'user',
+                'subject_id': 3,
+                'relation': 'viewer',
+                'include_children': None,
+                'model_id': 'custom_viewer',
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
+            new_callable=AsyncMock,
+        ) as mock_save_relation_models, patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ) as mock_save_bindings, patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+            side_effect=FGAWriteError('boom'),
+        ) as mock_authorize:
+            resp = await delete_relation_model(
+                model_id='custom_viewer',
+                login_user=mock_admin_user,
+            )
+
+        assert resp.status_code == 19004
+        mock_authorize.assert_awaited_once()
+        assert mock_authorize.await_args.kwargs['enforce_fga_success'] is True
+        mock_save_relation_models.assert_not_awaited()
+        mock_save_bindings.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_bindings_migrates_legacy_knowledge_library_bindings(self):

@@ -115,6 +115,7 @@ export type TUser = {
   role: string;
   provider: string;
   plugins?: string[];
+  is_department_admin?: boolean;
   /** 与 /user/info 的 menu_approval_mode 对齐 */
   menu_approval_mode?: boolean;
   backupCodes?: TBackupCode[];

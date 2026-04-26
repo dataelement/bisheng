@@ -30,3 +30,8 @@ class PermissionTupleWriteError(BaseErrorCode):
 class PermissionInvalidRelationError(BaseErrorCode):
     Code: int = 19005
     Msg: str = 'Invalid permission relation'
+
+
+class PermissionRelationModelNameExistsError(BaseErrorCode):
+    Code: int = 19006
+    Msg: str = 'Relation model name already exists'

@@ -49,6 +49,39 @@ def _make_app(user_factory):
 
 class TestPermissionApiIntegration:
 
+    def test_create_relation_model_rejects_duplicate_name(self):
+        app = _make_app(_AdminUser)
+        state = [{
+            'id': 'custom_existing',
+            'name': '新关系测试',
+            'relation': 'viewer',
+            'grant_tier': 'usage',
+            'permissions': ['view_app'],
+            'permissions_explicit': True,
+            'is_system': False,
+        }]
+
+        async def fake_get_relation_models():
+            return deepcopy(state)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            side_effect=fake_get_relation_models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_relation_models',
+            new_callable=AsyncMock,
+        ) as mock_save_relation_models:
+            with TestClient(app) as client:
+                create_resp = client.post(
+                    '/api/v1/permissions/relation-models',
+                    json={'name': ' 新关系测试 ', 'relation': 'viewer', 'permissions': ['view_app']},
+                )
+                body = create_resp.json()
+
+        assert body['status_code'] == 19006
+        mock_save_relation_models.assert_not_awaited()
+
     def test_relation_model_update_round_trip_preserves_explicit_empty_permissions(self):
         app = _make_app(_AdminUser)
         state = [{

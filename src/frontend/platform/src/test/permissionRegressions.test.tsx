@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import RolesAndPermissions from "@/pages/SystemPage/components/RolesAndPermissions";
 import {
+  createRelationModelApi,
   getApplicationPermissionTemplateApi,
   getGrantableRelationModelsApi,
   getKnowledgeLibraryPermissionTemplateApi,
@@ -92,6 +93,7 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 }));
 
 const mockedGetApplicationPermissionTemplateApi = vi.mocked(getApplicationPermissionTemplateApi);
+const mockedCreateRelationModelApi = vi.mocked(createRelationModelApi);
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetKnowledgeLibraryPermissionTemplateApi = vi.mocked(getKnowledgeLibraryPermissionTemplateApi);
 const mockedGetRebacSchemaApi = vi.mocked(getRebacSchemaApi);
@@ -217,6 +219,7 @@ describe("Permission dialog regressions", () => {
 describe("Relation model regressions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedCreateRelationModelApi.mockResolvedValue({ id: "custom_new" } as any);
     mockedGetRebacSchemaApi.mockResolvedValue({
       schema_version: "1",
       model_version: "1",
@@ -297,6 +300,53 @@ describe("Relation model regressions", () => {
     checkboxes.forEach((checkbox) => {
       expect(checkbox).not.toBeChecked();
     });
+  });
+
+  it("shows custom relation model names without relation suffixes", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "custom_plain_name",
+        name: "新关系测试",
+        relation: "viewer",
+        grant_tier: "usage",
+        permissions: [],
+        permissions_explicit: true,
+        is_system: false,
+      },
+    ] as any);
+
+    await openRebacTab();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveTextContent("新关系测试");
+    });
+    expect(screen.getByRole("combobox")).not.toHaveTextContent("新关系测试（");
+  });
+
+  it("blocks creating relation models with duplicate names", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "custom_existing",
+        name: "新关系测试",
+        relation: "viewer",
+        grant_tier: "usage",
+        permissions: [],
+        permissions_explicit: true,
+        is_system: false,
+      },
+    ] as any);
+
+    await openRebacTab();
+
+    fireEvent.click(screen.getByRole("button", { name: "system.relationModelCreateButton" }));
+    fireEvent.change(
+      screen.getByPlaceholderText("system.relationModelNamePlaceholder"),
+      { target: { value: " 新关系测试 " } },
+    );
+
+    expect(screen.getByText("system.relationModelNameExists")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "confirmButton" })).toBeDisabled();
+    expect(mockedCreateRelationModelApi).not.toHaveBeenCalled();
   });
 
   it("shows relation-model template editing guidance before the selector", async () => {

@@ -5,6 +5,7 @@ import {
   getKnowledgeSpaceGrantUserGroupsApi,
 } from "@/controllers/API/permission";
 import { render, screen, waitFor } from "@/test/test-utils";
+import { fireEvent, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", () => ({
@@ -29,11 +30,12 @@ vi.mock("@/components/bs-ui/input", () => ({
 }));
 
 vi.mock("@/components/bs-ui/checkBox", () => ({
-  Checkbox: ({ checked, onCheckedChange }: any) => (
+  Checkbox: ({ checked, disabled, onCheckedChange }: any) => (
     <input
       type="checkbox"
       readOnly
       checked={checked}
+      disabled={disabled}
       onClick={() => onCheckedChange?.(!checked)}
     />
   ),
@@ -77,6 +79,142 @@ describe("Knowledge-space grant subject sources", () => {
     });
 
     expect(mockedGetKnowledgeSpaceGrantDepartmentsApi).toHaveBeenCalledWith("88");
+  });
+
+  it("shows descendants as checked when an ancestor department includes children", async () => {
+    mockedGetKnowledgeSpaceGrantDepartmentsApi.mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "BS@10",
+        name: "研发部",
+        parent_id: null,
+        path: "/10/",
+        sort_order: 0,
+        source: "local",
+        status: "active",
+        member_count: 0,
+        children: [
+          {
+            id: 11,
+            dept_id: "BS@11",
+            name: "平台组",
+            parent_id: 10,
+            path: "/10/11/",
+            sort_order: 0,
+            source: "local",
+            status: "active",
+            member_count: 0,
+            children: [],
+          },
+        ],
+      },
+    ] as any);
+
+    render(
+      <SubjectSearchDepartment
+        value={[
+          {
+            type: "department",
+            id: 10,
+            name: "研发部",
+            include_children: true,
+          },
+        ]}
+        onChange={vi.fn()}
+        resourceType="knowledge_space"
+        resourceId="88"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("研发部")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("search.department"), {
+      target: { value: "平台组" },
+    });
+
+    const childLabel = await screen.findByText("平台组");
+    const childCheckbox = within(childLabel.parentElement as HTMLElement).getByRole("checkbox");
+
+    expect(childCheckbox).toBeChecked();
+  });
+
+  it("materializes inherited selections before removing include-children mode", async () => {
+    mockedGetKnowledgeSpaceGrantDepartmentsApi.mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "BS@10",
+        name: "研发部",
+        parent_id: null,
+        path: "/10/",
+        sort_order: 0,
+        source: "local",
+        status: "active",
+        member_count: 0,
+        children: [
+          {
+            id: 11,
+            dept_id: "BS@11",
+            name: "平台组",
+            parent_id: 10,
+            path: "/10/11/",
+            sort_order: 0,
+            source: "local",
+            status: "active",
+            member_count: 0,
+            children: [],
+          },
+        ],
+      },
+    ] as any);
+
+    const onChange = vi.fn();
+    const onIncludeChildrenChange = vi.fn();
+
+    render(
+      <SubjectSearchDepartment
+        value={[
+          {
+            type: "department",
+            id: 10,
+            name: "研发部",
+            include_children: true,
+          },
+        ]}
+        onChange={onChange}
+        resourceType="knowledge_space"
+        resourceId="88"
+        includeChildren
+        onIncludeChildrenChange={onIncludeChildrenChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("研发部")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("search.department"), {
+      target: { value: "平台组" },
+    });
+
+    fireEvent.click(await screen.findByText("平台组"));
+
+    expect(onIncludeChildrenChange).toHaveBeenCalledWith(false);
+    expect(onChange).toHaveBeenCalledWith([
+      {
+        type: "department",
+        id: 10,
+        name: "研发部",
+        include_children: false,
+      },
+      {
+        type: "department",
+        id: 11,
+        name: "研发部/平台组",
+        include_children: false,
+      },
+    ]);
   });
 
   it("loads the full user-group list for knowledge-space permission grants", async () => {

@@ -9,6 +9,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import useAvatar from '~/hooks/Messages/useAvatar';
 import store from '~/store';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
+import { canOpenPlatformAdminPanel } from '~/utils/platformAccess';
 import MyKnowledgeView from '../Chat/Input/Files/MyKnowledgeView';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../ui';
 import Settings from './Settings';
@@ -43,6 +44,11 @@ function AccountSettings() {
 
   const avatarSrc = useAvatar(user);
   const name = user?.avatar ?? user?.username ?? '';
+  const canOpenPlatform = canOpenPlatformAdminPanel({
+    role: user?.role,
+    plugins: user?.plugins,
+    is_department_admin: user?.is_department_admin,
+  });
 
   return (
     <div className='mt-text-sm h-auto w-full items-center gap-2 rounded-xl p-2 text-sm'>
@@ -91,7 +97,7 @@ function AccountSettings() {
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent className='w-60 rounded-2xl'>
-          {(user?.plugins?.includes('backend') || user?.plugins?.includes('admin')) && <a href={getPlatformAdminPanelUrl()} target='_blank'>
+          {canOpenPlatform && <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
             <DropdownMenuItem className='select-item text-sm font-normal'>
               <GanttChartIcon className="icon-md" />
               {localize('com_nav_admin_panel')}
