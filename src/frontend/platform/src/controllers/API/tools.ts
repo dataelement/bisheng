@@ -21,14 +21,21 @@ export const createTool = async (data: any): Promise<any> => {
     return await axios.post(`/api/v1/tool`, data);
 };
 
-export const getToolsApi = async (type: 'all' | 'default' | 'custom' | 'mcp'): Promise<any> => {
-    const queryStr = {
+export const getToolsApi = async (
+    type: 'all' | 'default' | 'custom' | 'mcp',
+    options: { permissionId?: 'view_tool' | 'use_tool' } = {}
+): Promise<any> => {
+    const params = new URLSearchParams();
+    const preset = {
         all: '',
-        default: '?is_preset=1',
-        custom: '?is_preset=0',
-        mcp: '?is_preset=2'
-    }
-    return await axios.get(`/api/v1/tool${queryStr[type]}`)
+        default: '1',
+        custom: '0',
+        mcp: '2'
+    }[type];
+    if (preset) params.set('is_preset', preset);
+    if (options.permissionId) params.set('permission_id', options.permissionId);
+    const query = params.toString();
+    return await axios.get(`/api/v1/tool${query ? `?${query}` : ''}`)
 };
 /**
  * 修改工具接口

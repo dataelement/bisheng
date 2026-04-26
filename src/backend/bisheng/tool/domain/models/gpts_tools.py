@@ -87,6 +87,7 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
     api_location: Optional[str] = Field(default="",
                                         description="Custom Request Header Parameter Position header or query")
     write: Optional[bool] = Field(default=False, description="Do you have write access")
+    delete: Optional[bool] = Field(default=False, description="Do you have delete access")
 
     @model_validator(mode="after")
     def validate(self):

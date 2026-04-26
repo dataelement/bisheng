@@ -93,6 +93,10 @@ def _load_tool_service_module():
                 return tool_ids
 
             @staticmethod
+            async def filter_tool_ids_by_permission_async(login_user, tool_ids, permission_id):
+                return tool_ids
+
+            @staticmethod
             async def has_any_permission_async(login_user, tool_type_id, permission_ids):
                 return True
 
@@ -168,6 +172,7 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
         user_id=7,
         is_admin=lambda: False,
         aget_user_access_resource_ids=AsyncMock(side_effect=[['1', '2'], ['2']]),
+        rebac_list_accessible=AsyncMock(return_value=['2']),
     )
     tool_service = ToolServices(request=None, login_user=login_user)
 
@@ -176,8 +181,9 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
 
     with patch.object(
         tool_module.ToolPermissionService,
-        'filter_tool_ids_by_permission_sync',
-        side_effect=[['2'], ['2']],
+        'filter_tool_ids_by_permission_async',
+        new_callable=AsyncMock,
+        side_effect=[['2'], ['2'], ['2']],
     ) as mock_filter_ids, patch.object(
         tool_module.GptsToolsDao,
         'aget_user_tool_type',
@@ -194,8 +200,11 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
     assert [one.id for one in result] == [1, 2]
     assert getattr(result[0], 'write', False) is False
     assert result[1].write is True
+    assert getattr(result[0], 'delete', False) is False
+    assert result[1].delete is True
     assert mock_filter_ids.call_args_list[0].args[2] == 'use_tool'
     assert mock_filter_ids.call_args_list[1].args[2] == 'edit_tool'
+    assert mock_filter_ids.call_args_list[2].args[2] == 'delete_tool'
 
 
 @pytest.mark.asyncio

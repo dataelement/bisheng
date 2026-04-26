@@ -17,6 +17,9 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.permission.domain.services.owner_service import _run_async_safe
+from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType
@@ -79,6 +82,29 @@ class ToolExecutor(BaseTool):
         default=None, description="The tool schema."
     )
     tool_instance: BaseTool = Field(..., description="Langchain Tool Instance")
+
+    @staticmethod
+    def _build_permission_user(user_id: int) -> UserPayload:
+        return UserPayload(user_id=user_id, user_name='', user_role=[])
+
+    @classmethod
+    async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
+        if tool_type.is_preset == ToolPresetType.PRESET.value:
+            return
+        login_user = cls._build_permission_user(user_id)
+        allowed = await ToolPermissionService.has_any_permission_async(
+            login_user,
+            str(tool_type.id),
+            ['use_tool'],
+        )
+        if not allowed:
+            raise PermissionError("Permission denied: use_tool")
+
+    @classmethod
+    def _ensure_use_permission_sync(cls, tool_type: GptsToolsType, user_id: int) -> None:
+        if tool_type.is_preset == ToolPresetType.PRESET.value:
+            return
+        _run_async_safe(cls._ensure_use_permission_async(tool_type, user_id))
 
     @classmethod
     def init_by_tool_instance(cls, base_tool: BaseTool, tool: GptsTools, *, app_id: str, app_name: str,
@@ -176,18 +202,21 @@ class ToolExecutor(BaseTool):
         tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id=tool.type)
         if not tool_type:
             raise ValueError(f"Tool type with id {tool.type} not found.")
+        await cls._ensure_use_permission_async(tool_type, user_id)
         return cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id, app_name=app_name,
                                           app_type=app_type, user_id=user_id, **kwargs)
 
     @classmethod
     def _init_tools(cls, tools: List[GptsTools], tool_types_map: Dict[int, GptsToolsType], *,
                     app_id: str, app_name: str, app_type: ApplicationTypeEnum,
-                    user_id: int, **kwargs) -> List[BaseTool]:
+                    user_id: int, enforce_permission: bool = True, **kwargs) -> List[BaseTool]:
         result = []
         for tool in tools:
             tool_type = tool_types_map.get(tool.type)
             if not tool_type:
                 raise ValueError(f"Tool type with id {tool.type} not found.")
+            if enforce_permission:
+                cls._ensure_use_permission_sync(tool_type, user_id)
             result.append(
                 cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id,
                                            app_name=app_name, app_type=app_type, user_id=user_id, **kwargs)
@@ -201,9 +230,14 @@ class ToolExecutor(BaseTool):
         tool_type_ids = [tool.type for tool in tools]
         tool_types = await GptsToolsDao.aget_all_tool_type(list(set(tool_type_ids)))
         tool_type_map = {tool_type.id: tool_type for tool_type in tool_types}
+        for tool in tools:
+            tool_type = tool_type_map.get(tool.type)
+            if not tool_type:
+                raise ValueError(f"Tool type with id {tool.type} not found.")
+            await cls._ensure_use_permission_async(tool_type, user_id)
 
         return cls._init_tools(tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
-                               user_id=user_id, **kwargs)
+                               user_id=user_id, enforce_permission=False, **kwargs)
 
     @classmethod
     def init_by_tool_ids_sync(cls, tool_ids: list[int], app_id: str, app_name: str, app_type: ApplicationTypeEnum,
@@ -225,6 +259,7 @@ class ToolExecutor(BaseTool):
         tool_type = GptsToolsDao.get_one_tool_type(tool_type_id=tool.type)
         if not tool_type:
             raise ValueError(f"Tool type with id {tool.type} not found.")
+        cls._ensure_use_permission_sync(tool_type, user_id)
 
         return cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id, app_name=app_name,
                                           app_type=app_type, user_id=user_id, **kwargs)

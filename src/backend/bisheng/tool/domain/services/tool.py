@@ -37,7 +37,11 @@ class ToolServices(BaseModel):
     request: Optional[Request] = None
     login_user: Optional[UserPayload] = None
 
-    async def get_tool_list(self, is_preset: Optional[int] = None) -> List[GptsToolsTypeRead]:
+    async def get_tool_list(
+        self,
+        is_preset: Optional[int] = None,
+        permission_id: str = 'use_tool',
+    ) -> List[GptsToolsTypeRead]:
         """ Get a list of tools visible to users """
         # Get Tool Categories Visible to Users
         tool_type_ids_extra = []
@@ -48,7 +52,7 @@ class ToolServices(BaseModel):
                 filtered_ids = await ToolPermissionService.filter_tool_ids_by_permission_async(
                     self.login_user,
                     [int(access) for access in access_resources],
-                    'use_tool',
+                    permission_id,
                 )
                 tool_type_ids_extra = [int(access) for access in filtered_ids]
         if is_preset is None:
@@ -74,11 +78,12 @@ class ToolServices(BaseModel):
         for one in tool_list:
             tool_type_children[one.type].append(one)
 
-        # check write permission
         write_tool_type = None
+        delete_tool_type = None
         for one in res:
             if self.login_user.is_admin() or one.user_id == self.login_user.user_id:
                 one.write = True
+                one.delete = True
             else:
                 if write_tool_type is None:
                     write_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
@@ -89,6 +94,15 @@ class ToolServices(BaseModel):
                     )
                     write_tool_type = {int(x): True for x in filtered_write}
                 one.write = write_tool_type.get(one.id, False)
+                if delete_tool_type is None:
+                    delete_resources = await self.login_user.rebac_list_accessible('can_delete', 'tool')
+                    filtered_delete = await ToolPermissionService.filter_tool_ids_by_permission_async(
+                        self.login_user,
+                        [int(x) for x in delete_resources],
+                        'delete_tool',
+                    )
+                    delete_tool_type = {int(x): True for x in filtered_delete}
+                one.delete = delete_tool_type.get(one.id, False)
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization

@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Dict
+from typing import Literal, Optional, Dict
 
 from fastapi import APIRouter, Depends, Body, Request
 
@@ -20,9 +20,10 @@ router = APIRouter(prefix='/tool', tags=['Tool'])
 @router.get('')
 async def get_tool_list(*,
                         is_preset: Optional[int] = None,
+                        permission_id: Literal['view_tool', 'use_tool'] = 'use_tool',
                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Query all visibletool Vertical"""
-    res = await ToolServices(login_user=login_user).get_tool_list(is_preset)
+    res = await ToolServices(login_user=login_user).get_tool_list(is_preset, permission_id)
     return resp_200(data=res)
 
 

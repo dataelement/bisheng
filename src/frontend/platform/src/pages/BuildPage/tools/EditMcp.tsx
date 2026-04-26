@@ -7,11 +7,10 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { userContext } from "@/contexts/userContext";
 import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // test chat
@@ -138,14 +137,12 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const originalName = useRef("");
     const { message } = useToast();
     const testToolDialogRef = useRef(null);
-    const { user } = useContext(userContext);
-    const [isSelf, setIsSelf] = useState(false);
     // Parse flag
     const textareaRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false); // Loading state
     const latestFormData = useRef(initialFormState); // Store latest form data
     const parseBeforeSaveRef = useRef(false); // Need to parse before saving
-    const [isWrite, setIsWrite] = useState(false)
+    const [canDelete, setCanDelete] = useState(false)
     useEffect(() => {
         latestFormData.current = formData;
     }, [formData]);
@@ -187,8 +184,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setFormData(newFormData);
                 latestFormData.current = newFormData;
                 serverRef.current = serverData;
-                setIsSelf(serverData.user_id === user.user_id);
-                setIsWrite(serverData.write)
+                setCanDelete(serverData.delete)
                 originalName.current = serverData.name;
                 setIsEditMode(true);
                 loadToolsFromSchema(serverData.openapi_schema);
@@ -208,6 +204,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         latestFormData.current = initialFormState;
         serverRef.current = initialFormState;
         setAvailableTools([]);
+        setCanDelete(false);
     };
 
     const loadToolsFromSchema = async (schemaContent) => {
@@ -436,7 +433,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
                     {/* footer buttons */}
                     <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                        {isEditMode && (user.role === 'admin' || isSelf || isWrite) && (
+                        {isEditMode && canDelete && (
                             <Button
                                 variant="destructive"
                                 className="mr-auto"
