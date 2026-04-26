@@ -36,6 +36,10 @@ export interface FilePreviewProps {
     targetBBox?: CitationPdfBBox | null;
     /** Render viewer-only layout (hide top toolbar and sidebar controls). */
     compactMode?: boolean;
+    /** Whether to expose download actions. */
+    allowDownload?: boolean;
+    /** Optional business-level download handler. Defaults to downloading fileUrl. */
+    onDownloadFile?: () => void;
 }
 
 export default function FilePreview({
@@ -47,6 +51,8 @@ export default function FilePreview({
     highlightBboxes = [],
     targetBBox = null,
     compactMode = false,
+    allowDownload = true,
+    onDownloadFile,
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
@@ -113,6 +119,10 @@ export default function FilePreview({
     }, []);
 
     const handleDownload = useCallback(() => {
+        if (onDownloadFile) {
+            onDownloadFile();
+            return;
+        }
         const link = document.createElement("a");
         link.href = fileUrl;
         link.download = fileName;
@@ -120,22 +130,26 @@ export default function FilePreview({
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-    }, [fileName, fileUrl]);
+    }, [fileName, fileUrl, onDownloadFile]);
+
+    const topBarDownload = allowDownload ? handleDownload : undefined;
 
     // Unsupported format
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />}
+                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
                         <p className="text-lg">{localize("com_knowledge.unsupported_format_prefix")}{fileType}{localize("com_knowledge.unsupported_format_suffix")}</p>
-                        <button
-                            onClick={handleDownload}
-                            className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
-                        >
-                            {localize("com_knowledge.download_file")}</button>
+                        {allowDownload && (
+                            <button
+                                onClick={handleDownload}
+                                className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
+                            >
+                                {localize("com_knowledge.download_file")}</button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -153,7 +167,7 @@ export default function FilePreview({
                         zoomLevel={zoomLevel}
                         onZoomIn={handleZoomIn}
                         onZoomOut={handleZoomOut}
-                        onDownload={fileUrl ? handleDownload : undefined}
+                        onDownload={fileUrl ? topBarDownload : undefined}
                         actions={actions}
                     />
                 )}
@@ -171,7 +185,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />}
+                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-4xl">📄</div>
@@ -229,7 +243,7 @@ export default function FilePreview({
                     currentPage={currentPage}
                     totalPages={totalPages}
                     onPageChange={handlePageChange}
-                    onDownload={handleDownload}
+                    onDownload={topBarDownload}
                     actions={actions}
                 />
             )}

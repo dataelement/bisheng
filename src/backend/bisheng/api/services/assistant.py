@@ -23,7 +23,6 @@ from bisheng.database.models.assistant import (Assistant, AssistantDao, Assistan
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
@@ -63,16 +62,19 @@ class AssistantService(BaseService, AssistantUtils):
             res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
             editable_ids = None
         else:
-            # F008: Use ReBAC to filter accessible assistants (AC-04)
-            assistant_ids_extra = user.get_user_access_resource_ids([AccessType.ASSISTANT_READ])
-            assistant_ids_extra = ApplicationPermissionService.filter_object_ids_by_permission_sync(
+            res, _ = AssistantDao.get_all_assistants(name, 0, 0, assistant_ids, status)
+            allowed_ids = ApplicationPermissionService.filter_object_ids_by_permission_sync(
                 user,
                 'assistant',
-                assistant_ids_extra,
+                [one.id for one in res],
                 permission_id,
             )
-            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
-                                                     assistant_ids)
+            allowed_id_set = set(allowed_ids)
+            res = [one for one in res if str(one.id) in allowed_id_set]
+            total = len(res)
+            start_index = (page - 1) * limit
+            end_index = start_index + limit
+            res = res[start_index:end_index]
             editable_ids = set(ApplicationPermissionService.filter_object_ids_by_permission_sync(
                 user,
                 'assistant',
@@ -288,6 +290,9 @@ class AssistantService(BaseService, AssistantUtils):
     async def auto_update_stream(cls, assistant_id: str, prompt: str, login_user: UserPayload):
         """ Regenerate Assistant Prompts and Tool Selection, Only call the model capability without modifying the database data """
         assistant = AssistantDao.get_one_assistant(assistant_id)
+        if not assistant:
+            raise AssistantNotExistsError()
+        await cls.check_update_permission_async(assistant, login_user)
         assistant.prompt = prompt
 
         # Inisialisasillm

@@ -18,7 +18,7 @@ const APP_HEADER_PERMISSION_IDS = [
     'manage_app_viewer',
 ]
 
-export default function Header({ loca, onSave, onLine, onTabChange }) {
+export default function Header({ loca, onSave, onLine, onTabChange, canEdit: canEditProp }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
@@ -30,7 +30,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
         hasPermissionId(permissions, assistantId, 'manage_app_manager') ||
         hasPermissionId(permissions, assistantId, 'manage_app_viewer')
     ) : false
-    const canEdit = assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false
+    const canEdit = canEditProp ?? (assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false)
     {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
     const [permDialogOpen, setPermDialogOpen] = useState(false);
@@ -57,7 +57,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
             {/* edit dialog */}
             <Dialog open={editShow} onOpenChange={setEditShow}>
                 <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon"><SquarePen className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="icon" disabled={!canEdit}><SquarePen className="w-4 h-4" /></Button>
                 </DialogTrigger>
                 {
                     editShow && <EditAssistantDialog
@@ -96,7 +96,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
                     {t('build.authorizationManagement')}
                 </Button>
             )}
-            <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>
+            <Button variant="outline" className="px-10" type="button" disabled={!canEdit} onClick={onSave}>{t('build.save')}</Button>
             <Button type="submit" className="px-10" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>{assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}</Button>
             {canManage && assistantState?.id ? (
                 <PermissionDialog

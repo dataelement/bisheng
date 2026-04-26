@@ -235,12 +235,12 @@ def test_get_assistant_filters_by_use_app_and_sets_write_from_edit_app():
         side_effect=[['asst-2'], ['asst-2']],
     ) as mock_filter_ids, patch.object(
         assistant_module.AssistantDao,
-        'get_assistants',
+        'get_all_assistants',
         return_value=([assistant_one, assistant_two], 2),
     ), patch.object(
         AssistantService,
         'return_simple_assistant_info',
-        side_effect=[SimpleNamespace(id='asst-1'), SimpleNamespace(id='asst-2')],
+        return_value=SimpleNamespace(id='asst-2'),
     ), patch.object(
         AssistantService,
         'get_logo_share_link',
@@ -249,10 +249,10 @@ def test_get_assistant_filters_by_use_app_and_sets_write_from_edit_app():
     ):
         data, total = AssistantService.get_assistant(user, page=1, limit=20)
 
-    assert total == 2
-    assert [item.id for item in data] == ['asst-1', 'asst-2']
-    assert getattr(data[0], 'write', False) is False
-    assert data[1].write is True
+    user.get_user_access_resource_ids.assert_not_called()
+    assert total == 1
+    assert [item.id for item in data] == ['asst-2']
+    assert data[0].write is True
     assert mock_filter_ids.call_args_list[0].args[3] == 'use_app'
     assert mock_filter_ids.call_args_list[1].args[3] == 'edit_app'
 
@@ -276,12 +276,12 @@ def test_get_assistant_can_filter_by_view_app():
         side_effect=[['asst-1'], []],
     ) as mock_filter_ids, patch.object(
         assistant_module.AssistantDao,
-        'get_assistants',
+        'get_all_assistants',
         return_value=([assistant_one, assistant_two], 2),
     ), patch.object(
         AssistantService,
         'return_simple_assistant_info',
-        side_effect=[SimpleNamespace(id='asst-1'), SimpleNamespace(id='asst-2')],
+        return_value=SimpleNamespace(id='asst-1'),
     ), patch.object(
         AssistantService,
         'get_logo_share_link',
@@ -290,8 +290,9 @@ def test_get_assistant_can_filter_by_view_app():
     ):
         data, total = AssistantService.get_assistant(user, page=1, limit=20, permission_id='view_app')
 
-    assert total == 2
-    assert [item.id for item in data] == ['asst-1', 'asst-2']
+    user.get_user_access_resource_ids.assert_not_called()
+    assert total == 1
+    assert [item.id for item in data] == ['asst-1']
     assert mock_filter_ids.call_args_list[0].args[3] == 'view_app'
     assert mock_filter_ids.call_args_list[1].args[3] == 'edit_app'
 

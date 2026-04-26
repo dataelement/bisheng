@@ -12,7 +12,7 @@ from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
 from bisheng.common.chat.manager import ChatManager
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.schemas.api import PageData
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
@@ -98,6 +98,13 @@ async def update_status(*,
 async def auto_update_assistant_task(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                                      assistant_id: str = Body(description='Assistant UniqueID'),
                                      prompt: str = Body(description='User-filled prompts')):
+    if not await ApplicationPermissionService.has_any_permission_async(
+        login_user,
+        'assistant',
+        str(assistant_id),
+        ['edit_app'],
+    ):
+        raise UnAuthorizedError()
     # Deposit Cache
     task_id = generate_uuid()
     redis_client = await get_redis_client()

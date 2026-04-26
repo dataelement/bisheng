@@ -155,9 +155,8 @@ class WorkFlowService(BaseService):
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
                                                      query_page, query_page_size, search_description=search_description)
         else:
-            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=managed)
-            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, user.user_id,
-                                                     flow_id_extra, None, query_page, query_page_size, search_description=search_description)
+            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None,
+                                                     None, None, query_page, query_page_size, search_description=search_description)
         data = cls.filter_supported_apps(data)
         writeable_ids: Optional[set[str]] = None
         if not user.is_admin() and data:
@@ -187,10 +186,36 @@ class WorkFlowService(BaseService):
         return data, total
 
     @classmethod
+    async def filter_apps_by_permission_id(
+        cls,
+        user: UserPayload,
+        data: list[dict],
+        permission_id: str = 'use_app',
+    ) -> list[dict]:
+        if user.is_admin() or not data:
+            return data
+        permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+            user,
+            data,
+            [permission_id],
+        )
+        return [
+            one for one in data
+            if permission_id in permission_map.get(str(one.get('id')), set())
+        ]
+
+    @classmethod
     def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any], workflow_id: str):
         workflow_info = FlowDao.get_flow_by_id(workflow_id)
         if not workflow_info:
             raise NotFoundError()
+        if not ApplicationPermissionService.has_any_permission_sync(
+            login_user,
+            'workflow',
+            str(workflow_info.id),
+            ['edit_app'],
+        ):
+            raise UnAuthorizedError()
 
         node_data = BaseNodeData(**node_data.get('data', {}))
         base_callback = BaseCallback()
@@ -438,10 +463,9 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         else:
-            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=False)
-            data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, user_id=user.user_id,
-                                           id_extra=flow_id_extra, page=0, limit=0)
+            data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         data = cls.filter_supported_apps(data)
+        data = await cls.filter_apps_by_permission_id(user, data, 'use_app')
 
         # Reorder users in the order they are added to the stock
         data.sort(key=lambda x: user_link_order.get(x['id'], float('inf')))
@@ -493,10 +517,10 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
         else:
-            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=False)
-            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra,
+            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)
+        data = await cls.filter_apps_by_permission_id(user, data, 'use_app')
         total = len(data)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size

@@ -344,7 +344,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             {/* Right Section with Options */}
             <div className="header-right flex items-center gap-3">
                 <Notification />
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8`} onClick={handleRunClick}>
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8`} disabled={!canEdit} onClick={handleRunClick}>
                     <Play className="size-3.5 mr-1" />
                     {t('run')}
                 </Button>

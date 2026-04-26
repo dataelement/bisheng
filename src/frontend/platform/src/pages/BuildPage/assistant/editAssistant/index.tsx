@@ -1,5 +1,6 @@
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -28,6 +29,9 @@ export default function editAssistant() {
     const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
     const [checking, setChecking] = useState(true)
+    const assistantId = assisId ? String(assisId) : ''
+    const { permissions } = usePermissionIds('assistant', assistantId ? [assistantId] : [], ['edit_app'])
+    const canEdit = assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false
 
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)
@@ -49,6 +53,7 @@ export default function editAssistant() {
     const [openChat, setOpenChat] = useState(true)
     const handleStartChat = async (save) => {
         if (!handleCheck()) return
+        if (save && !canEdit) return
         destory()
         setOpenChat(false)
         save ? await handleSave(true) : await new Promise((resolve) => setTimeout(resolve, 0))
@@ -62,6 +67,7 @@ export default function editAssistant() {
     const { message, toast } = useToast()
     // Save assistant details
     const handleSave = async (showMessage = false) => {
+        if (!canEdit) return
         if (!handleCheck()) return
         await captureAndAlertRequestErrorHoc(saveAssistanttApi({
             ...assistantState,
@@ -146,6 +152,7 @@ export default function editAssistant() {
     // Save on leave
     const blocker = useBeforeUnload(changed, checking)
     const handleSaveAndClose = async () => {
+        if (!canEdit) return blocker.reset?.()
         await handleSave(true)
         blocker.proceed?.()
     }
@@ -153,13 +160,13 @@ export default function editAssistant() {
     if (checking) return null
 
     return <div className="bg-background-main">
-        <Header loca={loca} onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
+        <Header loca={loca} canEdit={canEdit} onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
         <div className="h-[calc(100vh-70px)]">
             <div className={`flex h-full ${showApiPage ? 'hidden' : ''}`}>
                 <div className="w-[60%]">
                     <div className="text-md font-medium leading-none p-4 shadow-sm">{t('build.assistantConfiguration')}</div>
                     <div className="flex h-[calc(100vh-120px)]">
-                        <Prompt></Prompt>
+                        <Prompt canEdit={canEdit}></Prompt>
                         <Setting></Setting>
                     </div>
                 </div>
