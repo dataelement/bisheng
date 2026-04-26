@@ -239,28 +239,31 @@ export function PermissionListTab({
   const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
     const seen = new Set<string>();
     return getSubjectEntries(entry).reduce<RevokeItem[]>((items, candidate) => {
-      const includeChildren =
+      const includeChildrenValues =
         candidate.subject_type === "department"
-          ? Boolean(candidate.include_children)
-          : undefined;
-      const key = [
-        candidate.subject_type,
-        candidate.subject_id,
-        candidate.relation,
-        includeChildren === undefined ? "" : String(includeChildren),
-      ].join(":");
-      if (seen.has(key)) {
-        return items;
+          ? (candidate.include_children ? [true, false] : [false])
+          : [undefined];
+
+      for (const includeChildren of includeChildrenValues) {
+        const key = [
+          candidate.subject_type,
+          candidate.subject_id,
+          candidate.relation,
+          includeChildren === undefined ? "" : String(includeChildren),
+        ].join(":");
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        items.push({
+          subject_type: candidate.subject_type,
+          subject_id: candidate.subject_id,
+          relation: candidate.relation,
+          ...(candidate.subject_type === "department"
+            ? { include_children: includeChildren }
+            : {}),
+        });
       }
-      seen.add(key);
-      items.push({
-        subject_type: candidate.subject_type,
-        subject_id: candidate.subject_id,
-        relation: candidate.relation,
-        ...(candidate.subject_type === "department"
-          ? { include_children: includeChildren }
-          : {}),
-      });
       return items;
     }, []);
   };

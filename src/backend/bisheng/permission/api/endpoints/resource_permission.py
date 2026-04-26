@@ -350,8 +350,9 @@ async def _apply_binding_metadata_to_permissions(
     """Overlay persisted UI binding metadata onto raw FGA tuple rows.
 
     Department grants with include_children=True are written as one tuple per
-    subtree department. The permission list should show the original parent
-    grant, not a flat list of generated child department tuples.
+    subtree department. The permission list should expose those concrete rows
+    while copying the original parent binding's relation-model metadata to the
+    generated child department rows.
     """
     if not bindings:
         return permissions
@@ -365,10 +366,11 @@ async def _apply_binding_metadata_to_permissions(
         for b in bindings
         if b.get('subject_id') is not None
     }
-    generated_department_keys: set[tuple] = set()
 
     for binding in bindings:
         subject_type = binding.get('subject_type')
+        if binding.get('subject_id') is None:
+            continue
         subject_id = int(binding.get('subject_id'))
         relation = binding.get('relation')
         key = (subject_type, subject_id, relation)
@@ -382,30 +384,35 @@ async def _apply_binding_metadata_to_permissions(
             )
             item_map[key] = item
 
-        item.include_children = binding.get('include_children')
-        item.model_id = binding.get('model_id')
-        item.model_name = model_map.get(item.model_id, {}).get('name')
+        binding_include_children = binding.get('include_children')
+        binding_model_id = binding.get('model_id')
+        binding_model_name = model_map.get(binding_model_id, {}).get('name')
+        item.include_children = binding_include_children
+        item.model_id = binding_model_id
+        item.model_name = binding_model_name
 
-        if subject_type == 'department' and binding.get('include_children'):
+        if subject_type == 'department' and binding_include_children:
             try:
                 from bisheng.database.models.department import DepartmentDao
 
                 dept = await DepartmentDao.aget_by_id(subject_id)
                 subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path) if dept else [subject_id]
             except Exception as e:
-                logger.warning('Failed to collapse department permission subtree: %s', e)
+                logger.warning('Failed to expand department permission subtree metadata: %s', e)
                 subtree_ids = [subject_id]
 
             for dept_id in subtree_ids:
                 child_key = ('department', int(dept_id), relation)
-                if child_key != key and child_key not in bound_keys:
-                    generated_department_keys.add(child_key)
+                if child_key == key or child_key in bound_keys:
+                    continue
+                child_item = item_map.get(child_key)
+                if child_item is None:
+                    continue
+                child_item.include_children = False
+                child_item.model_id = binding_model_id
+                child_item.model_name = binding_model_name
 
-    return [
-        item
-        for key, item in item_map.items()
-        if key not in generated_department_keys
-    ]
+    return list(item_map.values())
 
 
 def _tuple_signature(item) -> tuple:
@@ -888,8 +895,15 @@ async def authorize_resource(
     bindings = await _get_bindings()
     bindings_map = {b.get('key'): b for b in bindings if b.get('key')}
     for revoke in (request.revokes or []):
-        include_children_values = [getattr(revoke, 'include_children', None)]
-        if _is_invalid_owner_subject(revoke.subject_type, revoke.relation) and revoke.subject_type == 'department':
+        include_children = getattr(revoke, 'include_children', None)
+        include_children_values = [include_children]
+        if (
+            revoke.subject_type == 'department'
+            and (
+                include_children is True
+                or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+            )
+        ):
             include_children_values = [True, False]
         for include_children in include_children_values:
             for key in _binding_lookup_keys(

@@ -182,4 +182,54 @@ describe("Client PermissionListTab", () => {
       );
     });
   });
+
+  it("deletes department include-children grants across subtree and exact variants", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "department",
+        subject_id: 7,
+        subject_name: "研发部",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+        include_children: true,
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        refreshKey={0}
+        fixedSubjectType="department"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("研发部")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByLabelText("com_permission.remove"));
+
+    await waitFor(() => {
+      expect(mockedAuthorizeResource).toHaveBeenCalledWith(
+        "knowledge_space",
+        "space-1",
+        [],
+        [
+          {
+            subject_type: "department",
+            subject_id: 7,
+            relation: "viewer",
+            include_children: true,
+          },
+          {
+            subject_type: "department",
+            subject_id: 7,
+            relation: "viewer",
+            include_children: false,
+          },
+        ],
+      );
+    });
+  });
 });
