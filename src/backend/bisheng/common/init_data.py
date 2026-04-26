@@ -1,5 +1,4 @@
 import hashlib
-import json
 import os
 from typing import List
 
@@ -141,8 +140,6 @@ async def init_default_data():
             # init dashboard data
             await init_dashboard_datasets()
 
-            # F006: One-time RBAC → ReBAC permission migration
-            await _migrate_rbac_to_rebac_if_needed()
         except Exception as exc:
             # if the exception involves tables already existing
             # we can ignore it
@@ -364,45 +361,6 @@ async def _backfill_guest_department_membership(session):
         )
         ops = DepartmentChangeHandler.on_members_added(guest.id, added_user_ids)
         await DepartmentChangeHandler.execute_async(ops)
-
-
-async def _migrate_rbac_to_rebac_if_needed():
-    """One-time RBAC → ReBAC permission migration (F006). Idempotent.
-
-    Checks Redis key 'migration:f006:completed' to skip if already done.
-    Uses SETNX lock (TTL=3600s) to prevent concurrent execution.
-    """
-    try:
-        from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
-
-        fga = await aget_fga_client()
-        if fga is None:
-            fga = get_fga_client()
-        if fga is None:
-            return  # OpenFGA not enabled, skip
-
-        redis_client = await get_redis_client()
-        if await redis_client.aget('migration:f006:completed'):
-            return  # Already completed
-
-        lock_key = 'migration:f006:lock'
-        if not await redis_client.asetNx(lock_key, '1', expiration=3600):
-            return  # Another process is executing
-
-        try:
-            from bisheng.permission.migration.migrate_rbac_to_rebac import RBACToReBACMigrator
-            from datetime import datetime
-            migrator = RBACToReBACMigrator(dry_run=False)
-            stats = await migrator.run()
-            await redis_client.aset('migration:f006:completed', json.dumps({
-                'timestamp': datetime.now().isoformat(),
-                'stats': stats.to_dict(),
-            }))
-            logger.info(f'F006 migration completed: {stats.total} tuples written')
-        finally:
-            await redis_client.adelete(lock_key)
-    except Exception as e:
-        logger.error(f'F006 migration failed (will retry on next startup): {e}')
 
 
 def upload_preset_minio_file():

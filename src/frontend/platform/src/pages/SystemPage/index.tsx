@@ -33,8 +33,13 @@ export default function index() {
   const canAccessSystemConfig = isSuperAdmin
   /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
   const showOrgSyncTab = isSuperAdmin
+  /** PRD §4.5: Child Admin manages own tenant's user groups. Backend now
+   *  flips can_manage_user_groups true for Child Admin too; the explicit
+   *  is_child_admin term keeps the tab visible if the backend regresses. */
   const showUserGroupTab =
-    user?.role === "admin" || !!user?.can_manage_user_groups
+    user?.role === "admin"
+    || !!user?.can_manage_user_groups
+    || !!user?.is_child_admin
   /** Legacy flat user table is for accounts without org-tab access. */
   const showLegacyUserTab = !showOrgTab
 
