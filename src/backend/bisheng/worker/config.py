@@ -1,6 +1,10 @@
 from bisheng.common.services.config_service import settings
+from bisheng.core.config.celery_redis import build_celery_redis_config
 
-broker_url = settings.celery_redis_url
+_celery_redis_config = build_celery_redis_config(settings.celery_redis_url)
+
+broker_url = _celery_redis_config['broker_url']
+broker_transport_options = _celery_redis_config.get('broker_transport_options', {})
 
 task_serializer = 'json'
 result_serializer = 'json'

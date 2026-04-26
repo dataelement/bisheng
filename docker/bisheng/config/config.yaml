@@ -30,8 +30,23 @@ sso_sync:
 #   sentinel_master: "mymaster"
 #   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
 #   db: 1
-# celery的broken地址
+
+# Celery broker Redis 配置
+# 单点模式（兼容现有写法）:
 celery_redis_url: "redis://redis:6379/2"
+# 哨兵模式:
+# celery_redis_url:
+#   mode: "sentinel"
+#   sentinel_hosts:
+#     - {"host": "redis-sentinel-1", "port": 26379}
+#     - {"host": "redis-sentinel-2", "port": 26379}
+#     - {"host": "redis-sentinel-3", "port": 26379}
+#   sentinel_master: "mymaster"
+#   sentinel_password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
+#   password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
+#   db: 10
+
+
 celery_task:
   # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行只能在一个进程内！！！
   task_routers:
