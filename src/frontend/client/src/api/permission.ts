@@ -59,7 +59,14 @@ interface PermissionRequestConfig {
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
 
+function assertSuccess(res: any) {
+  if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
+    throw new Error(res.status_message || `Permission request failed: ${res.status_code}`);
+  }
+}
+
 function unwrap<T>(res: any): T {
+  assertSuccess(res);
   return res?.data ?? res;
 }
 
