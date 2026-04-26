@@ -561,6 +561,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._relation_bindings_cache = await _get_bindings()
         return self._relation_bindings_cache
 
+    @staticmethod
+    def _is_direct_space_user_binding(binding: dict, space_id: int, user_id: int) -> bool:
+        return (
+            binding.get('resource_type') == 'knowledge_space'
+            and str(binding.get('resource_id')) == str(space_id)
+            and binding.get('subject_type') == 'user'
+            and str(binding.get('subject_id')) == str(user_id)
+        )
+
+    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
+        """Remove direct ReBAC grants and UI binding metadata for a space user."""
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings, _save_bindings
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+
+        bindings = await _get_bindings()
+        to_remove = [
+            binding for binding in bindings
+            if self._is_direct_space_user_binding(binding, space_id, user_id)
+        ]
+        if not to_remove:
+            return
+
+        revokes = []
+        revoked_relations = set()
+        for binding in to_remove:
+            relation = binding.get('relation')
+            if not relation or relation in revoked_relations:
+                continue
+            revoked_relations.add(relation)
+            revokes.append(AuthorizeRevokeItem(
+                subject_type='user',
+                subject_id=int(user_id),
+                relation=relation,
+                include_children=False,
+            ))
+
+        if revokes:
+            await PermissionService.authorize(
+                object_type='knowledge_space',
+                object_id=str(space_id),
+                grants=[],
+                revokes=revokes,
+                enforce_fga_success=True,
+            )
+
+        await _save_bindings([
+            binding for binding in bindings
+            if not self._is_direct_space_user_binding(binding, space_id, user_id)
+        ])
+        if hasattr(self, '_relation_bindings_cache'):
+            delattr(self, '_relation_bindings_cache')
+
     async def _get_current_user_subject_strings(self) -> set[str]:
         if hasattr(self, '_current_user_subjects_cache'):
             return self._current_user_subjects_cache
@@ -1331,6 +1383,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if current_role == UserRoleEnum.ADMIN:
             if target_membership.user_role == UserRoleEnum.ADMIN:
                 raise ValueError("Admins do not have permission to remove other admins")
+
+        await self._revoke_direct_space_user_permissions(req.space_id, req.user_id)
 
         # 6. Hard delete: remove from database
         await SpaceChannelMemberDao.delete_space_member(space_id=req.space_id, user_id=req.user_id)
@@ -2279,5 +2333,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ):
             raise SpacePermissionDeniedError()
 
+        await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
         return deleted

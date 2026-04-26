@@ -4,9 +4,9 @@ import {
     Plus,
     X
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceRole, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
@@ -18,6 +18,10 @@ import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
 import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
+import {
+    hasKnowledgeSpacePermission,
+    useKnowledgeSpaceActionPermissions,
+} from "../hooks/useKnowledgeSpacePermissions";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -101,6 +105,35 @@ export function KnowledgeSpaceSidebar({
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
     const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
     const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
+    const permissionSpaceIds = useMemo(
+        () => Array.from(new Set([
+            ...departmentSpaces.map(s => s.id),
+            ...filteredCreatedSpaces.map(s => s.id),
+            ...filteredJoinedSpaces.map(s => s.id),
+        ])),
+        [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
+    );
+    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
+
+    const getItemPermissions = (space: KnowledgeSpace, type: "created" | "joined" | "department") => {
+        const isCreator = type === "created" || space.role === SpaceRole.CREATOR;
+        const canEditSpace = isCreator || hasKnowledgeSpacePermission(
+            spaceActionPermissions,
+            space.id,
+            "edit_space",
+        );
+        const canDeleteSpace = isCreator || hasKnowledgeSpacePermission(
+            spaceActionPermissions,
+            space.id,
+            "delete_space",
+        );
+        const canManageMembers = isCreator || hasKnowledgeSpacePermission(
+            spaceActionPermissions,
+            space.id,
+            "manage_space_relation",
+        );
+        return { canEditSpace, canDeleteSpace, canManageMembers };
+    };
 
     // CRUD operations with optimistic updates (mirrors useChannelActions)
     const {
@@ -291,6 +324,7 @@ export function KnowledgeSpaceSidebar({
                                                 onPin={(id, pinned) => handlePinSpace(id, pinned, "department")}
                                                 onSettings={onSpaceSettings}
                                                 onManageMembers={onManageMembers}
+                                                {...getItemPermissions(s, "department")}
                                             />
                                         ))}
                                     </div>
@@ -322,6 +356,7 @@ export function KnowledgeSpaceSidebar({
                                             onPin={(id, pinned) => handlePinSpace(id, pinned, "created")}
                                             onSettings={onSpaceSettings}
                                             onManageMembers={onManageMembers}
+                                            {...getItemPermissions(s, "created")}
                                         />
                                     ))}
                                     {!filteredCreatedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
@@ -353,6 +388,7 @@ export function KnowledgeSpaceSidebar({
                                             onPin={(id, pinned) => handlePinSpace(id, pinned, "joined")}
                                             onSettings={onSpaceSettings}
                                             onManageMembers={onManageMembers}
+                                            {...getItemPermissions(s, "joined")}
                                         />
                                     ))}
                                     {!filteredJoinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
