@@ -65,4 +65,17 @@ describe("resolveRoutePermissions", () => {
     expect(resolveRoutePermissions({})).toEqual([])
     expect(resolveRoutePermissions({ is_child_admin: true })).toEqual(["sys"])
   })
+
+  it("matches the real /user/info shape for a Child Admin (caiwu on 114)", () => {
+    // Backend strips sys/system_config for non-super, non-dept admins. The
+    // resolved perms must include sys so getPrivateRouter doesn't drop the
+    // /sys route — that drop was the original /404 bug.
+    const perms = resolveRoutePermissions({
+      web_menu: ["admin", "workstation", "model", "knowledge_space"],
+      is_department_admin: false,
+      is_child_admin: true,
+    })
+    expect(perms).toContain("sys")
+    expect(perms).not.toContain("create_app")
+  })
 })
