@@ -66,8 +66,8 @@ async def test_rbac_migrator_run_prefers_async_fga_accessor(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_init_data_migration_probe_prefers_async_fga_accessor():
-    from bisheng.common.init_data import _migrate_rbac_to_rebac_if_needed
+async def test_permission_migration_script_prefers_async_fga_accessor():
+    from bisheng.script.permission_rbac_to_rebac_migration import run_migration
 
     fake_fga = AsyncMock()
     fake_redis = SimpleNamespace(
@@ -87,18 +87,25 @@ async def test_init_data_migration_probe_prefers_async_fga_accessor():
         'bisheng.core.openfga.manager.get_fga_client',
         return_value=None,
     ) as sync_get_fga, patch(
-        'bisheng.common.init_data.get_redis_client',
+        'bisheng.core.cache.redis_manager.get_redis_client',
         new_callable=AsyncMock,
         return_value=fake_redis,
+    ), patch(
+        'bisheng.core.context.initialize_app_context',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.core.context.close_app_context',
+        new_callable=AsyncMock,
     ), patch(
         'bisheng.permission.migration.migrate_rbac_to_rebac.RBACToReBACMigrator',
         return_value=fake_migrator,
     ):
-        await _migrate_rbac_to_rebac_if_needed()
+        exit_code = await run_migration()
 
     async_get_fga.assert_awaited_once()
     sync_get_fga.assert_not_called()
     fake_migrator.run.assert_awaited_once()
+    assert exit_code == 0
 
 
 @pytest.mark.asyncio
