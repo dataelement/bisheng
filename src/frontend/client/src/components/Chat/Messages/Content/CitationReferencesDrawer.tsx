@@ -382,6 +382,9 @@ export default function CitationReferencesDrawer({
   }, [detailMap, desktopMode, internalOpen, isNarrowLayout, loadCitationDetail, open, panelOnly, references, shouldAutoResolveCitationDetail]);
 
   const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
+  const referenceIconCount = Math.min(referenceEntryIcons.length, 3);
+  const referenceButtonWidth = referenceIconCount <= 1 ? 'w-24 min-w-24' : referenceIconCount === 2 ? 'w-[104px] min-w-[104px]' : 'w-28 min-w-28';
+  const referenceIconStackWidth = referenceIconCount <= 1 ? 'w-5' : referenceIconCount === 2 ? 'w-7' : 'w-9';
   const isDesktopInlinePanel = !isNarrowLayout
     && desktopMode === 'inline-panel'
     && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
@@ -695,15 +698,15 @@ export default function CitationReferencesDrawer({
           data-citation-references-trigger="true"
           onClick={handleOpenButtonClick}
           className={cn(
-            'flex h-6 w-[112px] min-w-[112px] shrink-0 items-center justify-end gap-1 rounded-[6px] px-1 text-[#818181] transition-colors',
-            isOpen ? 'bg-[#F2F3F5]' : 'bg-transparent hover:bg-[#F7F7F7]',
+            'flex h-6 shrink-0 items-center justify-end gap-1 rounded-[6px] bg-transparent px-1 py-0.5 text-[#818181] transition-colors hover:bg-[#F7F7F7]',
+            referenceButtonWidth,
           )}
         >
-          <div className="flex h-5 w-11 shrink-0 items-center overflow-hidden">
+          <div className={cn('flex h-5 shrink-0 items-center', referenceIconStackWidth)}>
             <CitationSourceIconStack icons={referenceEntryIcons} />
           </div>
-          <div className="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap">
-            <span className="whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+          <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
+            <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
             <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
           </div>
         </button>

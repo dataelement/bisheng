@@ -190,11 +190,11 @@ export function getCitationClassName(type?: string) {
   switch (type?.toLowerCase()) {
     case "web":
     case "websearch":
-      return "bg-[#F3EEFF] text-[#7C3AED] hover:bg-[#E9DFFF]";
+      return "bg-[#F7F3FF] text-[#7224D9]";
     case "knowledgesearch":
-      return "bg-[#EEF3FF] text-[#1D4ED8] hover:bg-[#E3ECFF]";
+      return "bg-[#F5F8FF] text-[#024DE3]";
     default:
-      return "bg-[#F2F3F5] text-[#4E5969] hover:bg-[#E5E6EB]";
+      return "bg-[#F5F8FF] text-[#024DE3]";
   }
 }
 

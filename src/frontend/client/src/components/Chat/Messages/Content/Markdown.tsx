@@ -550,9 +550,9 @@ const Citation = ({
           onClick={handleCitationClick}
           onMouseEnter={() => handleOpenChange(true)}
           onMouseLeave={scheduleClose}
-          className={`ml-1 inline-flex min-h-5 min-w-5 cursor-pointer items-center justify-center rounded-xl px-1.5 py-0.5 text-[0.85em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
+          className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
         >
-          <span>{children}</span>
+          <span className="flex h-[18px] items-center">{children}</span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>

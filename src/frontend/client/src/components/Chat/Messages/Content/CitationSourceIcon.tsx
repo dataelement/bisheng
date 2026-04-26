@@ -298,9 +298,15 @@ export function CitationSourceIcon({
 }) {
   const icon = buildCitationSourceIconData({ detail, preview, type, fallbackKey });
 
+  const shouldClipAsCircle = icon.type === 'web' || ragIconVariant === 'knowledge';
+
   return (
     <span
-      className={cn('inline-flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full', className)}
+      className={cn(
+        'inline-flex size-4 shrink-0 items-center justify-center',
+        shouldClipAsCircle && 'overflow-hidden rounded-full',
+        className,
+      )}
       title={icon.title}
     >
       {icon.type === 'web' ? (
@@ -320,17 +326,20 @@ export function CitationSourceIconStack({ icons }: { icons: CitationSourceIconDa
   }
 
   return (
-    <span className="inline-flex shrink-0 -space-x-1.5">
-      {icons.map((icon) => (
+    <span className="inline-flex shrink-0 items-center">
+      {icons.map((icon, index) => (
         <span
           key={icon.key}
-          className="flex size-5 items-center justify-center overflow-hidden rounded-full border-[4px] border-white bg-white shadow-sm"
+          className={cn(
+            'flex size-5 items-center justify-center overflow-hidden rounded-full border-[0.5px] border-[#E0E0E0] bg-[#F4F5F8]',
+            index < icons.length - 1 && '-mr-3',
+          )}
           title={icon.title}
         >
           {icon.type === 'web' ? (
             <WebSourceIcon icon={icon} iconClassName="size-full" />
           ) : (
-            <CitationFileTypeIcon fileType={icon.fileType || 'txt'} className="size-4" />
+            <CitationFileTypeIcon fileType={icon.fileType || 'txt'} className="size-3.5" />
           )}
         </span>
       ))}
