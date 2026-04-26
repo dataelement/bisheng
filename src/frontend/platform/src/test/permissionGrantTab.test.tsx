@@ -73,19 +73,19 @@ describe("PermissionGrantTab", () => {
     await waitFor(() => {
       expect(screen.getByTestId("relation-options")).toHaveTextContent("level.owner");
     });
-    expect(screen.getByTestId("selected-model")).toHaveTextContent("owner");
+    expect(screen.getByTestId("selected-model")).toHaveTextContent("viewer");
 
     fireEvent.click(screen.getByRole("button", { name: "subject.department" }));
     await waitFor(() => {
       expect(screen.getByTestId("relation-options")).not.toHaveTextContent("level.owner");
     });
-    expect(screen.getByTestId("selected-model")).toHaveTextContent("manager");
+    expect(screen.getByTestId("selected-model")).toHaveTextContent("viewer");
 
     fireEvent.click(screen.getByRole("button", { name: "subject.userGroup" }));
     await waitFor(() => {
       expect(screen.getByTestId("relation-options")).not.toHaveTextContent("level.owner");
     });
-    expect(screen.getByTestId("selected-model")).toHaveTextContent("manager");
+    expect(screen.getByTestId("selected-model")).toHaveTextContent("viewer");
   });
 
   it("reuses prefetched grantable relation models without refetching", async () => {

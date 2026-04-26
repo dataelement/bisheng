@@ -5,7 +5,7 @@ import {
   getGrantableRelationModelsApi,
   getResourcePermissions,
 } from "@/controllers/API/permission";
-import { render, screen, waitFor } from "@/test/test-utils";
+import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/controllers/API/department", () => ({
@@ -26,8 +26,17 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
   useToast: () => ({ message: vi.fn() }),
 }));
 
-vi.mock("@/components/bs-comp/permission/RelationSelect", () => ({
-  RelationSelect: ({ value }: { value: string }) => <span>{value}</span>,
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
+  bsConfirm: ({ onOk }: any) => onOk?.(vi.fn()),
+}));
+
+vi.mock("@/components/bs-ui/dropdownMenu", () => ({
+  DropdownMenu: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, onSelect }: any) => (
+    <button type="button" onClick={onSelect}>{children}</button>
+  ),
 }));
 
 const mockedGetDepartmentTreeApi = vi.mocked(getDepartmentTreeApi);
@@ -125,11 +134,12 @@ describe("PermissionListTab", () => {
         resourceType="knowledge_space"
         resourceId="3215"
         refreshKey={0}
+        fixedSubjectType="user"
       />,
     );
 
     await screen.findByText("Alice");
-    expect(screen.getAllByRole("button")).toHaveLength(3);
+    expect(screen.queryByLabelText("action.revoke")).not.toBeInTheDocument();
   });
 
   it("allows owner actions when another owner remains", async () => {
@@ -157,10 +167,74 @@ describe("PermissionListTab", () => {
         resourceType="knowledge_space"
         resourceId="3215"
         refreshKey={0}
+        fixedSubjectType="user"
       />,
     );
 
     await screen.findByText("Alice");
-    expect(screen.getAllByRole("button")).toHaveLength(5);
+    expect(screen.getAllByLabelText("action.revoke")).toHaveLength(2);
+  });
+
+  it("deletes every relation for the selected subject", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "editor",
+        model_id: "editor",
+        model_name: "Editor",
+      },
+      {
+        subject_type: "user",
+        subject_id: 3,
+        subject_name: "Bob",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByLabelText("action.revoke")[0]);
+
+    await waitFor(() => {
+      expect(mockedAuthorizeResource).toHaveBeenCalledWith(
+        "knowledge_file",
+        "file-1",
+        [],
+        [
+          {
+            subject_type: "user",
+            subject_id: 2,
+            relation: "viewer",
+          },
+          {
+            subject_type: "user",
+            subject_id: 2,
+            relation: "editor",
+          },
+        ],
+      );
+    });
   });
 });
