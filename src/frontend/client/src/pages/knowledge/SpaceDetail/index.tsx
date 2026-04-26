@@ -171,6 +171,7 @@ export function KnowledgeSpaceContent({
         "share_space",
     );
     const [canCreateFolder, setCanCreateFolder] = useState(false);
+    const [canUploadFile, setCanUploadFile] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -193,16 +194,34 @@ export function KnowledgeSpaceContent({
         const objectType = currentFolderId ? "folder" : "knowledge_space";
         const objectId = currentFolderId || space.id;
 
-        checkPermission(
-            objectType,
-            objectId,
-            "can_edit",
-            "create_folder",
-            { signal: controller.signal },
-        ).then((res) => {
-            if (!cancelled) setCanCreateFolder(Boolean(res?.allowed));
+        Promise.allSettled([
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "create_folder",
+                { signal: controller.signal },
+            ),
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "upload_file",
+                { signal: controller.signal },
+            ),
+        ]).then(([createFolderResult, uploadFileResult]) => {
+            if (cancelled) return;
+            setCanCreateFolder(
+                createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
+            );
+            setCanUploadFile(
+                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
+            );
         }).catch(() => {
-            if (!cancelled) setCanCreateFolder(false);
+            if (!cancelled) {
+                setCanCreateFolder(false);
+                setCanUploadFile(false);
+            }
         });
 
         return () => {
@@ -266,6 +285,7 @@ export function KnowledgeSpaceContent({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const triggerUpload = () => {
+        if (!canUploadFile) return;
         fileInputRef.current?.click();
     };
 
@@ -293,7 +313,9 @@ export function KnowledgeSpaceContent({
                 }
             }
 
-            onUploadFile(filesList);
+            if (canUploadFile) {
+                onUploadFile(filesList);
+            }
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
@@ -301,7 +323,7 @@ export function KnowledgeSpaceContent({
     // ─── Drag and drop ──────────────────────────────────────────────────
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
-        onUploadFile,
+        onUploadFile: canUploadFile ? onUploadFile : () => undefined,
         maxFileSizeMB,
     });
 
@@ -594,6 +616,7 @@ export function KnowledgeSpaceContent({
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 canCreateFolder={canCreateFolder}
+                canUploadFile={canUploadFile}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
@@ -619,8 +642,8 @@ export function KnowledgeSpaceContent({
                                 alt="empty"
                             />
                             <p className="text-[14px] leading-6 text-[#4E5969]">
-                                {searchQuery ? localize("com_knowledge.no_matched_file") : isAdmin ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
-                                {isAdmin && !searchQuery && (
+                                {searchQuery ? localize("com_knowledge.no_matched_file") : canUploadFile ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
+                                {canUploadFile && !searchQuery && (
                                     <span
                                         className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                                         onClick={triggerUpload}

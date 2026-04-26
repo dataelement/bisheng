@@ -1092,7 +1092,13 @@ export async function createFolderApi(
             name: data.name,
             parent_id: data.parent_id ? Number(data.parent_id) : null,
         }
-    ) as ApiResponse<RawSpaceChild>;
+    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "create folder failed");
+    }
+    if (!res?.data) {
+        throw new Error("create folder failed: missing data");
+    }
     return mapChild(res.data, space_id);
 }
 
@@ -1128,7 +1134,13 @@ export async function uploadFileToServerApi(
 ): Promise<UploadFileResponse> {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse>;
+    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "upload file failed");
+    }
+    if (!res?.data?.file_path) {
+        throw new Error("upload file failed: missing file path");
+    }
     return res.data;
 }
 
@@ -1143,7 +1155,10 @@ export async function addFilesApi(
         `/api/v1/knowledge/space/${space_id}/files`,
         data,
         { showError: true }
-    ) as ApiResponse<RawSpaceChild[]>;
+    ) as ApiResponse<RawSpaceChild[]> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "register files failed");
+    }
     const payload: any = res?.data ?? {};
     const list = extractList<RawSpaceChild>(payload);
     return list.map(raw => {

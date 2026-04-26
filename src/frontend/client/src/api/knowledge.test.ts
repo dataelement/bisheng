@@ -1,16 +1,18 @@
 import request from "~/api/request";
-import { getSquareSpacesApi, VisibilityType } from "./knowledge";
+import { createFolderApi, getSquareSpacesApi, VisibilityType } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
   default: {
     get: jest.fn(),
     post: jest.fn(),
+    postMultiPart: jest.fn(),
   },
 }));
 
 const mockGet = request.get as jest.Mock;
 const mockPost = request.post as jest.Mock;
+const mockPostMultiPart = request.postMultiPart as jest.Mock;
 
 describe("getSquareSpacesApi", () => {
   it("maps pending square items from is_pending when subscription_status is absent", async () => {
@@ -65,5 +67,55 @@ describe("subscribeSpaceApi", () => {
       status: "pending",
       spaceId: "101",
     });
+  });
+});
+
+describe("createFolderApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(createFolderApi("101", { name: "New folder" })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("uploadFileToServerApi", () => {
+  beforeEach(() => {
+    mockPostMultiPart.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    const { uploadFileToServerApi } = await import("./knowledge");
+    mockPostMultiPart.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(uploadFileToServerApi("101", new File(["x"], "doc.txt"))).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("addFilesApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("rejects backend business errors", async () => {
+    const { addFilesApi } = await import("./knowledge");
+    mockPost.mockResolvedValue({
+      status_code: 19000,
+      status_message: "Permission denied",
+      data: null,
+    });
+
+    await expect(addFilesApi("101", { file_path: ["/tmp/doc.txt"] })).rejects.toThrow("Permission denied");
   });
 });

@@ -53,6 +53,7 @@ interface KnowledgeSpaceHeaderProps {
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
     canCreateFolder?: boolean;
+    canUploadFile?: boolean;
 
     // Batch Operation Props
     selectedCount: number;
@@ -87,6 +88,7 @@ export function KnowledgeSpaceHeader({
     onCreateFolder,
     onTriggerUpload,
     canCreateFolder = false,
+    canUploadFile = false,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -123,7 +125,8 @@ export function KnowledgeSpaceHeader({
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
-    const showToolbarActions = isAdmin || selectedCount > selectedThreshold;
+    const showAddMenu = canCreateFolder || canUploadFile;
+    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
 
     const viewFilterSortCluster = (
@@ -293,7 +296,7 @@ export function KnowledgeSpaceHeader({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
-            {(canCreateFolder || isAdmin) && (
+            {showAddMenu && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
@@ -308,7 +311,7 @@ export function KnowledgeSpaceHeader({
                                 {localize("com_knowledge.new_folder")}
                             </DropdownMenuItem>
                         )}
-                        {isAdmin && (
+                        {canUploadFile && (
                             <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
                                 <Upload className="mr-2 size-4" />
                                 {localize("com_knowledge.upload_file")}
