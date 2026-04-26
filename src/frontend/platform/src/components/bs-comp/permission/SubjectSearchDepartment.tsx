@@ -245,18 +245,19 @@ function TreeNode({
   const explicitSelection = selectedDepartmentsById.get(node.id)
   const isExplicitlySelected = selectedIds.has(node.id)
   const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected
-  const isChecked = isExplicitlySelected || isImplicitlySelected
-  const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children)
   const isDisabled = disabledIds.has(node.id)
+  const isChecked = isExplicitlySelected || isImplicitlySelected || isDisabled
+  const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children)
   const pathLabel = pathSegments.join('/')
 
   return (
     <>
       <div
         className={`flex items-stretch gap-0 pr-2 ${
-          isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent"
+          isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-accent"
         }`}
         onClick={() => {
+          if (isDisabled) return
           if (isImplicitlySelected) {
             onMaterializeInheritedSelection()
             return
@@ -288,6 +289,7 @@ function TreeNode({
             disabled={isDisabled}
             onClick={(e) => e.stopPropagation()}
             onCheckedChange={() => {
+              if (isDisabled) return
               if (isImplicitlySelected) {
                 onMaterializeInheritedSelection()
                 return

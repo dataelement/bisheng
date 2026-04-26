@@ -1,8 +1,12 @@
 import { PermissionGrantTab } from "@/components/bs-comp/permission/PermissionGrantTab";
-import { getGrantableRelationModelsApi } from "@/controllers/API/permission";
+import { getGrantableRelationModelsApi, getResourcePermissions } from "@/controllers/API/permission";
 import { render, screen, waitFor } from "@/test/test-utils";
 import { fireEvent } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const subjectSearchUserMock = vi.hoisted(() => vi.fn());
+const subjectSearchDepartmentMock = vi.hoisted(() => vi.fn());
+const subjectSearchUserGroupMock = vi.hoisted(() => vi.fn());
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -13,6 +17,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/controllers/API/permission", () => ({
   authorizeResource: vi.fn(),
   getGrantableRelationModelsApi: vi.fn(),
+  getResourcePermissions: vi.fn(),
 }));
 
 vi.mock("@/controllers/request", () => ({
@@ -28,15 +33,24 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 }));
 
 vi.mock("@/components/bs-comp/permission/SubjectSearchUser", () => ({
-  SubjectSearchUser: () => <div>user-search</div>,
+  SubjectSearchUser: (props: any) => {
+    subjectSearchUserMock(props);
+    return <div data-testid="user-search">{props.disabledIds?.join(",")}</div>;
+  },
 }));
 
 vi.mock("@/components/bs-comp/permission/SubjectSearchDepartment", () => ({
-  SubjectSearchDepartment: () => <div>department-search</div>,
+  SubjectSearchDepartment: (props: any) => {
+    subjectSearchDepartmentMock(props);
+    return <div data-testid="department-search">{props.disabledIds?.join(",")}</div>;
+  },
 }));
 
 vi.mock("@/components/bs-comp/permission/SubjectSearchUserGroup", () => ({
-  SubjectSearchUserGroup: () => <div>user-group-search</div>,
+  SubjectSearchUserGroup: (props: any) => {
+    subjectSearchUserGroupMock(props);
+    return <div data-testid="user-group-search">{props.disabledIds?.join(",")}</div>;
+  },
 }));
 
 vi.mock("@/components/bs-comp/permission/RelationSelect", () => ({
@@ -49,10 +63,12 @@ vi.mock("@/components/bs-comp/permission/RelationSelect", () => ({
 }));
 
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
+const mockedGetResourcePermissions = vi.mocked(getResourcePermissions);
 
 describe("PermissionGrantTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGetResourcePermissions.mockResolvedValue([]);
     mockedGetGrantableRelationModelsApi.mockResolvedValue([
       { id: "owner", name: "所有者", relation: "owner", is_system: true },
       { id: "manager", name: "可管理", relation: "manager", is_system: true },
@@ -108,5 +124,61 @@ describe("PermissionGrantTab", () => {
     });
 
     expect(mockedGetGrantableRelationModelsApi).not.toHaveBeenCalled();
+  });
+
+  it("passes already granted subjects into the search components as disabled checked ids", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "viewer",
+      },
+      {
+        subject_type: "department",
+        subject_id: 7,
+        subject_name: "研发部",
+        relation: "viewer",
+        include_children: false,
+      },
+      {
+        subject_type: "user_group",
+        subject_id: 9,
+        subject_name: "产品组",
+        relation: "viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="123"
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("user-search")).toHaveTextContent("2");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "subject.department" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("department-search")).toHaveTextContent("7");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "subject.userGroup" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("user-group-search")).toHaveTextContent("9");
+    });
+
+    expect(subjectSearchUserMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ disabledIds: [2] }),
+    );
+    expect(subjectSearchDepartmentMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ disabledIds: [7] }),
+    );
+    expect(subjectSearchUserGroupMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ disabledIds: [9] }),
+    );
   });
 });

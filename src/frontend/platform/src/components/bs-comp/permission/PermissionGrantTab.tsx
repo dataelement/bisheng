@@ -4,6 +4,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
+  getResourcePermissions,
   type RelationModel,
 } from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
@@ -14,7 +15,7 @@ import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
-import { GrantItem, RelationLevel, ResourceType, SelectedSubject, SubjectType } from "./types"
+import { GrantItem, PermissionEntry, RelationLevel, ResourceType, SelectedSubject, SubjectType } from "./types"
 
 const SUBJECT_TYPES: SubjectType[] = ['user', 'department', 'user_group']
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -23,6 +24,12 @@ const DEFAULT_MODELS: RelationModelOption[] = [
   { id: 'editor', name: '可编辑', relation: 'editor' },
   { id: 'manager', name: '可管理', relation: 'manager' },
 ]
+
+const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
+  user: [],
+  department: [],
+  user_group: [],
+}
 
 interface PermissionGrantTabProps {
   resourceType: ResourceType
@@ -61,6 +68,9 @@ export function PermissionGrantTab({
   }>({ fallbackToDefault: true })
   const [selectedModelId, setSelectedModelId] = useState<string>('viewer')
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(true)
+  const [grantedSubjectIds, setGrantedSubjectIds] = useState<Record<SubjectType, number[]>>(
+    EMPTY_GRANTED_SUBJECT_IDS,
+  )
   const [submitting, setSubmitting] = useState(false)
   const includeChildren = includeChildrenProp ?? internalIncludeChildren
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren
@@ -79,6 +89,24 @@ export function PermissionGrantTab({
 
     const preferredModel = relationModels!.find((model) => model.relation === 'viewer') ?? relationModels![0]
     setSelectedModelId(preferredModel.id)
+  }, [])
+
+  const applyGrantedPermissions = useCallback((permissions: PermissionEntry[] | undefined) => {
+    const next = {
+      user: new Set<number>(),
+      department: new Set<number>(),
+      user_group: new Set<number>(),
+    }
+    for (const permission of Array.isArray(permissions) ? permissions : []) {
+      if (permission.subject_type in next) {
+        next[permission.subject_type].add(permission.subject_id)
+      }
+    }
+    setGrantedSubjectIds({
+      user: Array.from(next.user),
+      department: Array.from(next.department),
+      user_group: Array.from(next.user_group),
+    })
   }, [])
 
   useEffect(() => {
@@ -154,6 +182,24 @@ export function PermissionGrantTab({
     setSubjectType(fixedSubjectType)
     setSelected([])
   }, [fixedSubjectType])
+
+  useEffect(() => {
+    let cancelled = false
+    captureAndAlertRequestErrorHoc(
+      getResourcePermissions(resourceType, resourceId),
+      () => true,
+    ).then((res) => {
+      if (cancelled) return
+      if (res === false) {
+        setGrantedSubjectIds(EMPTY_GRANTED_SUBJECT_IDS)
+        return
+      }
+      applyGrantedPermissions(res)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [applyGrantedPermissions, resourceId, resourceType])
 
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type)
@@ -241,6 +287,7 @@ export function PermissionGrantTab({
             onChange={setSelected}
             resourceType={resourceType}
             resourceId={resourceId}
+            disabledIds={grantedSubjectIds.user}
           />
         )}
         {subjectType === 'department' && (
@@ -252,6 +299,7 @@ export function PermissionGrantTab({
             includeChildren={includeChildren}
             onIncludeChildrenChange={handleIncludeChildrenChange}
             showIncludeChildrenToggle={!hideDepartmentIncludeChildrenControl}
+            disabledIds={grantedSubjectIds.department}
           />
         )}
         {subjectType === 'user_group' && (
@@ -260,6 +308,7 @@ export function PermissionGrantTab({
             onChange={setSelected}
             resourceType={resourceType}
             resourceId={resourceId}
+            disabledIds={grantedSubjectIds.user_group}
           />
         )}
       </div>
