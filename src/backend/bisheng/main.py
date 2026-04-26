@@ -112,6 +112,15 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
+    from bisheng.department.api.endpoints.department_limit import (
+        router as department_limit_router,
+    )
+
+    app.include_router(
+        department_limit_router,
+        prefix='/api/department-limit',
+        tags=['Department traffic'],
+    )
     if settings.debug:
         import tracemalloc
         tracemalloc.start()

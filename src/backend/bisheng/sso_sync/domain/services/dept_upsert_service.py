@@ -40,7 +40,10 @@ class DeptUpsertService:
 
     @classmethod
     async def assert_parent_chain_exists(
-        cls, external_ids: Iterable[str],
+        cls,
+        external_ids: Iterable[str],
+        *,
+        source: str = SSO_SOURCE,
     ) -> Dict[str, Department]:
         """Resolve every ``external_id`` to a Department row, raise 19312 on
         the first miss.
@@ -55,7 +58,7 @@ class DeptUpsertService:
             if not ext:
                 continue
             dept = await DepartmentDao.aget_by_source_external_id(
-                cls.SOURCE, ext,
+                source, ext,
             )
             if dept is None or dept.is_deleted == 1:
                 missing.append(ext)

@@ -464,9 +464,11 @@ class UserService:
         # Build response with tenant info. is_global_super is already a bool
         # on LoginUser, populated by init_login_user; surface it so the
         # frontend can render admin menus without a /user/info round-trip.
+        entry = await LoginUser.user_entry_payload_for_read(db_user)
         extra_fields = {
             'access_token': access_token,
             'is_global_super': login_user.is_global_super,
+            **entry,
         }
         if requires_tenant_selection:
             extra_fields['requires_tenant_selection'] = True

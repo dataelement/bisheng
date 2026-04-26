@@ -113,7 +113,6 @@ export function CreateDepartmentDialog({
           {/* Department admins (optional) — 与部门设置页相同的多选搜索 */}
           <div className="space-y-2">
             <Label>{t("bs:department.admins")}</Label>
-            <p className="text-xs text-muted-foreground">{t("bs:department.adminsHint")}</p>
             <DepartmentUsersSelect
               multiple
               value={adminSelectValue}

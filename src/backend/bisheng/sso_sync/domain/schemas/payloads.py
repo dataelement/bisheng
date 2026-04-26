@@ -48,7 +48,11 @@ class TenantMappingItem(BaseModel):
 class LoginSyncRequest(BaseModel):
     external_user_id: str = Field(
         ...,
-        description='Stable HR/SSO user ID; keyed together with source="sso".',
+        description=(
+            'Stable upstream user ID; paired with source on the user row (``sso`` '
+            'for generic HMAC sync, ``wecom`` for Gateway wecom batch in '
+            '``/internal/sso/gateway-wecom-org-sync``).'
+        ),
     )
     primary_dept_external_id: Optional[str] = Field(
         default=None,
@@ -85,6 +89,15 @@ class LoginSyncRequest(BaseModel):
     ts: int = Field(
         ...,
         description='Source system timestamp (seconds). Required by INV-T12.',
+    )
+    #: 企微等上游账号是否已禁用。为 True 时同步 ``user.delete=1`` 并走短流程（不签发 JWT）；
+    #: 为 False 时确保 ``user.delete=0``。省略时保持 bisheng 既有 ``delete`` 与校验逻辑（兼容旧 Gateway）。
+    account_disabled: Optional[bool] = Field(
+        default=None,
+        description=(
+            'If True, mark user as disabled in bisheng and skip full login/JWT. '
+            'If False, ensure user is enabled. Omitted: legacy behavior (do not change delete).'
+        ),
     )
     #: 为 True 时不单独写 ``org_sync_log``（由 Gateway 批量接口统一落一条）。
     skip_org_sync_log: bool = Field(
@@ -148,3 +161,5 @@ class GatewayWecomOrgSyncResult(BaseModel):
     member_sync_ok: int = 0
     member_sync_fail: int = 0
     member_errors: List[dict] = Field(default_factory=list)
+    #: PRD: 本次导入名单外的 ``source=wecom`` 活跃用户被禁用并强退（不在名单中）
+    absent_wecom_users_disabled: int = 0

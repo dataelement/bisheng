@@ -539,6 +539,15 @@ class TenantService:
         # Update last access time
         await UserTenantDao.aupdate_last_access_time(user_id, tenant_id)
 
+        from bisheng.common.errcode.user import UserNoRoleForLoginError, UserNoWebMenuForLoginError
+        from bisheng.user.domain.services.user import UserService
+
+        guard = await UserService._reject_login_if_user_has_no_usable_access(db_user)
+        if guard is not None:
+            if guard.status_code == UserNoRoleForLoginError.Code:
+                raise UserNoRoleForLoginError()
+            raise UserNoWebMenuForLoginError()
+
         # Create new JWT with target tenant_id
         from bisheng.user.domain.services.auth import LoginUser
         access_token = LoginUser.create_access_token(

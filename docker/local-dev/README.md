@@ -16,6 +16,26 @@ bash docker/local-dev/start-middleware.sh
 
 脚本会：停止 `bisheng-backend` / `bisheng-backend-worker` / `bisheng-frontend` 容器（若存在），再启动 MySQL、OpenFGA、Redis、ES、Milvus 依赖栈，并初始化 `bisheng_gateway` 库表。
 
+## 1b. 清空 bisheng 业务库并同步清空 OpenFGA / Redis（避免 FGA 与 user_id 不一致）
+
+仅执行 `reset-full-db-keep-superadmin.sql` **不会**清空 OpenFGA 使用的独立 MySQL 库 `openfga`，历史上会出现「新用户占用旧 user_id，继承旧权限元组」的问题。
+
+**推荐一键顺序**（先停本机 uvicorn / Celery，再执行）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File docker/local-dev/reset-full-local-stack.ps1
+```
+
+Linux / macOS：
+
+```bash
+bash docker/local-dev/reset-full-local-stack.sh
+```
+
+脚本会：`FLUSHDB` Redis `1,2,3`（与默认 `config.yaml` 的 bisheng/celery 及 Gateway 常用库一致）→ `DROP/CREATE` MySQL `openfga` → `docker compose … openfga-migrate` → 导入 `reset-full-db-keep-superadmin.sql`。
+
+**未包含**：Elasticsearch 索引、Milvus 集合、MinIO 桶内对象；若需「知识库也干净」，请另行删除对应索引/集合/桶，或使用 compose 卷重建（会丢全部 Docker 数据）。
+
 ## 2. 对齐关系
 
 | 组件 | 地址 | 说明 |

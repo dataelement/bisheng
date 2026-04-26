@@ -26,3 +26,10 @@ class UsedAppNotFoundError(BaseErrorCode):
 class UsedAppNotOnlineError(BaseErrorCode):
     Code: int = 12044
     Msg: str = 'Used app not online'
+
+
+class DepartmentDailyChatConcurrentLimitError(BaseErrorCode):
+    """Department traffic control: too many users in daily-mode chat at once."""
+
+    Code: int = 12045
+    Msg: str = '部门同时在线会话数已达上限，请稍后再试'

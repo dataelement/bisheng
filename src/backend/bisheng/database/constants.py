@@ -5,6 +5,10 @@ DefaultRole = 2
 # Super Admin RoleID
 AdminRole = 1
 
+# v2.5 PRD 同步: account disabled by automated sync — blocks UI re-enable unless super admin
+USER_DISABLE_SOURCE_ORG_SYNC = 'org_sync'  # F009 Celery / OrgSyncService
+USER_DISABLE_SOURCE_GATEWAY = 'gateway'  # F014 SSO / Gateway push
+
 
 # Some of the basiccategoryType
 class MessageCategory(str, Enum):

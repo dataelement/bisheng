@@ -1016,6 +1016,7 @@ class DepartmentService:
                     User.create_time.label('user_create_time'),
                     User.update_time.label('user_update_time'),
                     User.delete.label('user_deleted'),
+                    User.disable_source.label('user_disable_source'),
                 )
                 .join(User, User.user_id == UserDepartment.user_id)
                 .where(
@@ -1111,6 +1112,7 @@ class DepartmentService:
                 'create_time': r.member_join_time,
                 'update_time': _last_modified(r),
                 'enabled': r.user_deleted == 0,
+                'disable_source': getattr(r, 'user_disable_source', None),
                 'user_groups': user_groups_map.get(r.user_id, []),
                 'roles': roles_map.get(r.user_id, []),
                 'is_department_admin': r.user_id in admin_uids,

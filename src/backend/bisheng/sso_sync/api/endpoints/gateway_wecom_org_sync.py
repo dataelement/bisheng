@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.sso_sync.domain.constants import WECOM_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     GatewayWecomOrgSyncRequest,
     GatewayWecomOrgSyncResult,
@@ -14,6 +15,9 @@ from bisheng.sso_sync.domain.services.departments_sync_service import (
 )
 from bisheng.sso_sync.domain.services.hmac_auth import verify_hmac
 from bisheng.sso_sync.domain.services.login_sync_service import LoginSyncService
+from bisheng.sso_sync.domain.services.wecom_gateway_absent_reconcile import (
+    disable_wecom_users_absent_from_import,
+)
 from bisheng.sso_sync.domain.services.org_sync_log_writer import (
     OrgSyncLogBuffer,
     flush_log,
@@ -41,7 +45,9 @@ async def gateway_wecom_org_sync(
     buffer = OrgSyncLogBuffer()
 
     dept_result = await DepartmentsSyncService.execute(
-        payload.departments, request_ip=request_ip,
+        payload.departments,
+        request_ip=request_ip,
+        row_source=WECOM_SOURCE,
     )
     buffer.dept_updated = dept_result.applied_upsert
     buffer.dept_archived = dept_result.applied_remove
@@ -56,10 +62,17 @@ async def gateway_wecom_org_sync(
     member_fail = 0
     member_errors: list[dict] = []
     members_with_leader_depts = 0
+    seen_external = {
+        str(m.external_user_id).strip()
+        for m in payload.members
+        if m.external_user_id and str(m.external_user_id).strip()
+    }
     for raw in payload.members:
         item = raw.model_copy(update={'skip_org_sync_log': True})
         try:
-            await LoginSyncService.execute(item, request_ip=request_ip)
+            await LoginSyncService.execute(
+                item, request_ip=request_ip, row_source=WECOM_SOURCE,
+            )
             member_ok += 1
         except Exception as e:  # noqa: BLE001 — aggregate per-user failures
             member_fail += 1
@@ -74,6 +87,13 @@ async def gateway_wecom_org_sync(
             admins = item.department_admin_external_ids or []
             if admins:
                 members_with_leader_depts += 1
+
+    # PRD: 第三方同步人员不在本次导入名单中 → 已禁用 + 强退
+    absent_disabled = 0
+    try:
+        absent_disabled = await disable_wecom_users_absent_from_import(seen_external)
+    except Exception as e:  # noqa: BLE001
+        buffer.error('absent_reconcile', '', str(e))
 
     buffer.member_updated = member_ok
     buffer.warn(
@@ -98,5 +118,6 @@ async def gateway_wecom_org_sync(
         member_sync_ok=member_ok,
         member_sync_fail=member_fail,
         member_errors=member_errors,
+        absent_wecom_users_disabled=absent_disabled,
     )
     return resp_200(out)

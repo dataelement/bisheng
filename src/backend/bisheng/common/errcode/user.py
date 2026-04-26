@@ -54,7 +54,7 @@ class UserNoRoleForLoginError(BaseErrorCode):
 
 class UserNoWebMenuForLoginError(BaseErrorCode):
     Code: int = 10611
-    Msg: str = '您缺少菜单权限，请联系管理员'
+    Msg: str = '当前无页面权限，请联系管理员。'
 
 
 class UserGroupNotDeleteError(BaseErrorCode):
