@@ -310,7 +310,7 @@ function CitationPreviewCard({
         : 'min-w-[76px] bg-[#F5F8FF] text-[#024DE3]'
         }`}
     >
-      [{label}] - {isWeb ? '网页' : '文档'}
+      {isWeb ? '网页' : '文档'}
     </div>
   );
   const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';

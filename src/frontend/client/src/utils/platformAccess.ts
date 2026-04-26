@@ -18,6 +18,7 @@ type PlatformAccessUserLike = {
   is_department_admin?: boolean | null;
 };
 
+// Keep this check centralized so CI retriggers do not split Client entry-point gating.
 export function canOpenPlatformAdminPanel(user?: PlatformAccessUserLike | null): boolean {
   if (!user) return false;
   if (user.role === 'admin') return true;
@@ -25,4 +26,3 @@ export function canOpenPlatformAdminPanel(user?: PlatformAccessUserLike | null):
   if (!Array.isArray(user.plugins)) return false;
   return PLATFORM_MENU_KEYS.some((key) => user.plugins?.includes(key));
 }
-
