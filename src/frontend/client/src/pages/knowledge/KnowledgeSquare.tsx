@@ -8,9 +8,7 @@ import {
     getJoinedSpacesApi,
     getSquareSpacesApi,
     subscribeSpaceApi,
-    unsubscribeSpaceApi,
     type KnowledgeSpace,
-    VisibilityType
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
@@ -154,9 +152,6 @@ export default function KnowledgeSquare({
     }, [hasMorePage, loadingMore, load, page]);
 
     const handleJoin = async (space: KnowledgeSpace) => {
-        const nextStatus: SquareSpaceStatus =
-            space.visibility === VisibilityType.PUBLIC ? "joined" : "pending";
-
         // Only join when currently "join"
         const currentStatus =
             statusOverride?.[String(space.id)] ??
@@ -166,18 +161,6 @@ export default function KnowledgeSquare({
 
         const prevSpaces = spaces;
         setJoiningId(space.id);
-        setSpaces((prev) =>
-            prev.map((s) =>
-                s.id === space.id
-                    ? {
-                          ...s,
-                          squareStatus: nextStatus,
-                          isFollowed: nextStatus === "joined",
-                          isPending: nextStatus === "pending",
-                      }
-                    : s
-            )
-        );
 
         const rollback = () => {
             setSpaces(prevSpaces);
@@ -200,7 +183,21 @@ export default function KnowledgeSquare({
         }
 
         try {
-            await subscribeSpaceApi(space.id);
+            const result = await subscribeSpaceApi(space.id);
+            const nextStatus: SquareSpaceStatus = result.status === "subscribed" ? "joined" : "pending";
+            setSpaces((prev) =>
+                prev.map((s) =>
+                    s.id === space.id
+                        ? {
+                              ...s,
+                              squareStatus: nextStatus,
+                              subscriptionStatus: result.status,
+                              isFollowed: nextStatus === "joined",
+                              isPending: nextStatus === "pending",
+                          }
+                        : s
+                )
+            );
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
@@ -293,6 +290,7 @@ export default function KnowledgeSquare({
                                             statusOverride?.[String(space.id)] ??
                                             ((space.squareStatus as SquareSpaceStatus) || "join")
                                         }
+                                        isActing={joiningId === space.id}
                                         onPreview={() => onPreviewSpace?.(space)}
                                         onAction={() => handleJoin(space)}
                                     />

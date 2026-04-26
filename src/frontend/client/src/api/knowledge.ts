@@ -116,6 +116,13 @@ export interface KnowledgeSpace {
     departmentName?: string;
 }
 
+export type SpaceSubscribeStatus = "subscribed" | "pending";
+
+export interface SubscribeSpaceResult {
+    status: SpaceSubscribeStatus;
+    spaceId: string;
+}
+
 /** Space tag entity used by tagging UI */
 export interface SpaceTag {
     id: number;
@@ -921,7 +928,7 @@ export async function batchUpdateTagsApi(
  * Subscribe to a space
  * POST /api/v1/knowledge/space/{space_id}/subscribe
  */
-export async function subscribeSpaceApi(space_id: string): Promise<void> {
+export async function subscribeSpaceApi(space_id: string): Promise<SubscribeSpaceResult> {
     const res = await request.post(`/api/v1/knowledge/space/${space_id}/subscribe`) as any;
     if (res?.status_code && res.status_code !== 200) {
         const msg =
@@ -931,6 +938,15 @@ export async function subscribeSpaceApi(space_id: string): Promise<void> {
             "subscribe space failed";
         throw new Error(msg);
     }
+    const payload = res?.data ?? res ?? {};
+    const status = String(payload?.status ?? "").toLowerCase();
+    if (status !== "subscribed" && status !== "pending") {
+        throw new Error("subscribe space failed: missing subscription status");
+    }
+    return {
+        status,
+        spaceId: String(payload?.space_id ?? payload?.spaceId ?? space_id),
+    };
 }
 
 /**

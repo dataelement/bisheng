@@ -5,10 +5,12 @@ jest.mock("~/api/request", () => ({
   __esModule: true,
   default: {
     get: jest.fn(),
+    post: jest.fn(),
   },
 }));
 
 const mockGet = request.get as jest.Mock;
+const mockPost = request.post as jest.Mock;
 
 describe("getSquareSpacesApi", () => {
   it("maps pending square items from is_pending when subscription_status is absent", async () => {
@@ -40,6 +42,28 @@ describe("getSquareSpacesApi", () => {
       isPending: true,
       isFollowed: false,
       squareStatus: "pending",
+    });
+  });
+});
+
+describe("subscribeSpaceApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("returns backend subscription status", async () => {
+    const { subscribeSpaceApi } = await import("./knowledge");
+    mockPost.mockResolvedValue({
+      status_code: 200,
+      data: {
+        status: "pending",
+        space_id: 101,
+      },
+    });
+
+    await expect(subscribeSpaceApi("101")).resolves.toEqual({
+      status: "pending",
+      spaceId: "101",
     });
   });
 });
