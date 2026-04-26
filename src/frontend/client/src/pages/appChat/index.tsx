@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
 import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { checkPermission } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
@@ -52,6 +53,18 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         setChatId(cid!) // 切换会话
 
         const numericType = Number(type);
+        const ensureUseAppPermission = async (objectType: "workflow" | "assistant") => {
+            if (shareToken || isGuestMode) return true;
+            const permission = await checkPermission(objectType, fid!, "can_read", "use_app")
+                .catch(() => ({ allowed: false }));
+            if (permission?.allowed) return true;
+            showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+            navigate('/apps', { replace: true });
+            return false;
+        };
+
+        if (numericType === FLOW_TYPES.WORK_FLOW && !(await ensureUseAppPermission("workflow"))) return;
+        if (numericType === FLOW_TYPES.ASSISTANT && !(await ensureUseAppPermission("assistant"))) return;
 
         if (currentData) { // 有缓存不重复加载
             numericType === FLOW_TYPES.SKILL && setRunningState((prev) => {
