@@ -13,7 +13,7 @@ querying ``org_sync_log``.
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from loguru import logger
 
@@ -100,6 +100,10 @@ class DepartmentsSyncService:
                         request_ip,
                         row_source,
                     )
+
+                await cls._reconcile_absent_on_full_snapshot(
+                    payload, result, request_ip, row_source,
+                )
             finally:
                 current_tenant_id.reset(token)
 
@@ -127,6 +131,82 @@ class DepartmentsSyncService:
             if row is not None:
                 cache[ext] = row
         return cache
+
+    @classmethod
+    async def _reconcile_absent_on_full_snapshot(
+        cls,
+        payload: DepartmentsSyncRequest,
+        result: BatchResult,
+        request_ip: str,
+        row_source: str,
+    ) -> None:
+        """PRD §5: third-party dept IDs not in this import → archive (like remove)."""
+        if not payload.full_snapshot:
+            return
+        # Union flat WeCom id list (department/list) with DFS upsert ids. Gateway builds
+        # upsert from a filtered tree; if that tree omits a node that still exists in
+        # WeCom, snapshot-only present would wrongly archive it (e.g. B archived when
+        # only C/D were deleted). Using the union matches "still in WeCom if either
+        # payload branch says so".
+        snap_ids: set[str] = set()
+        if payload.snapshot_external_ids:
+            snap_ids = {
+                str(x).strip()
+                for x in payload.snapshot_external_ids
+                if x is not None and str(x).strip()
+            }
+        up_ids: set[str] = {
+            str(it.external_id).strip()
+            for it in payload.upsert
+            if it.external_id is not None and str(it.external_id).strip()
+        }
+        present = snap_ids | up_ids
+        if not present:
+            logger.warning(
+                'F014 full_snapshot absent reconcile skipped: empty present set '
+                '(no snapshot_external_ids and no upsert)',
+            )
+            return
+        if snap_ids and up_ids and snap_ids != up_ids:
+            logger.info(
+                'F014 full_snapshot present union: only_in_snapshot={} only_in_upsert={}',
+                sorted(snap_ids - up_ids)[:16],
+                sorted(up_ids - snap_ids)[:16],
+            )
+        active = await DepartmentDao.aget_active_synced_departments_by_source(
+            row_source,
+        )
+        snap_n = len(payload.snapshot_external_ids or [])
+        logger.info(
+            'F014 full_snapshot reconcile inputs: present_n={} '
+            'snapshot_external_ids_n={} upsert_n={} active_wecom_rows={}',
+            len(present),
+            snap_n,
+            len(payload.upsert),
+            len(active),
+        )
+        absent: List[Department] = [
+            d for d in active
+            if str(d.external_id).strip() not in present
+        ]
+        if not absent:
+            return
+        logger.info(
+            'F014 full_snapshot absent reconcile: archiving {} dept(s), '
+            'sample external_ids={}',
+            len(absent),
+            [str(d.external_id) for d in absent[:8]],
+        )
+        absent.sort(key=lambda d: len(d.path or ''), reverse=True)
+        for d in absent:
+            ext = str(d.external_id).strip()
+            await cls._apply_remove(
+                ext,
+                payload.source_ts,
+                result,
+                request_ip,
+                row_source,
+            )
 
     # -----------------------------------------------------------------------
     # Per-item handlers (each in its own try/except — per AC-11).
@@ -231,6 +311,9 @@ class DepartmentsSyncService:
             if mounted_before:
                 result.orphan_triggered.append(mounted_before)
             result.applied_remove += 1
+            await cls._cascade_archive_descendants_after_sso_remove(
+                dept, incoming_ts, result,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 'F014 remove error for %s: %s', external_id, exc,
@@ -240,3 +323,65 @@ class DepartmentsSyncService:
                 'external_id': external_id,
                 'error': str(exc),
             })
+
+    @classmethod
+    async def _cascade_archive_descendants_after_sso_remove(
+        cls,
+        archived_parent_snapshot: Department,
+        incoming_ts: int,
+        result: BatchResult,
+    ) -> None:
+        """PRD §5: archive active sub-departments (e.g. source=local) under SSO path."""
+        prefix = (archived_parent_snapshot.path or '').strip()
+        if not prefix:
+            return
+        if not prefix.endswith('/'):
+            prefix = f'{prefix}/'
+        if prefix in ('/', '//'):
+            logger.warning(
+                'F014 cascade skipped: unsafe path prefix for dept_id=%s',
+                archived_parent_snapshot.id,
+            )
+            return
+        tid = int(archived_parent_snapshot.tenant_id)
+        pid = int(archived_parent_snapshot.id or 0)
+        if not pid:
+            return
+        descendants = await DepartmentDao.aget_active_descendants_under_path(
+            tenant_id=tid,
+            path_prefix=prefix,
+            exclude_id=pid,
+        )
+        if not descendants:
+            return
+        descendants.sort(key=lambda d: len(d.path or ''), reverse=True)
+        for row in descendants:
+            cid = int(row.id or 0)
+            if not cid:
+                continue
+            try:
+                mounted_before = row.mounted_tenant_id
+                snap = await DepartmentDao.aarchive_by_id_sso_cascade(
+                    cid, incoming_ts,
+                )
+                if snap is None:
+                    continue
+                await DepartmentArchiveCleanupService.arun_for_archived_department(
+                    cid, reason='f014_department_cascade',
+                )
+                await DepartmentDeletionHandler.on_deleted(
+                    dept_id=cid,
+                    deletion_source=DeletionSource.SSO_REALTIME,
+                )
+                if mounted_before:
+                    result.orphan_triggered.append(mounted_before)
+                result.applied_remove += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    'F014 cascade archive failed dept_id=%s: %s', cid, exc,
+                )
+                result.errors.append({
+                    'type': 'cascade_archive_error',
+                    'external_id': str(cid),
+                    'error': str(exc),
+                })

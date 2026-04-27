@@ -677,6 +677,26 @@ class DepartmentDao:
             return result.first()
 
     @classmethod
+    async def aget_active_synced_departments_by_source(
+        cls, source: str,
+    ) -> List[Department]:
+        """Active departments with external_id for F014 full_snapshot absent reconcile."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.source == source,
+                    Department.status == 'active',
+                    Department.is_tenant_root == 0,
+                    Department.external_id.isnot(None),  # type: ignore[union-attr]
+                )
+            )
+            rows = list(result.all())
+        return [
+            d for d in rows
+            if d.external_id and str(d.external_id).strip()
+        ]
+
+    @classmethod
     async def aupsert_by_external_id(
         cls,
         *,
@@ -698,6 +718,14 @@ class DepartmentDao:
         ``is_deleted=1``), clears the flag and restores ``status='active'``
         so the department becomes visible again.
         """
+        def final_path(parent_path: str, dept_id: int) -> str:
+            base = (parent_path or '').strip()
+            if base and not base.endswith('/'):
+                base = f'{base}/'
+            if not base.startswith('/'):
+                base = f'/{base}' if base else '/'
+            return f'{base}{dept_id}/'.replace('//', '/')
+
         existing = await cls.aget_by_source_external_id(source, external_id)
         async with get_async_db_session() as session:
             if existing is None:
@@ -717,6 +745,10 @@ class DepartmentDao:
                 session.add(dept)
                 await session.commit()
                 await session.refresh(dept)
+                dept.path = final_path(path, int(dept.id))
+                session.add(dept)
+                await session.commit()
+                await session.refresh(dept)
                 return dept
             await session.execute(
                 update(Department)
@@ -724,7 +756,7 @@ class DepartmentDao:
                 .values(
                     name=name,
                     parent_id=parent_id,
-                    path=path,
+                    path=final_path(path, int(existing.id)),
                     sort_order=sort_order,
                     status='active',
                     is_deleted=0,
@@ -752,6 +784,59 @@ class DepartmentDao:
             await session.execute(
                 update(Department)
                 .where(Department.id == existing.id)
+                .values(
+                    status='archived',
+                    is_deleted=1,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        return existing
+
+    @classmethod
+    async def aget_active_descendants_under_path(
+        cls,
+        *,
+        tenant_id: int,
+        path_prefix: str,
+        exclude_id: int,
+    ) -> List[Department]:
+        """Active departments strictly under ``path_prefix`` (materialised path).
+
+        Used when an SSO-archived parent must pull down local child departments
+        (PRD §5 cascade).
+        """
+        p = (path_prefix or '').strip()
+        if not p:
+            return []
+        if not p.endswith('/'):
+            p = f'{p}/'
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.tenant_id == tenant_id,
+                    Department.status == 'active',
+                    Department.id != exclude_id,
+                    Department.path.like(f'{p}%'),
+                )
+            )
+            return list(result.all())
+
+    @classmethod
+    async def aarchive_by_id_sso_cascade(
+        cls, dept_id: int, last_sync_ts: int,
+    ) -> Optional[Department]:
+        """Archive a row by id for subtree cascade (no per-row ts guard)."""
+        existing = await cls.aget_by_id(dept_id)
+        if existing is None or existing.status != 'active':
+            return None
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(
+                    Department.id == dept_id,
+                    Department.status == 'active',
+                )
                 .values(
                     status='archived',
                     is_deleted=1,
