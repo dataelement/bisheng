@@ -41,7 +41,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
   }, [hasMessages]);
 
   useEffect(() => {
-    if (isH5 || !citationPanelOpen) {
+    if (!citationPanelOpen || (isH5 && isPhoneViewport)) {
       return;
     }
 
@@ -74,7 +74,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [citationPanelOpen, handleCloseCitationPanel, isH5]);
+  }, [citationPanelOpen, handleCloseCitationPanel, isH5, isPhoneViewport]);
 
   const citationPanelContent = (
     <CitationReferencesDrawer
@@ -114,29 +114,21 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
 
       if (isPhoneViewport) {
         return (
-          <div className="fixed inset-0 z-[120] flex flex-col bg-white overflow-hidden overscroll-contain touch-pan-y">
+          <div className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white">
             {citationPanelContent}
           </div>
         );
       }
 
       return (
-        <div className="pointer-events-none fixed inset-0 z-[120] flex justify-end">
-          <button
-            type="button"
-            aria-label="关闭参考资料"
-            className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
-            onClick={handleCloseCitationPanel}
-          />
-          <div
-            ref={citationPanelRef}
-            data-citation-popover-surface
-            className="relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {citationPanelContent}
-          </div>
+        <div
+          ref={citationPanelRef}
+          data-citation-popover-surface
+          className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {citationPanelContent}
         </div>
       );
     }
