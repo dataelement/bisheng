@@ -18,6 +18,10 @@ import { cn } from "~/utils";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
+    /** Whether to render a short vertical timeline connector below this card.
+     *  Set to true when this is not the last tool in its group, so a visual
+     *  line bridges to the next tool even when both are collapsed. */
+    showConnector?: boolean;
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -231,7 +235,7 @@ const variantStyles = {
     },
 } as const;
 
-const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
+const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
@@ -295,7 +299,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors]);
 
     const leadingIcon = toolCall.inflight ? (
-        <Loader2 className="mr-1.5 size-3.5 animate-spin text-text-secondary" />
+        <Loader2 className="mr-1.5 size-3.5 animate-spin text-primary" />
     ) : toolCall.error ? (
         <AlertCircle className="mr-1.5 size-3.5 text-red-500" />
     ) : (
@@ -308,7 +312,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
             onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
             disabled={!hasDetails || toolCall.inflight}
             className={cn(
-                "group mt-3 flex w-fit items-center justify-center py-2 text-sm leading-[18px]",
+                "group flex w-fit items-center justify-center py-2 text-sm leading-[18px]",
                 toolCall.inflight && "animate-pulse",
             )}
         >
@@ -343,9 +347,9 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                 )}
                 style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
             >
-                <div className="overflow-hidden mt-3">
-                    <div className="relative pl-3 text-xs text-text-secondary">
-                        <div className="absolute left-0 h-full pl-1 border-r border-border-medium dark:border-border-heavy" />
+                <div className="overflow-hidden min-h-0">
+                    <div className="relative pt-3 pl-3 text-xs text-text-secondary">
+                        <div className="absolute left-1.5 h-full border-l border-border-medium dark:border-border-heavy" />
 
                         {toolCall.error && (
                             <div className="leading-[22px]">{toolCall.error}</div>
@@ -389,6 +393,11 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                     </div>
                 </div>
             </div>
+            {showConnector && !expanded && (
+                <div className="relative h-3 pl-3" aria-hidden="true">
+                    <div className="absolute left-1.5 h-full border-r border-border-medium dark:border-border-heavy" />
+                </div>
+            )}
         </>
     );
 });
