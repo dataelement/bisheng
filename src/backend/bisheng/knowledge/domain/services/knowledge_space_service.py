@@ -788,7 +788,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not (lineage_binding_can_override and matched_lineage_binding):
                     effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
+        effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         return effective_permissions
+
+    async def _public_space_viewer_permission_ids(self, lineage: List[tuple[str, int]]) -> set[str]:
+        space_id = next(
+            (lineage_id for lineage_type, lineage_id in lineage if lineage_type == 'knowledge_space'),
+            None,
+        )
+        if space_id is None:
+            return set()
+        space = await KnowledgeDao.aquery_by_id(int(space_id))
+        if (
+            space
+            and space.type == KnowledgeTypeEnum.SPACE.value
+            and space.is_released
+            and space.auth_type == AuthTypeEnum.PUBLIC
+        ):
+            return default_permission_ids_for_relation('viewer')
+        return set()
 
     async def _require_permission_id(
         self,
