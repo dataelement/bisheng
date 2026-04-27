@@ -185,6 +185,8 @@ describe("Permission dialog regressions", () => {
     expect(screen.getByText("subject.department")).toBeInTheDocument();
     expect(screen.getByText("subject.userGroup")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "dialog.tabGrant" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveClass("flex");
+    expect(screen.getByRole("dialog")).not.toHaveClass("grid");
     expect(screen.queryByText("dialog.tabList")).not.toBeInTheDocument();
     expect(screen.queryByText("dialog.tabShare")).not.toBeInTheDocument();
   });
