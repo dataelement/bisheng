@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
-import AgentThinkingHeader from "~/components/Chat/Messages/AgentThinkingHeader";
+import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
+import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
@@ -160,44 +161,56 @@ function parseMessageText(text: string) {
 }
 
 /**
- * Render the agent-native timeline: walk `events` in arrival order, emitting
- * a thinking header or tool-call card for each entry. The last streaming
- * thinking entry (no `duration_ms` yet) shows the "思考中…" pulse.
+ * Render the agent-native timeline: walk `events` as display blocks and emit
+ * a `DeepThinkingGroup` per non-text run + a lightweight `<Markdown>` per
+ * intermediate text block. The LAST text block (if events ends with text)
+ * is rendered separately by the bubble's main `<Markdown>` body so that
+ * citations / copy / voice still attach to the final answer.
  */
 function AgentTimeline({
     events,
     isStreaming,
+    finalTextIdx,
+    messageId,
 }: {
     events: AgentEvent[];
     isStreaming: boolean;
+    /** Index in `blocks` of the trailing text block to skip (rendered by the
+     * main bubble Markdown). -1 if no such block. */
+    finalTextIdx: number;
+    /** Bubble's message id, used to namespace intermediate Markdown blocks. */
+    messageId: string;
 }) {
-    // Index of the last thinking event that still has no duration — that's
-    // the one currently being streamed (drives the pulse animation).
-    const openThinkingIdx = (() => {
-        for (let i = events.length - 1; i >= 0; i--) {
-            const ev = events[i];
-            if (ev.type === "thinking" && ev.duration_ms == null) return i;
+    const blocks: DisplayBlock[] = groupEventsForDisplay(events);
+    const lastGroupIdx = (() => {
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            if (blocks[i].kind === "group") return i;
         }
         return -1;
     })();
 
     return (
         <>
-            {events.map((ev, i) => {
-                if (ev.type === "thinking") {
+            {blocks.map((block, i) => {
+                if (block.kind === "text") {
+                    if (i === finalTextIdx) return null;
                     return (
-                        <AgentThinkingHeader
-                            key={`t-${i}`}
-                            reasoning={ev.content}
-                            durationMs={ev.duration_ms}
-                            isStreaming={isStreaming && i === openThinkingIdx}
+                        <Markdown
+                            key={`text-${i}`}
+                            content={block.content}
+                            webContent={[]}
+                            citations={undefined}
+                            messageId={`${messageId}-intermediate-${i}`}
+                            showCursor={false}
+                            isLatestMessage={false}
                         />
                     );
                 }
                 return (
-                    <ToolCallDisplay
-                        key={ev.tool_call_id || `tc-${i}`}
-                        toolCall={ev}
+                    <DeepThinkingGroup
+                        key={`grp-${i}`}
+                        events={block.events}
+                        isStreaming={isStreaming && i === lastGroupIdx && finalTextIdx === -1}
                     />
                 );
             })}
@@ -402,17 +415,42 @@ function AssistantBubble({
     // SSE hook keeps writing `:::thinking…:::\n> ⏳/✅` status lines into
     // `text` for backward compat — rendering them here would duplicate the
     // thinking header + tool call cards in the message body.
-    const { thinkingContent, webContent, regularContent } = useMemo(() => {
+    const { thinkingContent, webContent, regularContent, finalTextIdx } = useMemo(() => {
         if (isAgentNative) {
+            const evs = message.events ?? [];
+            const blocks = groupEventsForDisplay(evs);
+
+            // New format: events array contains text items. The "final" body
+            // is rendered by the main <Markdown> outside the timeline ONLY
+            // when events end with a text block. Any non-trailing text block
+            // (mid-stream ReAct: text → tool → text) renders inline inside
+            // the timeline.
+            const last = blocks[blocks.length - 1];
+            if (last && last.kind === "text") {
+                return {
+                    thinkingContent: "",
+                    webContent: [],
+                    regularContent: last.content,
+                    finalTextIdx: blocks.length - 1,
+                };
+            }
+
+            // Legacy: events without text items. Strip the legacy envelope
+            // out of message.text and use that as the body (today's behaviour).
             const raw = message.text || "";
             const stripped = raw
                 .replace(/:::thinking[\s\S]*?:::/g, "")
                 .replace(/^>\s*[⏳✅⚠️][^\n]*\n?/gm, "")
                 .trimStart();
-            return { thinkingContent: "", webContent: [], regularContent: stripped };
+            return {
+                thinkingContent: "",
+                webContent: [],
+                regularContent: stripped,
+                finalTextIdx: -1,
+            };
         }
-        return parseMessageText(message.text || "");
-    }, [message.text, isAgentNative]);
+        return { ...parseMessageText(message.text || ""), finalTextIdx: -1 };
+    }, [message.text, message.events, isAgentNative]);
     const { data: bsConfig } = useGetBsConfig()
 
     const modelName = message.sender || "AI";
@@ -447,12 +485,10 @@ function AssistantBubble({
                     <div className="model-name select-none font-semibold text-base">{modelName}</div>
                 </div>
 
-                {/* Pre-stream "等待模型响应…" pill — same shape as the thinking
-                    header so it doesn't visually jump when it's replaced. */}
+                {/* Pre-stream "正在思考" indicator — pulsing black dot. */}
                 {showWaiting && (
-                    <div className="mt-3 inline-flex w-fit items-center justify-center gap-1.5 rounded-xl bg-surface-tertiary px-3 py-2 text-xs leading-[18px] text-text-secondary">
-                        <Loader2 className="size-3.5 animate-spin" />
-                        <span>thinking…</span>
+                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                     </div>
                 )}
 
@@ -461,6 +497,8 @@ function AssistantBubble({
                     <AgentTimeline
                         events={message.events || []}
                         isStreaming={!!isStreaming && isLatest}
+                        finalTextIdx={finalTextIdx}
+                        messageId={message.messageId}
                     />
                 ) : (
                     <>

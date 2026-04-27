@@ -85,6 +85,10 @@ export interface AgentToolCall {
     inflight?: boolean;
     /** Epoch ms when the start event arrived; lets the UI compute a live duration. */
     started_at?: number;
+    /** Epoch ms when the end event arrived. Used for wall-clock group span on reload. */
+    ended_at?: number;
+    /** Final duration; backend or frontend may stamp it. */
+    duration_ms?: number;
 }
 
 // Unified ordered event — one per thinking segment or tool call in arrival order.
@@ -94,10 +98,18 @@ export type AgentEvent =
     | {
           type: "thinking";
           content: string;
+          /** Epoch ms when the first delta arrived. */
+          started_at?: number;
+          /** Epoch ms when the `agent_thinking/end` event arrived. */
+          ended_at?: number;
           /** Final duration; absent while the segment is still streaming. */
           duration_ms?: number;
       }
-    | ({ type: "tool_call" } & AgentToolCall);
+    | ({ type: "tool_call" } & AgentToolCall)
+    | {
+          type: "text";
+          content: string;
+      };
 
 export interface ChatMessage {
     messageId: string;

@@ -1191,12 +1191,24 @@ async def _agent_stream_chat_completion(
 
         def close_thinking() -> int | None:
             """Finalise the open thinking event (if any). Returns its duration
-            in ms, or None when no segment was open. Caller yields the SSE."""
+            in ms, or None when no segment was open. Caller yields the SSE.
+
+            Uses a single time snapshot so that
+            `events[idx]['started_at'] + duration_ms == events[idx]['ended_at']`
+            holds (modulo the rare case where started_at was missing)."""
             nonlocal current_thinking_idx, current_thinking_start
             if current_thinking_idx is None:
                 return None
-            duration_ms = int((time.time() - (current_thinking_start or 0)) * 1000)
-            events[current_thinking_idx]['duration_ms'] = duration_ms
+            now = time.time()
+            ended_ms = int(now * 1000)
+            ev = events[current_thinking_idx]
+            started_ms = ev.get('started_at')
+            if started_ms is not None:
+                duration_ms = max(0, ended_ms - started_ms)
+            else:
+                duration_ms = max(0, int((now - (current_thinking_start or now)) * 1000))
+            ev['duration_ms'] = duration_ms
+            ev['ended_at'] = ended_ms
             current_thinking_idx = None
             current_thinking_start = None
             return duration_ms
@@ -1238,7 +1250,15 @@ async def _agent_stream_chat_completion(
                     'args': {},
                 }
                 yield _sse_resp('agent_tool_call', 'start', start_payload, conversation_id)
-                end_payload = {**start_payload, 'results': [], 'error': f['error']}
+                now_ms = int(time.time() * 1000)
+                end_payload = {
+                    **start_payload,
+                    'results': [],
+                    'error': f['error'],
+                    'started_at': now_ms,
+                    'ended_at': now_ms,
+                    'duration_ms': 0,
+                }
                 events.append({'type': 'tool_call', **end_payload})
                 yield _sse_resp('agent_tool_call', 'end', end_payload, conversation_id)
 
@@ -1385,7 +1405,12 @@ async def _agent_stream_chat_completion(
                         )
                         if reasoning:
                             if current_thinking_idx is None:
-                                events.append({'type': 'thinking', 'content': ''})
+                                start_ms = int(time.time() * 1000)
+                                events.append({
+                                    'type': 'thinking',
+                                    'content': '',
+                                    'started_at': start_ms,
+                                })
                                 current_thinking_idx = len(events) - 1
                                 current_thinking_start = time.time()
                             events[current_thinking_idx]['content'] += reasoning
@@ -1403,6 +1428,10 @@ async def _agent_stream_chat_completion(
                                     conversation_id,
                                 )
                             final_msg += text
+                            if events and events[-1].get('type') == 'text':
+                                events[-1]['content'] = events[-1].get('content', '') + text
+                            else:
+                                events.append({'type': 'text', 'content': text})
                             yield _sse_resp(
                                 'agent_answer', 'stream', {'msg': text}, conversation_id,
                             )
@@ -1430,6 +1459,7 @@ async def _agent_stream_chat_completion(
                             'display_name': meta['display_name'],
                             'tool_type': meta['tool_type'],
                             'args': (ev.get('data') or {}).get('input', {}),
+                            'started_at': int(time.time() * 1000),
                         }
                         events.append(tool_event)
                         inflight_tool_idx[tc_id] = len(events) - 1
@@ -1444,11 +1474,15 @@ async def _agent_stream_chat_completion(
                         tc_id = str(ev.get('run_id') or '')
                         idx = inflight_tool_idx.pop(tc_id, None)
                         raw_output = (ev.get('data') or {}).get('output')
+                        ended_ms = int(time.time() * 1000)
                         if idx is not None:
                             tool_event = events[idx]
                             results = _parse_tool_results(raw_output, tool_event.get('tool_name'))
                             tool_event['results'] = results
                             tool_event['error'] = None
+                            tool_event['ended_at'] = ended_ms
+                            if tool_event.get('started_at') is not None:
+                                tool_event['duration_ms'] = max(0, ended_ms - tool_event['started_at'])
                             payload = {k: v for k, v in tool_event.items() if k != 'type'}
                         else:
                             # Edge case: tool_end without a matching start. Synthesise one.
@@ -1462,6 +1496,9 @@ async def _agent_stream_chat_completion(
                                 'args': {},
                                 'results': results,
                                 'error': None,
+                                'started_at': ended_ms,
+                                'ended_at': ended_ms,
+                                'duration_ms': 0,
                             }
                             events.append(tool_event)
                             payload = {k: v for k, v in tool_event.items() if k != 'type'}
@@ -1478,7 +1515,12 @@ async def _agent_stream_chat_completion(
                     )
                     if reasoning:
                         if current_thinking_idx is None:
-                            events.append({'type': 'thinking', 'content': ''})
+                            start_ms = int(time.time() * 1000)
+                            events.append({
+                                'type': 'thinking',
+                                'content': '',
+                                'started_at': start_ms,
+                            })
                             current_thinking_idx = len(events) - 1
                             current_thinking_start = time.time()
                         events[current_thinking_idx]['content'] += reasoning
@@ -1496,6 +1538,10 @@ async def _agent_stream_chat_completion(
                                 conversation_id,
                             )
                         final_msg += text
+                        if events and events[-1].get('type') == 'text':
+                            events[-1]['content'] = events[-1].get('content', '') + text
+                        else:
+                            events.append({'type': 'text', 'content': text})
                         yield _sse_resp(
                             'agent_answer', 'stream', {'msg': text}, conversation_id,
                         )
@@ -1512,6 +1558,25 @@ async def _agent_stream_chat_completion(
 
         # Finalise any dangling thinking event (e.g. stream interrupted mid-reasoning).
         close_thinking()
+
+        # Force-finalise any tool events that never received on_tool_end (e.g.,
+        # the langgraph stream raised mid-tool). Without this, the persisted
+        # row would carry tool_call entries with only started_at — they'd
+        # render as perpetually "in-flight" on history reload.
+        if inflight_tool_idx:
+            now_ms = int(time.time() * 1000)
+            for tc_id, idx in inflight_tool_idx.items():
+                if 0 <= idx < len(events):
+                    ev = events[idx]
+                    if ev.get('ended_at') is None:
+                        ev['ended_at'] = now_ms
+                        if ev.get('error') is None:
+                            ev['error'] = error_msg or 'tool did not complete'
+                        if 'results' not in ev:
+                            ev['results'] = []
+                        if ev.get('started_at') is not None:
+                            ev['duration_ms'] = max(0, now_ms - ev['started_at'])
+            inflight_tool_idx.clear()
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
         db_content: dict = {'msg': final_msg, 'events': events}

@@ -160,7 +160,11 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                         const delta: string = message?.content ?? "";
                         if (!delta) return;
                         if (currentThinkingIdx == null) {
-                            events.push({ type: "thinking", content: "" });
+                            events.push({
+                                type: "thinking",
+                                content: "",
+                                started_at: Date.now(),
+                            });
                             currentThinkingIdx = events.length - 1;
                         }
                         const ev = events[currentThinkingIdx] as Extract<
@@ -181,6 +185,7 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                                 { type: "thinking" }
                             >;
                             ev.duration_ms = durationMs;
+                            ev.ended_at = Date.now();
                             currentThinkingIdx = null;
                         }
                         emitAgent({ events: snapshot() });
@@ -217,6 +222,7 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                                     AgentEvent,
                                     { type: "tool_call" }
                                 >;
+                                const endedAt = Date.now();
                                 events[idx] = {
                                     ...prev,
                                     display_name:
@@ -226,6 +232,11 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                                     results: message?.results,
                                     error: message?.error ?? null,
                                     inflight: false,
+                                    ended_at: endedAt,
+                                    duration_ms:
+                                        prev.started_at != null
+                                            ? endedAt - prev.started_at
+                                            : prev.duration_ms,
                                 };
                             }
                             const tn =
@@ -242,7 +253,15 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                     if (category === "agent_answer") {
                         if (type === "stream") {
                             const delta = message?.msg;
-                            if (delta) responseText += delta;
+                            if (delta) {
+                                responseText += delta;
+                                const last = events[events.length - 1];
+                                if (last && last.type === "text") {
+                                    last.content += delta;
+                                } else {
+                                    events.push({ type: "text", content: delta });
+                                }
+                            }
                         } else if (type === "end") {
                             if (message_id) currentMessageId = String(message_id);
                             // `message.msg` on the end event is the final full
