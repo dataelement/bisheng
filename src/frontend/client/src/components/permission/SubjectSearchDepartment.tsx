@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
-import { getDepartmentTree, getResourceGrantDepartments } from "~/api/permission";
+import { getResourceGrantDepartments } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,8 +18,8 @@ interface DepartmentNode {
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
-  resourceType?: ResourceType;
-  resourceId?: string;
+  resourceType: ResourceType;
+  resourceId: string;
   includeChildren: boolean;
   onIncludeChildrenChange: (v: boolean) => void;
   disabledIds?: number[];
@@ -76,13 +76,9 @@ export function SubjectSearchDepartment({
 
   useEffect(() => {
     const controller = new AbortController();
-    const request =
-      resourceType && resourceId
-        ? getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
-        : getDepartmentTree({ signal: controller.signal });
 
     setLoading(true);
-    request
+    getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
       .then((res) => {
         if (!controller.signal.aborted && res) setTree(res);
       })

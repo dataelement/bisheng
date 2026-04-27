@@ -1,20 +1,17 @@
 import { PermissionListTab } from "@/components/bs-comp/permission/PermissionListTab";
-import { getDepartmentTreeApi } from "@/controllers/API/department";
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
+  getResourceGrantDepartmentsApi,
   getResourcePermissions,
 } from "@/controllers/API/permission";
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/controllers/API/department", () => ({
-  getDepartmentTreeApi: vi.fn(),
-}));
-
 vi.mock("@/controllers/API/permission", () => ({
   authorizeResource: vi.fn(),
   getGrantableRelationModelsApi: vi.fn(),
+  getResourceGrantDepartmentsApi: vi.fn(),
   getResourcePermissions: vi.fn(),
 }));
 
@@ -39,7 +36,7 @@ vi.mock("@/components/bs-ui/dropdownMenu", () => ({
   ),
 }));
 
-const mockedGetDepartmentTreeApi = vi.mocked(getDepartmentTreeApi);
+const mockedGetResourceGrantDepartmentsApi = vi.mocked(getResourceGrantDepartmentsApi);
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetResourcePermissions = vi.mocked(getResourcePermissions);
 const mockedAuthorizeResource = vi.mocked(authorizeResource);
@@ -48,7 +45,7 @@ describe("PermissionListTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null as any);
-    mockedGetDepartmentTreeApi.mockResolvedValue([]);
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([]);
     mockedGetGrantableRelationModelsApi.mockResolvedValue([
       {
         id: "viewer",
@@ -86,6 +83,10 @@ describe("PermissionListTab", () => {
     });
     expect(mockedGetGrantableRelationModelsApi).toHaveBeenCalledTimes(1);
     expect(mockedGetGrantableRelationModelsApi).toHaveBeenCalledWith(
+      "knowledge_space",
+      "3215",
+    );
+    expect(mockedGetResourceGrantDepartmentsApi).toHaveBeenCalledWith(
       "knowledge_space",
       "3215",
     );
@@ -239,6 +240,20 @@ describe("PermissionListTab", () => {
   });
 
   it("deletes department include-children grants across subtree and exact variants", async () => {
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
+      {
+        id: 7,
+        dept_id: "BS@7",
+        name: "研发部",
+        parent_id: null,
+        path: "/7/",
+        sort_order: 0,
+        source: "local",
+        status: "active",
+        member_count: 0,
+        children: [],
+      },
+    ] as any);
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "department",

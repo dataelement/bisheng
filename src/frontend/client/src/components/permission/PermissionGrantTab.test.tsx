@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import {
   authorizeResource,
-  getDepartmentTree,
   getGrantableRelationModels,
   getResourcePermissions,
   getResourceGrantDepartments,
@@ -21,7 +20,6 @@ jest.mock("~/Providers", () => ({
 
 jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
-  getDepartmentTree: jest.fn(),
   getGrantableRelationModels: jest.fn(),
   getResourcePermissions: jest.fn(),
   getResourceGrantDepartments: jest.fn(),
@@ -30,7 +28,6 @@ jest.mock("~/api/permission", () => ({
 }));
 
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
-const mockedGetDepartmentTree = jest.mocked(getDepartmentTree);
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
 const mockedGetResourcePermissions = jest.mocked(getResourcePermissions);
 const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
@@ -49,16 +46,6 @@ describe("PermissionGrantTab", () => {
         relation: "viewer",
         permissions: [],
         is_system: true,
-      },
-    ]);
-    mockedGetDepartmentTree.mockResolvedValue([
-      {
-        id: 7,
-        dept_id: "dept-7",
-        name: "测试部门",
-        parent_id: null,
-        member_count: 3,
-        children: [],
       },
     ]);
     mockedGetResourceGrantUsers.mockResolvedValue([]);
