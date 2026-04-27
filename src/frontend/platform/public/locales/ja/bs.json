@@ -190,6 +190,7 @@
     "userGroupList": "ユーザーグループ一覧",
     "confirmText": "削除しますか",
     "roleName": "ロール名",
+    "roleNameInputPlaceholder": "ロール名を入力（同一スコープ内で重複不可）",
     "roleType": "ロール種別",
     "roleScope": "適用範囲",
     "scopeGlobal": "グローバル",

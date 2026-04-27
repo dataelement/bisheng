@@ -11,6 +11,11 @@ $gateway = Join-Path (Split-Path $repoRoot -Parent) "bisheng-gateway"
 if (-not (Test-Path (Join-Path $gateway "pom.xml"))) {
     $gateway = Join-Path $repoRoot "..\bisheng-gateway"
 }
+# Common Windows layout: %USERPROFILE%\Desktop\gateway\bisheng-gateway
+$gwDesktop = Join-Path $env:USERPROFILE "Desktop\gateway\bisheng-gateway"
+if (-not (Test-Path (Join-Path $gateway "pom.xml")) -and (Test-Path (Join-Path $gwDesktop "pom.xml"))) {
+    $gateway = $gwDesktop
+}
 
 $javaExe = "java"
 try { $javaExe = (Get-Command java -ErrorAction Stop).Source } catch { }
@@ -30,24 +35,33 @@ if (-not (Test-Path $py)) {
     Write-Error "Missing $py — run: cd src/backend ; uv sync"
 }
 
-# 子进程内自行设置 $env:…（外层用反引号避免提前展开）
-$apiCmd = "& { Set-Location '$backend'; `$env:config='config.yaml'; `$env:BISHENG_PRO='true'; `$env:BS_SSO_SYNC__GATEWAY_HMAC_SECRET='bisheng-local-hmac-20260422'; & '$py' -m uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-access-log }"
+# 子进程继承当前会话环境（避免 Start-Process -Command 长字符串在部分环境下 ArgumentList 校验失败）
+$env:config = "config.yaml"
+$env:BISHENG_PRO = "true"
+$env:BS_SSO_SYNC__GATEWAY_HMAC_SECRET = "bisheng-local-hmac-20260422"
+
 Write-Host "==> Start bisheng API (new window)"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $apiCmd -WindowStyle Normal
+Start-Process -FilePath $py -WorkingDirectory $backend -ArgumentList @(
+  "-m", "uvicorn", "bisheng.main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1", "--no-access-log"
+) -WindowStyle Normal
 
 Start-Sleep -Seconds 10
 
-$celeryCmd = "& { Set-Location '$backend'; `$env:config='config.yaml'; `$env:BISHENG_PRO='true'; `$env:BS_SSO_SYNC__GATEWAY_HMAC_SECRET='bisheng-local-hmac-20260422'; & '$py' -m celery -A bisheng.worker.main worker -l info -c 4 -P threads -Q knowledge_celery,workflow_celery,celery -n dev@%COMPUTERNAME% }"
+$celeryNode = "dev@{0}" -f $env:COMPUTERNAME
 Write-Host "==> Start Celery worker (new window)"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $celeryCmd -WindowStyle Normal
+Start-Process -FilePath $py -WorkingDirectory $backend -ArgumentList @(
+  "-m", "celery", "-A", "bisheng.worker.main", "worker", "-l", "info", "-c", "4", "-P", "threads",
+  "-Q", "knowledge_celery,workflow_celery,celery", "-n", $celeryNode
+) -WindowStyle Normal
 
 Start-Sleep -Seconds 3
 
 $jar = Join-Path $gateway "target\gateway-0.0.1-SNAPSHOT.jar"
 if (Test-Path $jar) {
-    $gwCmd = "& { Set-Location '$gateway'; & '$javaExe' -jar '.\target\gateway-0.0.1-SNAPSHOT.jar' --spring.profiles.active=local --server.port=8180 }"
     Write-Host "==> Start Gateway (new window)"
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", $gwCmd -WindowStyle Normal
+    Start-Process -FilePath $javaExe -WorkingDirectory $gateway -ArgumentList @(
+      "-jar", ".\target\gateway-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=local", "--server.port=8180"
+    ) -WindowStyle Normal
 } else {
     Write-Warning "Gateway jar not found: $jar"
 }

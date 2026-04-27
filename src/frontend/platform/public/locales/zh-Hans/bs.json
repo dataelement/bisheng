@@ -191,6 +191,7 @@
     "userGroupList": "用户组列表",
     "confirmText": "是否删除",
     "roleName": "角色名称",
+    "roleNameInputPlaceholder": "请输入角色名称（同一个作用域不可重复）",
     "roleType": "角色类型",
     "roleScope": "作用域",
     "scopeGlobal": "全局",

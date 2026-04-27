@@ -667,7 +667,13 @@ export default function Roles() {
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <div>
               <Label>{t("system.roleName")}</Label>
-              <Input value={roleName} onChange={(e) => setRoleName(e.target.value)} className="mt-1" maxLength={128} />
+              <Input
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+                className="mt-1"
+                maxLength={128}
+                placeholder={t("system.roleNameInputPlaceholder")}
+              />
             </div>
 
             <div>

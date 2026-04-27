@@ -115,15 +115,14 @@ class DeptUpsertService:
             parent_id = parent.id
             parent_path = parent.path or ''
 
-        # ``path`` convention (F002): /id1/id2/.../parent_id/ — always
-        # terminated with '/'. For a new row we stamp a provisional path
-        # and leave the definitive ``/parent_path + self_id + '/'`` update
-        # to the existing F002 path helpers when path-rewrites land.
+        # ``path`` convention (F002): /id1/id2/.../self_id/ — always
+        # terminated with '/'. The DAO appends the row's own id after insert
+        # or when updating an existing row.
         if parent_id is None:
-            computed_path = '/'
+            computed_path = ''
         else:
             base = parent_path if parent_path.endswith('/') else parent_path + '/'
-            computed_path = f'{base}{parent_id}/'
+            computed_path = base
 
         return await DepartmentDao.aupsert_by_external_id(
             source=source,

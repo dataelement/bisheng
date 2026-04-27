@@ -589,7 +589,7 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
       <div className="font-bold mt-4">
         <p className="text-xl mb-4">{t('system.roleName')}</p>
         <Input
-          placeholder={t('system.roleName')}
+          placeholder={t('system.roleNameInputPlaceholder')}
           value={form.name}
           onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
           maxLength={50}

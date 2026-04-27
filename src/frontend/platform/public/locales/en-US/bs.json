@@ -187,6 +187,7 @@
     "roleList": "Role List",
     "confirmText": "Are you sure you want to delete",
     "roleName": "Role Name",
+    "roleNameInputPlaceholder": "Enter role name (must be unique within the same scope)",
     "roleType": "Type",
     "roleScope": "Scope",
     "scopeGlobal": "Global",

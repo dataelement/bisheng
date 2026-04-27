@@ -19,9 +19,9 @@ See spec.md §5.1 / §5.2. Field semantics:
   department is a direct child of Root (top-level).
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserAttrsDTO(BaseModel):
@@ -139,6 +139,38 @@ class DepartmentsSyncRequest(BaseModel):
             'item carries no ts of its own.'
         ),
     )
+    #: When True (Gateway full WeCom tree), archive active departments of the
+    #: same ``row_source`` whose ``external_id`` is missing from ``upsert``.
+    full_snapshot: bool = Field(
+        default=False,
+        description=(
+            'Authoritative full tree: after upsert/remove, archive synced '
+            'departments absent from upsert (PRD §5 absent third-party IDs).'
+        ),
+    )
+    #: WeCom ``department/list`` ids (flat). When set, absent reconcile uses
+    #: this set instead of ``upsert`` external_ids so deletes are detected
+    #: even if the tree DFS omitted nodes.
+    snapshot_external_ids: Optional[List[str]] = Field(
+        default=None,
+        description='Authoritative flat WeCom department id list for absent reconcile.',
+    )
+
+    @field_validator('snapshot_external_ids', mode='before')
+    @classmethod
+    def _normalize_snapshot_external_ids(
+        cls, v: Optional[List[Union[str, int]]],
+    ) -> Optional[List[str]]:
+        if v is None:
+            return None
+        out: List[str] = []
+        for x in v:
+            if x is None:
+                continue
+            s = str(x).strip()
+            if s:
+                out.append(s)
+        return out
 
 
 class GatewayWecomOrgSyncRequest(BaseModel):

@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, Request
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.sso_sync.domain.constants import WECOM_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
+    DepartmentsSyncRequest,
     GatewayWecomOrgSyncRequest,
     GatewayWecomOrgSyncResult,
+    LoginSyncRequest,
 )
 from bisheng.sso_sync.domain.services.departments_sync_service import (
     DepartmentsSyncService,
@@ -25,6 +27,38 @@ from bisheng.sso_sync.domain.services.org_sync_log_writer import (
 from bisheng.utils import get_request_ip
 
 router = APIRouter(tags=['SSO Sync'])
+
+
+def _merge_member_department_ids_into_snapshot(
+    departments: DepartmentsSyncRequest,
+    members: list[LoginSyncRequest],
+) -> DepartmentsSyncRequest:
+    """Ensure primary/secondary dept ids from synced members stay in the flat snapshot.
+
+    Defensive: empty-middle departments with no members would not appear here, but
+    any dept still referenced by an included member cannot be absent-reconciled away.
+    """
+    refs: set[str] = set()
+    for m in members:
+        if m.primary_dept_external_id:
+            s = str(m.primary_dept_external_id).strip()
+            if s:
+                refs.add(s)
+        for s in m.secondary_dept_external_ids or []:
+            if not s:
+                continue
+            t = str(s).strip()
+            if t:
+                refs.add(t)
+    if not refs:
+        return departments
+    snap = list(departments.snapshot_external_ids or [])
+    have = {str(x).strip() for x in snap if x is not None and str(x).strip()}
+    for r in refs:
+        if r not in have:
+            snap.append(r)
+            have.add(r)
+    return departments.model_copy(update={'snapshot_external_ids': snap})
 
 
 @router.post(
@@ -44,8 +78,15 @@ async def gateway_wecom_org_sync(
     request_ip = get_request_ip(request)
     buffer = OrgSyncLogBuffer()
 
-    dept_result = await DepartmentsSyncService.execute(
+    # Always treat Gateway WeCom push as authoritative full tree (PRD §5 absent
+    # ids), even if an older gateway JAR omits ``full_snapshot`` in JSON.
+    dept_augmented = _merge_member_department_ids_into_snapshot(
         payload.departments,
+        payload.members,
+    )
+    dept_payload = dept_augmented.model_copy(update={'full_snapshot': True})
+    dept_result = await DepartmentsSyncService.execute(
+        dept_payload,
         request_ip=request_ip,
         row_source=WECOM_SOURCE,
     )
