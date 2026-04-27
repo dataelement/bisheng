@@ -35,7 +35,6 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
     const canEdit = canEditProp ?? (assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false)
     const canPublish = assistantId ? hasPermissionId(permissions, assistantId, 'publish_app') : false
     const canUnpublish = assistantId ? hasPermissionId(permissions, assistantId, 'unpublish_app') : false
-    {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
     const [permDialogOpen, setPermDialogOpen] = useState(false);
 
@@ -101,14 +100,15 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
                 </Button>
             )}
             <Button variant="outline" className="px-10" type="button" disabled={!canEdit} onClick={onSave}>{t('build.save')}</Button>
-            <Button
-                type="submit"
-                className="px-10"
-                disabled={assistantState.status === OnlineState.OnLine ? !canUnpublish : !canPublish}
-                onClick={() => onLine(assistantState.status === OnlineState.OffLine)}
-            >
-                {assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}
-            </Button>
+            {(assistantState.status === OnlineState.OnLine ? canUnpublish : canPublish) ? (
+                <Button
+                    type="submit"
+                    className="px-10"
+                    onClick={() => onLine(assistantState.status === OnlineState.OffLine)}
+                >
+                    {assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}
+                </Button>
+            ) : null}
             {canManage && assistantState?.id ? (
                 <PermissionDialog
                     open={permDialogOpen}
