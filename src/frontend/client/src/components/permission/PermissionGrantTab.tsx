@@ -24,6 +24,12 @@ import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
+const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: "owner", name: "所有者", relation: "owner" },
+  { id: "viewer", name: "可查看", relation: "viewer" },
+  { id: "editor", name: "可编辑", relation: "editor" },
+  { id: "manager", name: "可管理", relation: "manager" },
+];
 const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
   user: [],
   department: [],
@@ -36,6 +42,7 @@ interface PermissionGrantTabProps {
   onSuccess: () => void;
   prefetchedGrantableModels?: RelationModel[];
   prefetchedGrantableModelsLoaded?: boolean;
+  prefetchedUseDefaultModels?: boolean;
   skipGrantableModelsRequest?: boolean;
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the grant form to the given subject type.
@@ -51,6 +58,7 @@ export function PermissionGrantTab({
   onSuccess,
   prefetchedGrantableModels,
   prefetchedGrantableModelsLoaded = false,
+  prefetchedUseDefaultModels = false,
   skipGrantableModelsRequest = false,
   fixedSubjectType,
   includeChildren: includeChildrenProp,
@@ -71,18 +79,28 @@ export function PermissionGrantTab({
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
 
-  const applyRelationModels = useCallback((relationModels: RelationModel[] | undefined) => {
-    const options: RelationModelOption[] = (Array.isArray(relationModels) ? relationModels : []).map((m) => ({
-      id: m.id,
-      name: m.is_system
-        ? localize(`com_permission.level_${m.relation}`)
-        : m.name,
-      relation: m.relation as RelationLevel,
-    }));
+  const applyRelationModels = useCallback((
+    relationModels: RelationModel[] | undefined,
+    fallbackToDefault: boolean,
+  ) => {
+    const options: RelationModelOption[] = fallbackToDefault
+      ? DEFAULT_MODELS.map((model) => ({
+        ...model,
+        name: localize(`com_permission.level_${model.relation}`),
+      }))
+      : (Array.isArray(relationModels) ? relationModels : []).map((m) => ({
+        id: m.id,
+        name: m.is_system
+          ? localize(`com_permission.level_${m.relation}`)
+          : m.name,
+        relation: m.relation as RelationLevel,
+      }));
     if (options.length) {
       setModels(options);
       setSelectedModelId((current) => (
-        options.some((option) => option.id === current) ? current : options[0].id
+        options.some((option) => option.id === current)
+          ? current
+          : options.find((option) => option.relation === "viewer")?.id ?? options[0].id
       ));
       return;
     }
@@ -143,21 +161,22 @@ export function PermissionGrantTab({
   useEffect(() => {
     if (skipGrantableModelsRequest) {
       if (!prefetchedGrantableModelsLoaded) return;
-      applyRelationModels(prefetchedGrantableModels);
+      applyRelationModels(prefetchedGrantableModels, prefetchedUseDefaultModels);
       return;
     }
 
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
-        applyRelationModels(res);
+        applyRelationModels(res, false);
       })
       .catch(() => {
-        applyRelationModels(undefined);
+        applyRelationModels(undefined, false);
       });
   }, [
     applyRelationModels,
     prefetchedGrantableModels,
     prefetchedGrantableModelsLoaded,
+    prefetchedUseDefaultModels,
     resourceId,
     resourceType,
     skipGrantableModelsRequest,

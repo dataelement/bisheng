@@ -40,7 +40,9 @@ export interface RelationModel {
   id: string;
   name: string;
   relation: RelationLevel;
+  grant_tier?: "owner" | "manager" | "usage";
   permissions: string[];
+  permissions_explicit?: boolean;
   is_system: boolean;
 }
 

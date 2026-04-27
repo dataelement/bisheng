@@ -61,6 +61,7 @@ export function KnowledgeSpaceShareDialog({
     const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
+    const [useDefaultModels, setUseDefaultModels] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -84,10 +85,12 @@ export function KnowledgeSpaceShareDialog({
         setGrantableModelsLoaded(false);
         getGrantableRelationModels(resourceType, resourceId)
             .then((res) => {
+                setUseDefaultModels(false);
                 setGrantableModels(Array.isArray(res) ? res : []);
                 setGrantableModelsLoaded(true);
             })
             .catch(() => {
+                setUseDefaultModels(false);
                 setGrantableModels([]);
                 setGrantableModelsLoaded(true);
             });
@@ -207,6 +210,7 @@ export function KnowledgeSpaceShareDialog({
                     fixedSubjectType={currentSubjectType}
                     prefetchedGrantableModels={grantableModels}
                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                    prefetchedUseDefaultModels={useDefaultModels}
                     skipGrantableModelsRequest
                 />
             </TabsContent>
@@ -283,6 +287,7 @@ export function KnowledgeSpaceShareDialog({
                                 onSuccess={handleGrantSuccess}
                                 prefetchedGrantableModels={grantableModels}
                                 prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                                prefetchedUseDefaultModels={useDefaultModels}
                                 skipGrantableModelsRequest
                                 fixedSubjectType={grantSubjectType}
                                 includeChildren={grantIncludeChildren}

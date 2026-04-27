@@ -2,6 +2,7 @@ import { useToastContext, useConfirm } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getResourceGrantDepartments,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -22,6 +23,7 @@ import { Building2, ChevronDown, Loader2, RotateCcw, Search, Trash2, User, Users
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
 
 const SUBJECT_ICONS = {
@@ -39,6 +41,7 @@ interface PermissionListTabProps {
   refreshKey: number;
   prefetchedGrantableModels?: RelationModel[];
   prefetchedGrantableModelsLoaded?: boolean;
+  prefetchedUseDefaultModels?: boolean;
   skipGrantableModelsRequest?: boolean;
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the list to the given subject type.
@@ -58,6 +61,7 @@ export function PermissionListTab({
   refreshKey,
   prefetchedGrantableModels,
   prefetchedGrantableModelsLoaded = false,
+  prefetchedUseDefaultModels = false,
   skipGrantableModelsRequest = false,
   fixedSubjectType,
 }: PermissionListTabProps) {
@@ -71,9 +75,28 @@ export function PermissionListTab({
   const [grantableModels, setGrantableModels] = useState<RelationModel[]>(
     prefetchedGrantableModels || [],
   );
+  const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels);
+  const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map());
+  const [userSelectedTab, setUserSelectedTab] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isListScrolling, setIsListScrolling] = useState(false);
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+      .then((res) => {
+        if (!controller.signal.aborted && Array.isArray(res)) {
+          setDeptPathById(buildDepartmentPathLabelMap(res));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setDeptPathById(new Map());
+        }
+      });
+    return () => controller.abort();
+  }, [refreshKey, resourceId, resourceType]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -94,6 +117,7 @@ export function PermissionListTab({
 
   useEffect(() => {
     setListTab(fixedSubjectType ?? "user");
+    setUserSelectedTab(false);
     setSearchQuery("");
   }, [resourceId, fixedSubjectType]);
 
@@ -107,17 +131,23 @@ export function PermissionListTab({
     if (skipGrantableModelsRequest) {
       if (!prefetchedGrantableModelsLoaded) return;
       setGrantableModels(prefetchedGrantableModels || []);
+      setUseDefaultModels(prefetchedUseDefaultModels);
       return;
     }
 
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
+        setUseDefaultModels(false);
         setGrantableModels(Array.isArray(res) ? res : []);
       })
-      .catch(() => {});
+      .catch(() => {
+        setUseDefaultModels(false);
+        setGrantableModels([]);
+      });
   }, [
     prefetchedGrantableModels,
     prefetchedGrantableModelsLoaded,
+    prefetchedUseDefaultModels,
     refreshKey,
     resourceId,
     resourceType,
@@ -125,12 +155,14 @@ export function PermissionListTab({
   ]);
 
   const grantableModelOptions = useMemo<RelationModelOption[]>(() => {
+    if (useDefaultModels) return DEFAULT_MODELS;
+
     return (grantableModels || []).map((m) => ({
       id: m.id,
       name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
       relation: m.relation as RelationLevel,
     }));
-  }, [grantableModels, localize]);
+  }, [grantableModels, localize, useDefaultModels]);
 
   const displayModels = useMemo<RelationModelOption[]>(() => {
     const opts = [...grantableModelOptions];
@@ -156,7 +188,27 @@ export function PermissionListTab({
     [entries],
   );
 
+  useEffect(() => {
+    if (fixedSubjectType || userSelectedTab || entries.length === 0 || subjectEntries.length > 0) return;
+    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((subjectType) =>
+      entries.some((entry) => entry.subject_type === subjectType),
+    );
+    if (firstNonEmptyTab) setListTab(firstNonEmptyTab);
+  }, [entries, fixedSubjectType, subjectEntries.length, userSelectedTab]);
+
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const getEntryDisplayName = useCallback(
+    (entry: PermissionEntry) => {
+      if (entry.subject_type === "department") {
+        return deptPathById.get(entry.subject_id)
+          ?? entry.subject_name
+          ?? `${entry.subject_type}:${entry.subject_id}`;
+      }
+      return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+    },
+    [deptPathById],
+  );
 
   const visibleEntries = useMemo(() => {
     if (!normalizedSearchQuery) {
@@ -164,7 +216,7 @@ export function PermissionListTab({
     }
 
     return subjectEntries.filter((entry) => {
-      const name = entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+      const name = getEntryDisplayName(entry);
       const groupNames = entry.subject_group_names?.join(" ") ?? "";
       const memberNames = entry.subject_member_names?.join(" ") ?? "";
       const includeChildrenText =
@@ -175,7 +227,7 @@ export function PermissionListTab({
         .toLowerCase()
         .includes(normalizedSearchQuery);
     });
-  }, [localize, normalizedSearchQuery, subjectEntries]);
+  }, [getEntryDisplayName, localize, normalizedSearchQuery, subjectEntries]);
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
     const model = grantableModelOptions.find((item) => item.id === modelId);
@@ -320,9 +372,6 @@ export function PermissionListTab({
     return map[type];
   };
 
-  const getEntryDisplayName = (entry: PermissionEntry) =>
-    entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
-
   const getPermissionLabel = (entry: PermissionEntry) => {
     const currentModelId = entry.model_id || entry.relation;
     return (
@@ -407,6 +456,7 @@ export function PermissionListTab({
                   : "text-gray-500 hover:text-gray-700"
               }`}
               onClick={() => {
+                setUserSelectedTab(true);
                 setListTab(subjectType);
                 setSearchQuery("");
               }}
