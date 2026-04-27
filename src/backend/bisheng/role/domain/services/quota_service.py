@@ -15,7 +15,7 @@ import functools
 import logging
 from typing import Optional, Union
 
-from bisheng.common.errcode.role import QuotaExceededError, QuotaConfigInvalidError
+from bisheng.common.errcode.role import QuotaConfigInvalidError
 from bisheng.common.errcode.tenant_quota import (
     TenantQuotaExceededError,
     TenantRoleQuotaExceededError,
@@ -60,7 +60,14 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     # KI-01 fix: channel has no `status` column either; removed filter to
     # avoid silent 0 counts via _count_resource's try/except.
     'channel': "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
-    'channel_subscribe': "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
+    'channel_subscribe': (
+        "SELECT COUNT(*) FROM space_channel_member scm "
+        "INNER JOIN channel c ON c.id=scm.business_id "
+        "WHERE scm.business_type='CHANNEL' "
+        "AND scm.user_role IN ('MEMBER','ADMIN') "
+        "AND scm.status IN ('ACTIVE','PENDING') "
+        "AND {qualified_col}=:{param}"
+    ),
     'workflow': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=10 AND status!=0",
     'assistant': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=5 AND status!=0",
     # KI-01 fix: actual table is `t_gpts_tools` (t_ prefix); `gpts_tools`
@@ -509,7 +516,14 @@ class QuotaService:
             return 0
 
         param = 'id_val'
-        sql = template.format(col=col, param=param)
+        qualified_col = (
+            'scm.user_id'
+            if resource_type == 'channel_subscribe' and col == 'user_id'
+            else 'c.tenant_id'
+            if resource_type == 'channel_subscribe' and col == 'tenant_id'
+            else col
+        )
+        sql = template.format(col=col, qualified_col=qualified_col, param=param)
         try:
             async with get_async_db_session() as session:
                 result = await session.execute(text(sql), {param: val})

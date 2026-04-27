@@ -2,7 +2,6 @@ import { DelIcon } from '@/components/bs-icons';
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { generateUUID } from '@/components/bs-ui/utils';
-import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +22,14 @@ const predefinedRules = [
   { regexKey: '。', mode: 'after' },
   { regexKey: '\\.', mode: 'after' }
 ];
+
+const DragHandleIcon = () => (
+  <div className="grid h-4 w-4 grid-cols-2 gap-x-[3px] gap-y-[1px] text-[#94a3b8]">
+    {Array.from({ length: 6 }).map((_, index) => (
+      <span key={index} className="h-[2px] w-[2px] rounded-full bg-current" />
+    ))}
+  </div>
+);
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
   const { t } = useTranslation('knowledge');
@@ -67,7 +74,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   };
 
   return (
-    <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)]'>
+    <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.96fr)]'>
       <div className="flex min-w-0 flex-col gap-5">
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-[#374151]">{t('recommendedRules')}</h3>
@@ -91,20 +98,21 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-[#374151]">{t('addCustomRule')}</h3>
           <div className="flex items-center gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <span className="shrink-0 text-sm text-[#0f172a]">{t('in')}</span>
               <Input
                 value={customRegex}
                 onChange={(e) => setCustomRegex(e.target.value)}
                 placeholder={t('enterRegex')}
-                className='h-8 flex-1 border-[#ebecf0] bg-white'
+                boxClassName="min-w-0 flex-1"
+                className='h-8 min-w-0 w-full border-[#ebecf0] bg-white'
               />
-              <div className="inline-flex shrink-0 items-center rounded-md bg-[#f8f8f8] p-1">
+              <div className="inline-flex h-8 shrink-0 items-center rounded-[6px] bg-[#f8f8f8] p-[3px]">
                 {['before', 'after'].map((item) => (
                   <button
                     key={item}
                     type="button"
-                    className={`rounded-[4px] px-3 py-1 text-sm transition-colors ${position === item ? 'bg-primary/15 font-medium text-primary' : 'text-[#818181]'}`}
+                    className={`rounded-[4px] px-3 py-[2px] text-sm leading-[22px] transition-colors ${position === item ? 'bg-primary/15 font-medium text-primary' : 'text-[#818181]'}`}
                     onClick={() => setPosition(item)}
                   >
                     {item === 'before' ? t('before') : t('after')}
@@ -112,10 +120,10 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                 ))}
               </div>
               <span className="shrink-0 text-sm text-[#0f172a]">{t('split')}</span>
+              <Button onClick={handleAddCustomStrategy} className="h-8 shrink-0 rounded-md border-[#ebecf0] bg-white px-4 text-[#070038]" variant="outline">
+                {t('add')}
+              </Button>
             </div>
-            <Button onClick={handleAddCustomStrategy} className="h-8 shrink-0 rounded-md border-[#ebecf0] bg-white px-4 text-[#070038]" variant="outline">
-              {t('add')}
-            </Button>
           </div>
         </div>
       </div>
@@ -136,19 +144,19 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className="group my-1 flex items-center gap-2 rounded-[4px] border border-[#e4e8ee] bg-[#f2f5f8] px-2 py-1 text-sm"
+                          className="group my-1 flex h-8 items-center gap-2 rounded-[4px] border border-[#e4e8ee] bg-[#f2f5f8] px-[5px] py-px text-sm"
                         >
                           <div
                             {...provided.dragHandleProps}
                             className="flex h-5 w-5 shrink-0 cursor-grab items-center justify-center text-[#94a3b8] active:cursor-grabbing"
                           >
-                            <GripVertical className="size-4" />
+                            <DragHandleIcon />
                           </div>
                           <div className='flex min-w-0 flex-1 items-center gap-3 overflow-hidden'>
-                            <span className="shrink-0 text-sm text-[#0f172a]">
+                            <span className="shrink-0 text-sm leading-5 text-[#0f172a]">
                               {strategy.position === 'before' ? `✂️${strategy.regex}` : `${strategy.regex}✂️`}
                             </span>
-                            <span className='min-w-0 truncate text-xs text-[#4e5969]'>{strategy.rule}</span>
+                            <span className='min-w-0 truncate text-sm text-[#4e5969]'>{strategy.rule}</span>
                           </div>
                           <div className="flex items-center">
                             <DelIcon

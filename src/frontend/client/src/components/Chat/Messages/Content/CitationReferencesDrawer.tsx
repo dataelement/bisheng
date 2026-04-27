@@ -392,7 +392,7 @@ export default function CitationReferencesDrawer({
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
   useEffect(() => {
-    if (!isNarrowLayout || !isOpen) {
+    if (!isNarrowLayout || !isOpen || !isFullBleedMobile) {
       return;
     }
 
@@ -400,7 +400,7 @@ export default function CitationReferencesDrawer({
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [isNarrowLayout, isOpen, setChatMobileNavHidden]);
+  }, [isNarrowLayout, isOpen, isFullBleedMobile, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!isOpen && !panelOnly) {

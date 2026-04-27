@@ -63,8 +63,8 @@ export default function AppRoot() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
-        // Explicit app-center source should always return to app center.
-        if (from === 'center') {
+        // App center entries (home list / explore) should always return to app center.
+        if (from === 'center' || from === 'explore') {
             navigate('/apps');
             return;
         }
@@ -122,7 +122,7 @@ export default function AppRoot() {
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
             <div className="flex w-full overflow-hidden bg-[#F9F9F9] p-4 touch-mobile:p-0" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
-                <div className="relative z-0 flex h-full w-full overflow-hidden">
+                <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#F4F5F7] p-2">
 
                     {/* Desktop/Tablet sidebar */}
                     {!isTabletOrMobile && (

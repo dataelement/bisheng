@@ -425,11 +425,17 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         )}
                     >{t('skills.saveVersion', { ns: 'bs' })}</ActionButton>
                 }
-                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} disabled={!canUnpublish} onClick={handleOfflineClick}>
-                    {t('takeOffline')}
-                </Button> : <Button size="sm" className={`h-8 px-6`} disabled={!canPublish} onClick={handleOnlineClick}>
-                    {t('goOnline')}
-                </Button>}
+                {isOnlineVersion
+                    ? (canUnpublish ? (
+                        <Button size="sm" className="h-8 px-6" onClick={handleOfflineClick}>
+                            {t('takeOffline')}
+                        </Button>
+                    ) : null)
+                    : (canPublish ? (
+                        <Button size="sm" className="h-8 px-6" onClick={handleOnlineClick}>
+                            {t('goOnline')}
+                        </Button>
+                    ) : null)}
                 <Popover open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                     <PopoverTrigger asChild >
                         <Button size="icon" variant="outline" disabled={!canEdit} className={`${!dark && 'bg-[#fff]'} size-8`}>

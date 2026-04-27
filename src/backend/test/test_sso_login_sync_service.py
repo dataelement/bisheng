@@ -28,6 +28,7 @@ def _payload(
     external_user_id='u1', primary='D1', secondary=None,
     ts=1000, name='Alice', email='a@x.com', phone=None,
     tenant_mapping=None,
+    account_disabled=None,
 ):
     from bisheng.sso_sync.domain.schemas.payloads import (
         LoginSyncRequest, UserAttrsDTO,
@@ -39,6 +40,7 @@ def _payload(
         user_attrs=UserAttrsDTO(name=name, email=email, phone=phone),
         ts=ts,
         tenant_mapping=tenant_mapping,
+        account_disabled=account_disabled,
     )
 
 
@@ -297,6 +299,25 @@ class TestDisabledSsoUser:
             await LoginSyncService.execute(_payload(), request_ip='1.2.3.4')
         assert getattr(exc_info.value, 'status_code', 0) == \
             UserForbiddenError.Code
+
+    async def test_wecom_explicit_re_enable_clears_delete(self, patches):
+        """Gateway sends account_disabled=false after 企微 re-enable; bisheng must flip delete."""
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        row = _user(user_id=7, delete=1, source='wecom', external_id='u1')
+        row.disable_source = 'wecom_org_sync'
+        m.UserDao.aget_by_source_external_id = AsyncMock(return_value=row)
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        await LoginSyncService.execute(
+            _payload(account_disabled=False), request_ip='1.2.3.4',
+        )
+
+        assert row.delete == 0
+        assert row.disable_source is None
 
 
 # =========================================================================

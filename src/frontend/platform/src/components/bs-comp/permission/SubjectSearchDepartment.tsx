@@ -16,6 +16,7 @@ interface SubjectSearchDepartmentProps {
   onChange: (v: SelectedSubject[]) => void
   resourceType?: ResourceType
   resourceId?: string
+  allowOrganizationTree?: boolean
   includeChildren?: boolean
   onIncludeChildrenChange?: (v: boolean) => void
   showIncludeChildrenToggle?: boolean
@@ -70,6 +71,7 @@ export function SubjectSearchDepartment({
   onChange,
   resourceType,
   resourceId,
+  allowOrganizationTree = false,
   includeChildren = false,
   onIncludeChildrenChange = () => undefined,
   showIncludeChildrenToggle = true,
@@ -84,15 +86,24 @@ export function SubjectSearchDepartment({
   const disabledIdSet = new Set(disabledIds)
 
   useEffect(() => {
-    setLoading(true)
     const request = resourceType && resourceId
       ? getResourceGrantDepartmentsApi(resourceType, resourceId)
-      : getDepartmentTreeApi()
+      : allowOrganizationTree
+        ? getDepartmentTreeApi()
+        : null
+
+    if (!request) {
+      setTree([])
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
     captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setTree(res)
       setLoading(false)
     })
-  }, [resourceId, resourceType])
+  }, [allowOrganizationTree, resourceId, resourceType])
 
   const selectedIds = new Set(value.map((s) => s.id))
   const selectedDepartmentsById = useMemo(

@@ -264,9 +264,9 @@ class LoginSyncService:
                 new_delete = 1 if payload.account_disabled is True else 0
                 ds = cls._disable_source_for_row(row_source, new_delete)
                 new_user = User(
-                    user_name=attrs.name or ext,
-                    email=attrs.email,
-                    phone_number=attrs.phone,
+                    user_name=(attrs.name.strip() if attrs.name else '') or ext,
+                    email=cls._normalize_contact_field(attrs.email),
+                    phone_number=cls._normalize_contact_field(attrs.phone),
                     external_id=ext,
                     source=row_source,
                     password='',
@@ -287,8 +287,12 @@ class LoginSyncService:
                         f'failed to create user for external_id={ext}: {e}'
                     )
         else:
+            # WeCom (and Gateway) send explicit ``account_disabled``; when False,
+            # the row below must flip ``delete`` back to 0. Unconditional forbid
+            # here blocked re-enable after 企微禁用 → 再启用 (delete stayed 1).
             if int(getattr(user, 'delete', 0) or 0) == 1:
-                raise UserForbiddenError.http_exception()
+                if payload.account_disabled is None:
+                    raise UserForbiddenError.http_exception()
             cls._apply_user_attrs(user, attrs)
             cls._touch_user_sync_time(user)
             await UserDao.aupdate_user(user)
@@ -305,15 +309,29 @@ class LoginSyncService:
             raise UserForbiddenError.http_exception()
         return user
 
+    @staticmethod
+    def _normalize_contact_field(val: Optional[str]) -> Optional[str]:
+        """Strip; empty string → None. ``None`` means omit (do not overwrite in apply)."""
+        if val is None:
+            return None
+        s = val.strip()
+        return s if s else None
+
     @classmethod
     def _apply_user_attrs(cls, user: User, attrs) -> None:
         """Apply present HR attributes without clearing omitted fields."""
-        if attrs.name and user.user_name != attrs.name:
-            user.user_name = attrs.name
-        if attrs.email is not None and user.email != attrs.email:
-            user.email = attrs.email
-        if attrs.phone is not None and user.phone_number != attrs.phone:
-            user.phone_number = attrs.phone
+        if attrs.name:
+            nm = attrs.name.strip()
+            if nm and user.user_name != nm:
+                user.user_name = nm
+        if attrs.email is not None:
+            ne = cls._normalize_contact_field(attrs.email)
+            if user.email != ne:
+                user.email = ne
+        if attrs.phone is not None:
+            np = cls._normalize_contact_field(attrs.phone)
+            if user.phone_number != np:
+                user.phone_number = np
 
     @classmethod
     def _touch_user_sync_time(cls, user: User) -> None:

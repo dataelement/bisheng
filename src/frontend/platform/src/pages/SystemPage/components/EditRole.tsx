@@ -403,8 +403,8 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
   const [form, setForm] = useState({
     name,
     useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
-    // 工作台菜单：订阅默认关闭，知识空间默认开启
-    useWorkbenchMenu: [MenuType.KNOWLEDGE_SPACE],
+    // 工作台子菜单：订阅与知识空间默认与 Roles 页新建角色一致（均开启）
+    useWorkbenchMenu: [MenuType.SUBSCRIPTION, MenuType.KNOWLEDGE_SPACE],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
     knowledgeSpaceFileLimit,

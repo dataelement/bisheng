@@ -1,6 +1,5 @@
 import type { GrantItem, PermissionEntry, RevokeItem } from "@/components/bs-comp/permission/types"
 import axios from "@/controllers/request"
-import { getDepartmentTreeApi } from "@/controllers/API/department"
 
 export type RebacSchemaType = {
   type: string
@@ -47,8 +46,6 @@ export type PermissionTemplateSection = {
   title: string
   columns: PermissionTemplateColumn[]
 }
-
-export const getDepartmentTree = getDepartmentTreeApi
 
 export async function getRebacSchemaApi(): Promise<{
   schema_version: string

@@ -61,6 +61,9 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         .map((item) => String(item || "").trim())
         .find(Boolean) || localize('com_ui_new_chat');
 
+    /** 与侧栏「分享应用」一致：仅 can_share === true 时展示对话顶栏分享入口 */
+    const hideShare = data?.can_share !== true;
+
     useEffect(() => {
         setChatMobileHeader({
             title: headerTitle,
@@ -68,10 +71,10 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
             flowId: data?.id || '',
             flowType: data?.flow_type || 15,
             readOnly: !!readOnly,
-            hideShare: false,
+            hideShare,
         });
         return () => setChatMobileHeader(null);
-    }, [setChatMobileHeader, headerTitle, cid, data?.id, data?.flow_type, readOnly]);
+    }, [setChatMobileHeader, headerTitle, cid, data?.id, data?.flow_type, readOnly, hideShare]);
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
         conversations.length === 0 &&
@@ -87,6 +90,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     return <div className="relative h-full flex flex-col">
         <HeaderTitle
             readOnly={readOnly}
+            hideShare={hideShare}
             conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
         />
         <div className="min-h-0 flex-1 flex flex-col bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">

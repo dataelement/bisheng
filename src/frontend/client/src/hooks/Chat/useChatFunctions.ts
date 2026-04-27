@@ -58,9 +58,7 @@ export default function useChatFunctions({
   const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
   const setFilesToDelete = useSetFilesToDelete();
   const isTemporary = useRecoilValue(store.isTemporary);
-  const modelType = useRecoilValue(store.modelType);
   const chatModel = useRecoilValue(store.chatModel);
-  const searchType = useRecoilValue(store.searchType);
   // const netSearch = useRecoilValue(store.netSearch);
   const selectedOrgKbs = useRecoilValue(store.selectedOrgKbs);
   // const model = useShouGangModel()
@@ -91,8 +89,7 @@ export default function useChatFunctions({
     }
 
     const endpoint = 'Deepseek';
-    const custom_model = modelType || 'deepseek-chat';
-    const search_enabled = searchType && searchType === 'netSearch' || false;
+    const custom_model = 'deepseek-chat';
 
     const use_knowledge_base = {
       knowledges: selectedOrgKbs,
@@ -192,7 +189,6 @@ export default function useChatFunctions({
       endpoint: '', // 临时修改
       endpointType: 'custom',
       model: chatModel.id + '',
-      search_enabled,
       use_knowledge_base,
     });
     const responseSender = chatModel.name // getSender({ ...endpointOption });

@@ -143,6 +143,11 @@ customAxios.interceptors.response.use(
         return Promise.reject(error);
       }
 
+      // Drop the auth-state sentinel so the next /api/user/me success
+      // (after re-login or SSO bounce) is detected as a fresh session and
+      // wipes cached chat preferences.
+      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
+
       const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
       if (thirdPartyLoginUrl) {
         window.location.href = thirdPartyLoginUrl;

@@ -291,6 +291,14 @@ class TestKI01SqlTemplateSchema:
                 f'channel table has no status column; {key} template must not filter by it: {tmpl!r}'
             )
 
+    def test_channel_subscribe_counts_memberships(self):
+        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
+        tmpl = _RESOURCE_COUNT_TEMPLATES['channel_subscribe']
+        assert 'FROM space_channel_member' in tmpl
+        assert 'INNER JOIN channel' in tmpl
+        assert "scm.status IN ('ACTIVE','PENDING')" in tmpl
+        assert '{qualified_col}' in tmpl
+
     def test_tool_uses_t_prefix_table_name(self):
         from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
         tmpl = _RESOURCE_COUNT_TEMPLATES['tool']

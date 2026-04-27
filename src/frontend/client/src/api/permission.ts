@@ -204,16 +204,6 @@ export async function getKnowledgeSpaceGrantUsers(
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);
 }
 
-export async function getDepartmentTree(
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  const res = await request.get(
-    `/api/v1/departments/tree`,
-    withPermissionRequestOptions(config)
-  );
-  return unwrapArray(res);
-}
-
 export async function getResourceGrantDepartments(
   resourceType: ResourceType,
   resourceId: string,

@@ -6,10 +6,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { getDepartmentTreeApi } from "@/controllers/API/department"
 import {
   authorizeResource,
   getGrantableRelationModelsApi,
+  getResourceGrantDepartmentsApi,
   getResourcePermissions,
   type RelationModel,
 } from "@/controllers/API/permission"
@@ -74,12 +74,14 @@ export function PermissionListTab({
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
+    captureAndAlertRequestErrorHoc(
+      getResourceGrantDepartmentsApi(resourceType, resourceId),
+    ).then((res) => {
       if (res && Array.isArray(res)) {
         setDeptPathById(buildDepartmentPathLabelMap(res))
       }
     })
-  }, [refreshKey])
+  }, [refreshKey, resourceId, resourceType])
 
   const loadData = useCallback(async () => {
     setLoading(true)

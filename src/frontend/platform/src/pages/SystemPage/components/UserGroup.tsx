@@ -29,6 +29,23 @@ import EditUserGroup from "./EditUserGroup";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 
+export const canDeleteUserGroup = (user: any, ug: UserGroupV2) => {
+    if (user?.role === "admin") return true
+    const isUserGroupManager =
+        user?.can_manage_user_groups
+        || user?.is_department_admin
+        || user?.is_child_admin
+    const creatorId = Number(ug.create_user)
+    const currentUserId = Number(user?.user_id)
+    if (
+        isUserGroupManager
+        && Number.isFinite(creatorId)
+        && Number.isFinite(currentUserId)
+        && creatorId === currentUserId
+    ) return true
+    return false
+}
+
 export default function UserGroups() {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
@@ -88,13 +105,6 @@ export default function UserGroups() {
                 }
             },
         })
-    }
-
-    const canDeleteGroup = (ug: UserGroupV2) => {
-        if (user?.role === "admin") return true
-        const isTenantScopedAdmin = user?.is_department_admin || user?.is_child_admin
-        if (isTenantScopedAdmin && ug.create_user === user?.user_id) return true
-        return false
     }
 
     const checkSameName = (name: string) => {
@@ -235,7 +245,7 @@ export default function UserGroups() {
                                     <Button variant="link" disabled={loading} onClick={() => setUserGroup({ ...ug })}
                                         className="px-0 pl-6">{t('edit')}
                                     </Button>
-                                    <Button variant="link" disabled={loading || !canDeleteGroup(ug)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                                    <Button variant="link" disabled={loading || !canDeleteUserGroup(user, ug)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                                 </TableCell>
                             </TableRow>
                         ))}

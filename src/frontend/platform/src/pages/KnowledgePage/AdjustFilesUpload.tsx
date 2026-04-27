@@ -342,25 +342,30 @@ export default function AdjustFilesUpload() {
   return (
     <div className="relative h-full flex flex-col">
       {/* Top return bar */}
-      <div className="pt-4 px-4">
-        <div className="flex items-center mb-4">
-          <Button
-            variant="outline"
-            size="icon"
-            className="bg-[#fff] size-8"
-            onClick={() => navigate(-1)}
-          >
-            <ChevronLeft />
-          </Button>
-          <span className="text-foreground text-sm font-black pl-4">{t('backToKnowledgeDetail')}</span>
+      <div className="relative px-4 pt-4">
+        <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
+          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
+              onClick={() => navigate(-1)}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledgeDetail')}</span>
+          </div>
         </div>
-
-        {/* Adjustment mode step progress */}
-        <StepProgress
-          align="center"
-          currentStep={currentStep}
-          labels={getAdjustStepLabels(t)}
-        />
+        <div className="mx-auto max-w-[1180px]">
+          <div className="min-w-0 overflow-hidden">
+            <StepProgress
+              align="center"
+              currentStep={currentStep}
+              labels={getAdjustStepLabels(t)}
+              className="my-0 min-w-0 px-0"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Step content area */}

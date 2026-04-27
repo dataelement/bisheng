@@ -186,7 +186,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 endpoint: "",
                 endpointType: "custom",
                 model: chatModel.id + "",
-                search_enabled: searchType === "netSearch",
                 use_knowledge_base: {
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
@@ -442,7 +441,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 endpoint: "",
                 endpointType: "custom",
                 model: chatModel.id + "",
-                search_enabled: searchType === "netSearch",
                 use_knowledge_base: {
                     organization_knowledge_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
                         ? []

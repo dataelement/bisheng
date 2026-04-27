@@ -304,7 +304,7 @@ const AiChatInput = memo(
 
         const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0)) && !isLingsi;
         return (
-            <div className="px-4 sm:px-0 pb-4 touch-mobile:px-0 touch-mobile:pb-3 shrink-0 relative">
+            <div className="px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -321,7 +321,7 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden touch-mobile:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl touch-mobile:rounded-2xl'}`}>
+                <div className={`relative flex w-full flex-col items-start gap-[10px] overflow-hidden bg-surface-tertiary p-2 touch-mobile:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl touch-mobile:rounded-2xl'}`}>
                     {/* File upload area: file list only. Trigger moves to "+" menu
                         when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {
@@ -394,21 +394,21 @@ const AiChatInput = memo(
                         tabIndex={0}
                         data-testid="ai-chat-input"
                         data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
-                        rows={2}
-                        style={{ height: 84, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
+                        rows={1}
+                        style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
                             "m-0 w-full resize-none bg-transparent text-sm pb-0 pl-4 pr-6",
-                            hasSelectionTags ? "pt-0" : "pt-3",
+                            hasSelectionTags ? "pt-0" : "pt-2",
                             "placeholder-black/50 dark:placeholder-white/50",
                             "max-h-[240px] scrollbar-gutter-stable",
-                            size === 'mini' ? 'min-h-0' : 'min-h-20',
+                            size === 'mini' ? 'min-h-0' : 'min-h-12',
                             removeFocusRings,
                             "transition-[max-height] duration-200",
                             isTextareaScrollable && "scroll-on-scroll"
                         )}
                     />
 
-                    <div className="relative h-8">
+                    <div className="relative h-7">
                         {/* Send / Stop / Voice buttons — matching ChatForm styles */}
                         <div className="absolute bottom-0 right-3 flex gap-2 items-center">
                             {/* Voice input (Speech to Text) */}
@@ -507,7 +507,6 @@ const AiChatInput = memo(
                             )}
                             {tools && !agentMode && onSearchTypeChange && (
                                 <ChatToolDown
-                                    linsi={isLingsi}
                                     config={bsConfig}
                                     searchType={searchType}
                                     setSearchType={(type) => {

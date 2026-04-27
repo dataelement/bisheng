@@ -314,6 +314,7 @@ const FileUploadStep2 = forwardRef(({
             <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
                 <Button
                     variant="outline"
+                    className="min-w-[88px]"
                     onClick={() => {
                         onPrev()
                         step === 2 && setShowPreview(false)
@@ -323,6 +324,7 @@ const FileUploadStep2 = forwardRef(({
                 </Button>
                 <Button
                     disabled={previewFailed || isSubmitting || strategies.length === 0}
+                    className="min-w-[88px]"
                     onClick={internalHandleNext}
                 >
                     {isSubmitting ? (

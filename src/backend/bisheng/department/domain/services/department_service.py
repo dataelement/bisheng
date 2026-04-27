@@ -1182,11 +1182,14 @@ class DepartmentService:
                     labels.append(self_nm)
                 return '/'.join(labels) if labels else (self_nm or '')
 
+            # Do not filter User.delete: 部门成员列表 aget_members 包含未启用用户，
+            # 全组织搜索需一致，否则无法按姓名定位已禁用成员。
             base_group = (
                 select(
                     User.user_id,
                     User.user_name,
                     func.min(Department.id).label('dept_int_id'),
+                    func.max(User.delete).label('user_deleted'),
                 )
                 .join(
                     UserDepartment,
@@ -1195,7 +1198,6 @@ class DepartmentService:
                 )
                 .join(Department, Department.id == UserDepartment.department_id)
                 .where(
-                    User.delete == 0,
                     Department.status == 'active',
                     col(Department.id).in_(visible_ids),
                     User.user_name.like(f'%{kw}%'),
@@ -1228,12 +1230,14 @@ class DepartmentService:
             d = dept_by_id.get(int(r.dept_int_id))
             if not d:
                 continue
+            udel = int(getattr(r, 'user_deleted', 0) or 0)
             data.append(
                 {
                     'user_id': int(r.user_id),
                     'user_name': r.user_name,
                     'primary_department_dept_id': d.dept_id,
                     'primary_department_path': _primary_dept_display_path(d),
+                    'enabled': udel == 0,
                 }
             )
         return {'data': data, 'total': int(total)}

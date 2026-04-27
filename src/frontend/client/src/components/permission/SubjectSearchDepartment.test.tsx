@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { getDepartmentTree, getResourceGrantDepartments } from "~/api/permission";
+import { getResourceGrantDepartments } from "~/api/permission";
 import type { SelectedSubject } from "~/api/permission";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 
@@ -9,17 +9,15 @@ jest.mock("~/hooks", () => ({
 }));
 
 jest.mock("~/api/permission", () => ({
-  getDepartmentTree: jest.fn(),
   getResourceGrantDepartments: jest.fn(),
 }));
 
-const mockedGetDepartmentTree = jest.mocked(getDepartmentTree);
 const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
 
 describe("SubjectSearchDepartment", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedGetDepartmentTree.mockResolvedValue([
+    mockedGetResourceGrantDepartments.mockResolvedValue([
       {
         id: 1,
         dept_id: "dept-1",
@@ -34,15 +32,6 @@ describe("SubjectSearchDepartment", () => {
             children: [],
           },
         ],
-      },
-    ]);
-    mockedGetResourceGrantDepartments.mockResolvedValue([
-      {
-        id: 3,
-        dept_id: "dept-3",
-        name: "应用授权部门",
-        parent_id: null,
-        children: [],
       },
     ]);
   });
@@ -61,13 +50,19 @@ describe("SubjectSearchDepartment", () => {
       <SubjectSearchDepartment
         value={value}
         onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
         includeChildren
         onIncludeChildrenChange={jest.fn()}
       />,
     );
 
     await waitFor(() => {
-      expect(mockedGetDepartmentTree).toHaveBeenCalledTimes(1);
+      expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
+        "workflow",
+        "wf-1",
+        { signal: expect.any(AbortSignal) },
+      );
     });
 
     fireEvent.change(screen.getByPlaceholderText("com_permission.search_department"), {
@@ -95,13 +90,15 @@ describe("SubjectSearchDepartment", () => {
           },
         ]}
         onChange={onChange}
+        resourceType="workflow"
+        resourceId="wf-1"
         includeChildren
         onIncludeChildrenChange={onIncludeChildrenChange}
       />,
     );
 
     await waitFor(() => {
-      expect(mockedGetDepartmentTree).toHaveBeenCalledTimes(1);
+      expect(mockedGetResourceGrantDepartments).toHaveBeenCalledTimes(1);
     });
 
     fireEvent.change(screen.getByPlaceholderText("com_permission.search_department"), {
@@ -132,6 +129,8 @@ describe("SubjectSearchDepartment", () => {
       <SubjectSearchDepartment
         value={[]}
         onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
         includeChildren
         onIncludeChildrenChange={jest.fn()}
         disabledIds={[1]}
@@ -146,6 +145,16 @@ describe("SubjectSearchDepartment", () => {
   });
 
   it("uses resource-scoped department candidates when a resource is provided", async () => {
+    mockedGetResourceGrantDepartments.mockResolvedValue([
+      {
+        id: 3,
+        dept_id: "dept-3",
+        name: "应用授权部门",
+        parent_id: null,
+        children: [],
+      },
+    ]);
+
     render(
       <SubjectSearchDepartment
         value={[]}
@@ -166,6 +175,5 @@ describe("SubjectSearchDepartment", () => {
       "wf-1",
       { signal: expect.any(AbortSignal) },
     );
-    expect(mockedGetDepartmentTree).not.toHaveBeenCalled();
   });
 });

@@ -110,6 +110,8 @@ export interface GlobalMemberSearchRow {
   user_name: string
   primary_department_dept_id: string
   primary_department_path: string
+  /** false = 账号未启用（User.delete=1），与部门成员列表一致 */
+  enabled?: boolean
 }
 
 export async function searchGlobalMembersApi(params: {

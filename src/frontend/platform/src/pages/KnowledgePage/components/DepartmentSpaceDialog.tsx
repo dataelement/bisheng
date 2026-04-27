@@ -137,6 +137,7 @@ export function DepartmentSpaceDialog({
             <SubjectSearchDepartment
               value={selected}
               onChange={setSelected}
+              allowOrganizationTree
               includeChildren={false}
               onIncludeChildrenChange={() => undefined}
               showIncludeChildrenToggle={false}

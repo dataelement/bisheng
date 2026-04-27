@@ -26,7 +26,7 @@ const FLOW_TYPE_MAP = {
 
 // Minimal auth context for guest mode — provides "not authenticated" values
 // without making any API calls or triggering 401 redirects.
-const noop = () => {};
+const noop = () => { };
 const guestAuthValue = {
   user: undefined,
   token: undefined,
@@ -101,7 +101,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   return (
     <StandaloneChatContext.Provider value={contextValue}>
       <div className={cn('flex', isGuestMode ? 'bg-white' : 'bg-[#F9F9F9]')} style={{ height: '100dvh' }}>
-        <div className="relative z-0 flex h-full w-full overflow-hidden">
+        <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#F4F5F7] p-2">
 
           {/* Desktop sidebar */}
           {!isTabletOrMobile && (
@@ -146,7 +146,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           <div
             className={cn(
               'relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden',
-              'p-2 touch-mobile:p-0',
+              'p-0',
             )}
           >
             {isTabletOrMobile && (

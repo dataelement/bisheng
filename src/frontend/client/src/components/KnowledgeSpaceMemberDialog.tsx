@@ -302,12 +302,12 @@ export function KnowledgeSpaceMemberDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent
                     overlayClassName="z-[100]"
-                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 touch-mobile:fixed touch-mobile:inset-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none"
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     close={false}
                 >
-                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 touch-mobile:h-auto touch-mobile:min-h-[56px] touch-mobile:px-4 sm:text-left">
-                        <DialogTitle className="m-0 inline-flex items-center text-left text-[16px] font-semibold leading-[24px] text-[#1D2129] touch-mobile:text-[20px] touch-mobile:font-medium touch-mobile:leading-7 touch-mobile:text-[#212121]">
+                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 max-[768px]:h-auto max-[768px]:min-h-[56px] max-[768px]:px-4 sm:text-left">
+                        <DialogTitle className="m-0 inline-flex items-center text-left text-[16px] font-semibold leading-[24px] text-[#1D2129] max-[768px]:text-[20px] max-[768px]:font-medium max-[768px]:leading-7 max-[768px]:text-[#212121]">
                             {localize("com_subscription.management_member")}
                         </DialogTitle>
                         <DialogClose className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-0 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
@@ -316,7 +316,7 @@ export function KnowledgeSpaceMemberDialog({
                         </DialogClose>
                     </DialogHeader>
 
-                    <div className="flex min-h-0 flex-1 flex-col px-6 pt-6 pb-0 touch-mobile:px-4 touch-mobile:pt-6">
+                    <div className="flex min-h-0 flex-1 flex-col px-6 pt-6 pb-0 max-[768px]:px-4 max-[768px]:pt-6">
                         <div className="relative mb-3">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C9CDD4]" />
                             <input

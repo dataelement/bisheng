@@ -357,7 +357,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                                     <span
                                         key={kb.id || `${kb.name}-${i}`}
                                         className={cn(
-                                            "inline-flex items-center justify-center gap-1.5 rounded-[4px] px-2 py-[2px] text-[13px]",
+                                            "inline-flex items-center justify-center gap-1.5 rounded-[4px] px-2 py-[4px] text-[13px]",
                                             kb.error
                                                 ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
                                                 : "bg-[#F7F8FA] text-[#4E5969]",
