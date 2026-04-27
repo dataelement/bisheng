@@ -237,6 +237,12 @@ async def test_get_all_flows_filters_by_use_app_and_sets_write_from_edit_app():
         new_callable=AsyncMock,
         side_effect=lambda _user, data, managed=False: data,
         create=True,
+    ), patch.object(
+        WorkFlowService,
+        '_app_type_ids_for_relation',
+        new_callable=AsyncMock,
+        return_value={FlowType.ASSISTANT.value: ['asst-1']},
+        create=True,
     ):
         data, total = await WorkFlowService.get_all_flows(
             user=login_user,

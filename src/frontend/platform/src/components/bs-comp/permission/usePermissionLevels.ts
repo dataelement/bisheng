@@ -1,3 +1,4 @@
+import { toast } from "@/components/bs-ui/toast/use-toast"
 import { userContext } from "@/contexts/userContext"
 import { checkPermission } from "@/controllers/API/permission"
 import { useContext, useEffect, useRef, useState } from "react"
@@ -167,6 +168,17 @@ export function usePermissionIds(
 
     setLoading(true)
 
+    let notifiedError = false
+    const notifyErrorOnce = (error: unknown) => {
+      if (error == null || notifiedError || controller.signal.aborted || (error as any)?.code === "ERR_CANCELED") return
+      notifiedError = true
+      toast({
+        title: '提示',
+        variant: 'error',
+        description: typeof error === 'string' && error ? error : '权限校验失败，请稍后重试',
+      })
+    }
+
     const resolvePermissions = async (resourceId: string): Promise<[string, string[]]> => {
       const allowedPermissions: string[] = []
       for (const permissionId of permissionIds) {
@@ -179,8 +191,9 @@ export function usePermissionIds(
             permissionId,
           )
           if (res?.allowed) allowedPermissions.push(permissionId)
-        } catch {
+        } catch (error) {
           // Keep permission checks best-effort for UI gating; backend still enforces.
+          notifyErrorOnce(error)
         }
       }
       return [resourceId, allowedPermissions]

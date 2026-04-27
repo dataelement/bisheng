@@ -20,6 +20,7 @@ from bisheng.permission.domain.services.permission_service import PermissionServ
 logger = logging.getLogger(__name__)
 PermissionService = _PermissionService
 UserDepartmentDao = _UserDepartmentDao
+_APP_PERMISSION_MAP_CONCURRENCY = 20
 
 _PERMISSION_LEVEL_TO_RELATION = {
     'owner': 'owner',
@@ -190,20 +191,23 @@ class ApplicationPermissionService:
         )
         binding_department_paths = await cls._get_binding_department_paths(bindings)
 
+        semaphore = asyncio.Semaphore(_APP_PERMISSION_MAP_CONCURRENCY)
+
         async def _one(row: dict) -> tuple[str, set[str]]:
             object_type = _FLOW_TYPE_TO_OBJECT_TYPE.get(row.get('flow_type'))
             object_id = str(row.get('id'))
             if object_type is None or not object_id:
                 return object_id, set()
-            perms = await cls.get_effective_permission_ids_async(
-                login_user,
-                object_type,
-                object_id,
-                models=models,
-                bindings=bindings,
-                binding_department_paths=binding_department_paths,
-                user_subject_strings=user_subject_strings,
-            )
+            async with semaphore:
+                perms = await cls.get_effective_permission_ids_async(
+                    login_user,
+                    object_type,
+                    object_id,
+                    models=models,
+                    bindings=bindings,
+                    binding_department_paths=binding_department_paths,
+                    user_subject_strings=user_subject_strings,
+                )
             return object_id, perms & permission_id_set
 
         pairs = await asyncio.gather(*[_one(row) for row in rows])

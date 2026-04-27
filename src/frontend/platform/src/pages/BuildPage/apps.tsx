@@ -124,11 +124,14 @@ export default function apps() {
     const assistantResourceIds = dataSource
         .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
         .map((item: any) => String(item.id));
-    const { permissions: workflowPermIds, loading: workflowPermLoading } = usePermissionIds('workflow', workflowResourceIds, APP_PERMISSION_IDS);
-    const { permissions: assistantPermIds, loading: assistantPermLoading } = usePermissionIds('assistant', assistantResourceIds, APP_PERMISSION_IDS);
+    const { permissions: workflowPermIds } = usePermissionIds('workflow', workflowResourceIds, APP_PERMISSION_IDS);
+    const { permissions: assistantPermIds } = usePermissionIds('assistant', assistantResourceIds, APP_PERMISSION_IDS);
     const permIds = { ...workflowPermIds, ...assistantPermIds };
-    const permLoading = workflowPermLoading || assistantPermLoading;
-    const canRead = (id: string | number) => hasPermissionId(permIds, id, 'view_app');
+    const listedAppIds = new Set(dataSource.map((item: any) => String(item.id)));
+    const canRead = (id: string | number) =>
+        user.role === 'admin' ||
+        hasPermissionId(permIds, id, 'view_app') ||
+        listedAppIds.has(String(id));
     const canEdit = (id: string | number) => hasPermissionId(permIds, id, 'edit_app');
     const canPublish = (id: string | number) => hasPermissionId(permIds, id, 'publish_app');
     const canUnpublish = (id: string | number) => hasPermissionId(permIds, id, 'unpublish_app');
@@ -137,9 +140,7 @@ export default function apps() {
         hasPermissionId(permIds, id, 'manage_app_manager') ||
         hasPermissionId(permIds, id, 'manage_app_viewer');
     const canDelete = (id: string | number) => hasPermissionId(permIds, id, 'delete_app');
-    const visibleApps = user.role === 'admin' || permLoading
-        ? dataSource
-        : dataSource.filter((item: any) => canRead(item.id));
+    const visibleApps = dataSource;
 
     // 角色菜单权限：`create_app` 控制"新建应用/管理应用模板"入口是否可见。
     // 超管：始终可见。组织上的部门管理员（is_department_admin）：与 PRD 一致默认可见（与 MainLayout 全量子壳一致）。
