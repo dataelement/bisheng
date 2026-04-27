@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import timedelta, datetime
-from typing import List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
@@ -46,7 +46,6 @@ from bisheng.common.errcode.channel import (
     ChannelPermissionDeniedError,
     ChannelCreateLimitExceededError,
     ChannelAdminLimitExceededError,
-    ChannelSubscribeLimitExceededError,
 )
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
 from bisheng.common.models.space_channel_member import (
@@ -59,11 +58,15 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.permission.domain.services.owner_service import OwnerService
+from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +74,6 @@ logger = logging.getLogger(__name__)
 MAX_USER_CHANNEL_COUNT = 10
 # Maximum number of administrators per channel
 MAX_ADMIN_COUNT = 5
-# Maximum number of channels a user can subscribe to (excluding self-created channels)
-MAX_USER_SUBSCRIBE_COUNT = 20
 CHANNEL_ADMIN_ASSIGNMENT_MESSAGE = "assigned_channel_admin"
 
 
@@ -195,7 +196,6 @@ class ChannelService:
                     new_channel_info_sources.append(new_source)
 
                 if new_channel_info_sources:
-                    from bisheng.worker.information.article import sync_information_article
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
 
         # Update latest_article_update_time for the new channel
@@ -749,13 +749,12 @@ class ChannelService:
             return SubscriptionStatusEnum.PENDING
 
         if not existing_membership or existing_membership.status == MembershipStatusEnum.REJECTED:
-            subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
+            await QuotaService.check_quota(
                 user_id=login_user.user_id,
-                roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
-                statuses=[MembershipStatusEnum.ACTIVE, MembershipStatusEnum.PENDING]
+                resource_type=QuotaResourceType.CHANNEL_SUBSCRIBE,
+                tenant_id=login_user.tenant_id,
+                login_user=login_user,
             )
-            if len(subscribed_channels) >= MAX_USER_SUBSCRIBE_COUNT:
-                raise ChannelSubscribeLimitExceededError()
 
         previous_status = existing_membership.status if existing_membership else None
         if existing_membership:
