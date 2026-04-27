@@ -379,7 +379,7 @@ function deriveFileType(raw: any): FileType {
     }
 }
 
-function extractKnowledgeFileError(raw: any): string | undefined {
+export function extractKnowledgeFileError(raw: any): string | undefined {
     const directMessage = raw?.error_message;
     if (typeof directMessage === "string" && directMessage.trim()) {
         return directMessage.trim();
@@ -393,6 +393,21 @@ function extractKnowledgeFileError(raw: any): string | undefined {
     const trimmedRemark = remark.trim();
     try {
         const parsed = JSON.parse(trimmedRemark);
+        const statusMessage = parsed?.status_message;
+        if (typeof statusMessage === "string" && statusMessage.trim()) {
+            const replacedMessage = statusMessage.replace(/\{([^{}]+)\}/g, (placeholder, key) => {
+                const value = parsed?.data?.data?.[key];
+                if (value === undefined || value === null) {
+                    return placeholder;
+                }
+                return String(value);
+            }).trim();
+
+            if (replacedMessage && replacedMessage !== statusMessage.trim()) {
+                return replacedMessage;
+            }
+        }
+
         const nestedMessage =
             parsed?.data?.exception ??
             parsed?.exception ??
@@ -402,8 +417,8 @@ function extractKnowledgeFileError(raw: any): string | undefined {
             return nestedMessage.trim();
         }
 
-        if (typeof parsed?.status_message === "string" && parsed.status_message.trim()) {
-            return parsed.status_message.trim();
+        if (typeof statusMessage === "string" && statusMessage.trim()) {
+            return statusMessage.trim();
         }
 
         if (typeof parsed?.old_name === "string" || typeof parsed?.new_name === "string") {

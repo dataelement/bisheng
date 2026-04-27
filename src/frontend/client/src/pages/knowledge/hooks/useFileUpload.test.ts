@@ -1,4 +1,4 @@
-import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
+import { extractKnowledgeFileError, FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import {
   extractDuplicateFileEntries,
   mergeVisibleRegisteredFiles,
@@ -69,5 +69,20 @@ describe("useFileUpload helpers", () => {
       files: [newWaitingFile, existingFile],
       addedCount: 1,
     });
+  });
+
+  test("extractKnowledgeFileError replaces status_message placeholders from nested data", () => {
+    const remark = JSON.stringify({
+      status_code: 10953,
+      status_message: "File parsing failed: {exception}",
+      data: {
+        exception: "File parsing failed: {exception}",
+        data: {
+          exception: "rebuild error",
+        },
+      },
+    });
+
+    expect(extractKnowledgeFileError({ remark })).toBe("File parsing failed: rebuild error");
   });
 });
