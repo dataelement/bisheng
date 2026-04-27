@@ -840,14 +840,14 @@ export function AddToKnowledgeModal({
                         !isChannelSyncMobileFooter && "ml-auto",
                         embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen
                             ? "flex w-full items-center gap-2"
-                            : "grid w-[176px] shrink-0 grid-cols-2 gap-2",
+                            : "flex w-auto shrink-0 items-center gap-2",
                     )}
                 >
                     <Button
                         variant="outline"
                         onClick={goBackToChannelForm}
                         className={cn(
-                            "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
+                            "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
                             "h-11 rounded-lg border-[#E5E6EB] text-[15px] text-[#4E5969] hover:bg-[#F7F8FA]",
                             isChannelSyncMobileFooter && "flex-1",
@@ -859,7 +859,7 @@ export function AddToKnowledgeModal({
                         onClick={() => void handleConfirm()}
                         disabled={!selectedId || isConfirming}
                         className={cn(
-                            "h-8 w-full shrink-0 px-4 text-sm rounded-md font-normal",
+                            "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
                             "h-11 rounded-lg text-[15px] enabled:bg-[#165DFF] enabled:text-white enabled:hover:bg-[#4080FF] disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
                             isChannelSyncMobileFooter && "flex-1",

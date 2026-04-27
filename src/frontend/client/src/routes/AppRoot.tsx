@@ -30,17 +30,21 @@ export default function AppRoot() {
     const isTabletOrMobile = usePrefersMobileLayout();
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
+    const appOriginStorageKey = (conversationId: string) => `app-chat-origin:${conversationId}`;
     const isFromHomeRecommendedEntry = (() => {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
-        if (from === 'center') return false;
+        if (from === 'center' || from === 'explore') return false;
         if (from === 'home-recommended' && entry === 'home') return true;
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
         const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
         if (!conversationId) return false;
         try {
+            const persistedOrigin = sessionStorage.getItem(appOriginStorageKey(conversationId));
+            if (persistedOrigin === 'center' || persistedOrigin === 'explore') return false;
+            if (persistedOrigin === 'home') return true;
             return sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
         } catch {
             return false;
@@ -63,12 +67,23 @@ export default function AppRoot() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
+        let persistedOrigin: 'center' | 'explore' | 'home' | null = null;
+        if (conversationId) {
+            try {
+                const origin = sessionStorage.getItem(appOriginStorageKey(conversationId));
+                if (origin === 'center' || origin === 'explore' || origin === 'home') {
+                    persistedOrigin = origin;
+                }
+            } catch {
+                // ignore storage failures
+            }
+        }
         // App center entries (home list / explore) should always return to app center.
-        if (from === 'center' || from === 'explore') {
+        if (from === 'center' || from === 'explore' || persistedOrigin === 'center' || persistedOrigin === 'explore') {
             navigate('/apps');
             return;
         }
-        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
+        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home') || persistedOrigin === 'home') {
             navigate('/c/new');
             return;
         }
@@ -114,6 +129,26 @@ export default function AppRoot() {
         };
     }, [isAuthenticated]);
 
+    useEffect(() => {
+        const searchParams = new URLSearchParams(location.search);
+        const from = searchParams.get('from');
+        const entry = searchParams.get('entry');
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
+        if (!conversationId) return;
+        let origin: 'center' | 'explore' | 'home' | null = null;
+        if (from === 'center') origin = 'center';
+        else if (from === 'explore') origin = 'explore';
+        else if (from === 'home-recommended' && entry === 'home') origin = 'home';
+        if (!origin) return;
+        try {
+            sessionStorage.setItem(appOriginStorageKey(conversationId), origin);
+        } catch {
+            // ignore storage failures
+        }
+    }, [location.pathname, location.search]);
+
     if (!isAuthenticated) {
         return null;
     }
@@ -121,8 +156,21 @@ export default function AppRoot() {
         <div className="h-[100dvh] w-full overflow-hidden">
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
-            <div className="flex w-full overflow-hidden bg-[#F9F9F9] p-4 touch-mobile:p-0" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
-                <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#F4F5F7] p-2">
+            <div
+                className={cn(
+                    "flex w-full overflow-hidden bg-[#F9F9F9]",
+                    isAppConversationRoute
+                        ? "p-2 touch-mobile:p-0 max-[768px]:p-0"
+                        : "p-4 touch-mobile:p-0",
+                )}
+                style={{ height: `calc(100dvh - ${bannerHeight}px)` }}
+            >
+                <div
+                    className={cn(
+                        "relative z-0 flex h-full w-full overflow-hidden rounded-[12px] touch-mobile:rounded-none",
+                        "bg-white p-0",
+                    )}
+                >
 
                     {/* Desktop/Tablet sidebar */}
                     {!isTabletOrMobile && (
@@ -138,13 +186,13 @@ export default function AppRoot() {
 
                     {/* Mobile overlay sidebar (covers content, does not push) */}
                     {isTabletOrMobile && sidebarVisible && (
-                        <div className="absolute inset-0 z-[70] flex">
-                            <div className="h-full w-[280px] max-w-[280px] border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
+                        <div className="fixed inset-0 z-[70] flex">
+                            <div className="relative flex h-full w-[280px] max-w-[280px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                                 <SideNav />
                             </div>
                             <button
                                 type="button"
-                                className="flex-1 bg-[rgba(86,88,105,0.55)]"
+                                className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
                                 aria-label="Close sidebar overlay"
                                 onClick={toggleSidebar}
                             />

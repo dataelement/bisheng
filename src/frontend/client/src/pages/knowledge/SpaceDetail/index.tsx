@@ -92,14 +92,18 @@ export function KnowledgeSpaceContent({
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
-    const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
-        const saved = localStorage.getItem("knowledge-view-mode");
-        return saved === "list" || saved === "card" ? saved : "card";
-    });
+    const [viewMode, setViewModeState] = useState<"card" | "list">("list");
     const setViewMode = (mode: "card" | "list") => {
-        setViewModeState(mode);
-        localStorage.setItem("knowledge-view-mode", mode);
+        if (mode !== "list") {
+            return;
+        }
+        setViewModeState("list");
+        localStorage.setItem("knowledge-view-mode", "list");
     };
+
+    useEffect(() => {
+        localStorage.setItem("knowledge-view-mode", "list");
+    }, []);
 
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -777,7 +781,7 @@ export function KnowledgeSpaceContent({
                 onSearch={handleSearch}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
-                enableCardMode
+                enableCardMode={false}
                 statusFilter={statusFilter}
                 onFilterStatus={handleStatusFilter}
                 sortBy={sortBy}
@@ -900,28 +904,41 @@ export function KnowledgeSpaceContent({
                 </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3 touch-mobile:mb-3">
-                {/* Left side: selection path (only in search mode with selections) */}
-                {isSearching && selectedFiles.size > 0 ? (
-                    <SelectionPathBreadcrumb
-                        spaceId={space.id}
-                        spaceName={space.name}
-                        selectedFiles={selectedFiles}
-                        displayFiles={displayFiles}
-                    />
-                ) : (
-                    <div />
-                )}
+            {/* Reserve space for mobile fixed footer */}
+            {isH5 ? <div aria-hidden className="h-[calc(env(safe-area-inset-bottom,0px)+88px)]" /> : null}
 
-                {files.length > 0 && (
-                    <PaginationBar
-                        currentPage={currentPage}
-                        pageSize={pageSize}
-                        total={total}
-                        onPageChange={onPageChange}
-                    />
-                )}
+            {/* Footer */}
+            <div className={cn(isH5 ? "fixed bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] left-1/2 z-30 w-full max-w-[1000px] -translate-x-1/2 px-4" : "")}>
+                <div
+                    className={cn(
+                        "flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3",
+                        isH5
+                            ? "w-full flex-nowrap justify-end pb-2"
+                            : ""
+                    )}
+                >
+                    {!isH5 && (
+                        isSearching && selectedFiles.size > 0 ? (
+                            <SelectionPathBreadcrumb
+                                spaceId={space.id}
+                                spaceName={space.name}
+                                selectedFiles={selectedFiles}
+                                displayFiles={displayFiles}
+                            />
+                        ) : (
+                            <div />
+                        )
+                    )}
+
+                    {files.length > 0 && (
+                        <PaginationBar
+                            currentPage={currentPage}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={onPageChange}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Edit Tags Modal */}

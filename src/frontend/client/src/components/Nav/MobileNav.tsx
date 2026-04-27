@@ -88,13 +88,12 @@ export default function MobileNav({
   return (
     <div
       className={cn(
-        'bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[env(safe-area-inset-top,0px)] dark:bg-gray-800 dark:text-white',
+        'bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)] dark:bg-gray-800 dark:text-white',
       )}
     >
       <div
         className={cn(
-          'flex w-full flex-row items-center justify-between px-2',
-          showWorkbenchMergedBar ? 'h-11 min-h-11' : 'h-10',
+          'flex h-11 min-h-11 w-full flex-row items-center justify-between px-4',
         )}
       >
         <button

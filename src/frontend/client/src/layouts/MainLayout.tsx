@@ -293,28 +293,6 @@ export default function MainLayout() {
     }
   }, [isMobile, isAppSection, mobileSidebarOpen]);
 
-  // Mobile browser: lock page-level scrolling to viewport and keep
-  // scrolling inside layout containers only.
-  useEffect(() => {
-    if (!isMobile) return;
-    const prevHtmlOverflow = document.documentElement.style.overflowY;
-    const prevHtmlHeight = document.documentElement.style.height;
-    const prevBodyOverflow = document.body.style.overflowY;
-    const prevBodyHeight = document.body.style.height;
-
-    document.documentElement.style.overflowY = 'hidden';
-    document.documentElement.style.height = '100dvh';
-    document.body.style.overflowY = 'hidden';
-    document.body.style.height = '100dvh';
-
-    return () => {
-      document.documentElement.style.overflowY = prevHtmlOverflow;
-      document.documentElement.style.height = prevHtmlHeight;
-      document.body.style.overflowY = prevBodyOverflow;
-      document.body.style.height = prevBodyHeight;
-    };
-  }, [isMobile]);
-
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
   // but this serves as a definitive guard for all environments.
@@ -374,7 +352,12 @@ export default function MainLayout() {
   })();
 
   return (
-    <div className="relative flex h-[100dvh] w-screen overflow-hidden bg-[#F9F9F9]">
+    <div
+      className={cn(
+        'relative flex w-screen bg-[#F9F9F9]',
+        isMobile ? 'min-h-[100dvh] overflow-visible' : 'h-[100dvh] overflow-hidden',
+      )}
+    >
       <WorkbenchAccessGuard />
       {shouldHideSidebarOnMobileAppsArea ? null : (
         <Sidebar
@@ -405,7 +388,12 @@ export default function MainLayout() {
           />
         </div>
       ) : null}
-      <main className="relative h-[100dvh] min-w-0 flex-1 p-2">
+      <main
+        className={cn(
+          'relative min-w-0 flex-1 p-2',
+          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh]',
+        )}
+      >
         {shouldHideSidebarOnMobileAppsArea &&
           isAppsArea &&
           !isAppChatRoute &&
@@ -427,7 +415,10 @@ export default function MainLayout() {
         >
           <div
             className={cn(
-              'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover rounded-xl bg-white shadow-xl',
+              'rounded-xl bg-white shadow-xl',
+              isMobile
+                ? 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
               shouldHideSidebarOnMobileAppsArea &&
               isAppsArea &&
               !isAppChatRoute &&

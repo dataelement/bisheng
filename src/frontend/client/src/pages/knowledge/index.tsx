@@ -660,24 +660,32 @@ export default function Knowledge() {
                                     className="h-full min-w-0 flex-shrink-0 overflow-hidden"
                                 >
                                     {isH5 ? (
-                                        <div className="mt-4 flex h-8 items-center justify-between px-4">
-                                            <button
-                                                type="button"
-                                                aria-label={localize("com_nav_open_sidebar")}
-                                                onClick={() => setSpaceListDrawerOpen(true)}
-                                                className={mobileHeadIconBtnClassName}
-                                            >
-                                                <Menu className="size-4" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                aria-label={localize("com_knowledge.create_knowledge_space")}
-                                                onClick={handleCreateSpace}
-                                                className={mobileHeadIconBtnClassName}
-                                            >
-                                                <Plus className="size-4" />
-                                            </button>
-                                        </div>
+                                        <>
+                                            <div className="fixed left-2 right-2 top-0 z-30 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                                <div className="mx-auto flex h-11 w-full max-w-[1000px] items-center justify-between px-4">
+                                                    <button
+                                                        type="button"
+                                                        aria-label={localize("com_nav_open_sidebar")}
+                                                        onClick={() => setSpaceListDrawerOpen(true)}
+                                                        className={mobileHeadIconBtnClassName}
+                                                    >
+                                                        <Menu className="size-4" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        aria-label={localize("com_knowledge.create_knowledge_space")}
+                                                        onClick={handleCreateSpace}
+                                                        className={mobileHeadIconBtnClassName}
+                                                    >
+                                                        <Plus className="size-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div
+                                                aria-hidden
+                                                className="h-[calc(env(safe-area-inset-top,0px)+52px)]"
+                                            />
+                                        </>
                                     ) : null}
                                     <KnowledgeSpaceContent
                                         space={activeSpace}

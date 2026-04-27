@@ -9,9 +9,9 @@ import { ChannelMinusIcon, ChannelPlusIcon } from "~/components/icons/channels";
 
 const MAX_KEYWORDS_LEN = 200;
 const MAX_CONDITIONS_TOTAL = 20;
-/** plus.svg / minus.svg 为 32×32 Figma 导出，图形在 viewBox 内略偏左上，缩放后用位移做光学居中 */
-const FILTER_COND_ICON_SM = "block h-4 w-4 shrink-0 object-contain translate-x-px translate-y-px";
-const FILTER_COND_ICON_MD = "block h-8 w-8 shrink-0 object-contain translate-x-px translate-y-[3px]";
+/** 图标在按钮内按几何中心对齐，避免在不同容器里出现视觉偏移 */
+const FILTER_COND_ICON_SM = "block h-4 w-4 shrink-0 object-contain";
+const FILTER_COND_ICON_MD = "block h-8 w-8 shrink-0 object-contain";
 
 export type FilterRelation = "and" | "or";
 

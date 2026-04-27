@@ -1,14 +1,14 @@
-import { ChevronLeft, X } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
+import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { UserPopMenu } from '~/layouts/UserPopMenu';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
-import { SideNavModuleTabs } from '~/pages/appChat/components/SideNavModuleTabs';
 import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
@@ -72,6 +72,7 @@ export function SideNav() {
     const location = useLocation();
     const navigate = useNavigate();
     const { conversationId, fid: flowId, type: flowType } = useParams();
+    const appOriginStorageKey = (id: string) => `app-chat-origin:${id}`;
     const handleGoBack = () => {
         let fromHomeEntry = false;
         if (conversationId) {
@@ -84,12 +85,23 @@ export function SideNav() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
+        let persistedOrigin: 'center' | 'explore' | 'home' | null = null;
+        if (conversationId) {
+            try {
+                const origin = sessionStorage.getItem(appOriginStorageKey(conversationId));
+                if (origin === 'center' || origin === 'explore' || origin === 'home') {
+                    persistedOrigin = origin;
+                }
+            } catch {
+                // ignore storage failures
+            }
+        }
         // App center entries (home list / explore) should always return to app center.
-        if (from === 'center' || from === 'explore') {
+        if (from === 'center' || from === 'explore' || persistedOrigin === 'center' || persistedOrigin === 'explore') {
             navigate('/apps');
             return;
         }
-        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home')) {
+        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home') || persistedOrigin === 'home') {
             navigate('/c/new');
             return;
         }
@@ -122,26 +134,22 @@ export function SideNav() {
     const showShareApp = flowData?.can_share === true;
 
     return (
-        <div className="relative h-full w-[280px] overflow-hidden border-r border-[#ececec] bg-white px-3 pb-2 pt-3 text-[#212121] flex flex-col gap-4">
-            {/* H5 header: fixed baseline for mobile side-menu content start */}
-            <div className="hidden shrink-0 items-center justify-between touch-mobile:flex">
-                {bsConfig?.sidebarIcon?.image ? (
-                    <img
-                        src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image}
-                        alt="logo"
-                        className="size-8 rounded-md object-contain"
-                    />
-                ) : (
-                    <div className="size-8 rounded-md bg-[#F2F3F5]" />
-                )}
-                <button
-                    type="button"
-                    onClick={() => setSidebarVisible(false)}
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
-                    aria-label={localize('com_nav_close_sidebar')}
-                >
-                    <X size={16} className="text-[#4E5969]" />
-                </button>
+        <div
+            className={cn(
+                "relative h-full w-full overflow-hidden bg-white text-[#212121] flex flex-col",
+                isTabletOrMobile
+                    ? "border-r-0 px-0 pb-0 pt-0 gap-0"
+                    : "border-r border-[#e5e6eb] px-2 pb-2 pt-2 gap-4",
+            )}
+        >
+            <div className="hidden touch-mobile:block">
+                <MobileSidebarHeaderTabs
+                    logoSrc={bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : undefined}
+                    onClose={() => setSidebarVisible(false)}
+                    onLinkClick={(link) => {
+                        if (link.closeDrawerOnNavigate) setSidebarVisible(false);
+                    }}
+                />
             </div>
 
             {/* PC: back + title — original desktop sidebar chrome */}
@@ -159,13 +167,8 @@ export function SideNav() {
                 </span>
             </div>
 
-            {/* Top module tabs — 应用内对话侧栏固定展示 */}
-            <div className="hidden touch-mobile:block pt-1">
-                <SideNavModuleTabs />
-            </div>
-
             {/* App card — 应用内对话侧栏固定展示 */}
-            <div className="shrink-0">
+            <div className="shrink-0 touch-mobile:px-3 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
                     style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
@@ -278,7 +281,7 @@ export function SideNav() {
             </div>
 
             {/* Footer user panel: mobile only (<768px) */}
-            <div className="shrink-0 border-t border-[#F2F3F5] pt-2 hidden max-[768px]:block">
+            <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1 hidden max-[768px]:block">
                 <UserPopMenu variant="drawer" />
             </div>
         </div>

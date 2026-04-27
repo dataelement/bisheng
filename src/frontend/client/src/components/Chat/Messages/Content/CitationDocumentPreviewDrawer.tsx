@@ -232,7 +232,7 @@ export default function CitationDocumentPreviewDrawer({
         className={cn(
           'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
           isFullBleedMobile && 'h-11 px-2 pt-[env(safe-area-inset-top,0px)]',
-          !isFullBleedMobile && 'h-14 px-3',
+          !isFullBleedMobile && 'h-10 px-4',
         )}
       >
         <div className="flex min-w-0 items-center gap-2">

@@ -4,7 +4,7 @@ import {
     Upload,
     FolderPlus,
     ChevronDown,
-    ChevronRight,
+    ChevronLeft,
     Info,
     FunnelIcon,
     Download,
@@ -402,53 +402,21 @@ export function KnowledgeSpaceHeader({
                             </Tooltip>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1 text-[#1d2129]">
+                        <div className="flex min-w-0 items-center gap-2 text-[#1d2129]">
                             <button
-                                onClick={() => onNavigateFolder(undefined)}
-                                className="text-[#4e5969] hover:text-[#165dff] shrink-0"
+                                type="button"
+                                onClick={() => {
+                                    const parent = currentPath[currentPath.length - 2];
+                                    onNavigateFolder(parent?.id);
+                                }}
+                                aria-label={localize("com_ui_go_back")}
+                                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
                             >
-                                {space.name}
+                                <ChevronLeft className="size-4" />
                             </button>
-                            {(() => {
-                                // Show ellipsis when path is longer than 3 levels
-                                const MAX_VISIBLE = 3;
-                                let visibleItems = currentPath;
-                                let showEllipsis = false;
-                                if (currentPath.length > MAX_VISIBLE) {
-                                    // Show first item, ellipsis, then last 2 items
-                                    visibleItems = [
-                                        currentPath[0],
-                                        ...currentPath.slice(-2),
-                                    ];
-                                    showEllipsis = true;
-                                }
-                                return visibleItems.map((item, displayIdx) => {
-                                    const isLast = displayIdx === visibleItems.length - 1;
-                                    return (
-                                        <div key={item.id} className="flex items-center gap-1 min-w-0">
-                                            <span className="text-[#86909c] mx-0.5 shrink-0">/</span>
-                                            {showEllipsis && displayIdx === 1 && (
-                                                <>
-                                                    <span className="text-[#86909c]">...</span>
-                                                    <span className="text-[#86909c] mx-0.5 shrink-0">/</span>
-                                                </>
-                                            )}
-                                            {isLast ? (
-                                                <span className="font-medium text-[#1d2129] truncate max-w-[160px]">
-                                                    {item.name}
-                                                </span>
-                                            ) : (
-                                                <button
-                                                    onClick={() => onNavigateFolder(item.id)}
-                                                    className="text-[#4e5969] hover:text-[#165dff] truncate max-w-[120px]"
-                                                >
-                                                    {item.name}
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                });
-                            })()}
+                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                                {currentPath[currentPath.length - 1]?.name || space.name}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -488,9 +456,11 @@ export function KnowledgeSpaceHeader({
                                 onSearch={onSearch}
                             />
                         </div>
-                        <div className="flex min-w-0 items-center justify-between gap-2">
-                            {viewFilterSortCluster}
-                            {batchAndAddActions}
+                        <div className="touch-mobile:-mx-4 touch-mobile:sticky touch-mobile:top-0 touch-mobile:z-20 touch-mobile:bg-white touch-mobile:px-4 touch-mobile:py-2">
+                            <div className="flex min-w-0 items-center justify-between gap-2">
+                                {viewFilterSortCluster}
+                                {batchAndAddActions}
+                            </div>
                         </div>
                     </div>
                 ) : (

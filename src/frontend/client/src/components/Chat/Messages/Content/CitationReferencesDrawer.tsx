@@ -503,8 +503,8 @@ export default function CitationReferencesDrawer({
     : { name: '文档预览', extension: '' };
   // 非 expanded：侧栏内预览区横向铺满，避免 max-w + items-center 在侧栏中留出左右大空白
   const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-full';
-  const desktopHeaderPadding = 'px-3';
-  const desktopHeaderHeight = 'h-14';
+  const desktopHeaderPadding = 'px-4';
+  const desktopHeaderHeight = 'h-10';
   const desktopHeaderGap = 'gap-2';
   const desktopButtonSize = 'size-6 rounded-[6px]';
   const desktopButtonIconSize = 'size-4';
@@ -526,8 +526,8 @@ export default function CitationReferencesDrawer({
   const referenceListContent = (
     <>
       <div className={cn(
-        'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
-        isMobileLikeViewport ? 'h-11 px-2' : 'h-14 px-3',
+        'flex shrink-0 items-center justify-between border-[#ECECEC] bg-white',
+        isMobileLikeViewport ? 'h-11 px-2' : 'h-10 px-4',
       )}>
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">

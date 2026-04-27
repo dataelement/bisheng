@@ -42,13 +42,13 @@ export function PaginationBar({ currentPage, pageSize, total, onPageChange }: Pa
 
     if (isH5) {
         return (
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 text-[12px] text-[#4e5969]">
-                <div className="w-full text-right">
+            <div className="ml-auto flex min-w-0 items-center justify-end gap-3 whitespace-nowrap text-[12px] text-[#4e5969]">
+                <div className="shrink-0">
                     {localize("com_knowledge.total_prefix")}{" "}
                     <span className="text-[#165dff]">{total}</span> {localize("com_knowledge.items_comma")}
                     {localize("com_knowledge.per_page")} {pageSize} {localize("com_knowledge.items_suffix")}
                 </div>
-                <Pagination className="mx-0 w-auto">
+                <Pagination className="mx-0 w-auto shrink-0">
                     <PaginationContent>
                         <PaginationItem>
                             <PaginationLink

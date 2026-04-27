@@ -18,6 +18,7 @@ import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
 import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
+import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
@@ -207,32 +208,9 @@ export function KnowledgeSpaceSidebar({
                 }}
             >
                 {mobileDrawerMode ? (
-                    <div className="shrink-0 px-3 py-2.5">
-                        <div className="flex items-center justify-between">
-                            {bsConfig?.sidebarIcon?.image ? (
-                                <img
-                                    className="h-8 w-8 rounded-md object-contain"
-                                    src={bsConfig.sidebarIcon.image}
-                                    alt={localize("com_nav_home")}
-                                />
-                            ) : (
-                                <div className="h-8 w-8 rounded-md bg-[#F2F3F5]" />
-                            )}
-                            {onDrawerClose ? (
-                                <button
-                                    type="button"
-                                    onClick={onDrawerClose}
-                                    aria-label={localize("com_nav_close_sidebar")}
-                                    className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
-                                >
-                                    <X className="size-4" />
-                                </button>
-                            ) : null}
-                        </div>
-                    </div>
-                ) : null}
-                {mobileDrawerMode ? (
-                    <HubModuleNavTabs
+                    <MobileSidebarHeaderTabs
+                        logoSrc={bsConfig?.sidebarIcon?.image}
+                        onClose={onDrawerClose}
                         onLinkClick={(link) => {
                             if (link.closeDrawerOnNavigate) onDrawerClose?.();
                         }}
