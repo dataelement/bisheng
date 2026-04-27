@@ -141,6 +141,7 @@
   "inputInteractionTooltip": "Provide the ability for users to edit text, suitable for multi-step task processing scenarios, such as allowing users to directly modify model-generated content or input suggestions for optimization. Submitted content will be stored in the output_result variable.",
   "dbAddress": "Database Address",
   "dbName": "Database Name",
+  "dbType": "Database Type",
   "dbUsername": "Database Username",
   "dbPassword": "Database Password",
   "dbAddressRequired": "Database address cannot be empty",
