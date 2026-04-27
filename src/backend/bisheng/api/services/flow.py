@@ -121,13 +121,15 @@ class FlowService(BaseService):
 
         # Switch versions
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
-        if not version_info:
+        if not version_info or version_info.flow_id != flow_id:
             return NotFoundVersionError.return_resp()
         if version_info.is_current == 1:
             return resp_200()
 
         # Modify the version selected by the user for the current version
-        await FlowVersionDao.change_current_version(flow_id, version_info)
+        changed = await FlowVersionDao.change_current_version(flow_id, version_info)
+        if not changed:
+            return NotFoundVersionError.return_resp()
 
         await cls.update_flow_hook(request, login_user, flow_info)
         return resp_200()

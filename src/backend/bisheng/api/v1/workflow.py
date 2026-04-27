@@ -271,15 +271,15 @@ def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserP
 
 
 @router.post('/change_version', status_code=200)
-def change_version(*,
-                   request: Request,
-                   flow_id: str = Query(default=None, description='Skill UniqueID'),
-                   version_id: int = Query(default=None, description='Current version that needs to be setID'),
-                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def change_version(*,
+                         request: Request,
+                         flow_id: str = Query(default=None, description='Skill UniqueID'),
+                         version_id: int = Query(default=None, description='Current version that needs to be setID'),
+                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Modify Current Version
     """
-    return FlowService.change_current_version(request, login_user, flow_id, version_id)
+    return await FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
 @router.get('/get_one_flow/{flow_id}')

@@ -226,6 +226,90 @@ def test_delete_version_requires_edit_app_permission():
 
 
 @pytest.mark.asyncio
+async def test_change_current_version_requires_edit_app_permission():
+    flow_module = _load_flow_service_module()
+    FlowService = flow_module.FlowService
+    login_user = SimpleNamespace(user_id=7)
+    request = SimpleNamespace()
+    flow_info = SimpleNamespace(id='wf-1', user_id=9, flow_type=10, status=0, logo='')
+    version_info = SimpleNamespace(id=2, flow_id='wf-1', is_current=0, data={'nodes': [], 'edges': []})
+
+    with patch.object(
+        flow_module.FlowDao,
+        'aget_flow_by_id',
+        new_callable=AsyncMock,
+        return_value=flow_info,
+    ), patch.object(
+        flow_module.ApplicationPermissionService,
+        'has_any_permission_async',
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_has_permission, patch.object(
+        flow_module.FlowVersionDao,
+        'aget_version_by_id',
+        new_callable=AsyncMock,
+        return_value=version_info,
+    ), patch.object(
+        flow_module.FlowVersionDao,
+        'change_current_version',
+        new_callable=AsyncMock,
+        return_value=True,
+        create=True,
+    ) as mock_change_version, patch.object(
+        FlowService,
+        'update_flow_hook',
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        await FlowService.change_current_version(request, login_user, 'wf-1', 2)
+
+    mock_has_permission.assert_awaited_once_with(
+        login_user,
+        'workflow',
+        'wf-1',
+        ['edit_app'],
+    )
+    mock_change_version.assert_awaited_once_with('wf-1', version_info)
+
+
+@pytest.mark.asyncio
+async def test_change_current_version_rejects_version_from_other_flow():
+    flow_module = _load_flow_service_module()
+    FlowService = flow_module.FlowService
+    login_user = SimpleNamespace(user_id=7)
+    request = SimpleNamespace()
+    flow_info = SimpleNamespace(id='wf-1', user_id=9, flow_type=10, status=0, logo='')
+    version_info = SimpleNamespace(id=2, flow_id='wf-other', is_current=0, data={'nodes': [], 'edges': []})
+
+    with patch.object(
+        flow_module.FlowDao,
+        'aget_flow_by_id',
+        new_callable=AsyncMock,
+        return_value=flow_info,
+    ), patch.object(
+        flow_module.ApplicationPermissionService,
+        'has_any_permission_async',
+        new_callable=AsyncMock,
+        return_value=True,
+    ), patch.object(
+        flow_module.FlowVersionDao,
+        'aget_version_by_id',
+        new_callable=AsyncMock,
+        return_value=version_info,
+    ), patch.object(
+        flow_module.FlowVersionDao,
+        'change_current_version',
+        new_callable=AsyncMock,
+        return_value=True,
+        create=True,
+    ) as mock_change_version:
+        resp = await FlowService.change_current_version(request, login_user, 'wf-1', 2)
+
+    assert resp == {'error': 'not_found_version'}
+    mock_change_version.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_one_flow_uses_view_or_use_app_permissions():
     flow_module = _load_flow_service_module()
     FlowService = flow_module.FlowService
