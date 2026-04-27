@@ -11,7 +11,7 @@ export type UserGroupV2 = {
   visibility: string;
   remark?: string | null;
   member_count?: number;
-  create_user?: number | null;
+  create_user?: number | string | null;
   create_user_name?: string | null;
   create_time?: string;
   update_time?: string;
