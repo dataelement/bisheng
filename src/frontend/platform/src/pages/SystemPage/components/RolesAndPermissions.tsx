@@ -44,6 +44,8 @@ import Roles from "./Roles"
 type TemplatePermission = { id: string; label: string; relation: string }
 type TemplateSection = { title: string; columns: { title: string; items: TemplatePermission[] }[] }
 
+const HIDDEN_RELATION_PERMISSION_IDS = new Set(["share_folder", "share_file"])
+
 const RELATION_LEVEL: Record<string, number> = {
   can_read: 1,
   can_edit: 2,
@@ -83,6 +85,17 @@ const DEFAULT_RELATION_MODELS: RelationModel[] = [
   { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
   { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
 ]
+
+const filterHiddenTemplatePermissions = (section: TemplateSection): TemplateSection => ({
+  ...section,
+  columns: section.columns.map((column) => ({
+    ...column,
+    items: column.items.filter((item) => !HIDDEN_RELATION_PERMISSION_IDS.has(item.id)),
+  })),
+})
+
+const filterHiddenPermissionIds = (permissionIds: string[]) =>
+  permissionIds.filter((id) => !HIDDEN_RELATION_PERMISSION_IDS.has(id))
 
 const TEMPLATE_SECTIONS: TemplateSection[] = [
   {
@@ -281,7 +294,7 @@ export default function RolesAndPermissions() {
     if (toolTemplate) {
       sections.splice(3, 0, withCanonicalLabels(toolTemplate as TemplateSection))
     }
-    return sections
+    return sections.map(filterHiddenTemplatePermissions)
   }, [applicationTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
@@ -314,7 +327,7 @@ export default function RolesAndPermissions() {
     if (!currentModel) return
     const permissions = currentModel.permissions || []
     if (currentModel.permissions_explicit !== false) {
-      setSelectedPermissionIds(permissions)
+      setSelectedPermissionIds(filterHiddenPermissionIds(permissions))
       return
     }
     const ids = templateSections.flatMap((section) =>
