@@ -421,7 +421,7 @@ export default function DepartmentUsersSelect({
         align="start"
         sideOffset={4}
         collisionPadding={12}
-        className="w-[min(calc(100vw_-_2rem),520px)] max-w-[calc(100vw_-_2rem)] overflow-hidden p-2"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[calc(100vw_-_2rem)] overflow-hidden p-2"
         style={{
           maxHeight: "min(520px, var(--radix-popover-content-available-height, 520px))",
         }}
