@@ -59,24 +59,23 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     const prefix = `bs:${user.id}:`;
 
     // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
-    // Priority: non-empty localStorage > admin-configured default_checked.
-    // A stored `[]` is treated as "not saved" so admin defaults still apply
-    // (the "start new conversation" button writes [], and we don't want that
-    // to permanently lock defaults out). When the KB feature is disabled by
-    // admin, clear the state regardless.
+    // Priority: any localStorage entry (including empty) wins so the user's
+    // explicit clear is preserved across refresh; admin-configured
+    // default_checked only applies on first session (key absent). When the
+    // KB feature is disabled by admin, clear the state regardless.
     try {
       if ((bsConfig as any)?.knowledgeBase?.enabled === false) {
         setSelectedOrgKbs([]);
       } else {
         const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
         let saved: any[] | null = null;
-        if (raw) {
+        if (raw !== null) {
           try {
             const v = JSON.parse(raw);
             if (Array.isArray(v)) saved = v;
           } catch { /* ignore parse errors */ }
         }
-        if (saved && saved.length > 0) {
+        if (saved !== null) {
           setSelectedOrgKbs(saved);
         } else {
           const defaults = ((bsConfig as any)?.orgKbs || [])
@@ -87,27 +86,37 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       }
     } catch { /* ignore */ }
 
-    // Agent tool groups (parent-level). Same priority rule: non-empty local
-    // wins; empty/missing falls through so AgentToolSelector can seed from
-    // admin-configured default_checked.
+    // Agent tool groups (parent-level). Same priority rule: any localStorage
+    // entry (including empty) is treated as the user's choice; admin
+    // default_checked only seeds the first session via AgentToolSelector
+    // when no key exists yet.
     try {
       const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
       let saved: any[] | null = null;
-      if (raw) {
+      if (raw !== null) {
         try {
           const v = JSON.parse(raw);
           if (Array.isArray(v)) saved = v;
         } catch { /* ignore parse errors */ }
       }
-      if (saved && saved.length > 0) {
+      if (saved !== null) {
         setSelectedAgentTools(saved);
         setAgentToolsInitialized(true);
       }
-      // else: leave initialized=false so AgentToolSelector applies defaults.
+      // else: key absent → leave initialized=false so AgentToolSelector
+      // applies admin defaults on first session.
+    } catch { /* ignore */ }
+
+    // Web search toggle. ChatForm clears searchType on conversation change,
+    // but its effect runs before this one (children commit first), so the
+    // hydrated value wins on initial mount and survives refresh / new tab.
+    try {
+      const saved = localStorage.getItem(`${prefix}searchType`);
+      if (saved !== null) setSearchType(saved);
     } catch { /* ignore */ }
 
     memoReadyRef.current = true;
-  }, [bsConfig, user?.id, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
+  }, [bsConfig, user?.id, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized, setSearchType]);
 
 
   // Persist on change (after initial hydrate completes).
@@ -120,6 +129,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     if (!memoReadyRef.current || !user?.id || !agentToolsInitialized) return;
     localStorage.setItem(`bs:${user.id}:selectedAgentTools`, JSON.stringify(selectedAgentTools));
   }, [selectedAgentTools, user?.id, agentToolsInitialized]);
+
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id) return;
+    localStorage.setItem(`bs:${user.id}:searchType`, searchType ?? '');
+  }, [searchType, user?.id]);
 
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
