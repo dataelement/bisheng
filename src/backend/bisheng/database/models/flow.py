@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import field_validator
-from sqlalchemy import Boolean, Column, DateTime, String, and_, func, or_, text
+from sqlalchemy import Boolean, Column, DateTime, String, and_, false, func, or_, text
 from sqlmodel import JSON, Field, select, update, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -392,7 +392,8 @@ class FlowDao(FlowBase):
                      id_list_not_in: list = None,
                      page: int = 0,
                      limit: int = 0,
-                     search_description: bool = False) -> (List[Dict], int):
+                     search_description: bool = False,
+                     app_type_ids: Dict[int, List[str]] = None) -> (List[Dict], int):
         """Get all flow-based apps and assistants."""
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
@@ -421,6 +422,10 @@ class FlowDao(FlowBase):
         if id_list:
             statement = statement.where(sub_query.c.id.in_(id_list))
             count_statement = count_statement.where(sub_query.c.id.in_(id_list))
+        app_type_ids_filter = cls._build_app_type_ids_filter(sub_query, app_type_ids)
+        if app_type_ids_filter is not None:
+            statement = statement.where(app_type_ids_filter)
+            count_statement = count_statement.where(app_type_ids_filter)
         if flow_type is not None:
             statement = statement.where(sub_query.c.flow_type == flow_type)
             count_statement = count_statement.where(sub_query.c.flow_type == flow_type)
@@ -469,6 +474,7 @@ class FlowDao(FlowBase):
                             page: int = 0,
                             limit: int = 0,
                             search_description=False,
+                            app_type_ids: Dict[int, List[str]] = None,
                             ) -> (List[Dict], int):
         """
         Get all flow-based apps and assistants.
@@ -514,6 +520,10 @@ class FlowDao(FlowBase):
         if id_list:
             statement = statement.where(sub_query.c.id.in_(id_list))
             count_statement = count_statement.where(sub_query.c.id.in_(id_list))
+        app_type_ids_filter = cls._build_app_type_ids_filter(sub_query, app_type_ids)
+        if app_type_ids_filter is not None:
+            statement = statement.where(app_type_ids_filter)
+            count_statement = count_statement.where(app_type_ids_filter)
         if flow_type is not None:
             statement = statement.where(sub_query.c.flow_type == flow_type)
             count_statement = count_statement.where(sub_query.c.flow_type == flow_type)
@@ -552,6 +562,25 @@ class FlowDao(FlowBase):
                 'update_time': one[8]
             })
         return data, total
+
+    @staticmethod
+    def _build_app_type_ids_filter(sub_query, app_type_ids: Dict[int, List[str]] = None):
+        """Build a type-aware app ID filter for the workflow/assistant union."""
+        if app_type_ids is None:
+            return None
+
+        conditions = []
+        for app_type, ids in app_type_ids.items():
+            normalized_ids = [str(one) for one in (ids or []) if one is not None]
+            if not normalized_ids:
+                continue
+            conditions.append(and_(
+                sub_query.c.flow_type == int(app_type),
+                sub_query.c.id.in_(normalized_ids),
+            ))
+        if not conditions:
+            return false()
+        return or_(*conditions)
 
     @classmethod
     async def get_one_flow_simple(cls, flow_id: str) -> Optional[Flow]:

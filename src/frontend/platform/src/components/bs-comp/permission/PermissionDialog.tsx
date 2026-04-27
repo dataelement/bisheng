@@ -132,7 +132,7 @@ export function PermissionDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+        <DialogContent className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
           <DialogHeader className="shrink-0">
             <DialogTitle>{t('dialog.title')} - {resourceName}</DialogTitle>
             <DialogDescription className="sr-only">
@@ -147,7 +147,7 @@ export function PermissionDialog({
       </Dialog>
 
       <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
-        <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+        <DialogContent className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
           <DialogHeader className="shrink-0">
             <DialogTitle>
               {t('dialog.tabGrant')} - {resourceName}

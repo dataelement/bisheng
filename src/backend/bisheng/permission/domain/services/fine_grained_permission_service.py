@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Iterable, Optional
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.openfga.exceptions import FGAClientError
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.api.endpoints.resource_permission import (
@@ -31,6 +33,8 @@ _PERMISSION_LEVEL_TO_RELATION = {
     'can_edit': 'editor',
     'can_read': 'viewer',
 }
+
+logger = logging.getLogger(__name__)
 
 
 class FineGrainedPermissionService:
@@ -126,6 +130,21 @@ class FineGrainedPermissionService:
         return {dept.id: dept.path or '' for dept in departments}
 
     @staticmethod
+    async def get_current_user_department_paths(user_subject_strings: set[str]) -> dict[int, str]:
+        department_ids: set[int] = set()
+        for subject in user_subject_strings:
+            if not subject.startswith('department:'):
+                continue
+            try:
+                department_ids.add(int(subject.split(':', 1)[1].split('#', 1)[0]))
+            except (TypeError, ValueError):
+                continue
+        if not department_ids:
+            return {}
+        departments = await DepartmentDao.aget_by_ids(list(department_ids))
+        return {int(dept.id): dept.path or '' for dept in departments}
+
+    @staticmethod
     def _subject_parts(tuple_user: str) -> tuple[str | None, int | None, str | None]:
         if tuple_user.startswith('user_group:'):
             subject_id = int(tuple_user.split(':', 1)[1].split('#', 1)[0])
@@ -153,6 +172,90 @@ class FineGrainedPermissionService:
         if subject_type == 'user_group':
             return suffix in {'member', 'admin'}
         return suffix == 'member'
+
+    @classmethod
+    def _binding_matches_current_user(
+        cls,
+        binding: dict,
+        user_subject_strings: set[str],
+        binding_department_paths: dict[int, str],
+        user_department_paths: dict[int, str],
+    ) -> bool:
+        try:
+            subject_id = int(binding.get('subject_id'))
+        except (TypeError, ValueError):
+            return False
+
+        subject_type = binding.get('subject_type')
+        if subject_type == 'user':
+            return f'user:{subject_id}' in user_subject_strings
+        if subject_type == 'user_group':
+            return f'user_group:{subject_id}#member' in user_subject_strings
+        if subject_type != 'department':
+            return False
+
+        if f'department:{subject_id}#member' in user_subject_strings:
+            return True
+        if not binding.get('include_children'):
+            return False
+
+        binding_path = binding_department_paths.get(subject_id)
+        if not binding_path:
+            return False
+        return any(
+            bool(user_path) and user_path.startswith(binding_path)
+            for user_path in user_department_paths.values()
+        )
+
+    @classmethod
+    async def _permission_ids_from_bindings(
+        cls,
+        lineage: list[tuple[str, str | int]],
+        models: dict[str, dict],
+        bindings: list[dict],
+        binding_department_paths: dict[int, str],
+        user_subject_strings: set[str],
+        *,
+        nearest_binding_wins: bool,
+    ) -> tuple[set[str], bool, bool]:
+        user_department_paths = await cls.get_current_user_department_paths(user_subject_strings)
+        effective_permissions: set[str] = set()
+        matched_lineage_binding = False
+        saw_bound_model = False
+
+        for resource_type, resource_id in lineage:
+            level_permissions: set[str] = set()
+            level_saw_binding = False
+            for binding in bindings:
+                if binding.get('resource_type') != resource_type:
+                    continue
+                if str(binding.get('resource_id')) != str(resource_id):
+                    continue
+                if not cls._binding_matches_current_user(
+                    binding,
+                    user_subject_strings,
+                    binding_department_paths,
+                    user_department_paths,
+                ):
+                    continue
+                model = models.get(binding.get('model_id')) if binding.get('model_id') else None
+                if binding.get('model_id'):
+                    saw_bound_model = True
+                level_saw_binding = True
+                level_permissions.update(
+                    cls._permission_ids_for_relation(
+                        resource_type,
+                        binding.get('relation') or '',
+                        model,
+                    ),
+                )
+            if nearest_binding_wins and level_saw_binding:
+                matched_lineage_binding = True
+                effective_permissions.update(level_permissions)
+                break
+            effective_permissions.update(level_permissions)
+
+        return effective_permissions, matched_lineage_binding, saw_bound_model
 
     @classmethod
     async def _resolve_binding_for_tuple(
@@ -266,49 +369,68 @@ class FineGrainedPermissionService:
         saw_legacy_subscription_viewer_tuple = False
         fga = PermissionService._get_fga()
         if fga is not None:
-            for resource_type, resource_id in lineage:
-                level_permissions: set[str] = set()
-                level_saw_tuple = False
-                for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
-                    tuples = await fga.read_tuples(object=f'{tuple_resource_type}:{resource_id}')
-                    binding_resource_type = (
-                        resource_type
-                        if tuple_resource_type != 'knowledge_space' or resource_type != 'knowledge_library'
-                        else 'knowledge_library'
-                    )
-                    for tuple_data in tuples:
-                        tuple_user = tuple_data.get('user')
-                        relation = tuple_data.get('relation')
-                        if tuple_user not in user_subject_strings:
-                            continue
-                        binding = await cls._resolve_binding_for_tuple(
-                            binding_resource_type,
-                            resource_id,
-                            tuple_user,
-                            relation,
-                            bindings,
-                            binding_department_paths,
+            try:
+                for resource_type, resource_id in lineage:
+                    level_permissions: set[str] = set()
+                    level_saw_tuple = False
+                    for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
+                        tuples = await fga.read_tuples(object=f'{tuple_resource_type}:{resource_id}')
+                        binding_resource_type = (
+                            resource_type
+                            if tuple_resource_type != 'knowledge_space' or resource_type != 'knowledge_library'
+                            else 'knowledge_library'
                         )
-                        if cls._is_legacy_subscription_viewer_tuple(
-                            tuple_resource_type,
-                            tuple_user,
-                            relation,
-                            binding,
-                        ):
-                            saw_legacy_subscription_viewer_tuple = True
-                            continue
-                        model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
-                        if binding and binding.get('model_id'):
-                            saw_bound_model_tuple = True
-                        level_saw_tuple = True
-                        level_permissions.update(
-                            cls._permission_ids_for_relation(resource_type, relation, model),
-                        )
-                if nearest_binding_wins and level_saw_tuple:
-                    matched_lineage_binding = True
+                        for tuple_data in tuples:
+                            tuple_user = tuple_data.get('user')
+                            relation = tuple_data.get('relation')
+                            if tuple_user not in user_subject_strings:
+                                continue
+                            binding = await cls._resolve_binding_for_tuple(
+                                binding_resource_type,
+                                resource_id,
+                                tuple_user,
+                                relation,
+                                bindings,
+                                binding_department_paths,
+                            )
+                            if cls._is_legacy_subscription_viewer_tuple(
+                                tuple_resource_type,
+                                tuple_user,
+                                relation,
+                                binding,
+                            ):
+                                saw_legacy_subscription_viewer_tuple = True
+                                continue
+                            model = models.get(binding.get('model_id')) if binding and binding.get('model_id') else None
+                            if binding and binding.get('model_id'):
+                                saw_bound_model_tuple = True
+                            level_saw_tuple = True
+                            level_permissions.update(
+                                cls._permission_ids_for_relation(resource_type, relation, model),
+                            )
+                    if nearest_binding_wins and level_saw_tuple:
+                        matched_lineage_binding = True
+                        effective_permissions.update(level_permissions)
+                        break
                     effective_permissions.update(level_permissions)
-                    break
-                effective_permissions.update(level_permissions)
+            except FGAClientError as exc:
+                logger.error(
+                    'OpenFGA failed while reading permission tuples for %s:%s: %s',
+                    object_type,
+                    object_id,
+                    exc,
+                )
+                binding_permissions, binding_matched, binding_saw_bound_model = await cls._permission_ids_from_bindings(
+                    lineage,
+                    models,
+                    bindings,
+                    binding_department_paths,
+                    user_subject_strings,
+                    nearest_binding_wins=nearest_binding_wins,
+                )
+                effective_permissions.update(binding_permissions)
+                matched_lineage_binding = matched_lineage_binding or binding_matched
+                saw_bound_model_tuple = saw_bound_model_tuple or binding_saw_bound_model
 
         implicit_level = await PermissionService.get_implicit_permission_level(
             user_id=login_user.user_id,

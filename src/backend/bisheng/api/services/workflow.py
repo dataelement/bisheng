@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -37,6 +38,18 @@ from bisheng.workflow.nodes.node_manage import NodeFactory
 
 class WorkFlowService(BaseService):
     SUPPORTED_APP_TYPES = {FlowType.WORKFLOW.value, FlowType.ASSISTANT.value}
+    _APP_PERMISSION_TO_MIN_RELATION = {
+        'view_app': 'can_read',
+        'use_app': 'can_read',
+        'edit_app': 'can_edit',
+        'delete_app': 'can_delete',
+        'publish_app': 'can_manage',
+        'unpublish_app': 'can_manage',
+        'share_app': 'can_manage',
+        'manage_app_owner': 'can_manage',
+        'manage_app_manager': 'can_manage',
+        'manage_app_viewer': 'can_manage',
+    }
 
     @classmethod
     def filter_supported_apps(cls, data: list[dict]) -> list[dict]:
@@ -142,13 +155,17 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        # Non-admin callers filter by app permissions in-memory after the DB query,
-        # so they must fetch the full candidate set first. skip_pagination=True
-        # also means the caller will paginate in-memory (e.g. chat.py), which
-        # would otherwise be double-paginated by the DB layer.
         if flow_type is None or skip_pagination or not user.is_admin():
             query_page = 0
             query_page_size = 0
+
+        readable_type_ids = None
+        if not user.is_admin():
+            required_permission = 'edit_app' if managed else permission_id
+            required_relation = cls._relation_for_app_permission(required_permission)
+            readable_type_ids = await cls._app_type_ids_for_relation(user, required_relation, flow_type)
+            if not cls._has_any_app_type_ids(readable_type_ids):
+                readable_type_ids = None
 
         # Get a list of skills visible to the user
         if user.is_admin():
@@ -156,16 +173,18 @@ class WorkFlowService(BaseService):
                                                      query_page, query_page_size, search_description=search_description)
         else:
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None,
-                                                     None, None, query_page, query_page_size, search_description=search_description)
+                                                     None, None, query_page, query_page_size,
+                                                     search_description=search_description,
+                                                     app_type_ids=readable_type_ids)
         data = cls.filter_supported_apps(data)
         writeable_ids: Optional[set[str]] = None
         if not user.is_admin() and data:
+            required_permission = 'edit_app' if managed else permission_id
             permission_map = await ApplicationPermissionService.get_app_permission_map_async(
                 user,
                 data,
-                ['view_app', 'use_app', 'edit_app'],
+                list(dict.fromkeys([required_permission, 'edit_app'])),
             )
-            required_permission = 'edit_app' if managed else permission_id
             data = [
                 one for one in data
                 if required_permission in permission_map.get(str(one.get('id')), set())
@@ -184,6 +203,43 @@ class WorkFlowService(BaseService):
         data = await cls.aenrich_apps_can_share(user, data, managed)
 
         return data, total
+
+    @classmethod
+    def _relation_for_app_permission(cls, permission_id: str) -> str:
+        return cls._APP_PERMISSION_TO_MIN_RELATION.get(permission_id, 'can_read')
+
+    @classmethod
+    async def _app_type_ids_for_relation(
+        cls,
+        user: UserPayload,
+        relation: str,
+        flow_type: Optional[int],
+    ) -> Dict[int, list[str]]:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        targets: list[tuple[int, str]] = []
+        if flow_type in (None, FlowType.WORKFLOW.value):
+            targets.append((FlowType.WORKFLOW.value, 'workflow'))
+        if flow_type in (None, FlowType.ASSISTANT.value):
+            targets.append((FlowType.ASSISTANT.value, 'assistant'))
+
+        results = await asyncio.gather(*[
+            PermissionService.list_accessible_ids(
+                user_id=user.user_id,
+                relation=relation,
+                object_type=object_type,
+                login_user=user,
+            )
+            for _, object_type in targets
+        ])
+        return {
+            app_type: [str(one) for one in (ids or [])]
+            for (app_type, _), ids in zip(targets, results)
+        }
+
+    @staticmethod
+    def _has_any_app_type_ids(app_type_ids: Optional[Dict[int, list[str]]]) -> bool:
+        return any(app_type_ids.values()) if app_type_ids else False
 
     @classmethod
     async def filter_apps_by_permission_id(
