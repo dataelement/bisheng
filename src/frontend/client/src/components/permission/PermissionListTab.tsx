@@ -2,6 +2,7 @@ import { useToastContext, useConfirm } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getResourceGrantDepartments,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -22,6 +23,7 @@ import { Building2, ChevronDown, Loader2, RotateCcw, Search, Trash2, User, Users
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
 
 const SUBJECT_ICONS = {
@@ -39,6 +41,7 @@ interface PermissionListTabProps {
   refreshKey: number;
   prefetchedGrantableModels?: RelationModel[];
   prefetchedGrantableModelsLoaded?: boolean;
+  prefetchedUseDefaultModels?: boolean;
   skipGrantableModelsRequest?: boolean;
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the list to the given subject type.
@@ -58,6 +61,7 @@ export function PermissionListTab({
   refreshKey,
   prefetchedGrantableModels,
   prefetchedGrantableModelsLoaded = false,
+  prefetchedUseDefaultModels = false,
   skipGrantableModelsRequest = false,
   fixedSubjectType,
 }: PermissionListTabProps) {
@@ -71,9 +75,28 @@ export function PermissionListTab({
   const [grantableModels, setGrantableModels] = useState<RelationModel[]>(
     prefetchedGrantableModels || [],
   );
+  const [useDefaultModels, setUseDefaultModels] = useState(prefetchedUseDefaultModels);
+  const [deptPathById, setDeptPathById] = useState<Map<number, string>>(() => new Map());
+  const [userSelectedTab, setUserSelectedTab] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isListScrolling, setIsListScrolling] = useState(false);
   const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+      .then((res) => {
+        if (!controller.signal.aborted && Array.isArray(res)) {
+          setDeptPathById(buildDepartmentPathLabelMap(res));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setDeptPathById(new Map());
+        }
+      });
+    return () => controller.abort();
+  }, [refreshKey, resourceId, resourceType]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -94,6 +117,7 @@ export function PermissionListTab({
 
   useEffect(() => {
     setListTab(fixedSubjectType ?? "user");
+    setUserSelectedTab(false);
     setSearchQuery("");
   }, [resourceId, fixedSubjectType]);
 
@@ -107,29 +131,41 @@ export function PermissionListTab({
     if (skipGrantableModelsRequest) {
       if (!prefetchedGrantableModelsLoaded) return;
       setGrantableModels(prefetchedGrantableModels || []);
+      setUseDefaultModels(prefetchedUseDefaultModels);
       return;
     }
 
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
+        setUseDefaultModels(false);
         setGrantableModels(Array.isArray(res) ? res : []);
       })
-      .catch(() => {});
+      .catch(() => {
+        setUseDefaultModels(false);
+        setGrantableModels([]);
+      });
   }, [
     prefetchedGrantableModels,
     prefetchedGrantableModelsLoaded,
+    prefetchedUseDefaultModels,
     refreshKey,
     resourceId,
     resourceType,
     skipGrantableModelsRequest,
   ]);
 
-  const models = useMemo<RelationModelOption[]>(() => {
-    const opts: RelationModelOption[] = (grantableModels || []).map((m) => ({
+  const grantableModelOptions = useMemo<RelationModelOption[]>(() => {
+    if (useDefaultModels) return DEFAULT_MODELS;
+
+    return (grantableModels || []).map((m) => ({
       id: m.id,
       name: m.is_system ? localize(`com_permission.level_${m.relation}`) : m.name,
       relation: m.relation as RelationLevel,
     }));
+  }, [grantableModels, localize, useDefaultModels]);
+
+  const displayModels = useMemo<RelationModelOption[]>(() => {
+    const opts = [...grantableModelOptions];
     const ids = new Set(opts.map((o) => o.id));
     for (const entry of entries) {
       if (!entry.model_id || ids.has(entry.model_id)) continue;
@@ -141,7 +177,7 @@ export function PermissionListTab({
       });
     }
     return opts.length ? opts : DEFAULT_MODELS;
-  }, [entries, grantableModels, localize]);
+  }, [entries, grantableModelOptions]);
 
   const subjectEntries = useMemo(
     () => entries.filter((entry) => entry.subject_type === listTab),
@@ -152,7 +188,27 @@ export function PermissionListTab({
     [entries],
   );
 
+  useEffect(() => {
+    if (fixedSubjectType || userSelectedTab || entries.length === 0 || subjectEntries.length > 0) return;
+    const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((subjectType) =>
+      entries.some((entry) => entry.subject_type === subjectType),
+    );
+    if (firstNonEmptyTab) setListTab(firstNonEmptyTab);
+  }, [entries, fixedSubjectType, subjectEntries.length, userSelectedTab]);
+
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const getEntryDisplayName = useCallback(
+    (entry: PermissionEntry) => {
+      if (entry.subject_type === "department") {
+        return deptPathById.get(entry.subject_id)
+          ?? entry.subject_name
+          ?? `${entry.subject_type}:${entry.subject_id}`;
+      }
+      return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+    },
+    [deptPathById],
+  );
 
   const visibleEntries = useMemo(() => {
     if (!normalizedSearchQuery) {
@@ -160,7 +216,7 @@ export function PermissionListTab({
     }
 
     return subjectEntries.filter((entry) => {
-      const name = entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+      const name = getEntryDisplayName(entry);
       const groupNames = entry.subject_group_names?.join(" ") ?? "";
       const memberNames = entry.subject_member_names?.join(" ") ?? "";
       const includeChildrenText =
@@ -171,10 +227,10 @@ export function PermissionListTab({
         .toLowerCase()
         .includes(normalizedSearchQuery);
     });
-  }, [localize, normalizedSearchQuery, subjectEntries]);
+  }, [getEntryDisplayName, localize, normalizedSearchQuery, subjectEntries]);
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
-    const model = models.find((item) => item.id === modelId);
+    const model = grantableModelOptions.find((item) => item.id === modelId);
     const newLevel = (model?.relation || "viewer") as RelationLevel;
     if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return;
     try {
@@ -225,15 +281,25 @@ export function PermissionListTab({
     [entries],
   );
 
+  const canManageEntry = useCallback(
+    (entry: PermissionEntry) => {
+      const currentModelId = entry.model_id || entry.relation;
+      return grantableModelOptions.some((model) => model.id === currentModelId);
+    },
+    [grantableModelOptions],
+  );
+
   const canDeleteSubject = useCallback(
     (entry: PermissionEntry) => {
+      if (!canManageEntry(entry)) return false;
       const relatedEntries = getSubjectEntries(entry);
+      if (relatedEntries.some((candidate) => !canManageEntry(candidate))) return false;
       const subjectOwnerCount = relatedEntries.filter(
         (candidate) => candidate.subject_type === "user" && candidate.relation === "owner",
       ).length;
       return subjectOwnerCount === 0 || ownerEntryCount > subjectOwnerCount;
     },
-    [getSubjectEntries, ownerEntryCount],
+    [canManageEntry, getSubjectEntries, ownerEntryCount],
   );
 
   const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
@@ -306,13 +372,10 @@ export function PermissionListTab({
     return map[type];
   };
 
-  const getEntryDisplayName = (entry: PermissionEntry) =>
-    entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
-
   const getPermissionLabel = (entry: PermissionEntry) => {
     const currentModelId = entry.model_id || entry.relation;
     return (
-      models.find((item) => item.id === currentModelId)?.name ||
+      displayModels.find((item) => item.id === currentModelId)?.name ||
       entry.model_name ||
       localize(`com_permission.level_${entry.relation}`)
     );
@@ -393,6 +456,7 @@ export function PermissionListTab({
                   : "text-gray-500 hover:text-gray-700"
               }`}
               onClick={() => {
+                setUserSelectedTab(true);
                 setListTab(subjectType);
                 setSearchQuery("");
               }}
@@ -433,6 +497,7 @@ export function PermissionListTab({
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
+                const canModifyEntry = canManageEntry(entry) && grantableModelOptions.length > 0;
                 const canDeleteEntrySubject = canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
@@ -465,7 +530,7 @@ export function PermissionListTab({
                     </p>
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      {!isOwner || canManageOwnerEntry ? (
+                      {canModifyEntry && (!isOwner || canManageOwnerEntry) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -480,7 +545,7 @@ export function PermissionListTab({
                             align="end"
                             className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
                           >
-                            {models.map((model) => {
+                            {grantableModelOptions.map((model) => {
                               const active = model.id === currentModelId;
                               return (
                                 <DropdownMenuItem

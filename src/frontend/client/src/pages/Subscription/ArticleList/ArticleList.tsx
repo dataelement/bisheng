@@ -276,42 +276,48 @@ export function ArticleList({
     }, [channel.id, updateTabsScrollShadow]);
 
     return (
-        <div className="flex h-full w-full flex-1 flex-col overflow-x-hidden touch-mobile:h-auto touch-mobile:min-h-full touch-mobile:overflow-y-auto">
+        <div className="flex h-full w-full flex-1 flex-col overflow-x-hidden touch-mobile:h-auto touch-mobile:min-h-full touch-mobile:overflow-y-auto touch-mobile:overflow-x-hidden">
             {/* header — 结构与知识空间页保持一致 */}
-            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
+            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-0 touch-mobile:pb-3">
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
-                        {/* H5 第一行：仅展开 / 创建，与标题区分开 */}
-                        <div className="touch-mobile:-mx-4 touch-mobile:sticky touch-mobile:top-0 touch-mobile:z-10 touch-mobile:bg-white touch-mobile:pt-[env(safe-area-inset-top,0px)]">
-                            <div
-                                className={cn(
-                                    "flex h-10 items-center gap-2 px-2",
-                                    onOpenChannelNav && onCreateChannel && "justify-between",
-                                    !onOpenChannelNav && onCreateChannel && "justify-end",
-                                )}
-                            >
-                                {onOpenChannelNav ? (
-                                    <button
-                                        type="button"
-                                        onClick={onOpenChannelNav}
-                                        aria-label={localize("com_nav_open_sidebar")}
-                                        className={mobileHeadIconBtnClassName}
-                                    >
-                                        <Menu className="size-4" />
-                                    </button>
-                                ) : null}
-                                {onCreateChannel ? (
-                                    <button
-                                        type="button"
-                                        onClick={onCreateChannel}
-                                        aria-label={localize("com_subscription.create")}
-                                        className={mobileHeadIconBtnClassName}
-                                    >
-                                        <Plus className="size-4" strokeWidth={2} />
-                                    </button>
-                                ) : null}
+                        {/* H5 第一行：固定在视口顶部，不随内容滚动且不制造横向溢出 */}
+                        <div className="hidden touch-mobile:fixed touch-mobile:left-2 touch-mobile:right-2 touch-mobile:top-0 touch-mobile:z-30 touch-mobile:block touch-mobile:bg-white touch-mobile:pt-[calc(env(safe-area-inset-top,0px)+8px)] touch-mobile:pb-2">
+                            <div className="mx-auto w-full max-w-[1000px] px-4">
+                                <div
+                                    className={cn(
+                                        "flex h-8 items-center",
+                                        onOpenChannelNav && onCreateChannel && "justify-between",
+                                        !onOpenChannelNav && onCreateChannel && "justify-end",
+                                    )}
+                                >
+                                    {onOpenChannelNav ? (
+                                        <button
+                                            type="button"
+                                            onClick={onOpenChannelNav}
+                                            aria-label={localize("com_nav_open_sidebar")}
+                                            className={mobileHeadIconBtnClassName}
+                                        >
+                                            <Menu className="size-4" />
+                                        </button>
+                                    ) : null}
+                                    {onCreateChannel ? (
+                                        <button
+                                            type="button"
+                                            onClick={onCreateChannel}
+                                            aria-label={localize("com_subscription.create")}
+                                            className={mobileHeadIconBtnClassName}
+                                        >
+                                            <Plus className="size-4" strokeWidth={2} />
+                                        </button>
+                                    ) : null}
+                                </div>
                             </div>
                         </div>
+                        <div
+                            aria-hidden
+                            className="hidden touch-mobile:block touch-mobile:h-[calc(env(safe-area-inset-top,0px)+48px)]"
+                        />
                         {/* H5 第二行：订阅 + 前往频道广场（在展开按钮下方） */}
                         <div className="flex min-w-0 items-end gap-2">
                             <h2 className="shrink-0 text-[24px] font-semibold leading-8 text-[#335CFF]">
@@ -434,7 +440,7 @@ export function ArticleList({
                             value={searchKey}
                             onChange={setSearchQuery}
                             placeholder={localize("com_subscription.search_articles_of_interest")}
-                            className="min-w-0 w-full min-[1440px]:w-auto"
+                            className="min-w-0 w-full range-576-768:w-auto range-576-768:flex-1 range-576-768:basis-0 min-[1440px]:w-auto"
                         />
 
                         {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排；576–768 与桌面同为单行 */}

@@ -12,10 +12,22 @@ from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
-from bisheng.permission.domain.application_permission_template import APPLICATION_PERMISSION_TEMPLATE
-from bisheng.permission.domain.knowledge_library_permission_template import KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE
-from bisheng.permission.domain.knowledge_space_permission_template import KNOWLEDGE_SPACE_PERMISSION_TEMPLATE
-from bisheng.permission.domain.tool_permission_template import TOOL_PERMISSION_TEMPLATE
+from bisheng.permission.domain.application_permission_template import (
+    APPLICATION_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_application_permissions,
+)
+from bisheng.permission.domain.knowledge_library_permission_template import (
+    KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_knowledge_library_permissions,
+)
+from bisheng.permission.domain.knowledge_space_permission_template import (
+    KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_knowledge_space_permissions,
+)
+from bisheng.permission.domain.tool_permission_template import (
+    TOOL_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_tool_permissions,
+)
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
@@ -39,8 +51,6 @@ logger = logging.getLogger(__name__)
 # Grantable role relations mapped to their required minimum level
 _GRANT_RELATIONS = {'owner': 'owner', 'manager': 'can_manage', 'editor': 'can_edit', 'viewer': 'can_read'}
 _GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
-_GRANT_TIERS = {'owner', 'manager', 'usage'}
-_RELATION_MAX_CALLER_INDEX = {'owner': 0, 'manager': 1, 'editor': 2, 'viewer': 2}
 _MANAGE_PERMISSION_BY_RESOURCE_TIER = {
     'workflow': {
         'owner': 'manage_app_owner',
@@ -74,8 +84,6 @@ _PERMISSION_LEVEL_TO_RELATION = {
     PermissionLevel.can_edit.value: 'editor',
     PermissionLevel.can_read.value: 'viewer',
 }
-# 无绑定信息的撤回：保持历史行为，需可管理及以上
-_LEGACY_REVOKE_MAX_CALLER_INDEX = 1
 _RELATION_MODELS_KEY = 'permission_relation_models_v1'
 _RELATION_MODEL_BINDINGS_KEY = 'permission_relation_model_bindings_v1'
 _PERMISSION_TEMPLATES = (
@@ -424,27 +432,42 @@ def _tuple_signature(item) -> tuple:
     )
 
 
-def _grant_tier_is_valid(grant, model_map: dict) -> bool:
-    """Validate that the requested relation model matches the grant relation."""
-    mid = getattr(grant, 'model_id', None)
-    if mid:
-        if mid not in model_map:
-            return False
-        m = model_map[mid]
-        if m.get('relation') != grant.relation:
-            return False
-        return m.get('grant_tier') in _GRANT_TIERS
-    return grant.relation in _RELATION_MAX_CALLER_INDEX
+def _default_permission_ids_for_relation(resource_type: str, relation: str) -> set[str]:
+    if resource_type in {'workflow', 'assistant'}:
+        return default_application_permissions(relation)
+    if resource_type == 'tool':
+        return default_tool_permissions(relation)
+    if resource_type == 'knowledge_library':
+        return default_knowledge_library_permissions(relation)
+    if resource_type in {'knowledge_space', 'folder', 'knowledge_file'}:
+        return default_knowledge_space_permissions(relation)
+    return set()
 
 
-def _management_permission_id(resource_type: str, grant_tier: str | None = None) -> str | None:
-    direct = _MANAGE_PERMISSION_BY_RESOURCE.get(resource_type)
-    if direct:
-        return direct
-    tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
-    if not tier_map:
-        return None
-    return tier_map.get(grant_tier or 'usage')
+def _permission_ids_for_model(resource_type: str, relation: str, model: dict | None) -> set[str]:
+    if model is None:
+        return _default_permission_ids_for_relation(resource_type, relation)
+    permissions = model.get('permissions') or []
+    if model.get('is_system'):
+        return _default_permission_ids_for_relation(resource_type, model.get('relation') or relation)
+    return set(permissions)
+
+
+def _model_matches_relation(relation: str, model: dict | None) -> bool:
+    return model is None or model.get('relation') == relation
+
+
+def _can_grant_relation_model(
+    *,
+    resource_type: str,
+    relation: str,
+    model: dict | None,
+    caller_permission_ids: set[str],
+) -> bool:
+    if not _model_matches_relation(relation, model):
+        return False
+    model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
+    return model_permission_ids.issubset(caller_permission_ids)
 
 
 def _management_permission_ids(resource_type: str) -> set[str]:
@@ -455,10 +478,6 @@ def _management_permission_ids(resource_type: str) -> set[str]:
     if not tier_map:
         return set()
     return set(tier_map.values())
-
-
-def _uses_direct_management_permission(resource_type: str) -> bool:
-    return resource_type in _MANAGE_PERMISSION_BY_RESOURCE
 
 
 def _lineage_binding_can_override(resource_type: str) -> bool:
@@ -492,24 +511,6 @@ async def _has_resource_permission_management_access(
         object_id=resource_id,
         login_user=login_user,
     )
-
-
-def _grant_management_permission_id(resource_type: str, grant, model_map: dict) -> str | None:
-    mid = getattr(grant, 'model_id', None)
-    if mid and mid in model_map:
-        grant_tier = model_map[mid].get('grant_tier')
-    else:
-        grant_tier = _infer_grant_tier_from_relation(getattr(grant, 'relation', '') or '')
-    return _management_permission_id(resource_type, grant_tier)
-
-
-def _revoke_management_permission_id(resource_type: str, revoke, binding: dict | None, model_map: dict) -> str | None:
-    model_id = binding.get('model_id') if binding else None
-    if model_id and model_id in model_map:
-        grant_tier = model_map[model_id].get('grant_tier')
-    else:
-        grant_tier = _infer_grant_tier_from_relation(getattr(revoke, 'relation', '') or '')
-    return _management_permission_id(resource_type, grant_tier)
 
 
 def _attach_default_model_metadata(item: ResourcePermissionItem, model_map: dict) -> None:
@@ -775,6 +776,55 @@ async def _add_implicit_permission_entries(
     return out
 
 
+async def _add_creator_owner_entry(
+    *,
+    resource_type: str,
+    resource_id: str,
+    permissions: list[ResourcePermissionItem],
+    model_map: dict,
+) -> list[ResourcePermissionItem]:
+    """Expose the DB creator as owner when the owner tuple is missing.
+
+    Resource creation writes an OpenFGA owner tuple, but older data or a delayed
+    tuple write can leave the permission dialog without the resource creator.
+    Permission checks already use the creator fallback; the list view should
+    show the same effective owner.
+    """
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    creator_id = await PermissionService._get_resource_creator(resource_type, resource_id)
+    if creator_id is None:
+        return permissions
+
+    creator_id = int(creator_id)
+    has_creator_owner = any(
+        item.subject_type == 'user'
+        and int(item.subject_id) == creator_id
+        and item.relation == 'owner'
+        for item in permissions
+    )
+    if has_creator_owner:
+        return permissions
+
+    user_name = None
+    try:
+        from bisheng.user.domain.models.user import UserDao
+
+        user = await UserDao.aget_user(creator_id)
+        user_name = getattr(user, 'user_name', None) if user else None
+    except Exception as e:
+        logger.debug('Could not resolve creator %s for permission list: %s', creator_id, e)
+
+    item = ResourcePermissionItem(
+        subject_type='user',
+        subject_id=creator_id,
+        subject_name=user_name,
+        relation='owner',
+    )
+    _attach_default_model_metadata(item, model_map)
+    return [*permissions, item]
+
+
 @router.post('/resources/{resource_type}/{resource_id}/authorize')
 async def authorize_resource(
     resource_type: str,
@@ -813,37 +863,41 @@ async def authorize_resource(
                 nearest_binding_wins=_lineage_binding_can_override(resource_type),
             )
 
-        if _uses_direct_management_permission(resource_type):
-            if management_permission_ids and not (management_permission_ids & caller_permission_ids):
-                return PermissionDeniedError.return_resp()
-            for grant in (request.grants or []):
-                if not _grant_tier_is_valid(grant, model_map):
-                    return PermissionDeniedError.return_resp()
-        else:
-            for grant in (request.grants or []):
-                if not _grant_tier_is_valid(grant, model_map):
-                    return PermissionDeniedError.return_resp()
-                permission_id = _grant_management_permission_id(resource_type, grant, model_map)
-                if permission_id and permission_id not in caller_permission_ids:
-                    return PermissionDeniedError.return_resp()
+        if management_permission_ids and not (management_permission_ids & caller_permission_ids):
+            return PermissionDeniedError.return_resp()
 
-            for revoke in (request.revokes or []):
-                binding = _binding_from_map(
-                    binding_map,
-                    resource_type,
-                    str(resource_id),
-                    revoke.subject_type,
-                    revoke.subject_id,
-                    revoke.relation,
-                    getattr(revoke, 'include_children', None),
-                )
-                if binding and binding.get('model_id'):
-                    m = model_map.get(binding['model_id'])
-                    if m is None or m.get('grant_tier') not in _GRANT_TIERS:
-                        return PermissionDeniedError.return_resp()
-                permission_id = _revoke_management_permission_id(resource_type, revoke, binding, model_map)
-                if permission_id and permission_id not in caller_permission_ids:
-                    return PermissionDeniedError.return_resp()
+        for grant in (request.grants or []):
+            model = model_map.get(getattr(grant, 'model_id', None)) if getattr(grant, 'model_id', None) else None
+            if getattr(grant, 'model_id', None) and model is None:
+                return PermissionDeniedError.return_resp()
+            if not _can_grant_relation_model(
+                resource_type=resource_type,
+                relation=grant.relation,
+                model=model,
+                caller_permission_ids=caller_permission_ids,
+            ):
+                return PermissionDeniedError.return_resp()
+
+        for revoke in (request.revokes or []):
+            binding = _binding_from_map(
+                binding_map,
+                resource_type,
+                str(resource_id),
+                revoke.subject_type,
+                revoke.subject_id,
+                revoke.relation,
+                getattr(revoke, 'include_children', None),
+            )
+            model = model_map.get(binding.get('model_id')) if binding and binding.get('model_id') else None
+            if binding and binding.get('model_id') and model is None:
+                return PermissionDeniedError.return_resp()
+            if not _can_grant_relation_model(
+                resource_type=resource_type,
+                relation=revoke.relation,
+                model=model,
+                caller_permission_ids=caller_permission_ids,
+            ):
+                return PermissionDeniedError.return_resp()
 
     grant_signatures = {_tuple_signature(g) for g in (request.grants or [])}
     revoke_signatures = {_tuple_signature(r) for r in (request.revokes or [])}
@@ -1067,6 +1121,12 @@ async def get_resource_permissions(
         visible_permissions.append(p)
     permissions = visible_permissions
     permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
+    permissions = await _add_creator_owner_entry(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        permissions=permissions,
+        model_map=model_map,
+    )
     permissions = await _add_implicit_permission_entries(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -1110,19 +1170,17 @@ async def get_grantable_relation_models(
             object_id,
             nearest_binding_wins=_lineage_binding_can_override(object_type),
         )
-    if _uses_direct_management_permission(object_type):
-        if management_permission_ids and (management_permission_ids & caller_permission_ids):
-            return resp_200([RelationModelItem(**m) for m in raw])
+    if management_permission_ids and not (management_permission_ids & caller_permission_ids):
         return resp_200([])
 
     out = []
     for m in raw:
-        if m.get('grant_tier') not in _GRANT_TIERS:
-            continue
-        permission_id = _management_permission_id(object_type, m.get('grant_tier'))
-        if permission_id and permission_id not in caller_permission_ids:
-            continue
-        if permission_id:
+        if _can_grant_relation_model(
+            resource_type=object_type,
+            relation=m.get('relation') or '',
+            model=m,
+            caller_permission_ids=caller_permission_ids,
+        ):
             out.append(RelationModelItem(**m))
     return resp_200(out)
 

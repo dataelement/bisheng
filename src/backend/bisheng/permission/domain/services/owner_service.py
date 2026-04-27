@@ -46,11 +46,15 @@ class OwnerService:
         user_id: int,
         object_type: str,
         object_id: str,
+        *,
+        enforce_fga_success: bool = False,
     ) -> None:
         """Write an owner tuple for a newly created resource.
 
         Called during resource creation (F008 integration point).
-        Does not raise on failure — FailedTuple compensation handles retries.
+        By default this preserves legacy best-effort behavior. Callers that
+        cannot safely continue without owner visibility should pass
+        ``enforce_fga_success=True``.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
         await PermissionService.authorize(
@@ -64,6 +68,7 @@ class OwnerService:
                     include_children=False,
                 ),
             ],
+            enforce_fga_success=enforce_fga_success,
         )
 
     @classmethod

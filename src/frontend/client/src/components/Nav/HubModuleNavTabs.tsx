@@ -31,7 +31,7 @@ const hubNavItemClassName = (
 ) =>
   cn(
     'flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors fine-pointer:hover:bg-[#e6edfc] coarse-pointer:hover:bg-transparent',
-    squareItems && 'h-12 w-12 p-0 shrink-0',
+    squareItems && 'h-11 w-11 p-0 shrink-0',
     equalWidth && !squareItems && 'min-w-0 flex-1',
     !equalWidth && 'shrink-0',
     (navActive || routeActive) && 'bg-[#e6edfc]',

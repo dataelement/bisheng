@@ -9,6 +9,7 @@
  *  5. Sessions can be switched/deleted
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRecoilValue } from "recoil";
 import { v4 } from "uuid";
 import type { ChatMessage, FolderSession } from "~/api/chatApi";
 import {
@@ -22,6 +23,7 @@ import {
 import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
+import store from "~/store";
 
 /** Tag object passed with folder chat messages */
 export interface FolderChatTag {
@@ -38,6 +40,7 @@ export default function useFolderChat(
     spaceId: string,
     folderId?: string
 ) {
+    const chatModel = useRecoilValue(store.chatModel);
     const [sessions, setSessions] = useState<FolderSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string>("");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -272,7 +275,7 @@ export default function useFolderChat(
             const responseMessageId = `${userMessageId}_`;
             const initialResponse: ChatMessage = {
                 text: "",
-                sender: "AI",
+                sender: chatModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId: userMessageId,
                 conversationId: chatId,
@@ -288,6 +291,7 @@ export default function useFolderChat(
                 chat_id: chatId,
                 query: text.trim(),
                 tags: tag ? [{ id: tag.id, name: tag.name }] : [],
+                model_id: String(chatModel.id || ""),
             };
 
             // Lock input immediately — don't wait for SSE open event
@@ -301,6 +305,8 @@ export default function useFolderChat(
             numericFolderId,
             createSession,
             buildSubmission,
+            chatModel.id,
+            chatModel.name,
         ]
     );
 
@@ -343,7 +349,7 @@ export default function useFolderChat(
             const newResponseId = v4();
             const newResponse: ChatMessage = {
                 text: "",
-                sender: "AI",
+                sender: chatModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId,
                 conversationId: activeChatId,
@@ -358,11 +364,12 @@ export default function useFolderChat(
                 chat_id: activeChatId,
                 query: parentMsg.text?.trim() || "",
                 tags: [],
+                model_id: String(chatModel.id || ""),
             };
 
             setSseSubmission(buildSubmission(payload, newResponseId));
         },
-        [isStreaming, enabled, activeChatId, numericFolderId, buildSubmission]
+        [isStreaming, enabled, activeChatId, numericFolderId, buildSubmission, chatModel.id, chatModel.name]
     );
 
     return {

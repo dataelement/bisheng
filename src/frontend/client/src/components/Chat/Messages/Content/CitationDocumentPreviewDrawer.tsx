@@ -1,5 +1,5 @@
 import { Download, FileText, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -112,7 +112,7 @@ export function CitationDocumentPreviewContent({
   }
 
   return (
-    <div className={cn('min-h-0 flex-1', className)}>
+    <div className={cn('flex h-full min-h-0 flex-1 flex-col', className)}>
       {fileUrl ? (
         <FilePreview
           fileName={fileName}
@@ -144,6 +144,7 @@ export default function CitationDocumentPreviewDrawer({
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
+  const drawerRef = useRef<HTMLElement>(null);
   const detail = preview?.detail ?? null;
   const fileName = getCitationDocumentName(detail);
   const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(() => getCitationDocumentUrl(detail));
@@ -151,7 +152,7 @@ export default function CitationDocumentPreviewDrawer({
   const canRenderPreview = !!preview && isRagCitation(preview.detail);
 
   useEffect(() => {
-    if (!canRenderPreview || !isNarrowLayout) return;
+    if (!canRenderPreview || !isFullBleedMobile) return;
 
     const originalBodyOverflow = document.body.style.overflow;
     const originalHtmlOverflow = document.documentElement.style.overflow;
@@ -162,7 +163,7 @@ export default function CitationDocumentPreviewDrawer({
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
     };
-  }, [canRenderPreview, isNarrowLayout]);
+  }, [canRenderPreview, isFullBleedMobile]);
 
   useEffect(() => {
     if (!canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
@@ -171,6 +172,21 @@ export default function CitationDocumentPreviewDrawer({
       setChatMobileNavHidden(false);
     };
   }, [canRenderPreview, isNarrowLayout, isFullBleedMobile, setChatMobileNavHidden]);
+
+  useEffect(() => {
+    if (!canRenderPreview || isFullBleedMobile) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || drawerRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
+  }, [canRenderPreview, isFullBleedMobile, onClose]);
 
   useEffect(() => {
     let active = true;
@@ -218,6 +234,7 @@ export default function CitationDocumentPreviewDrawer({
 
   const drawer = (
     <aside
+      ref={drawerRef}
       className={cn(
         'fixed flex flex-col bg-white',
         isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
@@ -232,7 +249,7 @@ export default function CitationDocumentPreviewDrawer({
         className={cn(
           'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
           isFullBleedMobile && 'h-11 px-2 pt-[env(safe-area-inset-top,0px)]',
-          !isFullBleedMobile && 'h-14 px-3',
+          !isFullBleedMobile && 'h-10 px-4',
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
@@ -278,11 +295,7 @@ export default function CitationDocumentPreviewDrawer({
         </button>
       </div>
 
-      <div
-        className={cn(
-          'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]',
-        )}
-      >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
       </div>
     </aside>
@@ -292,15 +305,5 @@ export default function CitationDocumentPreviewDrawer({
     return drawer;
   }
 
-  return (
-    <div className="pointer-events-none fixed inset-0 z-[120]">
-      <button
-        type="button"
-        aria-label="关闭文档预览"
-        className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
-        onClick={onClose}
-      />
-      {drawer}
-    </div>
-  );
+  return drawer;
 }

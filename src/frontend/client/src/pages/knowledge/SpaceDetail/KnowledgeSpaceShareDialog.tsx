@@ -61,6 +61,7 @@ export function KnowledgeSpaceShareDialog({
     const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
+    const [useDefaultModels, setUseDefaultModels] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -84,10 +85,12 @@ export function KnowledgeSpaceShareDialog({
         setGrantableModelsLoaded(false);
         getGrantableRelationModels(resourceType, resourceId)
             .then((res) => {
+                setUseDefaultModels(false);
                 setGrantableModels(Array.isArray(res) ? res : []);
                 setGrantableModelsLoaded(true);
             })
             .catch(() => {
+                setUseDefaultModels(false);
                 setGrantableModels([]);
                 setGrantableModelsLoaded(true);
             });
@@ -207,6 +210,7 @@ export function KnowledgeSpaceShareDialog({
                     fixedSubjectType={currentSubjectType}
                     prefetchedGrantableModels={grantableModels}
                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                    prefetchedUseDefaultModels={useDefaultModels}
                     skipGrantableModelsRequest
                 />
             </TabsContent>
@@ -227,8 +231,8 @@ export function KnowledgeSpaceShareDialog({
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:p-4">
-                    <DialogHeader className="shrink-0">
-                        <DialogTitle>{dialogTitle}</DialogTitle>
+                    <DialogHeader className="shrink-0 text-left">
+                        <DialogTitle className="text-left">{dialogTitle}</DialogTitle>
                     </DialogHeader>
 
                     <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -239,8 +243,8 @@ export function KnowledgeSpaceShareDialog({
 
             <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
                 <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:p-4">
-                    <DialogHeader className="shrink-0">
-                        <DialogTitle>
+                    <DialogHeader className="shrink-0 text-left">
+                        <DialogTitle className="text-left">
                             {localize("com_permission.tab_grant")} - {resourceName}
                         </DialogTitle>
                     </DialogHeader>
@@ -283,6 +287,7 @@ export function KnowledgeSpaceShareDialog({
                                 onSuccess={handleGrantSuccess}
                                 prefetchedGrantableModels={grantableModels}
                                 prefetchedGrantableModelsLoaded={grantableModelsLoaded}
+                                prefetchedUseDefaultModels={useDefaultModels}
                                 skipGrantableModelsRequest
                                 fixedSubjectType={grantSubjectType}
                                 includeChildren={grantIncludeChildren}

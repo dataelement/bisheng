@@ -44,6 +44,8 @@ import Roles from "./Roles"
 type TemplatePermission = { id: string; label: string; relation: string }
 type TemplateSection = { title: string; columns: { title: string; items: TemplatePermission[] }[] }
 
+const HIDDEN_RELATION_PERMISSION_IDS = new Set(["share_folder", "share_file"])
+
 const RELATION_LEVEL: Record<string, number> = {
   can_read: 1,
   can_edit: 2,
@@ -83,6 +85,17 @@ const DEFAULT_RELATION_MODELS: RelationModel[] = [
   { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
   { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
 ]
+
+const filterHiddenTemplatePermissions = (section: TemplateSection): TemplateSection => ({
+  ...section,
+  columns: section.columns.map((column) => ({
+    ...column,
+    items: column.items.filter((item) => !HIDDEN_RELATION_PERMISSION_IDS.has(item.id)),
+  })),
+})
+
+const filterHiddenPermissionIds = (permissionIds: string[]) =>
+  permissionIds.filter((id) => !HIDDEN_RELATION_PERMISSION_IDS.has(id))
 
 const TEMPLATE_SECTIONS: TemplateSection[] = [
   {
@@ -148,7 +161,7 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
         items: [
           { id: "manage_app_owner", label: "管理应用所有者", relation: "can_manage" },
           { id: "manage_app_manager", label: "管理应用管理者", relation: "can_manage" },
-          { id: "manage_app_viewer", label: "管理应用使用者", relation: "can_manage" },
+          { id: "manage_app_viewer", label: "管理应用编辑者与使用者", relation: "can_manage" },
         ],
       },
     ],
@@ -170,12 +183,38 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
         items: [
           { id: "manage_kb_owner", label: "管理知识库所有者", relation: "can_manage" },
           { id: "manage_kb_manager", label: "管理知识库管理者", relation: "can_manage" },
-          { id: "manage_kb_viewer", label: "管理知识库使用者", relation: "can_manage" },
+          { id: "manage_kb_viewer", label: "管理知识库编辑者与使用者", relation: "can_manage" },
         ],
       },
     ],
   },
 ]
+
+/** Display labels from TEMPLATE_SECTIONS override API payloads so copy updates apply without restarting the backend. */
+const CANONICAL_PERMISSION_LABELS: ReadonlyMap<string, string> = (() => {
+  const m = new Map<string, string>()
+  for (const section of TEMPLATE_SECTIONS) {
+    for (const col of section.columns) {
+      for (const item of col.items) {
+        m.set(item.id, item.label)
+      }
+    }
+  }
+  return m
+})()
+
+function withCanonicalLabels(section: TemplateSection): TemplateSection {
+  return {
+    ...section,
+    columns: section.columns.map((col) => ({
+      ...col,
+      items: col.items.map((item) => ({
+        ...item,
+        label: CANONICAL_PERMISSION_LABELS.get(item.id) ?? item.label,
+      })),
+    })),
+  }
+}
 
 export default function RolesAndPermissions() {
   const { t } = useTranslation()
@@ -244,18 +283,18 @@ export default function RolesAndPermissions() {
   const templateSections = useMemo<TemplateSection[]>(() => {
     const sections = [...TEMPLATE_SECTIONS]
     if (knowledgeTemplate) {
-      sections[0] = knowledgeTemplate as TemplateSection
+      sections[0] = withCanonicalLabels(knowledgeTemplate as TemplateSection)
     }
     if (applicationTemplate) {
-      sections[1] = applicationTemplate as TemplateSection
+      sections[1] = withCanonicalLabels(applicationTemplate as TemplateSection)
     }
     if (knowledgeLibraryTemplate) {
-      sections[2] = knowledgeLibraryTemplate as TemplateSection
+      sections[2] = withCanonicalLabels(knowledgeLibraryTemplate as TemplateSection)
     }
     if (toolTemplate) {
-      sections.splice(3, 0, toolTemplate as TemplateSection)
+      sections.splice(3, 0, withCanonicalLabels(toolTemplate as TemplateSection))
     }
-    return sections
+    return sections.map(filterHiddenTemplatePermissions)
   }, [applicationTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
@@ -288,7 +327,7 @@ export default function RolesAndPermissions() {
     if (!currentModel) return
     const permissions = currentModel.permissions || []
     if (currentModel.permissions_explicit !== false) {
-      setSelectedPermissionIds(permissions)
+      setSelectedPermissionIds(filterHiddenPermissionIds(permissions))
       return
     }
     const ids = templateSections.flatMap((section) =>

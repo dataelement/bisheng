@@ -144,6 +144,15 @@ describe("PermissionListTab", () => {
   });
 
   it("allows owner actions when another owner remains", async () => {
+    mockedGetGrantableRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "Owner",
+        relation: "owner",
+        permissions: [],
+        is_system: true,
+      },
+    ] as any);
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "user",
@@ -176,7 +185,66 @@ describe("PermissionListTab", () => {
     expect(screen.getAllByLabelText("action.revoke")).toHaveLength(2);
   });
 
+  it("does not expose existing models outside the grantable set as actions", async () => {
+    mockedGetGrantableRelationModelsApi.mockResolvedValue([
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+    ] as any);
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+      {
+        subject_type: "user",
+        subject_id: 3,
+        subject_name: "Bob",
+        relation: "owner",
+        model_id: "owner",
+        model_name: "Owner",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="3215"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await screen.findByText("Alice");
+    expect(screen.queryByLabelText("action.revoke")).not.toBeInTheDocument();
+    expect(mockedAuthorizeResource).not.toHaveBeenCalled();
+  });
+
   it("deletes every relation for the selected subject", async () => {
+    mockedGetGrantableRelationModelsApi.mockResolvedValue([
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "editor",
+        name: "Editor",
+        relation: "editor",
+        permissions: [],
+        is_system: true,
+      },
+    ] as any);
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "user",

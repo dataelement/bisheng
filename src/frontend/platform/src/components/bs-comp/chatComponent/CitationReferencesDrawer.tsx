@@ -210,6 +210,7 @@ export default function CitationReferencesDrawer({
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
   const [errorMap, setErrorMap] = useState<Record<string, boolean>>({});
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
+  const drawerRef = useRef<HTMLElement>(null);
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>("");
@@ -369,7 +370,7 @@ export default function CitationReferencesDrawer({
   }, [open]);
 
   useEffect(() => {
-    if (!open || !isNarrowLayout) {
+    if (!open || !isFullBleedMobile) {
       return;
     }
 
@@ -382,7 +383,28 @@ export default function CitationReferencesDrawer({
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
     };
-  }, [isNarrowLayout, open]);
+  }, [isFullBleedMobile, open]);
+
+  useEffect(() => {
+    if (!open || isFullBleedMobile) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || drawerRef.current?.contains(target)) return;
+      if (target.closest('[data-citation-references-trigger="true"]')) return;
+      if (target.closest('[data-citation-trigger="true"]')) return;
+      setPanelView("list");
+      setDocumentPreview(null);
+      setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [isFullBleedMobile, open]);
 
   if (!references.length) {
     return null;
@@ -455,7 +477,7 @@ export default function CitationReferencesDrawer({
         </button>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-4 [-webkit-overflow-scrolling:touch]">
         {references.map((item) => {
           const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
           return (
@@ -555,28 +577,21 @@ export default function CitationReferencesDrawer({
       {open && (
         isFullBleedMobile ? (
           <aside
-            className="fixed inset-0 z-[120] flex flex-col overflow-hidden overscroll-contain bg-white touch-pan-y"
+            className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
             aria-label="参考资料"
           >
             {panelContent}
           </aside>
         ) : (
-          <div className="pointer-events-none fixed inset-0 z-[120] flex justify-end">
-            <button
-              type="button"
-              aria-label="关闭参考资料"
-              className="pointer-events-auto absolute inset-0 z-0 bg-transparent"
-              onClick={handleClosePanel}
-            />
-            <aside
-              className="pointer-events-auto relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
-              aria-label="参考资料"
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              {panelContent}
-            </aside>
-          </div>
+          <aside
+            ref={drawerRef}
+            className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+            aria-label="参考资料"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {panelContent}
+          </aside>
         )
       )}
       {panelView !== "document-preview" && (

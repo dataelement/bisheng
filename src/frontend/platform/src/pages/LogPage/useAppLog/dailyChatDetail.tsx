@@ -5,7 +5,7 @@ import { Button } from "@/components/bs-ui/button"
 import ShadTooltip from "@/components/ShadTooltipComponent"
 import { getChatHistoryApi } from "@/controllers/API"
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Bot } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
@@ -133,10 +133,10 @@ export default function DailyChatDetail() {
                                             {msg.user_name.slice(0, 2).toLocaleUpperCase()}
                                         </div>
                                     ) : (
-                                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white">
-                                            <div className="">
-                                                <img src={appConfig?.worksapceIcon} alt="" />
-                                            </div>
+                                        <div className="w-7 h-7 rounded-full flex items-center justify-center bg-gray-100 dark:bg-zinc-800 overflow-hidden">
+                                            {appConfig?.worksapceIcon
+                                                ? <img src={__APP_ENV__.BASE_URL + appConfig.worksapceIcon} alt="" className="w-full h-full object-cover" />
+                                                : <Bot size={16} className="text-gray-500" />}
                                         </div>
                                     )}
                                 </div>

@@ -26,7 +26,7 @@ const checkFileType = (file, accepts) => {
 // @accepts '.png,.jpg'
 // `hideTrigger` hides the built-in attachment icon; caller invokes
 // `openPicker()` via the imperative ref (e.g. from the "+" menu).
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode, hideTrigger = false, hideList = false }, ref) => {
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, onFilesStateChange, uploadMode, hideTrigger = false, hideList = false }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -85,6 +85,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         setFiles(prevFiles => {
             const res = [...prevFiles, ...filesWithProgress];
             filesRef.current = res;
+            onFilesStateChange?.(res);
             return res;
         });
 
@@ -104,6 +105,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                         return f;
                     });
                     filesRef.current = updatedFiles;
+                    onFilesStateChange?.(updatedFiles);
                     return updatedFiles;
                 });
             }, uploadMode).then(response => {
@@ -118,6 +120,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     return f;
                 });
                 setFiles(filesRef.current);
+                onFilesStateChange?.(filesRef.current);
 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
@@ -161,6 +164,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         clear: () => {
             setFiles([]);
             filesRef.current = [];
+            onFilesStateChange?.([]);
             onChange([]);
         }
     }));
@@ -169,6 +173,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         const res = filesRef.current.filter(file => file.name !== fileName);
         filesRef.current = res
         setFiles(res);
+        onFilesStateChange?.(res);
 
         // If we manually remove a file during upload, we decrease the remaining upload counter
         remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);

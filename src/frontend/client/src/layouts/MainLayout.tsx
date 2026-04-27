@@ -137,41 +137,41 @@ function Sidebar({
   const links = useMemo(() => {
     if (!canOpenWorkbenchEntry) return [];
     return [
-    {
-      section: 'home',
-      to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
-      icon: <HomeIcon />,
-      label: localize('com_nav_home'),
-      isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-    },
-    {
-      section: 'apps',
-      to: '/apps',
-      icon: <GlobeIcon />,
-      label: localize('com_nav_app_center'),
-      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-    },
-    {
-      section: 'channel',
-      to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-      icon: <LinkIcon />,
-      label: localize('com_ui_channel'),
-      isActive: pathname.startsWith('/channel'),
-    },
-    {
-      section: 'knowledge',
-      to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
-      icon: <BookOpenIcon />,
-      label: localize('com_knowledge.knowledge_space'),
-      isActive: pathname.startsWith('/knowledge'),
-    },
-  ].filter((l) => {
-    if (l.section === 'home') return showHomeTab;
-    if (l.section === 'apps') return showAppsTab;
-    if (l.section === 'channel') return showSubscriptionTab;
-    if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-    return true;
-  });
+      {
+        section: 'home',
+        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
+        icon: <HomeIcon />,
+        label: localize('com_nav_home'),
+        isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+      },
+      {
+        section: 'knowledge',
+        to: lastSectionPaths.knowledge || '/knowledge',
+        icon: <BookOpenIcon />,
+        label: localize('com_knowledge.knowledge_space'),
+        isActive: pathname.startsWith('/knowledge'),
+      },
+      {
+        section: 'channel',
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        icon: <LinkIcon />,
+        label: localize('com_ui_channel'),
+        isActive: pathname.startsWith('/channel'),
+      },
+      {
+        section: 'apps',
+        to: '/apps',
+        icon: <GlobeIcon />,
+        label: localize('com_nav_app_center'),
+        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+      },
+    ].filter((l) => {
+      if (l.section === 'home') return showHomeTab;
+      if (l.section === 'apps') return showAppsTab;
+      if (l.section === 'channel') return showSubscriptionTab;
+      if (l.section === 'knowledge') return showKnowledgeSpaceTab;
+      return true;
+    });
   }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
@@ -293,28 +293,6 @@ export default function MainLayout() {
     }
   }, [isMobile, isAppSection, mobileSidebarOpen]);
 
-  // Mobile browser: lock page-level scrolling to viewport and keep
-  // scrolling inside layout containers only.
-  useEffect(() => {
-    if (!isMobile) return;
-    const prevHtmlOverflow = document.documentElement.style.overflowY;
-    const prevHtmlHeight = document.documentElement.style.height;
-    const prevBodyOverflow = document.body.style.overflowY;
-    const prevBodyHeight = document.body.style.height;
-
-    document.documentElement.style.overflowY = 'hidden';
-    document.documentElement.style.height = '100dvh';
-    document.body.style.overflowY = 'hidden';
-    document.body.style.height = '100dvh';
-
-    return () => {
-      document.documentElement.style.overflowY = prevHtmlOverflow;
-      document.documentElement.style.height = prevHtmlHeight;
-      document.body.style.overflowY = prevBodyOverflow;
-      document.body.style.height = prevBodyHeight;
-    };
-  }, [isMobile]);
-
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
   // but this serves as a definitive guard for all environments.
@@ -374,7 +352,12 @@ export default function MainLayout() {
   })();
 
   return (
-    <div className="relative flex h-[100dvh] w-screen overflow-hidden bg-[#F9F9F9]">
+    <div
+      className={cn(
+        'relative flex w-screen bg-[#F9F9F9]',
+        isMobile ? 'min-h-[100dvh] overflow-visible' : 'h-[100dvh] overflow-hidden',
+      )}
+    >
       <WorkbenchAccessGuard />
       {shouldHideSidebarOnMobileAppsArea ? null : (
         <Sidebar
@@ -405,7 +388,12 @@ export default function MainLayout() {
           />
         </div>
       ) : null}
-      <main className="relative h-[100dvh] min-w-0 flex-1 p-2">
+      <main
+        className={cn(
+          'relative min-w-0 flex-1 p-2',
+          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh]',
+        )}
+      >
         {shouldHideSidebarOnMobileAppsArea &&
           isAppsArea &&
           !isAppChatRoute &&
@@ -427,7 +415,10 @@ export default function MainLayout() {
         >
           <div
             className={cn(
-              'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover rounded-xl bg-white shadow-xl',
+              'rounded-xl bg-white shadow-xl',
+              isMobile
+                ? 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
               shouldHideSidebarOnMobileAppsArea &&
               isAppsArea &&
               !isAppChatRoute &&

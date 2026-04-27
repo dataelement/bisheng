@@ -37,7 +37,7 @@ export function RelationSelect({
     { id: "editor", name: localize("com_permission.level_editor"), relation: "editor" },
     { id: "viewer", name: localize("com_permission.level_viewer"), relation: "viewer" },
   ];
-  const modelOptions = options && options.length ? options : fallbackOptions;
+  const modelOptions = options ?? fallbackOptions;
 
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>

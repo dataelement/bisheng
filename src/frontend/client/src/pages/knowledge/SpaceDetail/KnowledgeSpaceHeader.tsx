@@ -4,7 +4,8 @@ import {
     Upload,
     FolderPlus,
     ChevronDown,
-    ChevronRight,
+    ChevronLeft,
+    CircleQuestionMark,
     Info,
     FunnelIcon,
     Download,
@@ -54,6 +55,8 @@ interface KnowledgeSpaceHeaderProps {
     onTriggerUpload: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
+    /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
+    supportedFormatsLabel?: string;
 
     // Batch Operation Props
     selectedCount: number;
@@ -91,6 +94,7 @@ export function KnowledgeSpaceHeader({
     onTriggerUpload,
     canCreateFolder = false,
     canUploadFile = false,
+    supportedFormatsLabel,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -320,7 +324,26 @@ export function KnowledgeSpaceHeader({
                         {canUploadFile && (
                             <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
                                 <Upload className="mr-2 size-4" />
-                                {localize("com_knowledge.upload_file")}
+                                <span className="flex-1">{localize("com_knowledge.upload_file")}</span>
+                                {supportedFormatsLabel && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                                onPointerDown={(e) => e.stopPropagation()}
+                                                className="ml-2 inline-flex items-center text-[#86909C] hover:text-[#4E5969]"
+                                                aria-label={localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
+                                            >
+                                                <CircleQuestionMark className="size-3.5" />
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[320px] z-[260] bg-[rgba(23,23,23,0.85)]">
+                                            {localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>
@@ -379,6 +402,20 @@ export function KnowledgeSpaceHeader({
                                     {localize("com_knowledge.department_badge")}
                                 </span>
                             )}
+                            {space.spaceKind === "department" && space.approvalEnabled !== undefined && (
+                                <span
+                                    className={cn(
+                                        "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
+                                        space.approvalEnabled
+                                            ? "bg-[#E6EDFC] text-[#165DFF]"
+                                            : "bg-[#F2F3F5] text-[#4E5969]",
+                                    )}
+                                >
+                                    {space.approvalEnabled
+                                        ? localize("com_knowledge.approval_enabled_badge")
+                                        : localize("com_knowledge.approval_disabled_badge")}
+                                </span>
+                            )}
                             <Tooltip>
                                 <TooltipTrigger className="shrink-0 cursor-pointer">
                                     <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
@@ -402,53 +439,21 @@ export function KnowledgeSpaceHeader({
                             </Tooltip>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1 text-[#1d2129]">
+                        <div className="flex min-w-0 items-center gap-2 text-[#1d2129]">
                             <button
-                                onClick={() => onNavigateFolder(undefined)}
-                                className="text-[#4e5969] hover:text-[#165dff] shrink-0"
+                                type="button"
+                                onClick={() => {
+                                    const parent = currentPath[currentPath.length - 2];
+                                    onNavigateFolder(parent?.id);
+                                }}
+                                aria-label={localize("com_ui_go_back")}
+                                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
                             >
-                                {space.name}
+                                <ChevronLeft className="size-4" />
                             </button>
-                            {(() => {
-                                // Show ellipsis when path is longer than 3 levels
-                                const MAX_VISIBLE = 3;
-                                let visibleItems = currentPath;
-                                let showEllipsis = false;
-                                if (currentPath.length > MAX_VISIBLE) {
-                                    // Show first item, ellipsis, then last 2 items
-                                    visibleItems = [
-                                        currentPath[0],
-                                        ...currentPath.slice(-2),
-                                    ];
-                                    showEllipsis = true;
-                                }
-                                return visibleItems.map((item, displayIdx) => {
-                                    const isLast = displayIdx === visibleItems.length - 1;
-                                    return (
-                                        <div key={item.id} className="flex items-center gap-1 min-w-0">
-                                            <span className="text-[#86909c] mx-0.5 shrink-0">/</span>
-                                            {showEllipsis && displayIdx === 1 && (
-                                                <>
-                                                    <span className="text-[#86909c]">...</span>
-                                                    <span className="text-[#86909c] mx-0.5 shrink-0">/</span>
-                                                </>
-                                            )}
-                                            {isLast ? (
-                                                <span className="font-medium text-[#1d2129] truncate max-w-[160px]">
-                                                    {item.name}
-                                                </span>
-                                            ) : (
-                                                <button
-                                                    onClick={() => onNavigateFolder(item.id)}
-                                                    className="text-[#4e5969] hover:text-[#165dff] truncate max-w-[120px]"
-                                                >
-                                                    {item.name}
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                });
-                            })()}
+                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                                {currentPath[currentPath.length - 1]?.name || space.name}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -488,9 +493,11 @@ export function KnowledgeSpaceHeader({
                                 onSearch={onSearch}
                             />
                         </div>
-                        <div className="flex min-w-0 items-center justify-between gap-2">
-                            {viewFilterSortCluster}
-                            {batchAndAddActions}
+                        <div className="touch-mobile:-mx-4 touch-mobile:sticky touch-mobile:top-0 touch-mobile:z-20 touch-mobile:bg-white touch-mobile:px-4 touch-mobile:py-2">
+                            <div className="flex min-w-0 items-center justify-between gap-2">
+                                {viewFilterSortCluster}
+                                {batchAndAddActions}
+                            </div>
                         </div>
                     </div>
                 ) : (

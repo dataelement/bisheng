@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getResourceGrantDepartments,
   getResourcePermissions,
 } from "~/api/permission";
 import { PermissionListTab } from "./PermissionListTab";
@@ -19,6 +20,7 @@ jest.mock("~/Providers", () => ({
 jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getGrantableRelationModels: jest.fn(),
+  getResourceGrantDepartments: jest.fn(),
   getResourcePermissions: jest.fn(),
 }));
 
@@ -38,6 +40,7 @@ jest.mock("~/components/ui/DropdownMenu", () => ({
 }));
 
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
+const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
 const mockedGetResourcePermissions = jest.mocked(getResourcePermissions);
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 
@@ -45,11 +48,26 @@ describe("Client PermissionListTab", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null);
+    mockedGetResourceGrantDepartments.mockResolvedValue([]);
     mockedGetGrantableRelationModels.mockResolvedValue([
       {
         id: "owner",
         name: "Owner",
         relation: "owner",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "editor",
+        name: "Editor",
+        relation: "editor",
         permissions: [],
         is_system: true,
       },

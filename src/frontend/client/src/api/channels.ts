@@ -444,10 +444,14 @@ export async function getFeedbackTips(): Promise<any> {
  * POST /api/v1/channel/manager/add_website_source
  * 添加网站信息源
  */
-export async function addWebsiteSourceApi(body: {
-    url: string;
-}): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/add_website_source`, body, { showError: true });
+export async function addWebsiteSourceApi(
+    body: { url: string },
+    options?: { signal?: AbortSignal; showError?: boolean }
+): Promise<any> {
+    return await request.post(`/api/v1/channel/manager/add_website_source`, body, {
+        showError: true,
+        ...options,
+    });
 }
 
 /**
@@ -470,10 +474,14 @@ export async function addWechatSourceApi(body: {
  * POST /api/v1/channel/manager/crawl
  * 信息源网址临时爬取
  */
-export async function crawlTempSourceApi(body: {
-    url: string;
-}): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/crawl`, body, { showError: true });
+export async function crawlTempSourceApi(
+    body: { url: string },
+    options?: { signal?: AbortSignal; showError?: boolean }
+): Promise<any> {
+    return await request.post(`/api/v1/channel/manager/crawl`, body, {
+        showError: true,
+        ...options,
+    });
 }
 
 /**

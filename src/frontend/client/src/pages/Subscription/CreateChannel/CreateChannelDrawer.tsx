@@ -25,11 +25,15 @@ import {
     AlertDialogTitle,
 } from "~/components/ui/AlertDialog";
 import { AddSourceDropdown } from "./AddSourceDropdown";
-import { CrawlPreviewPanel } from "./CrawlPreviewDialog";
+import { CrawlPreviewDialog } from "./CrawlPreviewDialog";
+import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
+import { CrawlQueuePanel } from "./CrawlQueuePanel";
 import { CreateChannelSuccessContent } from "./CreateChannelSuccess";
 import KnowledgeSyncSection, {
     type KnowledgeSyncDraft,
 } from "./KnowledgeSyncSection";
+import { useCrawlQueue } from "../hooks/useCrawlQueue";
+import { normalizeUrlForSearch } from "../urlNormalize";
 import { SubChannelBlock, type SubChannelData } from "./SubChannelBlock";
 import {
     FilterConditionEditor,
@@ -97,6 +101,21 @@ export function CreateChannelDrawer({
     const localize = useLocalize();
     const form = useCreateChannelForm();
     const isH5 = useMediaQuery("(max-width: 576px)");
+    const crawlQueue = useCrawlQueue({
+        onSourceAdded: (source) => {
+            form.setSources((prev) => {
+                if (prev.some((s) => s.id === source.id)) return prev;
+                return [...prev, source];
+            });
+        },
+    });
+
+    const [previewItemId, setPreviewItemId] = useState<string | null>(null);
+    const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+    const previewItem = previewItemId
+        ? crawlQueue.queue.find((it) => it.id === previewItemId) ?? null
+        : null;
+
     const isEditMode = mode === "edit" && !!editingChannel;
     const confirm = useConfirm();
     const [isComposingName, setIsComposingName] = useState(false);
@@ -206,12 +225,20 @@ export function CreateChannelDrawer({
 
     const handleClose = async (nextOpen: boolean) => {
         if (!nextOpen) {
+            if (crawlQueue.inProgressCount > 0) {
+                showToast({
+                    message: localize("com_subscription.wait_for_crawl_completion"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
             if (form.showSuccess) {
+                crawlQueue.clear();
                 form.resetForm();
                 onOpenChange(false);
                 return;
             }
-            if (isCreateFormPristine()) {
+            if (isCreateFormPristine() && crawlQueue.queue.length === 0) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
@@ -219,9 +246,10 @@ export function CreateChannelDrawer({
             const confirmed = await confirm({
                 description: localize("com_subscription.unsaved_tab_confirm_close"),
                 cancelText: localize("com_subscription.continue_editing"),
-                confirmText: localize("com_subscription.confirm_close")
+                confirmText: localize("com_subscription.confirm_close"),
             });
             if (!confirmed) return;
+            crawlQueue.clear();
             form.resetForm();
             onOpenChange(false);
         }
@@ -270,10 +298,7 @@ export function CreateChannelDrawer({
                     <div
                         onScroll={handleBodyScroll}
                         data-scrolling={isBodyScrolling ? "true" : "false"}
-                        className={cn(
-                            "scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden",
-                            form.crawlDialogOpen && "overflow-hidden"
-                        )}
+                        className="scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
                     >
                         {form.showSuccess && !isEditMode ? (
                             <CreateChannelSuccessContent
@@ -301,22 +326,43 @@ export function CreateChannelDrawer({
                             >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
-                                <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F] mr-1">*</span>
-                                    {localize("com_subscription.add_information_source")}
-                                </Label>
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-[14px] text-[#1D2129]">
+                                        <span className="text-[#F53F3F] mr-1">*</span>
+                                        {localize("com_subscription.add_information_source")}
+                                    </Label>
+                                    <CrawlQueuePanel
+                                        queue={crawlQueue.queue}
+                                        inProgressCount={crawlQueue.inProgressCount}
+                                        panelOpen={crawlQueue.panelOpen}
+                                        onPanelOpenChange={crawlQueue.setPanelOpen}
+                                        onAbort={crawlQueue.abort}
+                                        onOpenPreview={(id) => setPreviewItemId(id)}
+                                        onOpenFeedback={() => setFeedbackDialogOpen(true)}
+                                    />
+                                </div>
                                 <AddSourceDropdown
                                     sources={form.sources}
                                     onSourcesChange={form.setSources}
                                     expanded={form.showAddSourcePanel}
                                     onExpandChange={form.setShowAddSourcePanel}
                                     resetToken={form.sourceSearchResetToken}
-                                    onRequestCrawl={(url) => {
-                                        // 打开「确认爬取」前先收起信息源下拉，避免浮层遮挡弹窗
-                                        form.setShowAddSourcePanel(false);
-                                        form.setCrawlUrl(url);
-                                        form.setCrawlDialogOpen(true);
+                                    onEnqueueCrawl={(url) => {
+                                        const norm = normalizeUrlForSearch(url);
+                                        if (!norm) return;
+                                        const dupInQueue = crawlQueue.queue.some((it) => normalizeUrlForSearch(it.url) === norm);
+                                        const dupInSources = form.sources.some((s) => s.url && normalizeUrlForSearch(s.url) === norm);
+                                        if (dupInQueue || dupInSources) {
+                                            showToast({
+                                                message: localize("com_subscription.url_already_in_queue"),
+                                                severity: NotificationSeverity.WARNING,
+                                            });
+                                            return;
+                                        }
+                                        crawlQueue.enqueue(url);
+                                        crawlQueue.setPanelOpen(true);
                                     }}
+                                    queueInProgressCount={crawlQueue.inProgressCount}
                                 />
                             </div>
 
@@ -704,8 +750,15 @@ export function CreateChannelDrawer({
                                 {localize("cancel")}
                             </Button>
                             <Button
-                                disabled={form.submitting}
+                                disabled={form.submitting || crawlQueue.inProgressCount > 0}
                                 onClick={async () => {
+                                    if (crawlQueue.inProgressCount > 0) {
+                                        showToast({
+                                            message: localize("com_subscription.wait_for_crawl_completion"),
+                                            severity: NotificationSeverity.WARNING,
+                                        });
+                                        return;
+                                    }
                                     const data: CreateChannelFormData = {
                                         sources: form.sources,
                                         channelName: form.channelName.trim(),
@@ -772,45 +825,22 @@ export function CreateChannelDrawer({
                             </Button>
                         </div>
                     )}
-                        {form.crawlDialogOpen && (
-                            <div
-                                className={cn(
-                                    isH5 ? "absolute inset-0 z-[70] flex min-h-0 flex-col bg-white" : "fixed inset-0 z-[120] grid place-items-center bg-black/30 p-6",
-                                )}
-                                onClick={isH5 ? undefined : () => {
-                                    form.setShowAddSourcePanel(true);
-                                    form.setSourceSearchResetToken((t) => t + 1);
-                                    form.setCrawlDialogOpen(false);
-                                }}
-                            >
-                                <div
-                                    className={cn(
-                                        "min-h-0",
-                                        isH5
-                                            ? "flex h-full w-full flex-1 flex-col bg-white"
-                                            : "flex h-[min(760px,calc(100%-32px))] w-[min(720px,calc(100%-32px))] flex-col overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
-                                    )}
-                                    onClick={(event) => event.stopPropagation()}
-                                >
-                                    <CrawlPreviewPanel
-                                        url={form.crawlUrl}
-                                        onBack={() => {
-                                            form.setShowAddSourcePanel(true);
-                                            form.setSourceSearchResetToken((t) => t + 1);
-                                            form.setCrawlDialogOpen(false);
-                                        }}
-                                        onAddSource={(source) => {
-                                            form.setSources((prev) => [...prev, source]);
-                                            form.setCrawlDialogOpen(false);
-                                            form.setShowAddSourcePanel(true);
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </SheetContent>
             </Sheet>
+
+            {previewItem && previewItem.preview && (
+                <CrawlPreviewDialog
+                    open
+                    onOpenChange={(v) => { if (!v) setPreviewItemId(null); }}
+                    url={previewItem.url}
+                    initialPreview={previewItem.preview}
+                />
+            )}
+            <CrawlFeedbackDialog
+                open={feedbackDialogOpen}
+                onOpenChange={setFeedbackDialogOpen}
+            />
         </>
     );
 }

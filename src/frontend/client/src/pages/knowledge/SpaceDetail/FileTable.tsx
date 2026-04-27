@@ -346,6 +346,7 @@ function FileTableHeader({
     sortDirection,
     onSort,
     isAdmin,
+    showStatusColumn,
     isAllSelected,
     isIndeterminate,
     onSelectAll,
@@ -358,6 +359,7 @@ function FileTableHeader({
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
     isAdmin: boolean;
+    showStatusColumn: boolean;
     isAllSelected: boolean;
     isIndeterminate: boolean;
     onSelectAll: () => void;
@@ -445,8 +447,8 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* 状态 — 不排序, only visible to admins */}
-                {isAdmin && (
+                {/* 状态 — 管理员始终可见；普通成员仅在存在审批状态时展示 */}
+                {showStatusColumn && (
                     <TableHead
                         className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
                         style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
@@ -501,6 +503,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+    const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
 
     const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
@@ -529,6 +532,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         sortDirection={sortDirection}
                         onSort={onSort}
                         isAdmin={isAdmin}
+                        showStatusColumn={showStatusColumn}
                         isAllSelected={isAllSelected}
                         isIndeterminate={isIndeterminate}
                         onSelectAll={() => handleSelectAll(isAllSelected)}
@@ -559,6 +563,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canDelete={Boolean(deleteEntryIds?.has(file.id))}
                                 canDownload={Boolean(downloadEntryIds?.has(file.id))}
                                 columnWidths={columnWidths}
+                                showStatusColumn={showStatusColumn}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
                             />
@@ -602,6 +607,7 @@ function FileRow({
     canDelete = false,
     canDownload = false,
     columnWidths,
+    showStatusColumn,
     showLeftShadow,
     showRightShadow,
 }: {
@@ -623,6 +629,7 @@ function FileRow({
     canDelete?: boolean;
     canDownload?: boolean;
     columnWidths: Record<ColumnKey, number>;
+    showStatusColumn: boolean;
     showLeftShadow: boolean;
     showRightShadow: boolean;
 }) {
@@ -753,6 +760,7 @@ function FileRow({
 
     return (
         <TableRow
+            data-knowledge-file-item
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
@@ -894,19 +902,21 @@ function FileRow({
                 <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态（管理员） */}
-            {isAdmin && (
+            {/* 状态：管理员看解析状态；普通成员只看审批状态 */}
+            {showStatusColumn && (
                 <TableCell
                     className={cn("relative overflow-visible py-3 align-middle", rowBg)}
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
                     {isFolder ? (
-                        <span className="whitespace-nowrap text-sm">
+                        isAdmin ? <span className="whitespace-nowrap text-sm">
                             <span className="text-[#00b42a]">{file.successFileNum ?? 0}</span>
                             <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
-                        </span>
+                        </span> : null
                     ) : (
-                        <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
+                        isAdmin || file.approvalStatus
+                            ? <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
+                            : null
                     )}
                 </TableCell>
             )}

@@ -1,6 +1,5 @@
 {
   "title": "Org Sync",
-  "description": "Gateway HMAC push only: one org_sync_log row per request. In the list, “~” under Members is the count of successful login-sync runs in the batch (including no-op profile updates). WeCom department heads require the gateway to fetch full user profiles; see “Batch summary” in Details.",
   "loading": "Loading...",
   "emptyHint": "No gateway sync rows yet. Rows appear after the gateway calls sync APIs and the server flushes a log.",
   "providers": {

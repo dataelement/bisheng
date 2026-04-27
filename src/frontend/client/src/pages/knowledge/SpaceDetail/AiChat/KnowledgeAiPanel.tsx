@@ -25,6 +25,9 @@ import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { getSpaceTagsApi } from "~/api/knowledge";
+import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
+import { useRecoilValue } from "recoil";
+import store from "~/store";
 
 interface KnowledgeAiPanelProps {
     spaceId: string;
@@ -41,6 +44,8 @@ export function KnowledgeAiPanel({
 }: KnowledgeAiPanelProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const { data: bsConfig } = useGetBsConfig();
+    const chatModel = useRecoilValue(store.chatModel);
 
     // Fetch space tags via react-query (cache shared with other consumers)
     const { data: availableTags = [] } = useQuery({
@@ -212,7 +217,10 @@ export function KnowledgeAiPanel({
             <KnowledgeAiInput
                 key={spaceId}
                 availableTags={availableTags}
+                modelOptions={bsConfig?.models}
+                modelValue={chatModel.id}
                 isStreaming={isStreaming}
+                disabled={!bsConfig?.models?.length}
                 onSend={handleSend}
                 onStop={stopGenerating}
             />

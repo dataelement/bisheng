@@ -41,6 +41,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const debounceTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         setScope(isRoot ? 'all' : 'current');
@@ -84,6 +85,27 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             keyword: kw,
         });
     };
+
+    useEffect(() => {
+        if (debounceTimerRef.current) {
+            window.clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+        }
+        // Keep clear behavior immediate when keyword is empty and no tags.
+        if (keyword.trim() === '' && selectedTags.length === 0) {
+            return;
+        }
+        debounceTimerRef.current = window.setTimeout(() => {
+            fireSearch(selectedTags, keyword);
+            debounceTimerRef.current = null;
+        }, 300);
+        return () => {
+            if (debounceTimerRef.current) {
+                window.clearTimeout(debounceTimerRef.current);
+                debounceTimerRef.current = null;
+            }
+        };
+    }, [keyword, scope, isRoot]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {

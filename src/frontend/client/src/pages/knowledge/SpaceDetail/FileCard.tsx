@@ -189,7 +189,7 @@ export function FileCard({
             );
         }
 
-        if (!isAdmin || isFolder) {
+        if ((!isAdmin && !approvalStatusLabel) || isFolder) {
             return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
         }
         return (

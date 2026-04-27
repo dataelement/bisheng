@@ -1,9 +1,21 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
+import { FolderPlus } from "lucide-react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "~/components/ui/DropdownMenu";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { ALLOWED_EXTENSIONS, DEFAULT_MAX_FILE_SIZE_MB, triggerUrlDownload } from "../knowledgeUtils";
+import {
+    DEFAULT_MAX_FILE_SIZE_MB,
+    getAllowedExtensions,
+    getFileInputAccept,
+    triggerUrlDownload,
+} from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
@@ -19,6 +31,7 @@ import {
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -92,14 +105,18 @@ export function KnowledgeSpaceContent({
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
-    const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
-        const saved = localStorage.getItem("knowledge-view-mode");
-        return saved === "list" || saved === "card" ? saved : "card";
-    });
+    const [viewMode, setViewModeState] = useState<"card" | "list">("list");
     const setViewMode = (mode: "card" | "list") => {
-        setViewModeState(mode);
-        localStorage.setItem("knowledge-view-mode", mode);
+        if (mode !== "list") {
+            return;
+        }
+        setViewModeState("list");
+        localStorage.setItem("knowledge-view-mode", "list");
     };
+
+    useEffect(() => {
+        localStorage.setItem("knowledge-view-mode", "list");
+    }, []);
 
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -107,6 +124,8 @@ export function KnowledgeSpaceContent({
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+    const [contextMenuOpen, setContextMenuOpen] = useState(false);
+    const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
     // Card view: compute columns by *container width* (not viewport width).
     // Thresholds (container width):
@@ -186,6 +205,7 @@ export function KnowledgeSpaceContent({
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
+    const canUseAddActions = canCreateFolder && !isSearching;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -424,6 +444,9 @@ export function KnowledgeSpaceContent({
     const bishengConfig = useRecoilValue(bishengConfState);
     const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
     const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const enableEtl4lm = bishengConfig?.enable_etl4lm ?? false;
+    const allowedExtensions = getAllowedExtensions(enableEtl4lm);
+    const fileInputAccept = getFileInputAccept(enableEtl4lm);
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -431,6 +454,22 @@ export function KnowledgeSpaceContent({
     const triggerUpload = () => {
         if (!canUploadFile) return;
         fileInputRef.current?.click();
+    };
+
+    useEffect(() => {
+        if (!canUseAddActions) {
+            setContextMenuOpen(false);
+        }
+    }, [canUseAddActions]);
+
+    const handleContentContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+        if (!canUseAddActions) return;
+        const target = e.target;
+        if (target instanceof Element && target.closest("[data-knowledge-file-item]")) return;
+
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuOpen(true);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -450,7 +489,7 @@ export function KnowledgeSpaceContent({
                     return;
                 }
                 const ext = f.name.split('.').pop()?.toLowerCase();
-                if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {
+                if (!ext || !allowedExtensions.includes(ext)) {
                     showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
@@ -469,6 +508,7 @@ export function KnowledgeSpaceContent({
         onDragStateChange,
         onUploadFile: canUploadFile ? onUploadFile : () => undefined,
         maxFileSizeMB,
+        enableEtl4lm,
     });
 
     const handleSearch = (params: SearchParams) => {
@@ -765,7 +805,7 @@ export function KnowledgeSpaceContent({
                 className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept={ALLOWED_EXTENSIONS.map(ext => `.${ext}`).join(',')}
+                accept={fileInputAccept}
             />
             {/* Header */}
             <KnowledgeSpaceHeader
@@ -777,7 +817,7 @@ export function KnowledgeSpaceContent({
                 onSearch={handleSearch}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
-                enableCardMode
+                enableCardMode={false}
                 statusFilter={statusFilter}
                 onFilterStatus={handleStatusFilter}
                 sortBy={sortBy}
@@ -787,6 +827,11 @@ export function KnowledgeSpaceContent({
                 onTriggerUpload={triggerUpload}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
+                supportedFormatsLabel={localize(
+                    enableEtl4lm
+                        ? "com_knowledge.supported_formats_with_etl4lm"
+                        : "com_knowledge.supported_formats_basic"
+                )}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
@@ -805,7 +850,27 @@ export function KnowledgeSpaceContent({
 
             {/* Content Container (Scrollable) */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col touch-mobile:flex-none">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white touch-mobile:flex-none touch-mobile:overflow-visible">
+                <div
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white touch-mobile:flex-none touch-mobile:overflow-visible"
+                    onContextMenu={handleContentContextMenu}
+                >
+                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-hidden="true"
+                                tabIndex={-1}
+                                className="fixed size-0 opacity-0"
+                                style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                            />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
+                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                <FolderPlus className="mr-2 size-4" />
+                                {localize("com_knowledge.new_folder")}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     {displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
@@ -844,28 +909,29 @@ export function KnowledgeSpaceContent({
                                 }
                             >
                                 {displayFiles.map((file) => (
-                                    <FileCard
-                                        key={file.id}
-                                        file={file}
-                                        userRole={space.role}
-                                        isSelected={selectedFiles.has(file.id)}
-                                        onSelect={(selected) => handleSelectFile(file.id, selected)}
-                                        onDownload={() => handleSingleDownload(file.id)}
-                                        onRename={(newName) => onRenameFile(file.id, newName)}
-                                        onDelete={() => handleDelete(file.id)}
-                                        onEditTags={() => handleOpenEditTags(file.id)}
-                                        onRetry={() => handleSingleRetry(file.id)}
-                                        onNavigateFolder={() => onNavigateFolder(file.id)}
-                                    onPreview={handlePreviewFile}
-                                    onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
-                                    onCancelCreate={onCancelCreateFolder}
-                                    onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
-                                    canRename={renameEntryIds.has(file.id)}
-                                    canDelete={deleteEntryIds.has(file.id)}
-                                    canDownload={downloadEntryIds.has(file.id)}
-                                    mobileListMode={isH5 && viewMode === "list"}
-                                />
-                            ))}
+                                    <div key={file.id} data-knowledge-file-item>
+                                        <FileCard
+                                            file={file}
+                                            userRole={space.role}
+                                            isSelected={selectedFiles.has(file.id)}
+                                            onSelect={(selected) => handleSelectFile(file.id, selected)}
+                                            onDownload={() => handleSingleDownload(file.id)}
+                                            onRename={(newName) => onRenameFile(file.id, newName)}
+                                            onDelete={() => handleDelete(file.id)}
+                                            onEditTags={() => handleOpenEditTags(file.id)}
+                                            onRetry={() => handleSingleRetry(file.id)}
+                                            onNavigateFolder={() => onNavigateFolder(file.id)}
+                                            onPreview={handlePreviewFile}
+                                            onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
+                                            onCancelCreate={onCancelCreateFolder}
+                                            onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                            canRename={renameEntryIds.has(file.id)}
+                                            canDelete={deleteEntryIds.has(file.id)}
+                                            canDownload={downloadEntryIds.has(file.id)}
+                                            mobileListMode={isH5 && viewMode === "list"}
+                                        />
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     ) : (
@@ -900,28 +966,41 @@ export function KnowledgeSpaceContent({
                 </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3 touch-mobile:mb-3">
-                {/* Left side: selection path (only in search mode with selections) */}
-                {isSearching && selectedFiles.size > 0 ? (
-                    <SelectionPathBreadcrumb
-                        spaceId={space.id}
-                        spaceName={space.name}
-                        selectedFiles={selectedFiles}
-                        displayFiles={displayFiles}
-                    />
-                ) : (
-                    <div />
-                )}
+            {/* Reserve space for mobile fixed footer */}
+            {isH5 ? <div aria-hidden className="h-[calc(env(safe-area-inset-bottom,0px)+88px)]" /> : null}
 
-                {files.length > 0 && (
-                    <PaginationBar
-                        currentPage={currentPage}
-                        pageSize={pageSize}
-                        total={total}
-                        onPageChange={onPageChange}
-                    />
-                )}
+            {/* Footer */}
+            <div className={cn(isH5 ? "fixed bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] left-1/2 z-30 w-full max-w-[1000px] -translate-x-1/2 px-4" : "")}>
+                <div
+                    className={cn(
+                        "flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3",
+                        isH5
+                            ? "w-full flex-nowrap justify-end pb-2"
+                            : ""
+                    )}
+                >
+                    {!isH5 && (
+                        isSearching && selectedFiles.size > 0 ? (
+                            <SelectionPathBreadcrumb
+                                spaceId={space.id}
+                                spaceName={space.name}
+                                selectedFiles={selectedFiles}
+                                displayFiles={displayFiles}
+                            />
+                        ) : (
+                            <div />
+                        )
+                    )}
+
+                    {files.length > 0 && (
+                        <PaginationBar
+                            currentPage={currentPage}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={onPageChange}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Edit Tags Modal */}

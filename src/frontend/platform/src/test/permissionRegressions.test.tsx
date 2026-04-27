@@ -420,6 +420,62 @@ describe("Relation model regressions", () => {
     expect(screen.getByText("后端查看空间")).toBeInTheDocument();
   });
 
+  it("keeps space share but hides folder and file share permissions in relation models", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "所有者",
+        relation: "owner",
+        grant_tier: "owner",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetKnowledgeSpacePermissionTemplateApi.mockResolvedValue({
+      title: "知识空间模块",
+      columns: [
+        {
+          title: "空间级",
+          items: [
+            { id: "view_space", label: "查看空间", relation: "can_read" },
+            { id: "share_space", label: "分享空间", relation: "can_manage" },
+            { id: "manage_space_relation", label: "管理空间协作者", relation: "can_manage" },
+          ],
+        },
+        {
+          title: "文件夹级",
+          items: [
+            { id: "view_folder", label: "查看文件夹", relation: "can_read" },
+            { id: "share_folder", label: "分享文件夹", relation: "can_manage" },
+            { id: "manage_folder_relation", label: "管理文件夹协作者", relation: "can_manage" },
+          ],
+        },
+        {
+          title: "文件级",
+          items: [
+            { id: "view_file", label: "查看文件", relation: "can_read" },
+            { id: "share_file", label: "分享文件", relation: "can_manage" },
+            { id: "manage_file_relation", label: "管理文件协作者", relation: "can_manage" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expect(await screen.findByText("知识空间模块")).toBeInTheDocument();
+    expect(screen.getByText("查看空间")).toBeInTheDocument();
+    expect(screen.getByText("分享空间")).toBeInTheDocument();
+    expect(screen.getByText("管理空间协作者")).toBeInTheDocument();
+    expect(screen.getByText("查看文件夹")).toBeInTheDocument();
+    expect(screen.getByText("管理文件夹协作者")).toBeInTheDocument();
+    expect(screen.getByText("查看文件")).toBeInTheDocument();
+    expect(screen.getByText("管理文件协作者")).toBeInTheDocument();
+    expect(screen.queryByText("分享文件夹")).not.toBeInTheDocument();
+    expect(screen.queryByText("分享文件")).not.toBeInTheDocument();
+  });
+
   it("renders the knowledge-library section from the backend template source of truth", async () => {
     mockedGetRelationModelsApi.mockResolvedValue([
       {

@@ -272,7 +272,7 @@ async def _init_default_root_department(session):
         if root_dept is None:
             root_dept = Department(
                 dept_id='BS@root',
-                name='Default Organization',
+                name='默认组织',
                 parent_id=None,
                 tenant_id=DEFAULT_TENANT_ID,
                 path='',

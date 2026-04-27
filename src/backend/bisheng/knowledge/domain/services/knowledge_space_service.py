@@ -506,12 +506,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     relation='parent',
                     object=f'{object_type}:{object_id}',
                 ),
-            ])
+            ], crash_safe=True, raise_on_failure=True, stop_on_failure=True)
         except Exception as e:
-            _logger.warning(
+            _logger.exception(
                 'Failed to write parent tuple %s:%s -> %s:%s: %s',
                 parent_type, parent_id, object_type, object_id, e,
             )
+            raise
 
     async def _initialize_child_resource_permissions(
         self,
@@ -526,12 +527,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self.login_user.user_id,
                 object_type,
                 str(object_id),
+                enforce_fga_success=True,
             )
         except Exception as e:
-            _logger.warning(
+            _logger.exception(
                 'Failed to write owner tuple for %s %s: %s',
                 object_type, object_id, e,
             )
+            raise
 
     async def _cleanup_resource_tuples(self, resources: List[tuple[str, int]]) -> None:
         for resource_type, resource_id in resources:
@@ -788,7 +791,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not (lineage_binding_can_override and matched_lineage_binding):
                     effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
+        effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         return effective_permissions
+
+    async def _public_space_viewer_permission_ids(self, lineage: List[tuple[str, int]]) -> set[str]:
+        space_id = next(
+            (lineage_id for lineage_type, lineage_id in lineage if lineage_type == 'knowledge_space'),
+            None,
+        )
+        if space_id is None:
+            return set()
+        space = await KnowledgeDao.aquery_by_id(int(space_id))
+        if (
+            space
+            and space.type == KnowledgeTypeEnum.SPACE.value
+            and space.is_released
+            and space.auth_type == AuthTypeEnum.PUBLIC
+        ):
+            return default_permission_ids_for_relation('viewer')
+        return set()
 
     async def _require_permission_id(
         self,
@@ -1667,12 +1688,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path=file_level_path,
             status=KnowledgeFileStatus.SUCCESS.value,
         ))
-        await self._initialize_child_resource_permissions(
-            'folder',
-            added_folder.id,
-            parent_type,
-            parent_resource_id,
-        )
+        try:
+            await self._initialize_child_resource_permissions(
+                'folder',
+                added_folder.id,
+                parent_type,
+                parent_resource_id,
+            )
+        except Exception:
+            await self._cleanup_resource_tuples([('folder', added_folder.id)])
+            await KnowledgeFileDao.adelete_batch([added_folder.id])
+            raise
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return added_folder
 
@@ -1862,9 +1888,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                                                         file_kwargs={"level": level,
                                                                      "file_level_path": file_level_path,
                                                                      "file_source": file_source.value})
-            if getattr(db_file, 'id', None):
-                created_files.append(db_file)
             if db_file.status != KnowledgeFileStatus.FAILED.value:
+                if getattr(db_file, 'id', None):
+                    created_files.append(db_file)
                 # Get a preview cache of this filekey
                 cache_key = self.get_preview_cache_key(
                     knowledge_id, one
@@ -1878,13 +1904,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 failed_file.file_level_path = file_level_path
                 failed_files.append(failed_file)
 
-        for created_file in created_files:
-            await self._initialize_child_resource_permissions(
-                'knowledge_file',
-                created_file.id,
-                parent_type,
-                parent_resource_id,
-            )
+        try:
+            for created_file in created_files:
+                await self._initialize_child_resource_permissions(
+                    'knowledge_file',
+                    created_file.id,
+                    parent_type,
+                    parent_resource_id,
+                )
+        except Exception:
+            created_file_ids = [
+                created_file.id
+                for created_file in created_files
+                if getattr(created_file, 'id', None)
+            ]
+            if created_file_ids:
+                await self._cleanup_resource_tuples([
+                    ('knowledge_file', created_file_id)
+                    for created_file_id in created_file_ids
+                ])
+                await KnowledgeFileDao.adelete_batch(created_file_ids)
+            raise
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
         await self.update_folder_update_time(file_level_path)
@@ -1939,7 +1979,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def get_file_download(self, file_id: int, *, space_id: Optional[int] = None) -> dict:
-        file_record = await self._require_file_relation(file_id, 'can_read', space_id=space_id)
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_permission_id('knowledge_file', file_id, 'download_file', space_id=file_record.knowledge_id)
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
@@ -2134,20 +2174,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Directory structure is reconstructed from file_level_path (e.g. '/7/42') by
         resolving each segment id to the corresponding folder name.
         """
-        await self._require_read_permission(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
 
         # ── 1. Collect all file records to include ────────────────────────────
         # Explicit files requested directly
         direct_files = []
         for file_id in self._dedupe_ids(file_ids):
-            file_record = await self._require_file_relation(file_id, 'can_read', space_id=space_id)
+            file_record = await self._get_file_for_action(file_id, space_id=space_id)
             await self._require_permission_id('knowledge_file', file_id, 'download_file', space_id=space_id)
             direct_files.append(file_record)
 
         # Files & sub-folders under every requested folder_id
         folder_db_records: List[KnowledgeFile] = []
         for folder_id in self._dedupe_ids(folder_ids):
-            folder = await self._require_folder_relation(space_id, folder_id, 'can_read')
+            folder = await self._get_folder_for_action(space_id, folder_id)
             await self._require_permission_id('folder', folder_id, 'download_folder', space_id=space_id)
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)

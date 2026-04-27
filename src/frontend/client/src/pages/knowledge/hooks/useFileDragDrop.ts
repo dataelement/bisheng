@@ -1,9 +1,9 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useMemo } from "react";
 import {
-    ALLOWED_MIME_TYPES,
     MAX_UPLOAD_COUNT,
     DEFAULT_MAX_FILE_SIZE_MB,
-    ALLOWED_EXTENSIONS,
+    getAllowedMimeTypes,
+    getAllowedExtensions,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
@@ -12,17 +12,26 @@ interface UseFileDragDropOptions {
     onUploadFile: (files?: FileList | File[]) => void;
     /** Maximum single file size in MB (from env config). Falls back to DEFAULT_MAX_FILE_SIZE_MB. */
     maxFileSizeMB?: number;
+    /** Whether ETL4LM service is deployed; controls which extensions/MIME types are accepted. */
+    enableEtl4lm?: boolean;
 }
 
 /**
  * Manages drag-and-drop file upload interactions.
  * Extracted from SpaceDetail/index.tsx.
  */
-export function useFileDragDrop({ onDragStateChange, onUploadFile, maxFileSizeMB }: UseFileDragDropOptions) {
+export function useFileDragDrop({
+    onDragStateChange,
+    onUploadFile,
+    maxFileSizeMB,
+    enableEtl4lm = false,
+}: UseFileDragDropOptions) {
     const localize = useLocalize();
     const dragCounter = useRef(0);
     const limitMB = maxFileSizeMB ?? DEFAULT_MAX_FILE_SIZE_MB;
     const limitBytes = limitMB * 1024 * 1024;
+    const allowedMime = useMemo(() => getAllowedMimeTypes(enableEtl4lm), [enableEtl4lm]);
+    const allowedExt = useMemo(() => getAllowedExtensions(enableEtl4lm), [enableEtl4lm]);
 
     const validateDragItems = useCallback((items: DataTransferItemList): string | null => {
         if (items.length > MAX_UPLOAD_COUNT) return localize("com_knowledge.max_upload_count", { 0: MAX_UPLOAD_COUNT });
@@ -31,13 +40,13 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile, maxFileSizeMB
             const item = items[i];
             if (item.kind === "file") {
                 const type = item.type.toLowerCase();
-                if (type && !(ALLOWED_MIME_TYPES as readonly string[]).includes(type)) {
+                if (type && !allowedMime.includes(type)) {
                     return `包含不支持的文件格式 (${type || localize("com_knowledge.unknown_format")})`;
                 }
             }
         }
         return null;
-    }, []);
+    }, [allowedMime, localize]);
 
     const handleDragEnter = useCallback(
         (e: React.DragEvent) => {
@@ -97,7 +106,7 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile, maxFileSizeMB
                         return;
                     }
                     const ext = f.name.split(".").pop()?.toLowerCase();
-                    if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {
+                    if (!ext || !allowedExt.includes(ext)) {
                         onDragStateChange?.(true, localize("com_knowledge.unsupported_file_format", { 0: f.name }));
                         onDragStateChange?.(false);
                         return;
@@ -110,7 +119,7 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile, maxFileSizeMB
                 onDragStateChange?.(false);
             }
         },
-        [onDragStateChange, onUploadFile, limitBytes, limitMB]
+        [onDragStateChange, onUploadFile, limitBytes, limitMB, allowedExt, localize]
     );
 
     return {

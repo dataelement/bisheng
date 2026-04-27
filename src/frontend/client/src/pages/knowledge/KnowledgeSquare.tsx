@@ -25,6 +25,7 @@ interface KnowledgeSquareProps {
     onPreviewSpace?: (space: KnowledgeSpace) => void;
     /** Optional status override from parent (e.g. preview drawer join) */
     statusOverride?: Record<string, SquareSpaceStatus>;
+    onSquareStatusChange?: (spaceId: string, status: SquareSpaceStatus) => void;
 }
 
 export default function KnowledgeSquare({
@@ -36,6 +37,7 @@ export default function KnowledgeSquare({
     joinToastPrefix,
     onPreviewSpace,
     statusOverride,
+    onSquareStatusChange,
 }: KnowledgeSquareProps) {
     const MAX_JOINED_SPACES = 50;
 
@@ -152,11 +154,11 @@ export default function KnowledgeSquare({
     }, [hasMorePage, loadingMore, load, page]);
 
     const handleJoin = async (space: KnowledgeSpace) => {
-        // Only join when currently "join"
+        // Rejected applications can be submitted again.
         const currentStatus =
             statusOverride?.[String(space.id)] ??
             ((space.squareStatus as SquareSpaceStatus) || "join");
-        if (currentStatus !== "join") return;
+        if (currentStatus !== "join" && currentStatus !== "rejected") return;
         if (joiningId) return;
 
         const prevSpaces = spaces;
@@ -198,6 +200,7 @@ export default function KnowledgeSquare({
                         : s
                 )
             );
+            onSquareStatusChange?.(String(space.id), nextStatus);
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {

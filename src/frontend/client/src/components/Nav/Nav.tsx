@@ -29,7 +29,7 @@ const Nav = ({
   const localize = useLocalize();
   const { isAuthenticated } = useAuthContext();
 
-  const [navWidth, setNavWidth] = useState('260px');
+  const [navWidth, setNavWidth] = useState('280px');
   const [isHovering, setIsHovering] = useState(false);
   const isSmallScreen = usePrefersMobileLayout();
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
@@ -45,10 +45,10 @@ const Nav = ({
       if (savedNavVisible === null) {
         toggleNavVisible();
       }
-      // 移动端：与其它页面抽屉统一固定宽度
-      setNavWidth('240px');
+      // 移动端：与频道/知识空间抽屉统一固定宽度
+      setNavWidth('280px');
     } else {
-      setNavWidth('240px');
+      setNavWidth('280px');
     }
   }, [isSmallScreen]);
 
@@ -106,8 +106,8 @@ const Nav = ({
       <div
         data-testid="nav"
         className={cn(
-          'nav active max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[240px] bg-white border-r border-[#ececec]',
-          isSmallScreen && 'fixed left-0 top-0 z-[60] h-[100dvh]',
+          'max-w-[280px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[280px] bg-white border-r border-[#ececec]',
+          isSmallScreen && 'fixed inset-y-0 left-0 z-[70] h-[100dvh] shadow-[4px_0_24px_rgba(0,0,0,0.06)]',
         )}
         style={{
           width: navVisible ? navWidth : '0px',
@@ -115,7 +115,7 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[240px] touch-mobile:w-full touch-desktop:w-[240px]">
+        <div className="h-full w-[280px] touch-mobile:w-full touch-desktop:w-[280px]">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
@@ -131,7 +131,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full min-h-0 w-full flex-col px-5 touch-mobile:p-2"
+                  className="flex h-full min-h-0 w-full flex-col px-5 touch-mobile:p-0"
                 >
                   {/* 新建 */}
                   <NewChat
@@ -177,7 +177,10 @@ const Nav = ({
           id="mobile-nav-mask-toggle"
           role="button"
           tabIndex={0}
-          className={`nav-mask ${navVisible ? 'active' : ''}`}
+          className={cn(
+            'fixed inset-0 z-[69] min-w-0 bg-[rgba(86,88,105,0.55)] transition-opacity',
+            navVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+          )}
           onClick={toggleNavVisible}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {

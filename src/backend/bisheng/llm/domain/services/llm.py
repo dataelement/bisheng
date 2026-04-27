@@ -505,9 +505,6 @@ class LLMService:
 
             workbench_llm = await cls.get_workbench_llm()
             workbench_change = False
-            if not workbench_llm.knowledge_space_llm:
-                workbench_llm.knowledge_space_llm = WSModel(id=str(model.id), name=model.model_name)
-                workbench_change = True
             if not workbench_llm.chat_title_llm:
                 workbench_llm.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
                 workbench_change = True

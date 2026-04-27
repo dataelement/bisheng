@@ -8,15 +8,21 @@
  * - With tag selected and empty input: first Backspace/Delete highlights tag; second removes it (no extra chrome)
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRecoilState } from "recoil";
 import { SendIcon } from "~/components/svg";
+import AiModelSelect from "~/components/Chat/AiModelSelect";
+import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { useLocalize } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
+import store from "~/store";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
+    modelOptions?: BsConfig["models"];
+    modelValue?: number;
     isStreaming: boolean;
     disabled?: boolean;
     onSend: (text: string, files?: any[] | null, tag?: FolderChatTag) => void;
@@ -31,12 +37,15 @@ const TAG_TEXT_CLASS = "text-[#212121]";
 
 export function KnowledgeAiInput({
     availableTags,
+    modelOptions,
+    modelValue = 0,
     isStreaming,
     disabled,
     onSend,
     onStop,
 }: KnowledgeAiInputProps) {
     const localize = useLocalize();
+    const [, setChatModel] = useRecoilState(store.chatModel);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
@@ -210,7 +219,7 @@ export function KnowledgeAiInput({
 
     return (
         <div className="px-4 pb-4 shrink-0">
-            <div className="relative pb-3 flex w-full flex-col bg-surface-tertiary rounded-xl">
+            <div className="relative flex w-full flex-col rounded-xl bg-surface-tertiary pb-3">
                 {/* Tag picker popup */}
                 {showPicker && (
                     <div className="px-3">
@@ -226,7 +235,7 @@ export function KnowledgeAiInput({
                 )}
 
                 {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
-                <div className="p-3 pb-0">
+                <div className="p-3 pb-10">
                     <div className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-hover pr-6">
                         <div className="relative">
                             {selectedTag && (
@@ -275,59 +284,71 @@ export function KnowledgeAiInput({
                     </div>
                 </div>
 
-                {/* Toolbar row */}
-                <div className="relative h-8">
-                    {/* Send / Stop / Voice buttons */}
-                    <div className="absolute bottom-0 right-3 flex gap-2 items-center">
-                        {/* Voice input (Speech to Text) */}
-                        {showVoice && (
-                            <SpeechToTextComponent
-                                disabled={disabled}
-                                onChange={(e) => {
-                                    const newText = (inputText || "") + e;
-                                    setInputText(newText);
-                                }}
-                            />
-                        )}
+                <div className="absolute bottom-3 left-3 flex items-center">
+                    <AiModelSelect
+                        options={modelOptions}
+                        value={modelValue}
+                        disabled={disabled || isStreaming || !modelOptions?.length}
+                        onChange={(val) => {
+                            const model = modelOptions?.find((item) => String(item.id) === String(val));
+                            setChatModel({
+                                id: Number(val),
+                                name: model?.displayName || "",
+                            });
+                        }}
+                    />
+                </div>
 
-                        {isStreaming ? (
-                            <button
-                                type="button"
-                                className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
-                                onClick={onStop}
-                                aria-label="Stop generating"
+                {/* Send / Stop / Voice buttons */}
+                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                    {/* Voice input (Speech to Text) */}
+                    {showVoice && (
+                        <SpeechToTextComponent
+                            disabled={disabled}
+                            onChange={(e) => {
+                                const newText = (inputText || "") + e;
+                                setInputText(newText);
+                            }}
+                        />
+                    )}
+
+                    {isStreaming ? (
+                        <button
+                            type="button"
+                            className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
+                            onClick={onStop}
+                            aria-label="Stop generating"
+                        >
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="icon-lg text-surface-primary"
                             >
-                                <svg
-                                    width="24"
-                                    height="24"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="icon-lg text-surface-primary"
-                                >
-                                    <rect
-                                        x="7"
-                                        y="7"
-                                        width="10"
-                                        height="10"
-                                        rx="1.25"
-                                        fill="currentColor"
-                                    />
-                                </svg>
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={handleSend}
-                                disabled={disabled || !inputText.trim()}
-                                className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
-                                aria-label="Send message"
-                                data-testid="send-button"
-                            >
-                                <SendIcon size={24} />
-                            </button>
-                        )}
-                    </div>
+                                <rect
+                                    x="7"
+                                    y="7"
+                                    width="10"
+                                    height="10"
+                                    rx="1.25"
+                                    fill="currentColor"
+                                />
+                            </svg>
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={handleSend}
+                            disabled={disabled || !inputText.trim()}
+                            className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
+                            aria-label="Send message"
+                            data-testid="send-button"
+                        >
+                            <SendIcon size={24} />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

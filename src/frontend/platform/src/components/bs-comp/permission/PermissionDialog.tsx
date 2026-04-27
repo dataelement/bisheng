@@ -64,7 +64,7 @@ export function PermissionDialog({
       () => true,
     ).then((res) => {
       if (res === false) {
-        setUseDefaultModels(true)
+        setUseDefaultModels(false)
         setGrantableModels([])
         setGrantableModelsLoaded(true)
         return

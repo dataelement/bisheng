@@ -28,6 +28,7 @@ interface NotificationsDialogProps {
 }
 
 const PAGE_SIZE = 20;
+const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
 
 function resolveMessageTimeLocale(lang: string) {
     if (lang.startsWith("zh")) return "zh-CN";
@@ -333,10 +334,22 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         }
 
         try {
-            await decideApprovalRequestApi(requestId, {
+            const approvalRequest = await decideApprovalRequestApi(requestId, {
                 action: action === "approved" ? "approve" : "reject",
                 reason,
             });
+            if (approvalRequest?.space_id && typeof window !== "undefined") {
+                const finalizedFileIds = Array.isArray(approvalRequest.payload_json?.finalized_file_ids)
+                    ? approvalRequest.payload_json.finalized_file_ids
+                    : [];
+                window.dispatchEvent(new CustomEvent(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, {
+                    detail: {
+                        spaceId: approvalRequest.space_id,
+                        parentFolderId: approvalRequest.parent_folder_id ?? undefined,
+                        fileIds: finalizedFileIds,
+                    },
+                }));
+            }
             await markMessageReadApi([Number(notificationId)]);
             setNotifications(prev =>
                 prev.map(n =>

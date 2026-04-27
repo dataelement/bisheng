@@ -5,10 +5,12 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { Shield } from "lucide-react";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
-import { checkPermission } from "~/api/permission";
+import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import { Button } from "~/components";
 import { AiChatIcon } from "~/components/icons";
+import { PermissionDialog } from "~/components/permission";
 import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
 import { useResizablePanel } from "~/pages/Subscription/hooks/useResizablePanel";
 import FilePreview from "./index";
@@ -50,6 +52,8 @@ export default function FilePreviewPage() {
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
     const [canDownload, setCanDownload] = useState(false);
+    const [canManagePermission, setCanManagePermission] = useState(false);
+    const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
@@ -109,6 +113,30 @@ export default function FilePreviewPage() {
         };
     }, [fileId]);
 
+    useEffect(() => {
+        if (!fileId) {
+            setCanManagePermission(false);
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+        canOpenPermissionDialog("knowledge_file", fileId, {
+            signal: controller.signal,
+        })
+            .then((allowed) => {
+                if (!cancelled) setCanManagePermission(Boolean(allowed));
+            })
+            .catch(() => {
+                if (!cancelled) setCanManagePermission(false);
+            });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [fileId]);
+
     const handleDownloadFile = useCallback(async () => {
         if (!fileId || !spaceId || !canDownload) return;
         try {
@@ -130,6 +158,7 @@ export default function FilePreviewPage() {
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);
+    const hasAutoOpenedAiAssistant = useRef(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
 
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
@@ -139,6 +168,12 @@ export default function FilePreviewPage() {
         minRightWidth: AI_MIN_RIGHT,
         containerRef: splitContainerRef,
     });
+
+    useEffect(() => {
+        if (loading || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
+        hasAutoOpenedAiAssistant.current = true;
+        setShowAiAssistant(true);
+    }, [loading, showAiAssistant]);
 
     // Toggle AI assistant
     const handleToggleAiAssistant = useCallback(() => {
@@ -151,17 +186,29 @@ export default function FilePreviewPage() {
         });
     }, []);
 
-    // AI assistant button injected into FilePreview's TopBar slot
-    const aiButton = (
-        <Button
-            variant="ghost"
-            onClick={handleToggleAiAssistant}
-            className="ai-btn-border-draw h-8 px-1.5 text-sm gap-1 rounded-[6px] hover:bg-transparent"
-        >
-            <span className="ai-btn-shimmer-overlay" />
-            <AiChatIcon className="size-4 text-[#94BFFF]" />
-            <span className="text-[#000D4D] font-normal">{localize("com_knowledge.ai_assistant")}</span>
-        </Button>
+    // Extra actions injected into FilePreview's TopBar slot.
+    const topBarActions = (
+        <>
+            {canManagePermission && (
+                <Button
+                    variant="outline"
+                    onClick={() => setPermissionDialogOpen(true)}
+                    className="h-8 gap-1 rounded-[6px] px-2 text-sm"
+                >
+                    <Shield className="size-4 text-[#4e5969]" />
+                    <span className="font-normal">{localize("com_permission.manage_permission")}</span>
+                </Button>
+            )}
+            <Button
+                variant="ghost"
+                onClick={handleToggleAiAssistant}
+                className="ai-btn-border-draw h-8 px-1.5 text-sm gap-1 rounded-[6px] hover:bg-transparent"
+            >
+                <span className="ai-btn-shimmer-overlay" />
+                <AiChatIcon className="size-4 text-[#94BFFF]" />
+                <span className="text-[#000D4D] font-normal">{localize("com_knowledge.ai_assistant")}</span>
+            </Button>
+        </>
     );
 
     // Loading state while fetching preview URL
@@ -184,6 +231,16 @@ export default function FilePreviewPage() {
 
     return (
         <div ref={splitContainerRef} className="h-screen flex bg-white overflow-hidden">
+            {fileId && (
+                <PermissionDialog
+                    open={permissionDialogOpen}
+                    onOpenChange={setPermissionDialogOpen}
+                    resourceType="knowledge_file"
+                    resourceId={fileId}
+                    resourceName={fileName}
+                />
+            )}
+
             {/* Transparent overlay during drag — prevents iframe/children from stealing mouse events */}
             {isResizing && (
                 <div className="fixed inset-0 z-50 cursor-col-resize" />
@@ -198,7 +255,7 @@ export default function FilePreviewPage() {
                     fileName={fileName}
                     fileType={fileType}
                     fileUrl={fileUrl}
-                    actions={aiButton}
+                    actions={topBarActions}
                     conversionFailed={conversionFailed}
                     allowDownload={canDownload}
                     onDownloadFile={handleDownloadFile}
@@ -221,7 +278,7 @@ export default function FilePreviewPage() {
             {showAiAssistant && (
                 <div className="flex-1 h-full min-w-[360px] bg-white">
                     <AiAssistantPanel
-                        features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                        features={{ tools: false, modelSelect: true, knowledgeBase: false, fileUpload: false }}
                         onClose={() => setShowAiAssistant(false)}
                         noBorder
                         fileChat={spaceId && fileId ? { spaceId, fileId } : undefined}

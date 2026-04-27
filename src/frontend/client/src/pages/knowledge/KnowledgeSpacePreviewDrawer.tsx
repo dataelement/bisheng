@@ -272,17 +272,18 @@ export function KnowledgeSpacePreviewDrawer({
     const handleClickAction = () => {
         if (!space) return;
 
-        if (status === "joined" || status === "pending" || status === "rejected") return;
+        if (status === "joined" || status === "pending") return;
         if (subscribing) return;
 
         const prevUiStatus = status;
+        const prevSquareStatus = prevUiStatus === "none" ? "join" : prevUiStatus;
 
         (async () => {
             setSubscribing(true);
 
             const rollback = () => {
                 setStatus(prevUiStatus);
-                onSquareStatusChange?.(String(space.id), "join");
+                onSquareStatusChange?.(String(space.id), prevSquareStatus);
             };
 
             try {

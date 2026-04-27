@@ -18,7 +18,7 @@ import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Loader2 } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
@@ -104,6 +104,17 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                     ✕
                 </button>
             )}
+        </div>
+    );
+};
+
+const UploadingFileTag = ({ name }: { name: string }) => {
+    return (
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700">
+            <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
+            <span className="min-w-0 flex-1 truncate text-left" title={name}>
+                {name}
+            </span>
         </div>
     );
 };
@@ -239,6 +250,7 @@ const AiChatInput = memo(
         // File upload state
         const [fileUploading, setFileUploading] = useState(false);
         const [chatFiles, setChatFiles] = useState<any[] | null>(null);
+        const [uploadingFiles, setUploadingFiles] = useState<Array<{ id: string; name: string }>>([]);
         const inputFilesRef = useRef<any>(null);
 
         // Voice input: check if ASR model is available
@@ -278,6 +290,7 @@ const AiChatInput = memo(
             onSend(trimmed, chatFiles);
             setText("");
             setChatFiles(null);
+            setUploadingFiles([]);
             inputFilesRef.current?.clear();
             // Reset textarea height
             if (textAreaRef.current) {
@@ -302,7 +315,7 @@ const AiChatInput = memo(
             [handleSend, isStreaming]
         );
 
-        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0)) && !isLingsi;
+        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         return (
             <div className="px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2 shrink-0 relative">
                 {/* Drag-drop overlay */}
@@ -338,6 +351,12 @@ const AiChatInput = memo(
                             hideList
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
                             size={envConfig?.uploaded_files_maximum_size || 50}
+                            onFilesStateChange={(currentFiles: any[] = []) => {
+                                const pending = currentFiles
+                                    .filter((f) => f?.isUploading)
+                                    .map((f) => ({ id: String(f.id), name: String(f.name || "") }));
+                                setUploadingFiles(pending);
+                            }}
                             onChange={(files: any) => {
                                 setFileUploading(!files);
                                 setChatFiles(files);
@@ -353,8 +372,11 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {hasSelectionTags && (
-                        <div className="mx-3 mt-3 mb-2 max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                        <div className="mx-1 mt-1 mb-1 max-h-[72px] overflow-y-auto scrollbar-on-hover">
                             <div className="flex flex-wrap gap-1">
+                                {uploadingFiles.map((file) => (
+                                    <UploadingFileTag key={file.id} name={file.name} />
+                                ))}
                                 {(chatFiles || []).map((file) => (
                                     <FileTag
                                         key={file.file_id || file.filepath || file.name}
@@ -397,8 +419,8 @@ const AiChatInput = memo(
                         rows={1}
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm pb-0 pl-4 pr-6",
-                            hasSelectionTags ? "pt-0" : "pt-2",
+                            "m-0 w-full resize-none bg-transparent text-sm pb-0 pl-3 pr-4",
+                            hasSelectionTags ? "pt-0" : "pt-1.5",
                             "placeholder-black/50 dark:placeholder-white/50",
                             "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-12',
@@ -408,9 +430,9 @@ const AiChatInput = memo(
                         )}
                     />
 
-                    <div className="relative h-7">
+                    <div className="relative h-7 w-full">
                         {/* Send / Stop / Voice buttons — matching ChatForm styles */}
-                        <div className="absolute bottom-0 right-3 flex gap-2 items-center">
+                        <div className="absolute bottom-0 right-2 flex items-center gap-2">
                             {/* Voice input (Speech to Text) */}
                             {showVoice && (
                                 <SpeechToTextComponent
@@ -426,7 +448,7 @@ const AiChatInput = memo(
                             {isStreaming ? (
                                 <button
                                     type="button"
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
+                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
                                     onClick={onStop}
                                     aria-label="Stop generating"
                                 >
@@ -457,7 +479,7 @@ const AiChatInput = memo(
                                         disabled ||
                                         fileUploading
                                     }
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
+                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
@@ -467,7 +489,7 @@ const AiChatInput = memo(
                         </div>
 
                         {/* Toolbar: model select + knowledge base + tools */}
-                        <div className="input-bottom-left absolute bottom-0 left-3 flex gap-2 items-center">
+                        <div className="input-bottom-left absolute bottom-0 left-2 flex gap-2 items-center">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}

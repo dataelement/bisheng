@@ -233,6 +233,7 @@ export default function CitationReferencesDrawer({
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const [desktopView, setDesktopView] = useState<CitationDesktopView>('list');
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
+  const drawerRef = useRef<HTMLElement>(null);
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
@@ -410,6 +411,25 @@ export default function CitationReferencesDrawer({
   }, [isOpen, panelOnly]);
 
   useEffect(() => {
+    if (!isOpen || panelOnly || isFullBleedMobile || isDesktopInlinePanel) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || drawerRef.current?.contains(target)) return;
+      if (target.closest('[data-citation-references-trigger="true"]')) return;
+      if (target.closest('[data-citation-trigger="true"]')) return;
+      setDesktopView('list');
+      setDocumentPreview(null);
+      setInternalOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
+  }, [isDesktopInlinePanel, isFullBleedMobile, isOpen, panelOnly]);
+
+  useEffect(() => {
     if (!isDesktopInlinePanel || !isOpen) {
       return;
     }
@@ -503,8 +523,8 @@ export default function CitationReferencesDrawer({
     : { name: '文档预览', extension: '' };
   // 非 expanded：侧栏内预览区横向铺满，避免 max-w + items-center 在侧栏中留出左右大空白
   const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-full';
-  const desktopHeaderPadding = 'px-3';
-  const desktopHeaderHeight = 'h-14';
+  const desktopHeaderPadding = 'px-4';
+  const desktopHeaderHeight = 'h-10';
   const desktopHeaderGap = 'gap-2';
   const desktopButtonSize = 'size-6 rounded-[6px]';
   const desktopButtonIconSize = 'size-4';
@@ -526,8 +546,8 @@ export default function CitationReferencesDrawer({
   const referenceListContent = (
     <>
       <div className={cn(
-        'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
-        isMobileLikeViewport ? 'h-11 px-2' : 'h-14 px-3',
+        'flex shrink-0 items-center justify-between border-[#ECECEC] bg-white',
+        isMobileLikeViewport ? 'h-11 px-2' : 'h-10 px-4',
       )}>
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
@@ -551,7 +571,7 @@ export default function CitationReferencesDrawer({
       </div>
 
       <div className={cn(
-        'flex-1 overflow-y-auto',
+        'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]',
         'space-y-3 px-3 py-4',
       )}>
         {references.length > 0 ? (
@@ -715,28 +735,21 @@ export default function CitationReferencesDrawer({
       {!isDesktopInlinePanel && isOpen && (
         isFullBleedMobile ? (
           <aside
-            className="fixed inset-0 z-[120] flex flex-col overflow-hidden overscroll-contain bg-white touch-pan-y"
+            className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
             aria-label="参考资料"
           >
             {panelContent}
           </aside>
         ) : (
-          <div className="pointer-events-none fixed inset-0 z-[120] flex justify-end">
-            <button
-              type="button"
-              aria-label="关闭参考资料"
-              className="absolute inset-0 z-0 pointer-events-auto bg-transparent"
-              onClick={() => setOpenState(false)}
-            />
-            <aside
-              className="relative z-10 flex h-full w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
-              aria-label="参考资料"
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              {panelContent}
-            </aside>
-          </div>
+          <aside
+            ref={drawerRef}
+            className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
+            aria-label="参考资料"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {panelContent}
+          </aside>
         )
       )}
       {!isDesktopInlinePanel && (

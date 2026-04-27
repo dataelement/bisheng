@@ -209,7 +209,7 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_app_viewer'},
+            return_value={'manage_app_viewer', 'view_app', 'use_app'},
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
             new_callable=AsyncMock,
@@ -236,6 +236,53 @@ class TestPermissionApiIntegration:
         mock_get_permission_level.assert_not_awaited()
         mock_authorize.assert_awaited_once()
 
+    def test_authorize_api_blocks_custom_model_with_permissions_outside_caller_set(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[
+                {
+                    'id': 'custom_owner_manager',
+                    'name': '所有者管理',
+                    'relation': 'viewer',
+                    'grant_tier': 'usage',
+                    'permissions': ['manage_app_owner'],
+                    'permissions_explicit': True,
+                    'is_system': False,
+                },
+            ],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value={'manage_app_viewer'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/workflow/wf-1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 2,
+                            'relation': 'viewer',
+                            'model_id': 'custom_owner_manager',
+                        }],
+                        'revokes': [],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 19000
+        mock_authorize.assert_not_awaited()
+
     def test_authorize_api_blocks_self_owner_revoke_when_it_is_the_last_owner(self):
         app = _make_app(_ViewerUser)
 
@@ -254,7 +301,18 @@ class TestPermissionApiIntegration:
         ), patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_app_owner'},
+            return_value={
+                'manage_app_owner',
+                'manage_app_manager',
+                'manage_app_viewer',
+                'view_app',
+                'use_app',
+                'edit_app',
+                'delete_app',
+                'publish_app',
+                'unpublish_app',
+                'share_app',
+            },
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
             new_callable=AsyncMock,
@@ -305,7 +363,18 @@ class TestPermissionApiIntegration:
         ), patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_app_owner'},
+            return_value={
+                'manage_app_owner',
+                'manage_app_manager',
+                'manage_app_viewer',
+                'view_app',
+                'use_app',
+                'edit_app',
+                'delete_app',
+                'publish_app',
+                'unpublish_app',
+                'share_app',
+            },
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
             new_callable=AsyncMock,
@@ -351,16 +420,65 @@ class TestPermissionApiIntegration:
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value=False,
-        ) as mock_has_permission:
+            return_value=set(),
+        ) as mock_get_effective_permissions:
             with TestClient(app) as client:
                 resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
                 body = resp.json()
 
         assert body['status_code'] == 19000
-        mock_has_permission.assert_awaited_once()
+        mock_get_effective_permissions.assert_awaited_once()
+
+    def test_permissions_list_includes_creator_owner_when_tuple_is_missing(self):
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[{
+                'id': 'owner',
+                'name': '所有者',
+                'relation': 'owner',
+                'grant_tier': 'owner',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            }],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator',
+            new_callable=AsyncMock,
+            return_value=7,
+        ):
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/workflow/wf-1/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'] == [{
+            'subject_type': 'user',
+            'subject_id': 7,
+            'subject_name': None,
+            'subject_group_names': None,
+            'subject_member_names': None,
+            'relation': 'owner',
+            'include_children': None,
+            'model_id': 'owner',
+            'model_name': '所有者',
+        }]
 
     def test_knowledge_space_grant_subject_users_endpoint_returns_full_scope_candidates(self):
         app = _make_app(_ViewerUser)
@@ -486,10 +604,10 @@ class TestPermissionApiIntegration:
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value=True,
-        ) as mock_has_permission, patch(
+            return_value={'manage_app_viewer'},
+        ) as mock_get_effective_permissions, patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
             new_callable=AsyncMock,
             return_value=[
@@ -516,7 +634,7 @@ class TestPermissionApiIntegration:
         assert body['status_code'] == 200
         assert body['data'][0]['subject_id'] == 7
         assert body['data'][0]['relation'] == 'owner'
-        mock_has_permission.assert_awaited_once()
+        mock_get_effective_permissions.assert_awaited_once()
         mock_get_permissions.assert_awaited_once_with(
             object_type='workflow',
             object_id='wf-1',
@@ -526,9 +644,9 @@ class TestPermissionApiIntegration:
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value=True,
+            return_value={'manage_space_relation'},
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
             new_callable=AsyncMock,
@@ -566,9 +684,9 @@ class TestPermissionApiIntegration:
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value=True,
+            return_value={'manage_space_relation'},
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
             new_callable=AsyncMock,
@@ -618,9 +736,9 @@ class TestPermissionApiIntegration:
         app = _make_app(_ViewerUser)
 
         with patch(
-            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.has_any_permission_async',
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value=True,
+            return_value={'manage_space_relation'},
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
             new_callable=AsyncMock,
@@ -796,7 +914,14 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_space_relation'},
+            return_value={
+                'manage_space_relation',
+                'view_space',
+                'download_folder',
+                'download_file',
+                'view_folder',
+                'view_file',
+            },
         ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
             new_callable=AsyncMock,
@@ -851,7 +976,7 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_folder_relation'},
+            return_value={'manage_folder_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
         ) as mock_get_effective_permissions, patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
             new_callable=AsyncMock,
@@ -907,7 +1032,7 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_file_relation'},
+            return_value={'manage_file_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
         ) as mock_get_effective_permissions, patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
             new_callable=AsyncMock,
@@ -1058,7 +1183,7 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_app_viewer'},
+            return_value={'manage_app_viewer', 'view_app', 'use_app'},
         ):
             with TestClient(app) as client:
                 resp = client.get(
@@ -1069,6 +1194,53 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 200
         assert [item['id'] for item in body['data']] == ['viewer']
+        mock_get_permission_level.assert_not_awaited()
+
+    def test_grantable_application_custom_models_use_permission_subset_not_grant_tier(self):
+        app = _make_app(_ViewerUser)
+        models = [
+            {
+                'id': 'custom_manage_usage',
+                'name': '使用者管理',
+                'relation': 'viewer',
+                'grant_tier': 'owner',
+                'permissions': ['manage_app_viewer'],
+                'permissions_explicit': True,
+                'is_system': False,
+            },
+            {
+                'id': 'custom_manage_owner',
+                'name': '所有者管理',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': ['manage_app_owner'],
+                'permissions_explicit': True,
+                'is_system': False,
+            },
+        ]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_read',
+        ) as mock_get_permission_level, patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value={'manage_app_viewer'},
+        ):
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/relation-models/grantable',
+                    params={'object_type': 'workflow', 'object_id': 'wf-1'},
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert [item['id'] for item in body['data']] == ['custom_manage_usage']
         mock_get_permission_level.assert_not_awaited()
 
     def test_grantable_knowledge_space_uses_manage_permission_id_only(self):
@@ -1105,7 +1277,14 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_space_relation'},
+            return_value={
+                'manage_space_relation',
+                'view_space',
+                'download_folder',
+                'download_file',
+                'view_folder',
+                'view_file',
+            },
         ):
             with TestClient(app) as client:
                 resp = client.get(
@@ -1115,7 +1294,7 @@ class TestPermissionApiIntegration:
                 body = resp.json()
 
         assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['owner', 'viewer']
+        assert [item['id'] for item in body['data']] == ['viewer']
         mock_get_permission_level.assert_not_awaited()
 
     def test_grantable_folder_uses_manage_permission_id_only(self):
@@ -1152,7 +1331,7 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_folder_relation'},
+            return_value={'manage_folder_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
         ) as mock_get_effective_permissions:
             with TestClient(app) as client:
                 resp = client.get(
@@ -1162,7 +1341,7 @@ class TestPermissionApiIntegration:
                 body = resp.json()
 
         assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['owner', 'viewer']
+        assert [item['id'] for item in body['data']] == ['viewer']
         mock_get_permission_level.assert_not_awaited()
         assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True
 
@@ -1200,7 +1379,7 @@ class TestPermissionApiIntegration:
         ) as mock_get_permission_level, patch(
             'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
             new_callable=AsyncMock,
-            return_value={'manage_file_relation'},
+            return_value={'manage_file_relation', 'view_space', 'view_folder', 'download_folder', 'view_file', 'download_file'},
         ) as mock_get_effective_permissions:
             with TestClient(app) as client:
                 resp = client.get(
@@ -1210,6 +1389,6 @@ class TestPermissionApiIntegration:
                 body = resp.json()
 
         assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['owner', 'viewer']
+        assert [item['id'] for item in body['data']] == ['viewer']
         mock_get_permission_level.assert_not_awaited()
         assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True

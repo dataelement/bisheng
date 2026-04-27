@@ -115,15 +115,20 @@ export default function VarInput({
     }
 
     useEffect(() => {
-        console.log('!!!value :>> ', value);
         if (valueRef.current && valueRef.current !== value) {
             valueRef.current = value;
         }
+        const nextHTML = parseToHTML(value || '')[0];
+        const isFocused = textareaRef.current === document.activeElement;
         if (!full) {
-            textareaRef.current.innerHTML = parseToHTML(value || '')[0];
+            // Avoid resetting caret while user is typing in contentEditable.
+            // Only sync DOM when input is not focused.
+            if (!isFocused && textareaRef.current.innerHTML !== nextHTML) {
+                textareaRef.current.innerHTML = nextHTML;
+            }
         }
         setFullVarInputValue(value)
-        textareaRef.current !== document.activeElement && placeholderInit();
+        !isFocused && placeholderInit();
     }, [value]);
 
     // firefox hack

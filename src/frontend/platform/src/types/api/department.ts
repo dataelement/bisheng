@@ -64,4 +64,6 @@ export interface DepartmentUpdateForm {
   default_role_ids?: number[]
   /** 与名称、默认角色一并提交时全量替换部门管理员；不传则不改 */
   admin_user_ids?: number[]
+  /** 为 true 时将当前默认角色（可与 default_role_ids 同次提交）授予本部门现存全部成员 */
+  apply_default_roles_to_existing_members?: boolean
 }
