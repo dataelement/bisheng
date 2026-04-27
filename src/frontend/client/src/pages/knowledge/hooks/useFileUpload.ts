@@ -130,13 +130,27 @@ export function useFileUpload({
             // Upload each file to server
             const uploadedPaths: string[] = [];
 
+            const failedFileNames: string[] = [];
             for (const file of fileArray) {
                 try {
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
                     uploadedPaths.push(res.file_path);
                 } catch {
-                    showToast({ message: localize("com_knowledge.file_upload_failed", { 0: file.name }), severity: NotificationSeverity.ERROR });
+                    failedFileNames.push(file.name);
                 }
+            }
+            if (failedFileNames.length > 0) {
+                // Single summary toast: lists every failed file plus the browser-upload
+                // hint once at the bottom (avoids repeating the same hint per file when
+                // a client-wide time limit fails the whole batch).
+                const lines = failedFileNames.map((name) =>
+                    localize("com_knowledge.file_upload_failed", { 0: name })
+                );
+                const hint = localize("com_knowledge.upload_browser_hint");
+                showToast({
+                    message: [...lines, hint].join("\n"),
+                    severity: NotificationSeverity.ERROR,
+                });
             }
 
             // If all uploads failed, clear placeholders and bail out
