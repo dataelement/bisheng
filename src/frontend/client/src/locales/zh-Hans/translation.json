@@ -1572,10 +1572,9 @@
         "unnamed_folder_random": "未命名文件夹_{{0}}",
         "unpin": "取消置顶",
         "unpinned": "已取消置顶",
-        "unsaved_tags_confirm_close": "当前频道尚未保存，确认关闭吗？",
+        "unsaved_tags_confirm_close": "当前标签尚未保存，确认关闭吗？",
         "withdraw_application": "撤回申请",
         "withdraw_application_success": "已撤回申请",
-        "unsaved_tags_confirm_close": "当前标签尚未保存，确认关闭吗？",
         "unsupported_file_format": "不支持文件 {{0}} 的格式",
         "unsupported_file_prefix": "不支持文件",
         "unsupported_format_prefix": "该文件格式（.",
@@ -1594,7 +1593,10 @@
         "welcome_join_space_link": "欢迎加入知识空间【{{0}}】 ，点击链接：{{1}} 一键订阅。",
         "welcome_join_suffix": "一键订阅。",
         "window_too_narrow_ai": "窗口宽度不足，无法打开 AI 助手",
-        "yes": "是"
+        "yes": "是",
+        "supported_formats_basic": "pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv",
+        "supported_formats_tip": "支持的文件格式为 {{formats}}",
+        "supported_formats_with_etl4lm": "pdf（含扫描件）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp"
     },
     "com_subscription": {
         "add": "加入",
@@ -1670,7 +1672,6 @@
         "creator": "创建者",
         "creator_colon": "创建人：",
         "days_ago": "{{diffDays}}天前",
-        "delete": "删除",
         "delete_this_condition": "删除该条条件",
         "detected_as": "检测为",
         "dissolve_channel": "解散频道",
@@ -1856,7 +1857,15 @@
         "edit_knowledge_space": "编辑知识空间",
         "image_copied": "图片已复制到剪切板",
         "image_copy_failed_url_copied": "图片复制失败，已复制链接",
-        "knowledge_space_name_empty": "知识空间名称不能为空"
+        "knowledge_space_name_empty": "知识空间名称不能为空",
+        "crawled_content_preview": "爬取内容预览",
+        "input_keyword_press_enter": "请输入关键词，按回车键保存",
+        "relation_and": "并且",
+        "relation_or": "或者",
+        "set_article_filter_conditions": "设置文章内容筛选条件：",
+        "url_already_in_queue": "该网址已存在",
+        "wait_for_crawl_completion": "请等待所有爬取任务完成",
+        "website_crawl_queue": "网站爬取队列"
     },
     "com_permission": {
         "action_revoke": "撤销",

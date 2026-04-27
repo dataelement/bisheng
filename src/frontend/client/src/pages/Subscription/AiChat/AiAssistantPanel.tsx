@@ -245,4 +245,3 @@ export function AiAssistantPanel({
         </div>
     );
 }
-

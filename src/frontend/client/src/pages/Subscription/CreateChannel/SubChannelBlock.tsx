@@ -122,13 +122,18 @@ export function SubChannelBlock({
                 >{localize("com_subscription.delete")}</button>
             </div>
             {!data.collapsed && (
-                <div className="p-3 border-t border-[#E5E6EB]">
-                    <FilterConditionEditor
-                        groups={data.groups}
-                        topRelation={data.topRelation}
-                        onGroupsChange={onGroupsChange}
-                        onTopRelationChange={onTopRelationChange}
-                    />
+                <div className="border-t border-[#E5E6EB]">
+                    <p className="px-3 pt-3 pb-1 text-[14px] leading-[22px] text-[#666]">
+                        {localize("com_subscription.set_article_filter_conditions")}
+                    </p>
+                    <div className="px-3 pb-3">
+                        <FilterConditionEditor
+                            groups={data.groups}
+                            topRelation={data.topRelation}
+                            onGroupsChange={onGroupsChange}
+                            onTopRelationChange={onTopRelationChange}
+                        />
+                    </div>
                 </div>
             )}
         </div>

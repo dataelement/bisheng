@@ -74,7 +74,7 @@ export default function WorkbenchModel({ onBack }) {
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const handleSave = async () => {
-        const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId, chatTitleLlmId, knowledgeSpaceLlmId } = form;
+        const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId, chatTitleLlmId } = form;
         const errors = [];
         if (errors.length) return message({ variant: 'error', description: errors });
         setSaveLoad(true);
@@ -85,8 +85,6 @@ export default function WorkbenchModel({ onBack }) {
                 linsight_executor_mode: executionMode,
                 asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
                 tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
-                // “订阅 / 知识空间问答生成模型”
-                knowledge_space_llm: knowledgeSpaceLlmId ? { id: String(knowledgeSpaceLlmId) } : null, // 支持空值
                 // “应用会话标题生成模型”
                 chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
             };
@@ -254,15 +252,6 @@ export default function WorkbenchModel({ onBack }) {
                     onChange={(val) => setForm({ ...form, ttsModelId: val })}
                 />
             </div>
-            <ModelSelect
-                close
-                label={t('model.knowledgeSpaceQAModel')}
-                tooltipText={t('model.aiQASceneDescription')}
-                value={form.knowledgeSpaceLlmId}
-                options={llmOptions}
-                onChange={(val) => setForm({ ...form, knowledgeSpaceLlmId: val })}
-                required
-            />
             <ModelSelect
                 close
                 label={t('model.sessionTitleGenerationModel')}

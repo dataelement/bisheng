@@ -753,6 +753,7 @@ function FileRow({
 
     return (
         <TableRow
+            data-knowledge-file-item
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制

@@ -4,12 +4,14 @@
  * Uses useStreamChatSSE for streaming (shared with channel/folder chat).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRecoilValue } from "recoil";
 import { v4 } from "uuid";
 import type { ChatMessage } from "~/api/chatApi";
 import { getFileChatSSEUrl, getFileChatHistory, clearFileChatHistory } from "~/api/chatApi";
 import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
+import store from "~/store";
 
 /**
  * Hook for single-file Q&A chat in a knowledge space.
@@ -17,6 +19,7 @@ import useStreamChatSSE, {
  * @param fileId  - File ID within the space; empty string disables the hook.
  */
 export default function useFileChat(spaceId: string, fileId: string) {
+    const chatModel = useRecoilValue(store.chatModel);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -115,7 +118,7 @@ export default function useFileChat(spaceId: string, fileId: string) {
             const responseMessageId = `${userMessageId}_`;
             const initialResponse: ChatMessage = {
                 text: "",
-                sender: "AI",
+                sender: chatModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId: userMessageId,
                 conversationId: "",
@@ -127,10 +130,13 @@ export default function useFileChat(spaceId: string, fileId: string) {
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
             setSseSubmission(
-                buildSubmission({ query: text.trim() }, responseMessageId)
+                buildSubmission(
+                    { query: text.trim(), model_id: String(chatModel.id || "") },
+                    responseMessageId
+                )
             );
         },
-        [isStreaming, enabled, buildSubmission]
+        [isStreaming, enabled, buildSubmission, chatModel.id, chatModel.name]
     );
 
     // --- Stop generating ---
@@ -164,7 +170,7 @@ export default function useFileChat(spaceId: string, fileId: string) {
             const newResponseId = v4();
             const newResponse: ChatMessage = {
                 text: "",
-                sender: "AI",
+                sender: chatModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId,
                 conversationId: "",
@@ -176,12 +182,15 @@ export default function useFileChat(spaceId: string, fileId: string) {
             setIsStreaming(true);
             setSseSubmission(
                 buildSubmission(
-                    { query: parentMsg.text?.trim() || "" },
+                    {
+                        query: parentMsg.text?.trim() || "",
+                        model_id: String(chatModel.id || ""),
+                    },
                     newResponseId
                 )
             );
         },
-        [isStreaming, enabled, buildSubmission]
+        [isStreaming, enabled, buildSubmission, chatModel.id, chatModel.name]
     );
 
     return {

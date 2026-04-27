@@ -67,7 +67,6 @@ class WorkbenchModelConfig(BaseModel):
     # Speech-to-text model
     asr_model: Optional[WSModel] = Field(default=None, description='Speech-to-text model')
     tts_model: Optional[WSModel] = Field(default=None, description='Text-to-speech model')
-    knowledge_space_llm: Optional[WSModel] = Field(default=None, description='Knowledge Space Model')
     chat_title_llm: Optional[WSModel] = Field(default=None, description='Chat Title Generation Model')
 
 

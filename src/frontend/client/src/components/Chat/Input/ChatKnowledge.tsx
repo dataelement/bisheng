@@ -436,6 +436,7 @@ export const ChatKnowledge = ({
   };
 
   const hasAnySelection = value.length > 0;
+  const orgEnabled = !!config?.knowledgeBase?.enabled;
 
   const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
   // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）

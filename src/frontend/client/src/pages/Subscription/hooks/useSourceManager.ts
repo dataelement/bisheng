@@ -9,6 +9,7 @@ import {
 } from "~/api/channels";
 import { useLocalize } from "~/hooks";
 import { extractApiStatusCode } from "../errorUtils";
+import { normalizeUrlForSearch } from "../urlNormalize";
 
 const MAX_SOURCES = 50;
 const PAGE_SIZE = 20;
@@ -58,11 +59,6 @@ export function useSourceManager(
     const wechatAbortRef = useRef<AbortController | null>(null);
     const [wechatAddError, setWechatAddError] = useState(false);
     const localize = useLocalize();
-
-    const normalizeUrlForSearch = (value?: string) => {
-        if (!value) return "";
-        return value.trim().toLowerCase().replace(/\/+$/, "");
-    };
 
     const abortWechatRequest = () => {
         wechatAbortRef.current?.abort();

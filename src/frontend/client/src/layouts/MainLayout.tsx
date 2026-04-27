@@ -137,41 +137,41 @@ function Sidebar({
   const links = useMemo(() => {
     if (!canOpenWorkbenchEntry) return [];
     return [
-    {
-      section: 'home',
-      to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
-      icon: <HomeIcon />,
-      label: localize('com_nav_home'),
-      isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-    },
-    {
-      section: 'apps',
-      to: '/apps',
-      icon: <GlobeIcon />,
-      label: localize('com_nav_app_center'),
-      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-    },
-    {
-      section: 'channel',
-      to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-      icon: <LinkIcon />,
-      label: localize('com_ui_channel'),
-      isActive: pathname.startsWith('/channel'),
-    },
-    {
-      section: 'knowledge',
-      to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
-      icon: <BookOpenIcon />,
-      label: localize('com_knowledge.knowledge_space'),
-      isActive: pathname.startsWith('/knowledge'),
-    },
-  ].filter((l) => {
-    if (l.section === 'home') return showHomeTab;
-    if (l.section === 'apps') return showAppsTab;
-    if (l.section === 'channel') return showSubscriptionTab;
-    if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-    return true;
-  });
+      {
+        section: 'home',
+        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
+        icon: <HomeIcon />,
+        label: localize('com_nav_home'),
+        isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+      },
+      {
+        section: 'knowledge',
+        to: lastSectionPaths.knowledge || '/knowledge',
+        icon: <BookOpenIcon />,
+        label: localize('com_knowledge.knowledge_space'),
+        isActive: pathname.startsWith('/knowledge'),
+      },
+      {
+        section: 'channel',
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        icon: <LinkIcon />,
+        label: localize('com_ui_channel'),
+        isActive: pathname.startsWith('/channel'),
+      },
+      {
+        section: 'apps',
+        to: '/apps',
+        icon: <GlobeIcon />,
+        label: localize('com_nav_app_center'),
+        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+      },
+    ].filter((l) => {
+      if (l.section === 'home') return showHomeTab;
+      if (l.section === 'apps') return showAppsTab;
+      if (l.section === 'channel') return showSubscriptionTab;
+      if (l.section === 'knowledge') return showKnowledgeSpaceTab;
+      return true;
+    });
   }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {

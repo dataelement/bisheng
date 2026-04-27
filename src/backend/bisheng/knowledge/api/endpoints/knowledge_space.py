@@ -479,7 +479,7 @@ async def chat_single_file(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_single_file(space_id, file_id, req.query):
+            async for one in svc.chat_single_file(space_id, file_id, req.query, req.model_id):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
@@ -573,7 +573,8 @@ async def chat_folder(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.tags):
+            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.model_id,
+                                             req.tags):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
