@@ -15,13 +15,17 @@ const DialogClose = DialogPrimitive.Close
 const DialogOverlay = React.forwardRef<
     React.ElementRef<typeof DialogPrimitive.Overlay>,
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, onClick, ...props }, ref) => (
     <DialogPrimitive.Overlay
         ref={ref}
         className={cname(
             "fixed inset-0 z-50 bg-black/40  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             className
         )}
+        onClick={(event) => {
+            event.stopPropagation();
+            onClick?.(event);
+        }}
         {...props}
     />
 ))
@@ -110,4 +114,3 @@ export {
     Dialog, DialogClose,
     DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger
 }
-
