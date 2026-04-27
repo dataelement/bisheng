@@ -82,6 +82,14 @@ export default function KnowledgeTagSelect({
         setSelectedTagIds(initialTags.map(tag => tag.id));
     }, [initialTags, isBatch, open]);
 
+    useEffect(() => {
+        document.body.dataset.knowledgeTagDialogOpen = open ? 'true' : 'false';
+
+        return () => {
+            document.body.dataset.knowledgeTagDialogOpen = 'false';
+        };
+    }, [open]);
+
     const handleOpenChange = (nextOpen: boolean) => {
         setOpen(nextOpen);
         if (!nextOpen) {
@@ -182,8 +190,6 @@ export default function KnowledgeTagSelect({
             <DialogTrigger asChild>{children}</DialogTrigger>
             <DialogContent
                 close={false}
-                onPointerDownOutside={(event) => event.preventDefault()}
-                onInteractOutside={(event) => event.preventDefault()}
                 className="w-[600px] max-w-[calc(100vw-32px)] gap-0 rounded-xl border-none p-0"
                 onClick={(event) => event.stopPropagation()}
             >

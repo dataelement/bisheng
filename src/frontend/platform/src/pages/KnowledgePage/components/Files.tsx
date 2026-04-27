@@ -481,8 +481,8 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 />
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
-                            <TableHead className="min-w-[150px]">{t('tags')}</TableHead>
                             <TableHead>{t('segmentationStrategy')}</TableHead>
+                            <TableHead className="min-w-[150px]">{t('tags')}</TableHead>
                             <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
@@ -605,6 +605,9 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
+                                    if (document.body.dataset.knowledgeTagDialogOpen === 'true') {
+                                        return;
+                                    }
                                     if (selectedFileObjs.length === 0 && el.status !== 3 && el.status !== 1) {
                                         onPreview(el.id);
                                     }
@@ -631,15 +634,6 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                         </div>
                                     </Tip>
                                 </TableCell>
-                                <TableCell className="min-w-[150px]">
-                                    <FileTagList
-                                        knowledgeId={id}
-                                        fileId={el.id}
-                                        tags={el.tags || []}
-                                        isEditable={canEditKb && el.status === 2}
-                                        onUpdate={reload}
-                                    />
-                                </TableCell>
                                 <TableCell>
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
@@ -651,6 +645,15 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                             </Tooltip>
                                         </TooltipProvider>
                                     ) : splitRuleDesc(el)}
+                                </TableCell>
+                                <TableCell className="min-w-[150px]">
+                                    <FileTagList
+                                        knowledgeId={id}
+                                        fileId={el.id}
+                                        tags={el.tags || []}
+                                        isEditable={canEditKb && el.status === 2}
+                                        onUpdate={reload}
+                                    />
                                 </TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
 
