@@ -412,21 +412,36 @@ class ApprovalService:
             settings=settings,
             file_payloads=file_payloads,
         )
+        status = (
+            ApprovalRequestStatusEnum.SENSITIVE_REJECTED.value
+            if safety_status == ApprovalSafetyStatusEnum.REJECTED.value
+            else ApprovalRequestStatusEnum.PENDING_REVIEW.value
+        )
+        reviewer_user_ids = None
+        if status != ApprovalRequestStatusEnum.SENSITIVE_REJECTED.value:
+            reviewer_user_ids = await cls.get_department_space_reviewer_user_ids(
+                request=request,
+                login_user=login_user,
+                space_id=space_id,
+                parent_folder_id=parent_folder_id,
+                exclude_user_ids=[login_user.user_id],
+            )
+            if not reviewer_user_ids:
+                raise ApprovalRequestPermissionDeniedError(
+                    msg='No eligible reviewers available for this approval request'
+                )
 
         request_row = ApprovalRequest(
             tenant_id=login_user.tenant_id,
             request_type=ApprovalRequestTypeEnum.DEPARTMENT_KNOWLEDGE_SPACE_FILE_UPLOAD.value,
-            status=(
-                ApprovalRequestStatusEnum.SENSITIVE_REJECTED.value
-                if safety_status == ApprovalSafetyStatusEnum.REJECTED.value
-                else ApprovalRequestStatusEnum.PENDING_REVIEW.value
-            ),
+            status=status,
             review_mode=ApprovalReviewModeEnum.FIRST_RESPONSE_WINS.value,
             space_id=space_id,
             department_id=binding.department_id,
             parent_folder_id=parent_folder_id,
             applicant_user_id=login_user.user_id,
             applicant_user_name=login_user.user_name,
+            reviewer_user_ids=reviewer_user_ids,
             file_count=len(file_payloads),
             payload_json={
                 'files': file_payloads,
@@ -449,17 +464,6 @@ class ApprovalService:
             )
             return request_row
 
-        reviewer_user_ids = await cls.get_department_space_reviewer_user_ids(
-            request=request,
-            login_user=login_user,
-            space_id=space_id,
-            parent_folder_id=parent_folder_id,
-            exclude_user_ids=[login_user.user_id],
-        )
-        if not reviewer_user_ids:
-            raise ApprovalRequestPermissionDeniedError(msg='No eligible reviewers available for this approval request')
-        request_row.reviewer_user_ids = reviewer_user_ids
-        request_row = await ApprovalRequestDao.aupdate(request_row)
         message_id = await cls._send_approval_messages(
             applicant_user_id=login_user.user_id,
             applicant_user_name=login_user.user_name,

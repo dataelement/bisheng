@@ -1527,6 +1527,8 @@
     "joined_count_label": "Joined count:",
     "department_spaces": "Department Spaces",
     "department_badge": "Dept",
+    "approval_enabled_badge": "Approval on",
+    "approval_disabled_badge": "No approval",
     "approval_pending_status": "Pending approval",
     "approval_rejected_status": "Rejected",
     "sensitive_rejected_status": "Safety rejected",

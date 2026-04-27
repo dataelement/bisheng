@@ -25,6 +25,12 @@ interface UseFileManagerOptions {
     initialFolderId?: string;
 }
 
+const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
+
+interface KnowledgeSpaceFilesRefreshEventDetail {
+    spaceId?: number | string;
+}
+
 /**
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
@@ -201,6 +207,20 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
     loadFilesRef.current = loadFiles;
     const currentPageRef = useRef(currentPage);
     currentPageRef.current = currentPage;
+
+    useEffect(() => {
+        if (!activeSpace?.id || typeof window === "undefined") return;
+        const handleKnowledgeSpaceFilesRefresh = (event: Event) => {
+            const detail = (event as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
+            if (!detail?.spaceId) return;
+            if (String(detail.spaceId) !== String(activeSpace.id)) return;
+            loadFilesRef.current(currentPageRef.current);
+        };
+        window.addEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
+        return () => {
+            window.removeEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
+        };
+    }, [activeSpace?.id]);
 
     useEffect(() => {
         const hasPending = files.some(

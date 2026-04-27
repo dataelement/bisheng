@@ -1447,6 +1447,8 @@
         "joined_count_label": "加入人数：",
         "department_spaces": "部门知识空间",
         "department_badge": "部门",
+        "approval_enabled_badge": "需审批",
+        "approval_disabled_badge": "无需审批",
         "approval_pending_status": "待审批",
         "approval_rejected_status": "审批拒绝",
         "sensitive_rejected_status": "安全检测未通过",

@@ -1443,6 +1443,8 @@
     "joined_count_label": "参加人数:",
     "department_spaces": "部門ナレッジスペース",
     "department_badge": "部門",
+    "approval_enabled_badge": "承認あり",
+    "approval_disabled_badge": "承認不要",
     "approval_pending_status": "承認待ち",
     "approval_rejected_status": "却下",
     "sensitive_rejected_status": "安全チェック未通過",

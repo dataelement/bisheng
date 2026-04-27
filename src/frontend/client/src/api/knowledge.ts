@@ -114,6 +114,8 @@ export interface KnowledgeSpace {
     spaceKind?: "normal" | "department";
     departmentId?: number;
     departmentName?: string;
+    approvalEnabled?: boolean;
+    sensitiveCheckEnabled?: boolean;
 }
 
 export type SpaceSubscribeStatus = "subscribed" | "pending";
@@ -298,6 +300,14 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         spaceKind: (raw as any).space_kind || "normal",
         departmentId: (raw as any).department_id ?? undefined,
         departmentName: (raw as any).department_name ?? undefined,
+        approvalEnabled:
+            (raw as any).approval_enabled !== undefined
+                ? Boolean((raw as any).approval_enabled)
+                : undefined,
+        sensitiveCheckEnabled:
+            (raw as any).sensitive_check_enabled !== undefined
+                ? Boolean((raw as any).sensitive_check_enabled)
+                : undefined,
     };
 }
 

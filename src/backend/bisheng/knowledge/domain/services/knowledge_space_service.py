@@ -506,12 +506,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     relation='parent',
                     object=f'{object_type}:{object_id}',
                 ),
-            ])
+            ], crash_safe=True, raise_on_failure=True, stop_on_failure=True)
         except Exception as e:
-            _logger.warning(
+            _logger.exception(
                 'Failed to write parent tuple %s:%s -> %s:%s: %s',
                 parent_type, parent_id, object_type, object_id, e,
             )
+            raise
 
     async def _initialize_child_resource_permissions(
         self,
@@ -526,12 +527,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self.login_user.user_id,
                 object_type,
                 str(object_id),
+                enforce_fga_success=True,
             )
         except Exception as e:
-            _logger.warning(
+            _logger.exception(
                 'Failed to write owner tuple for %s %s: %s',
                 object_type, object_id, e,
             )
+            raise
 
     async def _cleanup_resource_tuples(self, resources: List[tuple[str, int]]) -> None:
         for resource_type, resource_id in resources:
@@ -1685,12 +1688,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path=file_level_path,
             status=KnowledgeFileStatus.SUCCESS.value,
         ))
-        await self._initialize_child_resource_permissions(
-            'folder',
-            added_folder.id,
-            parent_type,
-            parent_resource_id,
-        )
+        try:
+            await self._initialize_child_resource_permissions(
+                'folder',
+                added_folder.id,
+                parent_type,
+                parent_resource_id,
+            )
+        except Exception:
+            await self._cleanup_resource_tuples([('folder', added_folder.id)])
+            await KnowledgeFileDao.adelete_batch([added_folder.id])
+            raise
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return added_folder
 
@@ -1880,9 +1888,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                                                         file_kwargs={"level": level,
                                                                      "file_level_path": file_level_path,
                                                                      "file_source": file_source.value})
-            if getattr(db_file, 'id', None):
-                created_files.append(db_file)
             if db_file.status != KnowledgeFileStatus.FAILED.value:
+                if getattr(db_file, 'id', None):
+                    created_files.append(db_file)
                 # Get a preview cache of this filekey
                 cache_key = self.get_preview_cache_key(
                     knowledge_id, one
@@ -1896,13 +1904,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 failed_file.file_level_path = file_level_path
                 failed_files.append(failed_file)
 
-        for created_file in created_files:
-            await self._initialize_child_resource_permissions(
-                'knowledge_file',
-                created_file.id,
-                parent_type,
-                parent_resource_id,
-            )
+        try:
+            for created_file in created_files:
+                await self._initialize_child_resource_permissions(
+                    'knowledge_file',
+                    created_file.id,
+                    parent_type,
+                    parent_resource_id,
+                )
+        except Exception:
+            created_file_ids = [
+                created_file.id
+                for created_file in created_files
+                if getattr(created_file, 'id', None)
+            ]
+            if created_file_ids:
+                await self._cleanup_resource_tuples([
+                    ('knowledge_file', created_file_id)
+                    for created_file_id in created_file_ids
+                ])
+                await KnowledgeFileDao.adelete_batch(created_file_ids)
+            raise
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
         await self.update_folder_update_time(file_level_path)

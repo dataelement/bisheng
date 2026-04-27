@@ -184,6 +184,54 @@ async def test_create_department_space_upload_request_excludes_applicant_from_re
 
 
 @pytest.mark.asyncio
+async def test_create_department_space_upload_request_does_not_persist_without_reviewers():
+    login_user = _make_login_user(10)
+
+    with patch(
+        'bisheng.approval.domain.services.approval_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=10),
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=101, name='Dept Space', type=KnowledgeTypeEnum.SPACE.value),
+    ), patch.object(
+        ApprovalService,
+        'get_department_knowledge_space_settings',
+        new_callable=AsyncMock,
+        return_value=DepartmentKnowledgeSpaceApprovalSettings(),
+    ), patch.object(
+        ApprovalService,
+        '_build_file_payload',
+        new_callable=AsyncMock,
+        return_value=[{'file_path': '/tmp/doc.txt', 'file_name': 'doc.txt', 'space_id': 101}],
+    ), patch.object(
+        ApprovalService,
+        '_run_safety_check',
+        new_callable=AsyncMock,
+        return_value=(ApprovalSafetyStatusEnum.SKIPPED.value, None),
+    ), patch.object(
+        ApprovalService,
+        'get_department_space_reviewer_user_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.ApprovalRequestDao.acreate',
+        new_callable=AsyncMock,
+    ) as mock_create:
+        with pytest.raises(ApprovalRequestPermissionDeniedError):
+            await ApprovalService.create_department_space_upload_request(
+                request=SimpleNamespace(),
+                login_user=login_user,
+                space_id=101,
+                parent_folder_id=None,
+                file_paths=['/tmp/doc.txt'],
+            )
+
+    mock_create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_department_knowledge_space_settings_reads_per_space_binding():
     binding = SimpleNamespace(
         approval_enabled=False,

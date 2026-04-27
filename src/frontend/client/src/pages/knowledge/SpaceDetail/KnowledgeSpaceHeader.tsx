@@ -402,6 +402,20 @@ export function KnowledgeSpaceHeader({
                                     {localize("com_knowledge.department_badge")}
                                 </span>
                             )}
+                            {space.spaceKind === "department" && space.approvalEnabled !== undefined && (
+                                <span
+                                    className={cn(
+                                        "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
+                                        space.approvalEnabled
+                                            ? "bg-[#E6EDFC] text-[#165DFF]"
+                                            : "bg-[#F2F3F5] text-[#4E5969]",
+                                    )}
+                                >
+                                    {space.approvalEnabled
+                                        ? localize("com_knowledge.approval_enabled_badge")
+                                        : localize("com_knowledge.approval_disabled_badge")}
+                                </span>
+                            )}
                             <Tooltip>
                                 <TooltipTrigger className="shrink-0 cursor-pointer">
                                     <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
