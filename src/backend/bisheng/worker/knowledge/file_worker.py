@@ -87,10 +87,10 @@ def file_copy_celery(param: json) -> str:
 
 
 def copy_normal(
-        one: KnowledgeFile,
-        source_knowledge: Knowledge,
-        target_knowledge: Knowledge,
-        op_user_id: int,
+    one: KnowledgeFile,
+    source_knowledge: Knowledge,
+    target_knowledge: Knowledge,
+    op_user_id: int,
 ):
     one_dict = one.model_dump()
     one_dict.pop("id")
@@ -167,10 +167,10 @@ def copy_normal(
 
 
 def copy_vector(
-        source_konwledge: Knowledge,
-        target_knowledge: Knowledge,
-        source_file_id: int,
-        target_file_id: int,
+    source_konwledge: Knowledge,
+    target_knowledge: Knowledge,
+    source_file_id: int,
+    target_file_id: int,
 ):
     # migrate vectordb
     embedding = FakeEmbeddings()
@@ -276,12 +276,12 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
     try:
         # After the warehousing is successful, it is judged whether the file information still exists, and if not, it is deleted.
-        _, knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+        knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file:
+        if not db_file and knowledge:
             logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
             # If it does not exist, it may have been deleted during the parsing process,
             # and the data of the vector database needs to be deleted.
@@ -292,7 +292,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     db_file = KnowledgeFileDao.get_file_by_ids([file_id])
     if not db_file:
         logger.error("file_id={} not found in db", file_id)
-        return
+        return None
     db_file = db_file[0]
     if db_file.status not in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value]:
         logger.error(
@@ -300,11 +300,11 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
             file_id,
             db_file.status,
         )
-        return
+        return None
     db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
     if not db_knowledge:
         logger.error("knowledge_id={} not found", db_file.knowledge_id)
-        return
+        return None
     if db_file.status == KnowledgeFileStatus.WAITING.value:
         db_file.status = KnowledgeFileStatus.PROCESSING.value
         KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.PROCESSING)
@@ -317,7 +317,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
                       callback_url=callback_url,
                       preview_cache_keys=[preview_cache_key])
     logger.debug("parse_knowledge_file_celery_over", file_id)
-    return db_file, db_knowledge
+    return db_knowledge
 
 
 @bisheng_celery.task(acks_late=True)
@@ -335,12 +335,12 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                                             KnowledgeFileFailedError(exception=e).to_json_str())
         return
     try:
-        _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+        knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("retry_knowledge_file_celery error: {}", str(e))
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file:
+        if not db_file and knowledge:
             logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
             # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
             delete_vector_files([db_file[0].id], knowledge)
