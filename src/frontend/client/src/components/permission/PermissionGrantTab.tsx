@@ -24,13 +24,6 @@ import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
-const DEFAULT_MODELS: RelationModelOption[] = [
-  { id: "owner", name: "所有者", relation: "owner" },
-  { id: "viewer", name: "可查看", relation: "viewer" },
-  { id: "editor", name: "可编辑", relation: "editor" },
-  { id: "manager", name: "可管理", relation: "manager" },
-];
-
 const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
   user: [],
   department: [],
@@ -94,8 +87,8 @@ export function PermissionGrantTab({
       return;
     }
 
-    setModels(DEFAULT_MODELS);
-    setSelectedModelId("viewer");
+    setModels([]);
+    setSelectedModelId("");
   }, [localize]);
 
   const applyGrantedPermissions = useCallback((permissions: PermissionEntry[] | undefined) => {
@@ -173,6 +166,17 @@ export function PermissionGrantTab({
   const relation = useMemo<RelationLevel>(() => {
     return models.find((m) => m.id === selectedModelId)?.relation || "viewer";
   }, [models, selectedModelId]);
+
+  const availableModels = useMemo(() => {
+    if (subjectType === "user") return models;
+    return models.filter((model) => model.relation !== "owner");
+  }, [models, subjectType]);
+
+  useEffect(() => {
+    if (!availableModels.length) return;
+    if (availableModels.some((model) => model.id === selectedModelId)) return;
+    setSelectedModelId(availableModels[0].id);
+  }, [availableModels, selectedModelId]);
 
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type);
@@ -309,7 +313,7 @@ export function PermissionGrantTab({
           <RelationSelect
             value={selectedModelId}
             onChange={setSelectedModelId}
-            options={models}
+            options={availableModels}
             className="w-[132px]"
           />
         </div>
@@ -318,7 +322,7 @@ export function PermissionGrantTab({
       <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
         <Button
           onClick={handleSubmit}
-          disabled={selected.length === 0 || submitting}
+          disabled={selected.length === 0 || availableModels.length === 0 || submitting}
         >
           {submitting
             ? localize("com_permission.action_submit") + "..."

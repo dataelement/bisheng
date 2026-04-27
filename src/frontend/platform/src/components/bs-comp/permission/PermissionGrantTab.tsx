@@ -77,13 +77,17 @@ export function PermissionGrantTab({
 
   const applyRelationModels = useCallback((relationModels: RelationModel[] | undefined, fallbackToDefault: boolean) => {
     const hasModels = Boolean(relationModels?.length)
-    const shouldUseDefault = fallbackToDefault || !hasModels
+    const shouldUseDefault = fallbackToDefault
     setModelSource({
-      relationModels,
+      relationModels: hasModels ? relationModels : [],
       fallbackToDefault: shouldUseDefault,
     })
     if (shouldUseDefault) {
       setSelectedModelId(DEFAULT_MODELS.find((model) => model.id === 'viewer')?.id ?? DEFAULT_MODELS[0].id)
+      return
+    }
+    if (!hasModels) {
+      setSelectedModelId('')
       return
     }
 
@@ -121,7 +125,7 @@ export function PermissionGrantTab({
       () => true,
     ).then((res) => {
       if (res === false) {
-        applyRelationModels(undefined, true)
+        applyRelationModels(undefined, false)
         return
       }
       if (!res) return
@@ -339,7 +343,7 @@ export function PermissionGrantTab({
       <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
         <Button
           onClick={handleSubmit}
-          disabled={selected.length === 0 || submitting}
+          disabled={selected.length === 0 || availableModels.length === 0 || submitting}
         >
           {submitting ? t('action.submit') + '...' : t('action.submit')}
         </Button>

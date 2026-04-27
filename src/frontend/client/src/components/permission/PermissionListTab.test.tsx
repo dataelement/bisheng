@@ -53,6 +53,20 @@ describe("Client PermissionListTab", () => {
         permissions: [],
         is_system: true,
       },
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "editor",
+        name: "Editor",
+        relation: "editor",
+        permissions: [],
+        is_system: true,
+      },
     ]);
   });
 

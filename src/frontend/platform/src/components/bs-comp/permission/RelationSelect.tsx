@@ -30,7 +30,7 @@ export function RelationSelect({ value, onChange, className, disabled, options }
     { id: 'editor', name: t('level.editor'), relation: 'editor' },
     { id: 'manager', name: t('level.manager'), relation: 'manager' },
   ]
-  const modelOptions = options && options.length ? options : fallbackOptions
+  const modelOptions = options ?? fallbackOptions
 
   return (
     <Select value={value} onValueChange={(v) => onChange(v)} disabled={disabled}>

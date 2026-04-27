@@ -140,7 +140,8 @@ export function PermissionListTab({
       () => true,
     ).then((res) => {
       if (res === false) {
-        setUseDefaultModels(true)
+        setUseDefaultModels(false)
+        setGrantableModels([])
         return
       }
       if (!res) return
@@ -157,14 +158,18 @@ export function PermissionListTab({
     skipGrantableModelsRequest,
   ])
 
-  const models = useMemo<RelationModelOption[]>(() => {
+  const grantableModelOptions = useMemo<RelationModelOption[]>(() => {
     if (useDefaultModels) return DEFAULT_MODELS
 
-    const opts: RelationModelOption[] = grantableModels.map((model) => ({
+    return grantableModels.map((model) => ({
       id: model.id,
       name: model.is_system ? t(`level.${model.relation}`) : model.name,
       relation: model.relation as RelationLevel,
     }))
+  }, [grantableModels, t, useDefaultModels])
+
+  const displayModels = useMemo<RelationModelOption[]>(() => {
+    const opts = [...grantableModelOptions]
     const ids = new Set(opts.map((option) => option.id))
     for (const entry of entries) {
       if (!entry.model_id || ids.has(entry.model_id)) continue
@@ -176,7 +181,7 @@ export function PermissionListTab({
       })
     }
     return opts.length ? opts : DEFAULT_MODELS
-  }, [entries, grantableModels, t, useDefaultModels])
+  }, [entries, grantableModelOptions])
 
   function getEntryDisplayName(entry: PermissionEntry) {
     if (entry.subject_type === 'department') {
@@ -204,7 +209,7 @@ export function PermissionListTab({
   }, [normalizedSearchQuery, subjectEntries, t])
 
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
-    const model = models.find((item) => item.id === modelId)
+    const model = grantableModelOptions.find((item) => item.id === modelId)
     const newLevel = (model?.relation || 'viewer') as RelationLevel
     if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return
     const res = await captureAndAlertRequestErrorHoc(
@@ -250,15 +255,25 @@ export function PermissionListTab({
     [entries],
   )
 
+  const canManageEntry = useCallback(
+    (entry: PermissionEntry) => {
+      const currentModelId = entry.model_id || entry.relation
+      return grantableModelOptions.some((model) => model.id === currentModelId)
+    },
+    [grantableModelOptions],
+  )
+
   const canDeleteSubject = useCallback(
     (entry: PermissionEntry) => {
+      if (!canManageEntry(entry)) return false
       const relatedEntries = getSubjectEntries(entry)
+      if (relatedEntries.some((candidate) => !canManageEntry(candidate))) return false
       const subjectOwnerCount = relatedEntries.filter(
         (candidate) => candidate.subject_type === 'user' && candidate.relation === 'owner',
       ).length
       return subjectOwnerCount === 0 || ownerEntryCount > subjectOwnerCount
     },
-    [getSubjectEntries, ownerEntryCount],
+    [canManageEntry, getSubjectEntries, ownerEntryCount],
   )
 
   const buildRevokeItemsForSubject = (entry: PermissionEntry): RevokeItem[] => {
@@ -330,7 +345,7 @@ export function PermissionListTab({
   const getPermissionLabel = (entry: PermissionEntry) => {
     const currentModelId = entry.model_id || entry.relation
     return (
-      models.find((item) => item.id === currentModelId)?.name ||
+      displayModels.find((item) => item.id === currentModelId)?.name ||
       entry.model_name ||
       t(`level.${entry.relation}`)
     )
@@ -453,6 +468,7 @@ export function PermissionListTab({
                 const currentModelId = entry.model_id || entry.relation
                 const isOwner = entry.relation === 'owner'
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1
+                const canModifyEntry = canManageEntry(entry) && grantableModelOptions.length > 0
                 const canDeleteEntrySubject = canDeleteSubject(entry)
                 const displayName = getEntryDisplayName(entry)
                 const entryCaption = getEntryCaption(entry)
@@ -482,7 +498,7 @@ export function PermissionListTab({
                     </p>
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      {!isOwner || canManageOwnerEntry ? (
+                      {canModifyEntry && (!isOwner || canManageOwnerEntry) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -497,7 +513,7 @@ export function PermissionListTab({
                             align="end"
                             className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
                           >
-                            {models.map((model) => {
+                            {grantableModelOptions.map((model) => {
                               const active = model.id === currentModelId
                               return (
                                 <DropdownMenuItem
