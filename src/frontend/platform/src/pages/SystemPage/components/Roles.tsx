@@ -85,10 +85,12 @@ function formatKnowledgeSpaceGbInput(n: number): string {
   if (r < KB_SPACE_FILE_GB_MIN || r > KB_SPACE_FILE_GB_MAX) return "500"
   return Number.isInteger(r) ? String(r) : r.toFixed(1)
 }
+/** 工作台四项（首页 / 应用 / 订阅 / 知识空间）新建角色默认全开，与 PRD 一致 */
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
   "home",
   "apps",
+  "subscription",
   "knowledge_space",
   ADMIN_PARENT_ID,
   "knowledge",

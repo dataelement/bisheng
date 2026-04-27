@@ -471,7 +471,8 @@ export function MemberTable({
                     <TableRow
                       key={`${r.user_id}-${r.primary_department_dept_id}`}
                       className={cname(
-                        onRequestLocateMember && "cursor-pointer hover:bg-accent/60"
+                        onRequestLocateMember && "cursor-pointer hover:bg-accent/60",
+                        r.enabled === false && "opacity-90"
                       )}
                       onClick={() => {
                         setMemberScope("dept")
@@ -481,7 +482,16 @@ export function MemberTable({
                         })
                       }}
                     >
-                      <TableCell className="font-medium">{r.user_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          {r.user_name}
+                          {r.enabled === false && (
+                            <Badge variant="secondary" className="font-normal">
+                              {t("bs:department.disabled")}
+                            </Badge>
+                          )}
+                        </span>
+                      </TableCell>
                       <TableCell
                         className="max-w-md truncate text-muted-foreground"
                         title={r.primary_department_path}

@@ -28,6 +28,7 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # tenant context from cookies; the service layer installs
     # ROOT_TENANT_ID + bypass_tenant_filter explicitly.
     '/api/v1/internal/sso/login-sync',
+    '/api/v1/internal/sso/gateway-wecom-org-sync',
     '/api/v1/departments/sync',
     # v2.5.1 F015: HMAC-signed relink + resolve-conflict endpoints.
     '/api/v1/internal/departments/relink',

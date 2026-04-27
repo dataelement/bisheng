@@ -53,6 +53,7 @@ async def global_members_search(
 ):
     """全组织按用户名搜索成员（主属部门路径）；可见范围与 :meth:`DepartmentService.aget_tree` 一致。
 
+    含未启用账号（``User.delete=1``），与部门成员列表一致，便于管理员搜索定位。
     使用 ``/search/...`` 前缀，避免与 ``GET /{dept_id}`` 单段路径冲突（否则 ``global-members`` 会被当成 dept_id）。
     """
     try:

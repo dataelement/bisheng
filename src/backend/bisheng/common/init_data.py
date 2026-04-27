@@ -51,6 +51,8 @@ async def init_default_data():
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.APPS.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.SUBSCRIPTION.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.BUILD.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE.value),
