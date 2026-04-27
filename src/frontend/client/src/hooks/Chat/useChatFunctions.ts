@@ -58,7 +58,6 @@ export default function useChatFunctions({
   const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
   const setFilesToDelete = useSetFilesToDelete();
   const isTemporary = useRecoilValue(store.isTemporary);
-  const modelType = useRecoilValue(store.modelType);
   const chatModel = useRecoilValue(store.chatModel);
   const searchType = useRecoilValue(store.searchType);
   // const netSearch = useRecoilValue(store.netSearch);
@@ -91,7 +90,7 @@ export default function useChatFunctions({
     }
 
     const endpoint = 'Deepseek';
-    const custom_model = modelType || 'deepseek-chat';
+    const custom_model = 'deepseek-chat';
     const search_enabled = searchType && searchType === 'netSearch' || false;
 
     const use_knowledge_base = {

@@ -93,9 +93,9 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
-      // Drop the session sentinel so the next authenticated hit (even same
-      // account, same tab) is treated as a fresh session and clears `bs:*`.
-      try { sessionStorage.removeItem('bs:session-user'); } catch { /* ignore */ }
+      // Drop the auth-state sentinel so the next /api/user/me success is
+      // detected as a fresh login and wipes cached chat preferences.
+      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
       if (thirdPartyLogoutUrl) {
         window.location.href = thirdPartyLogoutUrl;
@@ -109,7 +109,7 @@ const AuthContextProvider = ({
       });
     },
     onError: (error) => {
-      try { sessionStorage.removeItem('bs:session-user'); } catch { /* ignore */ }
+      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
       doSetError((error as Error).message);
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
       if (thirdPartyLogoutUrl) {
@@ -166,20 +166,27 @@ const AuthContextProvider = ({
     if (userQuery.data) {
       setUser(userQuery.data);
       setIsAuthenticated(true);
-      // Session sentinel: any path that brings `user` into the app — normal
-      // login, 2FA, SSO, third-party SSO landing — ends up here once
-      // /api/user/me succeeds. sessionStorage survives same-tab reloads but
-      // dies on new tab / browser restart / explicit logout, so a mismatch
-      // means "fresh authenticated session for this user" → wipe cached
-      // chat preferences so admin-configured defaults re-apply.
+      // Auth-state sentinel: stored in localStorage (shared across tabs)
+      // so refresh and new-tab don't trigger a wipe. Cleared on logout and
+      // on 401 in the response interceptor; SSO landing leaves it absent
+      // until the first /api/user/me succeeds. Mismatch (absent or different
+      // uid — including a leftover bs:* set from a prior user) is treated
+      // as "fresh login" → wipe cached chat preferences and legacy global
+      // keys so admin-configured defaults re-apply.
       try {
         const uid = String(userQuery.data.id ?? '');
-        if (uid && sessionStorage.getItem('bs:session-user') !== uid) {
+        if (uid && localStorage.getItem('bs:auth-state') !== uid) {
           for (let i = localStorage.length - 1; i >= 0; i--) {
             const k = localStorage.key(i);
             if (k && k.startsWith('bs:')) localStorage.removeItem(k);
           }
-          sessionStorage.setItem('bs:session-user', uid);
+          // One-time cleanup of legacy global keys that used to be persisted
+          // via atomWithLocalStorage. Their atoms no longer write to these
+          // keys; remove any stale values so the keys don't linger forever.
+          ['chatModel', 'modelType', 'searchType', 'isSearch'].forEach((k) => {
+            localStorage.removeItem(k);
+          });
+          localStorage.setItem('bs:auth-state', uid);
         }
       } catch { /* ignore storage errors */ }
     } else if (userQuery.isError) {

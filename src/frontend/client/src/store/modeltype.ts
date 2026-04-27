@@ -1,4 +1,3 @@
-import { atomWithLocalStorage } from '~/store/utils';
 import { atom } from 'recoil';
 
 export type SelectedOrgKb = {
@@ -24,13 +23,22 @@ export type SelectedAgentTool = {
   children: SelectedAgentToolChild[];
 };
 
-const modelType = atomWithLocalStorage('modelType', '');
-// DEPRECATED (kept for backward compat with legacy chat flow). New code uses
-// selectedAgentTools below; will be removed alongside the legacy SSE format.
-const searchType = atomWithLocalStorage('searchType', '');
-const isSearch = atomWithLocalStorage('isSearch', false);
+const searchType = atom<string>({
+  key: 'searchType',
+  default: '',
+});
 
-const chatModel = atomWithLocalStorage('chatModel', { id: 0, name: '' });
+const isSearch = atom<boolean>({
+  key: 'isSearch',
+  default: false,
+});
+
+// Persistence is handled by ChatView under `bs:{uid}:chatModel` so the value
+// is user-scoped and gets cleared on re-login alongside the rest of `bs:*`.
+const chatModel = atom<{ id: number; name: string }>({
+  key: 'chatModel',
+  default: { id: 0, name: '' },
+});
 
 const selectedOrgKbs = atom<SelectedOrgKb[]>({
   key: 'selectedOrgKbs',
@@ -68,7 +76,6 @@ const chatStatesMap = atom<Record<string, any>>({
 });
 
 export default {
-  modelType,
   searchType,
   isSearch,
   chatModel,

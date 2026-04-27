@@ -12,6 +12,7 @@ import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
+import useChatModelMemo from '~/hooks/useChatModelMemo';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -43,30 +44,19 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [searchType, setSearchType] = useRecoilState(store.searchType);
 
   // v2.5 interaction memory — per-user localStorage snapshots for the input
-  // bar (model, kb selection, tools). Rules:
-  //  - model: default = latest backend model; if user-saved model was deleted,
-  //    fall back to latest again
+  // bar. The model selection is shared across chat surfaces (ChatView and
+  // AiAssistantPanel), so it lives in useChatModelMemo. KB / tools are
+  // ChatView-only and handled in the effect below. Rules:
   //  - KB space: default empty; remember user toggles
   //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
   //  - tools: default per bsConfig.tools[].default_checked; remember toggles
+  useChatModelMemo(user, bsConfig as any);
+
   const memoReadyRef = useRef(false);
   useEffect(() => {
     if (!bsConfig || !user?.id) return;
     if (memoReadyRef.current) return;
     const prefix = `bs:${user.id}:`;
-
-    // Model: stored id wins if still present; otherwise latest configured model.
-    try {
-      const savedModelId = localStorage.getItem(`${prefix}chatModel`);
-      const models = (bsConfig as any)?.models || [];
-      let target = savedModelId
-        ? models.find((m: any) => String(m.id) === savedModelId)
-        : null;
-      if (!target && models.length) target = models[models.length - 1];
-      if (target) {
-        setChatModel({ id: Number(target.id), name: target.displayName || target.name });
-      }
-    } catch { /* ignore */ }
 
     // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
     // Priority: non-empty localStorage > admin-configured default_checked.
@@ -117,15 +107,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     } catch { /* ignore */ }
 
     memoReadyRef.current = true;
-  }, [bsConfig, user?.id, setChatModel, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
+  }, [bsConfig, user?.id, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
 
 
   // Persist on change (after initial hydrate completes).
-  useEffect(() => {
-    if (!memoReadyRef.current || !user?.id || !chatModel.id) return;
-    localStorage.setItem(`bs:${user.id}:chatModel`, String(chatModel.id));
-  }, [chatModel.id, user?.id]);
-
   useEffect(() => {
     if (!memoReadyRef.current || !user?.id) return;
     localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));

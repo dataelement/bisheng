@@ -16,6 +16,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
+import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import store from "~/store";
 import type { AiChatInputFeatures } from "~/components/Chat/AiChatInput";
@@ -23,6 +24,7 @@ import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import useAiChat from "~/hooks/useAiChat";
 import useChannelChat from "~/hooks/useChannelChat";
+import useChatModelMemo from "~/hooks/useChatModelMemo";
 import useFileChat from "~/hooks/useFileChat";
 import { useConfirm } from "~/Providers";
 import { ChannelClearIcon } from "~/components/icons/channels";
@@ -91,10 +93,16 @@ export function AiAssistantPanel({
     } = activeChat;
 
     const { data: bsConfig } = useGetBsConfig();
+    const { user } = useAuthContext();
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
     const [searchType, setSearchType] = useRecoilState(store.searchType);
     const [inputText, setInputText] = useState("");
+
+    // Hydrate / persist chatModel under bs:{uid}:chatModel so model selection
+    // on Subscription / Article / FilePreview pages survives refresh and gets
+    // wiped on re-login alongside the rest of bs:*.
+    useChatModelMemo(user, bsConfig as any);
 
     const confirm = useConfirm();
 
