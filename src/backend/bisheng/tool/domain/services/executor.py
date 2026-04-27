@@ -225,18 +225,25 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     async def init_by_tool_ids(cls, tool_ids: list[int], *, app_id: str, app_name: str, app_type: ApplicationTypeEnum,
-                               user_id: int, **kwargs) -> List[BaseTool]:
+                               user_id: int, skip_unauthorized: bool = False, **kwargs) -> List[BaseTool]:
         tools = await GptsToolsDao.aget_list_by_ids(tool_ids)
         tool_type_ids = [tool.type for tool in tools]
         tool_types = await GptsToolsDao.aget_all_tool_type(list(set(tool_type_ids)))
         tool_type_map = {tool_type.id: tool_type for tool_type in tool_types}
+        allowed_tools = []
         for tool in tools:
             tool_type = tool_type_map.get(tool.type)
             if not tool_type:
                 raise ValueError(f"Tool type with id {tool.type} not found.")
-            await cls._ensure_use_permission_async(tool_type, user_id)
+            try:
+                await cls._ensure_use_permission_async(tool_type, user_id)
+            except PermissionError:
+                if skip_unauthorized:
+                    continue
+                raise
+            allowed_tools.append(tool)
 
-        return cls._init_tools(tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
+        return cls._init_tools(allowed_tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
                                user_id=user_id, enforce_permission=False, **kwargs)
 
     @classmethod
