@@ -84,8 +84,8 @@ export function SideNav() {
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
-        // Explicit app-center source should always return to app center.
-        if (from === 'center') {
+        // App center entries (home list / explore) should always return to app center.
+        if (from === 'center' || from === 'explore') {
             navigate('/apps');
             return;
         }

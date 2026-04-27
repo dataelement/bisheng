@@ -334,12 +334,12 @@ export function ChannelMemberDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent
                     overlayClassName="z-[100]"
-                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 touch-mobile:fixed touch-mobile:inset-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
+                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none"
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     close={false}
                 >
-                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 touch-mobile:h-auto touch-mobile:min-h-[56px] touch-mobile:px-4 sm:text-left">
-                        <DialogTitle className="m-0 inline-flex items-center text-[16px] font-semibold leading-[24px] text-[#1D2129] touch-mobile:text-[20px] touch-mobile:font-medium touch-mobile:leading-7 touch-mobile:text-[#212121]">
+                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 max-[768px]:h-auto max-[768px]:min-h-[56px] max-[768px]:px-4 sm:text-left">
+                        <DialogTitle className="m-0 inline-flex items-center text-[16px] font-semibold leading-[24px] text-[#1D2129] max-[768px]:text-[20px] max-[768px]:font-medium max-[768px]:leading-7 max-[768px]:text-[#212121]">
                             {localize("com_subscription.management_member")}
                         </DialogTitle>
                         <DialogClose className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-0 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
@@ -348,7 +348,7 @@ export function ChannelMemberDialog({
                         </DialogClose>
                     </DialogHeader>
 
-                    <div className="flex min-h-0 flex-1 flex-col px-6 pb-0 pt-6 touch-mobile:px-4 touch-mobile:pt-6">
+                    <div className="flex min-h-0 flex-1 flex-col px-6 pb-0 pt-6 max-[768px]:px-4 max-[768px]:pt-6">
                         <div className="relative mb-6">
                             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B8FA8]" />
                             <input
@@ -409,7 +409,7 @@ export function ChannelMemberDialog({
                         </div>
                     </div>
 
-                    <div className="flex h-auto shrink-0 items-center justify-end border-t border-[#ECECEC] px-6 py-5 text-[14px] touch-mobile:px-4 touch-mobile:py-4">
+                    <div className="flex h-auto shrink-0 items-center justify-end border-t border-[#ECECEC] px-6 py-5 text-[14px] max-[768px]:px-4 max-[768px]:py-4">
                         <div className="flex items-center gap-2">
                             <span className="shrink-0 leading-none text-[14px]">
                                 <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>

@@ -432,7 +432,6 @@ export default function MainLayout() {
               isAppsArea &&
               !isAppChatRoute &&
               !isAppsExploreRoute &&
-              !mobileSidebarOpen &&
               'pt-9',
             )}
           >

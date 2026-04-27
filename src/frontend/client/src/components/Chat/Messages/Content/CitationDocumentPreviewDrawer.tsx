@@ -165,12 +165,12 @@ export default function CitationDocumentPreviewDrawer({
   }, [canRenderPreview, isNarrowLayout]);
 
   useEffect(() => {
-    if (!canRenderPreview || !isNarrowLayout) return;
+    if (!canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
     setChatMobileNavHidden(true);
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [canRenderPreview, isNarrowLayout, setChatMobileNavHidden]);
+  }, [canRenderPreview, isNarrowLayout, isFullBleedMobile, setChatMobileNavHidden]);
 
   useEffect(() => {
     let active = true;
