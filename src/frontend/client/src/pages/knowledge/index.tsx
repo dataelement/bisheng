@@ -522,6 +522,14 @@ export default function Knowledge() {
                         setSquarePreviewDrawerOpen(true);
                     }}
                     statusOverride={squareStatusOverride}
+                    onSquareStatusChange={(id, status) => {
+                        setSquareStatusOverride((prev) => {
+                            if (prev[String(id)] === status) {
+                                return prev;
+                            }
+                            return { ...prev, [String(id)]: status };
+                        });
+                    }}
                 />
                 <KnowledgeSpacePreviewDrawer
                     spaceId={squarePreviewSpaceId}

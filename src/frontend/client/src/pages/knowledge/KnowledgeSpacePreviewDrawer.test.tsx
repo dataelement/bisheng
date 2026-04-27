@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
-import { SpaceRole, VisibilityType, getSpaceInfoApi } from "~/api/knowledge";
+import { SpaceRole, VisibilityType, getJoinedSpacesApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
 
 jest.mock("~/Providers", () => ({
   useToastContext: () => ({
@@ -131,5 +131,51 @@ describe("KnowledgeSpacePreviewDrawer", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     expect(mockedGetSpaceInfoApi).toHaveBeenCalledTimes(1);
+  });
+
+  test("allows reapplying from rejected preview state", async () => {
+    const mockedGetSpaceInfoApi = jest.mocked(getSpaceInfoApi);
+    const mockedGetJoinedSpacesApi = jest.mocked(getJoinedSpacesApi);
+    const mockedSubscribeSpaceApi = jest.mocked(subscribeSpaceApi);
+    const rejectedSpace = {
+      id: "space-2",
+      name: "审批空间",
+      description: "需要审批",
+      icon: "",
+      visibility: VisibilityType.APPROVAL,
+      creator: "Zhou",
+      creatorId: "u-1",
+      memberCount: 3,
+      fileCount: 8,
+      totalFileCount: 8,
+      role: SpaceRole.MEMBER,
+      isPinned: false,
+      createdAt: "",
+      updatedAt: "",
+      tags: [],
+      isReleased: true,
+      isFollowed: false,
+      isPending: false,
+      subscriptionStatus: "rejected",
+    };
+
+    mockedGetSpaceInfoApi.mockResolvedValue(rejectedSpace as any);
+    mockedGetJoinedSpacesApi.mockResolvedValue([]);
+    mockedSubscribeSpaceApi.mockResolvedValue({ status: "pending", spaceId: "space-2" });
+
+    render(
+      <KnowledgeSpacePreviewDrawer
+        spaceId={rejectedSpace.id}
+        initialSpace={rejectedSpace as any}
+        open
+        onOpenChange={() => undefined}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "重新申请" }));
+
+    await waitFor(() => {
+      expect(mockedSubscribeSpaceApi).toHaveBeenCalledWith("space-2");
+    });
   });
 });
