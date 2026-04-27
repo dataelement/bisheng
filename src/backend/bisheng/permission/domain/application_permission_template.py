@@ -52,7 +52,7 @@ APPLICATION_PERMISSION_TEMPLATE: dict = {
             'items': [
                 {'id': 'manage_app_owner', 'label': '管理应用所有者', 'relation': 'can_manage'},
                 {'id': 'manage_app_manager', 'label': '管理应用管理者', 'relation': 'can_manage'},
-                {'id': 'manage_app_viewer', 'label': '管理应用使用者', 'relation': 'can_manage'},
+                {'id': 'manage_app_viewer', 'label': '管理应用编辑者与使用者', 'relation': 'can_manage'},
             ],
         },
     ],

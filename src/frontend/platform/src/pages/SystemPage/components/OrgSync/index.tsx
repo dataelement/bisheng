@@ -35,9 +35,6 @@ function hasErrorDetails(log: OrgSyncLog): boolean {
   return Array.isArray(log.error_details) && log.error_details.length > 0
 }
 
-/**
- * 仅展示网关掉 HMAC 推送写入的 org_sync_log（扁平列表 + 详情）。
- */
 export default function OrgSync() {
   const { t } = useTranslation("orgSync")
 
@@ -71,10 +68,7 @@ export default function OrgSync() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div>
-        <h2 className="text-lg font-semibold">{t("title")}</h2>
-        <p className="text-sm text-muted-foreground">{t("description")}</p>
-      </div>
+      <h2 className="text-lg font-semibold">{t("title")}</h2>
 
       <div className="rounded-lg border">
         <Table>

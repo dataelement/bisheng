@@ -103,7 +103,7 @@ class TestInitDefaultRootDepartment:
         # Simulate what _init_default_root_department does (sync version)
         dept = Department(
             dept_id='BS@root',
-            name='Default Organization',
+            name='默认组织',
             parent_id=None,
             tenant_id=1,
             path='',
@@ -124,7 +124,7 @@ class TestInitDefaultRootDepartment:
         assert dept.id is not None
         assert dept.parent_id is None
         assert dept.path == f'/{dept.id}/'
-        assert dept.name == 'Default Organization'
+        assert dept.name == '默认组织'
         assert tenant.root_dept_id == dept.id
 
     def test_init_idempotent(self, session):
@@ -141,7 +141,7 @@ class TestInitDefaultRootDepartment:
 
         dept = Department(
             dept_id='BS@root',
-            name='Default Organization',
+            name='默认组织',
             parent_id=None,
             tenant_id=1,
             path='',

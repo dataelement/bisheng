@@ -47,7 +47,7 @@ KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE: dict = {
             'items': [
                 {'id': 'manage_kb_owner', 'label': '管理知识库所有者', 'relation': 'can_manage'},
                 {'id': 'manage_kb_manager', 'label': '管理知识库管理者', 'relation': 'can_manage'},
-                {'id': 'manage_kb_viewer', 'label': '管理知识库使用者', 'relation': 'can_manage'},
+                {'id': 'manage_kb_viewer', 'label': '管理知识库编辑者与使用者', 'relation': 'can_manage'},
             ],
         },
     ],

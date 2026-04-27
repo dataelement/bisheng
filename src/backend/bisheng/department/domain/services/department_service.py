@@ -551,6 +551,24 @@ class DepartmentService:
         if data.admin_user_ids is not None:
             await cls.aset_admins(dept_id, list(data.admin_user_ids), login_user)
 
+        if data.apply_default_roles_to_existing_members:
+            raw_grant = (
+                list(data.default_role_ids)
+                if data.default_role_ids is not None
+                else list(dept.default_role_ids or [])
+            )
+            role_ids_for_grant = [int(x) for x in raw_grant if x is not None]
+            async with get_async_db_session() as session:
+                member_rows = await session.exec(
+                    select(UserDepartment.user_id).where(
+                        UserDepartment.department_id == dept.id,
+                    ),
+                )
+                member_user_ids = [int(x) for x in member_rows.all()]
+            await cls._grant_default_roles_to_users(
+                dept_id, member_user_ids, role_ids_for_grant, login_user,
+            )
+
         return dept
 
     @classmethod
@@ -730,7 +748,7 @@ class DepartmentService:
 
     @classmethod
     async def acreate_root_department(
-        cls, tenant_id: int, name: str = 'Default Organization',
+        cls, tenant_id: int, name: str = '默认组织',
     ) -> Department:
         """Create the root department for a tenant.
 
@@ -788,6 +806,39 @@ class DepartmentService:
         return dept
 
     @classmethod
+    async def _grant_default_roles_to_users(
+        cls,
+        dept_id: str,
+        user_ids: List[int],
+        default_role_ids: List[int],
+        login_user,
+    ) -> None:
+        """Grant department default roles to users (assignable domain, skip AdminRole, idempotent)."""
+        if not default_role_ids or not user_ids:
+            return
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user_role import UserRoleDao
+
+        assignable = await cls.aget_assignable_roles(dept_id, login_user)
+        allowed_ids = {r['id'] for r in assignable}
+        to_apply = [
+            rid for rid in default_role_ids
+            if rid != AdminRole and rid in allowed_ids
+        ]
+        if not to_apply:
+            return
+        for uid in user_ids:
+            existing = {int(ur.role_id) for ur in UserRoleDao.get_user_roles(uid)}
+            need_add = [r for r in to_apply if r not in existing]
+            if need_add:
+                UserRoleDao.add_user_roles(uid, need_add)
+                await LegacyRBACSyncService.sync_user_role_change(
+                    uid,
+                    existing,
+                    existing | set(need_add),
+                )
+
+    @classmethod
     async def aadd_members(
         cls, dept_id: str, data: DepartmentMemberAdd, login_user,
     ) -> None:
@@ -827,27 +878,9 @@ class DepartmentService:
         await DepartmentChangeHandler.execute_async(ops)
 
         # 部门「默认角色」：加入本部门后自动授予（可分配域内、且用户尚未拥有）
-        if default_role_ids_snapshot:
-            from bisheng.database.constants import AdminRole
-            from bisheng.user.domain.models.user_role import UserRoleDao
-
-            assignable = await cls.aget_assignable_roles(dept_id, login_user)
-            allowed_ids = {r['id'] for r in assignable}
-            to_apply = [
-                rid for rid in default_role_ids_snapshot
-                if rid != AdminRole and rid in allowed_ids
-            ]
-            if to_apply:
-                for uid in data.user_ids:
-                    existing = {int(ur.role_id) for ur in UserRoleDao.get_user_roles(uid)}
-                    need_add = [r for r in to_apply if r not in existing]
-                    if need_add:
-                        UserRoleDao.add_user_roles(uid, need_add)
-                        await LegacyRBACSyncService.sync_user_role_change(
-                            uid,
-                            existing,
-                            existing | set(need_add),
-                        )
+        await cls._grant_default_roles_to_users(
+            dept_id, list(data.user_ids), default_role_ids_snapshot, login_user,
+        )
 
     @classmethod
     async def aremove_member(

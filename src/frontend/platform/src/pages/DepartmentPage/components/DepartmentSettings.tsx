@@ -1,9 +1,11 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
+import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { Separator } from "@/components/bs-ui/separator"
+import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import DepartmentUsersSelect, {
@@ -20,6 +22,7 @@ import {
   unmountTenantApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
+import { isGuestDepartmentDeptId } from "@/pages/DepartmentPage/constants/systemDepartments"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentAdmin, DepartmentTreeNode } from "@/types/api/department"
@@ -55,6 +58,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const [name, setName] = useState(dept.name)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
   const [defaultRoleIds, setDefaultRoleIds] = useState<string[]>([])
+  const [applyDefaultRolesToExisting, setApplyDefaultRolesToExisting] = useState(false)
   const [assignableRoles, setAssignableRoles] = useState<{ value: string; label: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -134,6 +138,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setApplyDefaultRolesToExisting(false)
     Promise.all([
       getDepartmentAdminsApi(dept.dept_id),
       getDepartmentApi(dept.dept_id),
@@ -236,6 +241,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         name?: string
         default_role_ids?: number[]
         admin_user_ids?: number[]
+        apply_default_roles_to_existing_members?: boolean
       } = {}
       const baseline = baselineRef.current
       const nextName = name.trim()
@@ -255,6 +261,9 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
       }
       if (baseline && !sameIdSet(nextDefaultRoleIds, baseline.defaultRoleIds)) {
         body.default_role_ids = nextDefaultRoleIds
+      }
+      if (applyDefaultRolesToExisting) {
+        body.apply_default_roles_to_existing_members = true
       }
       const nextParentId = parentIdValue
       const parentChanged =
@@ -282,6 +291,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         description: t("saved"),
         variant: "success",
       })
+      setApplyDefaultRolesToExisting(false)
       const nextAdmins = await getDepartmentAdminsApi(dept.dept_id).catch(() => null)
       const adminOpts = Array.isArray(nextAdmins)
         ? adminsToOptions(nextAdmins)
@@ -303,6 +313,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     canEditName,
     canEditParent,
     canEditPermissions,
+    applyDefaultRolesToExisting,
     defaultRoleIds,
     dept.dept_id,
     dept.parent_id,
@@ -408,12 +419,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         <div className="space-y-1.5">
           <Label>{t("bs:department.name")}</Label>
           {isSynced || isArchived ? (
-            <div>
-              <Input value={name} disabled className={FORM_CONTROL_WIDTH} />
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("bs:department.readonlyField")}
-              </p>
-            </div>
+            <Input value={name} disabled className={FORM_CONTROL_WIDTH} />
           ) : (
             <Input
               value={name}
@@ -502,6 +508,27 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
               disabled={!canEditPermissions}
               className={FORM_CONTROL_WIDTH}
             />
+            <label className="mt-2 flex max-w-md cursor-pointer items-start gap-2 text-sm leading-snug">
+              <Checkbox
+                className="mt-0.5"
+                checked={applyDefaultRolesToExisting}
+                disabled={!canEditPermissions}
+                onCheckedChange={(v) => setApplyDefaultRolesToExisting(Boolean(v))}
+              />
+              <span className="flex flex-1 flex-wrap items-center gap-1.5 text-foreground">
+                {t("bs:department.applyDefaultRolesToExisting")}
+                <span
+                  className="inline-flex shrink-0"
+                  onClick={(e) => e.preventDefault()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <QuestionTooltip
+                    className="text-muted-foreground hover:text-foreground"
+                    content={t("bs:department.applyDefaultRolesToExistingTooltip")}
+                  />
+                </span>
+              </span>
+            </label>
             <p className="mt-1 max-w-md text-xs leading-snug text-gray-500 dark:text-gray-400">
               {t("bs:department.defaultRolesHint")}
             </p>
@@ -516,9 +543,11 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
             <Button variant="outline" onClick={handleRestore}>
               {t("bs:department.restore")}
             </Button>
-            <Button variant="destructive" onClick={handlePurge}>
-              {t("bs:department.permanentDelete")}
-            </Button>
+            {!isGuestDepartmentDeptId(dept.dept_id) ? (
+              <Button variant="destructive" onClick={handlePurge}>
+                {t("bs:department.permanentDelete")}
+              </Button>
+            ) : null}
           </div>
         </div>
       )}
@@ -580,7 +609,9 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
                 {t("bs:tenant.unmount", { defaultValue: "取消挂载" })}
               </Button>
             )}
-            {!isSynced && dept.parent_id !== null && (
+            {!isSynced &&
+              dept.parent_id !== null &&
+              !isGuestDepartmentDeptId(dept.dept_id) && (
               <Button variant="destructive" onClick={handleDelete} className="shrink-0">
                 {t("bs:department.delete")}
               </Button>
