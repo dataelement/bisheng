@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { paginateAllUserGroupMembers } from "@/controllers/API/userGroups";
+import { canDeleteUserGroup } from "@/pages/SystemPage/components/UserGroup";
 
 describe("paginateAllUserGroupMembers", () => {
   it("loads every page until total is reached", async () => {
@@ -48,5 +49,34 @@ describe("paginateAllUserGroupMembers", () => {
 
     expect(fetchPage).toHaveBeenCalledTimes(2);
     expect(rows.map((r) => r.user_id)).toEqual([1]);
+  });
+});
+
+describe("canDeleteUserGroup", () => {
+  it("allows user-group managers to delete groups they created", () => {
+    expect(
+      canDeleteUserGroup(
+        { role: "user", can_manage_user_groups: true, user_id: 5 },
+        { id: 1, group_name: "g", visibility: "public", create_user: 5 },
+      ),
+    ).toBe(true);
+  });
+
+  it("normalizes creator ids before comparing", () => {
+    expect(
+      canDeleteUserGroup(
+        { role: "user", can_manage_user_groups: true, user_id: 5 },
+        { id: 1, group_name: "g", visibility: "public", create_user: "5" },
+      ),
+    ).toBe(true);
+  });
+
+  it("does not allow scoped managers to delete groups created by others", () => {
+    expect(
+      canDeleteUserGroup(
+        { role: "user", can_manage_user_groups: true, user_id: 5 },
+        { id: 1, group_name: "g", visibility: "public", create_user: 6 },
+      ),
+    ).toBe(false);
   });
 });
