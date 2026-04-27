@@ -100,25 +100,27 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 </div>
             ) : (
                 <div className="flex min-h-0 flex-1 overflow-hidden">
-                    <div className="relative min-w-0 flex-1 min-h-0 overflow-hidden">
-                        <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
-                            <ChatMessages
-                                useName={user?.username}
-                                title={data.name}
-                                logo={Logo}
-                                readOnly={readOnly}
-                                isGuestMode={isGuestMode}
-                                disabledSearch={data.flow_type === 10}
-                                onOpenCitationPanel={onOpenCitationPanel}
-                                activeCitationMessageId={activeCitationMessageId}
-                            />
+                    <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
+                        <div className="flex min-h-0 flex-1 overflow-hidden">
+                            <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
+                                <ChatMessages
+                                    useName={user?.username}
+                                    title={data.name}
+                                    logo={Logo}
+                                    readOnly={readOnly}
+                                    isGuestMode={isGuestMode}
+                                    disabledSearch={data.flow_type === 10}
+                                    onOpenCitationPanel={onOpenCitationPanel}
+                                    activeCitationMessageId={activeCitationMessageId}
+                                />
+                            </div>
                         </div>
+                        {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
                     </div>
 
                     {citationPanelElement}
                 </div>
             )}
-            {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
         </div>
     </div>
 };
