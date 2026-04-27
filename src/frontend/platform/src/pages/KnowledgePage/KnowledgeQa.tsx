@@ -305,24 +305,19 @@ export default function KnowledgeQa(params) {
     );
     const resourceIds = datalist.map((el: any) => String(el.id));
     const { permissions: permIds } = usePermissionIds('knowledge_library', resourceIds, KB_PERMISSION_IDS);
-    const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
     const visibleLibs = datalist;
     const canEdit = (el: any) =>
-        user.role === 'admin' || isCreator(el) || hasPermissionId(permIds, el.id, 'edit_kb');
+        hasPermissionId(permIds, el.id, 'edit_kb');
     const canDelete = (el: any) =>
-        user.role === 'admin' || isCreator(el) || hasPermissionId(permIds, el.id, 'delete_kb');
+        hasPermissionId(permIds, el.id, 'delete_kb');
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
-        user.role === 'admin' ||
-        isCreator(el) ||
         hasPermissionId(permIds, el.id, 'view_kb');
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
-        user.role === 'admin' ||
-        isCreator(el) ||
         KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
 
     useEffect(() => {
@@ -492,10 +487,10 @@ export default function KnowledgeQa(params) {
                                                             handleCopy(el);
                                                         break;
                                                     case 'set':
-                                                        canEdit(el) && el.copiable && handleOpenSettings(el);
+                                                        canEdit(el) && handleOpenSettings(el);
                                                         break;
                                                     case 'delete':
-                                                        canDelete(el) && (el.copiable || user.role === 'admin') && handleDelete(el.id);
+                                                        canDelete(el) && handleDelete(el.id);
                                                         break;
                                                 }
                                             }}
@@ -545,10 +540,10 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canEdit(el)) && t('noPermission')} side='top'>
+                                                <Tip content={!canEdit(el) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!canEdit(el) || !el.copiable}
+                                                        disabled={!canEdit(el)}
                                                         showIcon={false}
                                                     >
                                                         <div className="flex gap-2 items-center">
@@ -557,11 +552,11 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canDelete(el)) && t('noPermission')} side='top'>
+                                                <Tip content={!canDelete(el) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
-                                                        disabled={!canDelete(el) || !(el.copiable || user.role === 'admin')}
+                                                        disabled={!canDelete(el)}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />

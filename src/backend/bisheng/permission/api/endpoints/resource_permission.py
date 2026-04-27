@@ -36,13 +36,10 @@ from bisheng.common.models.config import ConfigDao
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Privilege hierarchy: lower index = higher privilege
-_LEVEL_ORDER = [level.value for level in PermissionLevel]  # owner, can_manage, can_edit, can_read
 # Grantable role relations mapped to their required minimum level
 _GRANT_RELATIONS = {'owner': 'owner', 'manager': 'can_manage', 'editor': 'can_edit', 'viewer': 'can_read'}
 _GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
-# 该关系模型可被「资源上最高权限档位 <= 此下标」的授权人使用（与 _LEVEL_ORDER 对齐）
-_TIER_MAX_CALLER_INDEX = {'owner': 0, 'manager': 1, 'usage': 2}
+_GRANT_TIERS = {'owner', 'manager', 'usage'}
 _RELATION_MAX_CALLER_INDEX = {'owner': 0, 'manager': 1, 'editor': 2, 'viewer': 2}
 _MANAGE_PERMISSION_BY_RESOURCE_TIER = {
     'workflow': {
@@ -427,24 +424,17 @@ def _tuple_signature(item) -> tuple:
     )
 
 
-def _caller_satisfies_ceiling(caller_level: str | None, max_caller_index: int) -> bool:
-    """True if caller's FGA 档位下标 <= max_caller_index（下标越小权限越高）。"""
-    if caller_level is None or caller_level not in _LEVEL_ORDER:
-        return False
-    return _LEVEL_ORDER.index(caller_level) <= max_caller_index
-
-
-def _grant_ceiling_index(grant, model_map: dict):
-    """Return max caller index allowed for this grant; None if invalid."""
+def _grant_tier_is_valid(grant, model_map: dict) -> bool:
+    """Validate that the requested relation model matches the grant relation."""
     mid = getattr(grant, 'model_id', None)
     if mid:
         if mid not in model_map:
-            return None
+            return False
         m = model_map[mid]
         if m.get('relation') != grant.relation:
-            return None
-        return _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'))
-    return _RELATION_MAX_CALLER_INDEX.get(grant.relation)
+            return False
+        return m.get('grant_tier') in _GRANT_TIERS
+    return grant.relation in _RELATION_MAX_CALLER_INDEX
 
 
 def _management_permission_id(resource_type: str, grant_tier: str | None = None) -> str | None:
@@ -510,6 +500,15 @@ def _grant_management_permission_id(resource_type: str, grant, model_map: dict) 
         grant_tier = model_map[mid].get('grant_tier')
     else:
         grant_tier = _infer_grant_tier_from_relation(getattr(grant, 'relation', '') or '')
+    return _management_permission_id(resource_type, grant_tier)
+
+
+def _revoke_management_permission_id(resource_type: str, revoke, binding: dict | None, model_map: dict) -> str | None:
+    model_id = binding.get('model_id') if binding else None
+    if model_id and model_id in model_map:
+        grant_tier = model_map[model_id].get('grant_tier')
+    else:
+        grant_tier = _infer_grant_tier_from_relation(getattr(revoke, 'relation', '') or '')
     return _management_permission_id(resource_type, grant_tier)
 
 
@@ -818,19 +817,11 @@ async def authorize_resource(
             if management_permission_ids and not (management_permission_ids & caller_permission_ids):
                 return PermissionDeniedError.return_resp()
             for grant in (request.grants or []):
-                if _grant_ceiling_index(grant, model_map) is None:
+                if not _grant_tier_is_valid(grant, model_map):
                     return PermissionDeniedError.return_resp()
         else:
-            caller_level = await PermissionService.get_permission_level(
-                user_id=login_user.user_id,
-                object_type=resource_type,
-                object_id=resource_id,
-                login_user=login_user,
-            )
-
             for grant in (request.grants or []):
-                ceiling = _grant_ceiling_index(grant, model_map)
-                if ceiling is None or not _caller_satisfies_ceiling(caller_level, ceiling):
+                if not _grant_tier_is_valid(grant, model_map):
                     return PermissionDeniedError.return_resp()
                 permission_id = _grant_management_permission_id(resource_type, grant, model_map)
                 if permission_id and permission_id not in caller_permission_ids:
@@ -848,12 +839,9 @@ async def authorize_resource(
                 )
                 if binding and binding.get('model_id'):
                     m = model_map.get(binding['model_id'])
-                    ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'), _LEGACY_REVOKE_MAX_CALLER_INDEX) if m else _LEGACY_REVOKE_MAX_CALLER_INDEX
-                else:
-                    ceiling = _LEGACY_REVOKE_MAX_CALLER_INDEX
-                if not _caller_satisfies_ceiling(caller_level, ceiling):
-                    return PermissionDeniedError.return_resp()
-                permission_id = _grant_management_permission_id(resource_type, revoke, model_map)
+                    if m is None or m.get('grant_tier') not in _GRANT_TIERS:
+                        return PermissionDeniedError.return_resp()
+                permission_id = _revoke_management_permission_id(resource_type, revoke, binding, model_map)
                 if permission_id and permission_id not in caller_permission_ids:
                     return PermissionDeniedError.return_resp()
 
@@ -1127,23 +1115,14 @@ async def get_grantable_relation_models(
             return resp_200([RelationModelItem(**m) for m in raw])
         return resp_200([])
 
-    from bisheng.permission.domain.services.permission_service import PermissionService
-
-    caller_level = await PermissionService.get_permission_level(
-        user_id=login_user.user_id,
-        object_type=object_type,
-        object_id=object_id,
-        login_user=login_user,
-    )
     out = []
     for m in raw:
-        ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'))
-        if ceiling is None:
+        if m.get('grant_tier') not in _GRANT_TIERS:
             continue
-        if _caller_satisfies_ceiling(caller_level, ceiling):
-            permission_id = _management_permission_id(object_type, m.get('grant_tier'))
-            if permission_id and permission_id not in caller_permission_ids:
-                continue
+        permission_id = _management_permission_id(object_type, m.get('grant_tier'))
+        if permission_id and permission_id not in caller_permission_ids:
+            continue
+        if permission_id:
             out.append(RelationModelItem(**m))
     return resp_200(out)
 

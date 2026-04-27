@@ -496,6 +496,44 @@ def test_update_knowledge_uses_permission_service_write_sync_bridge():
     )
 
 
+def test_delete_knowledge_uses_permission_service_delete_sync_bridge():
+    service_module = _load_service_module()
+    KnowledgeService = service_module.KnowledgeService
+    login_user = SimpleNamespace(user_id=7)
+    knowledge = SimpleNamespace(id=42, user_id=12)
+
+    with patch.object(
+        service_module.KnowledgeDao,
+        'query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_delete_sync',
+    ) as mock_ensure_delete, patch.object(
+        KnowledgeService,
+        'delete_knowledge_file_in_vector',
+    ), patch.object(
+        KnowledgeService,
+        'delete_knowledge_file_in_minio',
+    ), patch.object(
+        service_module.KnowledgeDao,
+        'delete_knowledge',
+    ), patch.object(
+        KnowledgeService.audit_telemetry_service,
+        'telemetry_delete_knowledge',
+    ), patch.object(
+        KnowledgeService,
+        'delete_knowledge_hook',
+    ):
+        KnowledgeService.delete_knowledge(MagicMock(), login_user, 42)
+
+    mock_ensure_delete.assert_called_once_with(
+        login_user=login_user,
+        owner_user_id=12,
+        knowledge_id=42,
+    )
+
+
 def test_delete_knowledge_file_uses_permission_service_write_sync_bridge():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService

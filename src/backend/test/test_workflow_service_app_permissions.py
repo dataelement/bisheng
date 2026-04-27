@@ -529,7 +529,7 @@ async def test_update_flow_status_uses_publish_and_unpublish_permissions():
 
 
 @pytest.mark.asyncio
-async def test_get_frequently_used_flows_awaits_async_app_visibility_helper():
+async def test_get_frequently_used_flows_filters_by_use_app_permission_id():
     workflow_module = _load_workflow_service_module()
     WorkFlowService = workflow_module.WorkFlowService
     workflow_module.UserLinkType = SimpleNamespace(
@@ -569,18 +569,23 @@ async def test_get_frequently_used_flows_awaits_async_app_visibility_helper():
         new_callable=AsyncMock,
         return_value=app_rows,
         create=True,
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+        return_value={'asst-1': {'use_app'}},
     ):
         data, total = await WorkFlowService.get_frequently_used_flows(login_user, 'app', 1, 8)
 
-    login_user.aget_merged_rebac_app_resource_ids.assert_awaited_once_with(for_write=False)
+    login_user.aget_merged_rebac_app_resource_ids.assert_not_awaited()
     login_user.get_merged_rebac_app_resource_ids.assert_not_called()
-    assert mock_get_all_apps.call_args.kwargs['id_extra'] == ['asst-1']
+    assert 'id_extra' not in mock_get_all_apps.call_args.kwargs
     assert total == 1
     assert data == app_rows
 
 
 @pytest.mark.asyncio
-async def test_get_uncategorized_flows_awaits_async_app_visibility_helper():
+async def test_get_uncategorized_flows_filters_by_use_app_permission_id():
     workflow_module = _load_workflow_service_module()
     WorkFlowService = workflow_module.WorkFlowService
 
@@ -623,11 +628,17 @@ async def test_get_uncategorized_flows_awaits_async_app_visibility_helper():
             'name': 'wf',
         }],
         create=True,
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+        return_value={'wf-1': {'use_app'}},
     ):
         data, total = await WorkFlowService.get_uncategorized_flows(login_user, 1, 8, None)
 
-    login_user.aget_merged_rebac_app_resource_ids.assert_awaited_once_with(for_write=False)
+    login_user.aget_merged_rebac_app_resource_ids.assert_not_awaited()
     login_user.get_merged_rebac_app_resource_ids.assert_not_called()
-    assert mock_get_all_apps.call_args.args[5] == ['wf-1']
+    assert mock_get_all_apps.call_args.args[4] is None
+    assert mock_get_all_apps.call_args.args[5] is None
     assert total == 1
     assert data[0]['logo'] == 'logo-url'

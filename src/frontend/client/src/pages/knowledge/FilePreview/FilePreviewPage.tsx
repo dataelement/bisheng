@@ -5,7 +5,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { getFilePreviewApi } from "~/api/knowledge";
+import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import { checkPermission } from "~/api/permission";
 import { Button } from "~/components";
 import { AiChatIcon } from "~/components/icons";
 import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
@@ -48,6 +49,7 @@ export default function FilePreviewPage() {
     const [fileType, setFileType] = useState<string>("pdf");
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
+    const [canDownload, setCanDownload] = useState(false);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
@@ -82,6 +84,49 @@ export default function FilePreviewPage() {
             .catch((err) => console.error("Failed to load preview URL:", err))
             .finally(() => setLoading(false));
     }, [fileId, spaceId]);
+
+    useEffect(() => {
+        if (!fileId) {
+            setCanDownload(false);
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+        checkPermission("knowledge_file", fileId, "can_read", "download_file", {
+            signal: controller.signal,
+        })
+            .then((result) => {
+                if (!cancelled) setCanDownload(Boolean(result.allowed));
+            })
+            .catch(() => {
+                if (!cancelled) setCanDownload(false);
+            });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [fileId]);
+
+    const handleDownloadFile = useCallback(async () => {
+        if (!fileId || !spaceId || !canDownload) return;
+        try {
+            const downloadData = await getFileDownloadApi(spaceId, fileId);
+            const downloadUrl = downloadData.original_url || downloadData.preview_url;
+            if (!downloadUrl) return;
+
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.download = fileName;
+            link.target = "_blank";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err) {
+            console.error("Failed to download file:", err);
+        }
+    }, [canDownload, fileId, fileName, spaceId]);
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -155,6 +200,8 @@ export default function FilePreviewPage() {
                     fileUrl={fileUrl}
                     actions={aiButton}
                     conversionFailed={conversionFailed}
+                    allowDownload={canDownload}
+                    onDownloadFile={handleDownloadFile}
                 />
             </div>
 

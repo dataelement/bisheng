@@ -56,14 +56,16 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                                     : "opacity-0 pointer-events-none fine-pointer:group-hover:opacity-100 fine-pointer:group-hover:pointer-events-auto"
                             )}
                         >
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onShare(agent); }}
-                                className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F2F3F5]"
-                                aria-label={localize('com_app_share_app')}
-                            >
-                                <ShareOutlineIcon className="size-3.5" />
-                            </button>
+                            {agent.can_share === true ? (
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onShare(agent); }}
+                                    className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E5E5] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F2F3F5]"
+                                    aria-label={localize('com_app_share_app')}
+                                >
+                                    <ShareOutlineIcon className="size-3.5" />
+                                </button>
+                            ) : null}
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onClick(agent); }}

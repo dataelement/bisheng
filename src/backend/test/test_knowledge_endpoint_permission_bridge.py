@@ -20,16 +20,18 @@ def _install_endpoint_stubs() -> None:
         sys.modules['bisheng.api.services'] = services_module
     if 'bisheng.api.services.knowledge_imp' not in sys.modules:
         knowledge_imp_module = ModuleType('bisheng.api.services.knowledge_imp')
-        knowledge_imp_module.KnowledgeUtils = type('KnowledgeUtils', (), {})
-        knowledge_imp_module.delete_knowledge_file_vectors = lambda *args, **kwargs: None
-        knowledge_imp_module.process_file_task = lambda *args, **kwargs: None
-        knowledge_imp_module.add_qa = lambda *args, **kwargs: None
-        knowledge_imp_module.list_qa_by_knowledge_id = AsyncMock(return_value=([], 0))
-        knowledge_imp_module.qa_status_change = lambda *args, **kwargs: None
-        knowledge_imp_module.delete_vector_data = lambda *args, **kwargs: None
-        knowledge_imp_module.recommend_question = lambda *args, **kwargs: []
         sys.modules['bisheng.api.services.knowledge_imp'] = knowledge_imp_module
         sys.modules['bisheng.api.services'].knowledge_imp = knowledge_imp_module
+    knowledge_imp_module = sys.modules['bisheng.api.services.knowledge_imp']
+    knowledge_imp_module.KnowledgeUtils = type('KnowledgeUtils', (), {})
+    knowledge_imp_module.delete_knowledge_file_vectors = lambda *args, **kwargs: None
+    knowledge_imp_module.process_file_task = lambda *args, **kwargs: None
+    knowledge_imp_module.add_qa = lambda *args, **kwargs: None
+    knowledge_imp_module.list_qa_by_knowledge_id = AsyncMock(return_value=([], 0))
+    knowledge_imp_module.qa_status_change = lambda *args, **kwargs: None
+    knowledge_imp_module.delete_vector_data = lambda *args, **kwargs: None
+    knowledge_imp_module.recommend_question = lambda *args, **kwargs: []
+    sys.modules['bisheng.api.services'].knowledge_imp = knowledge_imp_module
     if 'bisheng.api.services.audit_log' not in sys.modules:
         audit_log_module = ModuleType('bisheng.api.services.audit_log')
 

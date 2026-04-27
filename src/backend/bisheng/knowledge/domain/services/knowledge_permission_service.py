@@ -29,6 +29,7 @@ _KNOWLEDGE_ACCESS_RELATION = {
 
 _KNOWLEDGE_ACCESS_PERMISSION_ID = {
     AccessType.KNOWLEDGE: 'view_kb',
+    AccessType.KNOWLEDGE_WRITE: 'edit_kb',
 }
 
 _PERMISSION_LEVEL_TO_RELATION = {
@@ -320,6 +321,16 @@ class KnowledgePermissionService:
     ) -> None:
         await self.ensure_access_async(login_user, owner_user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
+    async def ensure_knowledge_delete_async(
+            self,
+            login_user: UserPayload,
+            owner_user_id: int,
+            knowledge_id: int,
+    ) -> None:
+        allowed = await self.check_permission_id_async(login_user, knowledge_id, 'delete_kb')
+        if not allowed:
+            raise UnAuthorizedError()
+
     async def ensure_knowledge_read_async(
             self,
             login_user: UserPayload,
@@ -335,6 +346,15 @@ class KnowledgePermissionService:
             knowledge_id: int,
     ) -> None:
         self.ensure_access_sync(login_user, owner_user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE)
+
+    def ensure_knowledge_delete_sync(
+            self,
+            login_user: UserPayload,
+            owner_user_id: int,
+            knowledge_id: int,
+    ) -> None:
+        if not self.check_permission_id_sync(login_user, knowledge_id, 'delete_kb'):
+            raise UnAuthorizedError()
 
     def ensure_knowledge_read_sync(
             self,

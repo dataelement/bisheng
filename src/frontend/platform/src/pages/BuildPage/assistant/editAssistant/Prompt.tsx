@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPromptDialog from "./AutoPromptDialog";
 
-export default function Prompt() {
+export default function Prompt({ canEdit = false }) {
 
     const { t } = useTranslation()
 
@@ -26,9 +26,9 @@ export default function Prompt() {
     return <div className="w-[50%] h-full bg-background-login shadow-sm p-4 overflow-y-auto scrollbar-hide">
         <div className="flex-between-center">
             <span className="text-sm font-medium leading-none">{t('build.assistantPortrait')}</span>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                 <DialogTrigger asChild>
-                    <Button variant="link" className="p-0"><Settings2 className="mr-1 h-4 w-4" />{t('build.automaticOptimization')}</Button>
+                    <Button variant="link" className="p-0" disabled={!canEdit}><Settings2 className="mr-1 h-4 w-4" />{t('build.automaticOptimization')}</Button>
                 </DialogTrigger>
                 {open && <AutoPromptDialog onOpenChange={setOpen}></AutoPromptDialog>}
             </Dialog>
@@ -38,6 +38,7 @@ export default function Prompt() {
             className="h-full border-none bg-transparent scrollbar-hide focus-visible:ring-0 resize-none text-sm text-muted-foreground"
             value={assistantState.prompt}
             placeholder={t('prompt')}
+            disabled={!canEdit}
             onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
         ></Textarea>
     </div>

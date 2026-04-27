@@ -59,13 +59,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         TOOL_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, id, permissionId));
 
     const loadData = async (_type = "custom") => {
-        await getToolsApi(_type).then((res) => {
+        await getToolsApi(_type, { permissionId: 'view_tool' }).then((res) => {
             setAllData(res);
         });
         setLoading(false)
     };
     const loadMcpData = async () => {
-        await getToolsApi('mcp').then((res) => {
+        await getToolsApi('mcp', { permissionId: 'view_tool' }).then((res) => {
             setAllData(res);
         });
         setLoading(false)

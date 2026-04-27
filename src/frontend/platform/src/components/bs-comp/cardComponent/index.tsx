@@ -111,6 +111,12 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
+  const showActionBar = Boolean(
+    onPermission ||
+    (edit && isAdmin && type !== 'assistant' && onAddTemp) ||
+    (showCopy && onCopy) ||
+    (!checked && onDelete)
+  )
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -195,11 +201,11 @@ export default function CardComponent<T>({
           <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
           <span className="text-sm font-medium overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>
-        {(edit || (showCopy && onCopy)) && (
+        {showActionBar && (
           <div className="hidden group-hover:flex gap-1 items-center">
             {/* {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>} */}
-            {edit && onPermission && <div className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1" onClick={(e) => { e.stopPropagation(); onPermission(data) }}><Shield className="w-4 h-4" /></div>}
-            {edit && isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            {onPermission && <div className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1" onClick={(e) => { e.stopPropagation(); onPermission(data) }}><Shield className="w-4 h-4" /></div>}
+            {edit && isAdmin && type !== 'assistant' && onAddTemp && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
             {showCopy && onCopy && (
               <Tip content={i18n.t('copy', { ns: 'flow' })} side="top">
                 <div
@@ -210,7 +216,7 @@ export default function CardComponent<T>({
                 </div>
               </Tip>
             )}
-            {edit && !checked && onDelete && <div className="hover:bg-[#24272d] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
+            {!checked && onDelete && <div className="hover:bg-[#24272d] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>
         )}
       </div>
