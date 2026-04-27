@@ -1957,7 +1957,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def get_file_download(self, file_id: int, *, space_id: Optional[int] = None) -> dict:
-        file_record = await self._require_file_relation(file_id, 'can_read', space_id=space_id)
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_permission_id('knowledge_file', file_id, 'download_file', space_id=file_record.knowledge_id)
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
@@ -2152,20 +2152,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Directory structure is reconstructed from file_level_path (e.g. '/7/42') by
         resolving each segment id to the corresponding folder name.
         """
-        await self._require_read_permission(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
 
         # ── 1. Collect all file records to include ────────────────────────────
         # Explicit files requested directly
         direct_files = []
         for file_id in self._dedupe_ids(file_ids):
-            file_record = await self._require_file_relation(file_id, 'can_read', space_id=space_id)
+            file_record = await self._get_file_for_action(file_id, space_id=space_id)
             await self._require_permission_id('knowledge_file', file_id, 'download_file', space_id=space_id)
             direct_files.append(file_record)
 
         # Files & sub-folders under every requested folder_id
         folder_db_records: List[KnowledgeFile] = []
         for folder_id in self._dedupe_ids(folder_ids):
-            folder = await self._require_folder_relation(space_id, folder_id, 'can_read')
+            folder = await self._get_folder_for_action(space_id, folder_id)
             await self._require_permission_id('folder', folder_id, 'download_folder', space_id=space_id)
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)

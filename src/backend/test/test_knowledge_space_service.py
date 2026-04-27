@@ -1576,7 +1576,7 @@ class TestTupleLifecycle:
         ), patch.object(
             service, '_get_effective_permission_ids',
             new_callable=AsyncMock,
-            return_value={'view_space', 'view_file', 'download_file'},
+            return_value={'download_file'},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
             return_value=('original', 'preview'),
@@ -2354,6 +2354,38 @@ class TestFineGrainedPermissionRuntime:
         ):
             with pytest.raises(SpacePermissionDeniedError):
                 await service.batch_download(1, [121], [])
+
+    @pytest.mark.asyncio
+    async def test_batch_download_checks_download_permission_without_read_gate(self, service):
+        file_record = _make_file(file_id=121, knowledge_id=1)
+        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
+
+        async def deny_download(resource_type, resource_id, permission_id, **kwargs):
+            assert (resource_type, resource_id, permission_id) == ('knowledge_file', 121, 'download_file')
+            raise SpacePermissionDeniedError()
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_read_permission', new_callable=AsyncMock,
+            side_effect=AssertionError('download should not require read/view permission'),
+        ) as mock_require_read, patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+            side_effect=deny_download,
+        ) as mock_require_permission_id:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.batch_download(1, [121], [])
+
+        mock_require_read.assert_not_awaited()
+        mock_require_permission_id.assert_awaited_once_with(
+            'knowledge_file', 121, 'download_file', space_id=1,
+        )
 
     @pytest.mark.asyncio
     async def test_batch_download_denied_without_download_folder_permission(self, service):
