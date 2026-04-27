@@ -493,6 +493,11 @@ const Citation = ({
       return;
     }
 
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    onActivePopoverKeyChange(null);
     onOpenDocumentPreview(nextDetail, data.itemId, true);
   };
 

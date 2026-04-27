@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";
 import { cname } from "@/components/bs-ui/utils";
@@ -238,7 +238,7 @@ export function CitationDocumentPreviewContent({
   const targetBBox = bboxes[0] ?? null;
 
   return (
-    <div className={className || "min-h-0 flex-1"}>
+    <div className={className || "flex h-full min-h-0 flex-1 flex-col"}>
       {isResolving ? (
         <div className="flex h-full items-center justify-center gap-2 text-[14px] text-[#86909C]">
           <Loader2 className="size-4 animate-spin" />
@@ -265,9 +265,10 @@ export default function CitationDocumentPreviewDrawer({
   const isPhoneViewport = useMediaQuery("(max-width: 576px)");
   const isNarrowLayout = useMediaQuery("(max-width: 768px)");
   const isFullBleedMobile = isPhoneViewport;
+  const drawerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!preview || !isRagCitation(effectiveDetail) || !isNarrowLayout) {
+    if (!preview || !isRagCitation(effectiveDetail) || !isFullBleedMobile) {
       return;
     }
 
@@ -280,7 +281,24 @@ export default function CitationDocumentPreviewDrawer({
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
     };
-  }, [effectiveDetail, isNarrowLayout, preview]);
+  }, [effectiveDetail, isFullBleedMobile, preview]);
+
+  useEffect(() => {
+    if (!preview || !isRagCitation(effectiveDetail) || isFullBleedMobile) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || drawerRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [effectiveDetail, isFullBleedMobile, onClose, preview]);
 
   if (!preview || !isRagCitation(effectiveDetail)) {
     return null;
@@ -302,6 +320,7 @@ export default function CitationDocumentPreviewDrawer({
 
   const drawer = (
     <aside
+      ref={drawerRef}
       className={cname(
         "fixed flex flex-col bg-white",
         isFullBleedMobile && "inset-0 z-[120] overflow-hidden overscroll-contain touch-pan-y",
@@ -369,7 +388,7 @@ export default function CitationDocumentPreviewDrawer({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <CitationDocumentPreviewContent preview={preview} compactMode={isNarrowLayout} />
       </div>
     </aside>
@@ -379,15 +398,5 @@ export default function CitationDocumentPreviewDrawer({
     return drawer;
   }
 
-  return (
-    <div className="pointer-events-none fixed inset-0 z-[120]">
-      <button
-        type="button"
-        aria-label="关闭文档预览"
-        className="pointer-events-auto absolute inset-0 z-0 bg-transparent"
-        onClick={onClose}
-      />
-      {drawer}
-    </div>
-  );
+  return drawer;
 }
