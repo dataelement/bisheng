@@ -952,7 +952,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space, has_content_permission = await self._require_space_info_permission(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
-        total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)
+        total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
         result = KnowledgeSpaceInfoResp(**space.model_dump())
         if space.user_id != self.login_user.user_id:
             create_user = await UserDao.aget_user(space.user_id)
