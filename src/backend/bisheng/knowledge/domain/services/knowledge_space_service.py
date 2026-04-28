@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -1849,7 +1848,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Upload cap: 实际上传人 login_user 的角色配额（多角色取 max），再与租户链取 min；超管不限
         limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
-        logger.debug('space_file_upload_limit_bytes=%s user_id=%s', limit_bytes, self.login_user.user_id)
+        logger.debug(f'space_file_upload_limit_bytes={limit_bytes} user_id={self.login_user.user_id}')
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
         folder_id2name = {}
@@ -1875,14 +1874,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
         for one in file_path:
-            if limit_bytes is not None:
-                try:
-                    incoming_size = os.path.getsize(one)
-                except OSError as exc:
-                    logger.warning('Cannot stat upload path %s: %s', one, exc)
-                    raise SpaceFileSizeLimitError() from exc
-                if incoming_size > limit_bytes or current_total_file_size + incoming_size > limit_bytes:
-                    raise SpaceFileSizeLimitError()
             db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
                                                         file_info=KnowledgeFileOne(
                                                             file_path=one,
@@ -1906,7 +1897,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
                 failed_file.file_level_path = file_level_path
                 failed_files.append(failed_file)
-
+            if limit_bytes is not None:
+                if current_total_file_size > limit_bytes:
+                    raise SpaceFileSizeLimitError()
         try:
             for created_file in created_files:
                 await self._initialize_child_resource_permissions(
