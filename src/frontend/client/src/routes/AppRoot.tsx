@@ -51,52 +51,14 @@ export default function AppRoot() {
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
     const handleGoBack = () => {
-        const go = (to: string) => navigate(to, { replace: true });
-        const defaultPath = '/apps';
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        const searchParams = new URLSearchParams(location.search);
-        const returnTo = searchParams.get('returnTo');
-        const from = searchParams.get('from');
-        const entry = searchParams.get('entry');
-        const surfaceReturn = (location.state as AppSurfaceLocationState | null)?.appSurfaceReturn;
-
-        const normalizedReturnTo = normalizeAppChatReturn(returnTo);
-        if (normalizedReturnTo) {
-            if (conversationId) writeAppChatReturnTo(conversationId, normalizedReturnTo);
-            go(normalizedReturnTo);
+        // Same browser-history-based back as SideNav. Avoids unreliable
+        // URL-param routing when the chat URL doesn't reflect the user's
+        // perceived navigation source.
+        if (typeof window !== 'undefined' && window.history.length > 1) {
+            navigate(-1);
             return;
         }
-
-        // Fallback for legacy links where returnTo might be stripped later.
-        const fromReturnTo =
-            from === 'center'
-                ? '/apps'
-                : from === 'explore'
-                    ? '/apps/explore'
-                    : from === 'home-recommended' && entry === 'home'
-                        ? '/c/new'
-                        : null;
-        if (fromReturnTo) {
-            if (conversationId) writeAppChatReturnTo(conversationId, fromReturnTo);
-            go(fromReturnTo);
-            return;
-        }
-
-        const storedReturnTo = conversationId ? readAppChatReturnTo(conversationId) : null;
-        if (storedReturnTo) {
-            go(storedReturnTo);
-            return;
-        }
-
-        const normalizedSurfaceReturn = normalizeAppChatReturn(surfaceReturn);
-        if (normalizedSurfaceReturn) {
-            if (conversationId) writeAppChatReturnTo(conversationId, normalizedSurfaceReturn);
-            go(normalizedSurfaceReturn);
-            return;
-        }
-        go(defaultPath);
+        navigate('/apps', { replace: true });
     };
     const handleCreateNewAppChat = () => {
         const pathSegments = location.pathname.split('/').filter(Boolean);
