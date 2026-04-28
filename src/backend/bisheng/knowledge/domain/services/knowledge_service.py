@@ -281,12 +281,7 @@ class KnowledgeService(KnowledgeUtils):
         if not login_user.is_admin():
             filter_knowledge = []
             for one in db_knowledge:
-                if cls.permission_service.check_access_sync(
-                    login_user=login_user,
-                    owner_user_id=one.user_id,
-                    knowledge_id=one.id,
-                    access_type=AccessType.KNOWLEDGE,
-                ):
+                if cls.permission_service.check_permission_id_sync(login_user, one.id, 'view_kb'):
                     filter_knowledge.append(one)
         if not filter_knowledge:
             return []
@@ -1618,6 +1613,32 @@ class KnowledgeService(KnowledgeUtils):
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
+        return db_knowledge
+
+    @classmethod
+    def judge_qa_knowledge_view(
+        cls, login_user: UserPayload, qa_knowledge_id: int
+    ) -> Knowledge:
+        db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError()
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
+        if not cls.permission_service.check_permission_id_sync(login_user, qa_knowledge_id, 'view_kb'):
+            raise UnAuthorizedError.http_exception()
+        return db_knowledge
+
+    @classmethod
+    async def ajudge_qa_knowledge_view(
+        cls, login_user: UserPayload, qa_knowledge_id: int
+    ) -> Knowledge:
+        db_knowledge = await KnowledgeDao.aquery_by_id(qa_knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError()
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
+        if not await cls.permission_service.check_permission_id_async(login_user, qa_knowledge_id, 'view_kb'):
+            raise UnAuthorizedError.http_exception()
         return db_knowledge
 
     @classmethod
