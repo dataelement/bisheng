@@ -9,12 +9,66 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 from datetime import datetime
 from typing import Any, Sequence
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 from loguru import logger
 from sqlalchemy import func, select
+
+# Single dedicated async runner shared by ALL FileEncodingTransformer
+# instances across all celery worker threads. Reasoning:
+#   - bisheng_settings.aget_all_config() (and other async getters) cache
+#     aiomysql / aioredis clients bound to the asyncio loop they were
+#     first created on.
+#   - The celery worker uses -P threads with -c >= 1, so multiple worker
+#     threads call transform_documents concurrently. If each thread
+#     creates its own loop, the cached connections end up bound to one
+#     thread's loop and the others hit "Future attached to a different
+#     loop" / "Event loop is closed".
+#   - asyncio.run() closes the loop after each call, leaving cached
+#     connections bound to a closed loop on the very next file.
+# The fix: run all async work on ONE loop hosted on ONE dedicated daemon
+# thread; threadpool worker threads submit coros via run_coroutine_threadsafe
+# and block on the result. Cached connections live on that single loop
+# for the lifetime of the process — no cross-loop or closed-loop errors.
+
+
+class _AsyncRunner:
+    def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+
+    def _ensure_started(self) -> None:
+        if self._loop is not None and self._thread is not None and self._thread.is_alive():
+            return
+        with self._lock:
+            if self._loop is not None and self._thread is not None and self._thread.is_alive():
+                return
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(
+                target=self._run, args=(loop,),
+                daemon=True, name='shougang-encoding-async',
+            )
+            thread.start()
+            self._loop = loop
+            self._thread = thread
+
+    @staticmethod
+    def _run(loop: asyncio.AbstractEventLoop) -> None:
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    def submit(self, coro, timeout: float = 120.0):
+        self._ensure_started()
+        assert self._loop is not None
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result(timeout=timeout)
+
+
+_async_runner = _AsyncRunner()
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
@@ -98,10 +152,12 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self, documents: Sequence[Document], **kwargs: Any
     ) -> Sequence[Document]:
         # Sync entry point. Pipeline.run calls this directly. Pipeline.arun's
-        # default atransform_documents wraps us in a thread executor. In both
-        # cases, no event loop is running on this thread — asyncio.run is safe.
+        # default atransform_documents wraps us in a thread executor. We
+        # delegate the actual async work to a single shared runner loop so
+        # cached aiomysql/aioredis clients (in bisheng_settings) live on a
+        # stable loop across all worker threads — see module top.
         try:
-            asyncio.run(self._do_work())
+            _async_runner.submit(self._do_work())
         except Exception as e:
             logger.warning(
                 f"[shougang.encoding] file_id={getattr(self.knowledge_file, 'id', None)} "

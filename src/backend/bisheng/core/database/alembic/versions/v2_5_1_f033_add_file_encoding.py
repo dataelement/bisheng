@@ -32,11 +32,11 @@ def upgrade() -> None:
     # at app startup, which already includes the file_encoding column from the
     # model definition. This migration only needs to add the column on existing
     # databases that were created before this revision.
-    if not _table_exists('knowledge_file'):
+    if not _table_exists('knowledgefile'):
         return
-    if not _column_exists('knowledge_file', 'file_encoding'):
+    if not _column_exists('knowledgefile', 'file_encoding'):
         op.add_column(
-            'knowledge_file',
+            'knowledgefile',
             sa.Column(
                 'file_encoding',
                 sa.String(length=64),
@@ -47,7 +47,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if not _table_exists('knowledge_file'):
+    if not _table_exists('knowledgefile'):
         return
-    if _column_exists('knowledge_file', 'file_encoding'):
-        op.drop_column('knowledge_file', 'file_encoding')
+    if _column_exists('knowledgefile', 'file_encoding'):
+        op.drop_column('knowledgefile', 'file_encoding')
