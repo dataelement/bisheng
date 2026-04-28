@@ -7,7 +7,6 @@ import { Input } from "~/components/ui/Input";
 import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
-import useMediaQuery from "~/hooks/useMediaQuery";
 import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm, useToastContext } from "~/Providers";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
@@ -24,53 +23,37 @@ import {
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
 
-/** 网站行：非 hover 设备始终下划线 + 外链箭头，点击新开页（与桌面 hover 露出一致的可发现性） */
+/** 网站行：文本只展示（无超链接样式与点击），跳转入口收口到末尾箭头按钮上；箭头仅 hover 时露出 */
 function WebsiteSourceLink({
     name,
-    url,
+    url: _url,
     maxLen = 20,
-    noHover,
     onNavigate,
 }: {
     name: string;
     url: string;
     maxLen?: number;
-    /** `(hover: none)` 时为主要输入不可悬停的设备 */
-    noHover: boolean;
-    onNavigate: (e: MouseEvent<HTMLSpanElement>) => void;
+    onNavigate: (e: MouseEvent<HTMLElement>) => void;
 }) {
     return (
-        <span
-            role="link"
-            tabIndex={0}
-            className={cn(
-                "inline-flex max-w-full cursor-pointer items-center align-middle transition-colors",
-                noHover
-                    ? "text-[#165DFF]"
-                    : "group/link text-[#1D2129] hover:text-[#165DFF]",
-            )}
-            onClick={onNavigate}
-            onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    (e.currentTarget as HTMLElement).click();
-                }
-            }}
-        >
-            <span
-                className={cn(
-                    "truncate",
-                    noHover ? "underline underline-offset-2" : "hover:underline hover:underline-offset-2",
-                )}
-            >
+        <span className="group/link inline-flex max-w-full items-center align-middle text-[#1D2129]">
+            <span className="truncate">
                 {truncateName(name, maxLen)}
             </span>
-            <ChannelRightSmallUpIcon
-                className={cn(
-                    "ml-0.5 size-4 shrink-0 transition-opacity",
-                    noHover ? "text-[#165DFF] opacity-100" : "opacity-0 group-hover/link:opacity-100",
-                )}
-            />
+            <button
+                type="button"
+                aria-label="open external link"
+                onClick={onNavigate}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLElement).click();
+                    }
+                }}
+                className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center text-[#165DFF] cursor-pointer opacity-0 transition-opacity group-hover/link:opacity-100"
+            >
+                <ChannelRightSmallUpIcon className="size-4 shrink-0" />
+            </button>
         </span>
     );
 }
@@ -96,7 +79,6 @@ export function AddSourceDropdown({
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
-    const noHoverDevice = useMediaQuery("(hover: none)");
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
     const confirm = useConfirm();
     const { showToast } = useToastContext();
@@ -228,7 +210,6 @@ export function AddSourceDropdown({
                                                 <WebsiteSourceLink
                                                     name={s.name}
                                                     url={s.url}
-                                                    noHover={noHoverDevice}
                                                     onNavigate={(e) => {
                                                         e.stopPropagation();
                                                         window.open(s.url, "_blank");
@@ -459,7 +440,6 @@ export function AddSourceDropdown({
                                                                 name={source.name}
                                                                 url={source.url}
                                                                 maxLen={MAX_NAME_DISPLAY}
-                                                                noHover={noHoverDevice}
                                                                 onNavigate={(e) => {
                                                                     e.stopPropagation();
                                                                     window.open(source.url, "_blank");

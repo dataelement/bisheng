@@ -65,7 +65,9 @@ def _load_tool_service_module():
         sys.modules['bisheng.common.errcode.tool'] = tool_error_module
 
         config_service_module = ModuleType('bisheng.common.services.config_service')
-        config_service_module.settings = SimpleNamespace(get_mcp_conf=AsyncMock(return_value=SimpleNamespace(enable_stdio=True)))
+        config_service_module.settings = SimpleNamespace(
+            get_mcp_conf=AsyncMock(return_value=SimpleNamespace(enable_stdio=True)),
+        )
         sys.modules['bisheng.common.services.config_service'] = config_service_module
 
         group_resource_module = ModuleType('bisheng.database.models.group_resource')
@@ -82,7 +84,10 @@ def _load_tool_service_module():
         sys.modules['bisheng.mcp_manage.constant'] = mcp_constant_module
 
         mcp_manager_module = ModuleType('bisheng.mcp_manage.manager')
-        mcp_manager_module.ClientManager = SimpleNamespace(connect_mcp_from_json=AsyncMock(), parse_mcp_client_type=lambda *args, **kwargs: ('http', None))
+        mcp_manager_module.ClientManager = SimpleNamespace(
+            connect_mcp_from_json=AsyncMock(),
+            parse_mcp_client_type=lambda *args, **kwargs: ('http', None),
+        )
         sys.modules['bisheng.mcp_manage.manager'] = mcp_manager_module
 
         tool_permission_module = ModuleType('bisheng.permission.domain.services.tool_permission_service')
@@ -104,7 +109,11 @@ def _load_tool_service_module():
         sys.modules['bisheng.permission.domain.services.tool_permission_service'] = tool_permission_module
 
         tool_const_module = ModuleType('bisheng.tool.domain.const')
-        tool_const_module.ToolPresetType = SimpleNamespace(PRESET=SimpleNamespace(value=1), API=SimpleNamespace(value=2), MCP=SimpleNamespace(value=3))
+        tool_const_module.ToolPresetType = SimpleNamespace(
+            PRESET=SimpleNamespace(value=1),
+            API=SimpleNamespace(value=2),
+            MCP=SimpleNamespace(value=3),
+        )
         sys.modules['bisheng.tool.domain.const'] = tool_const_module
 
         linsight_knowledge_module = ModuleType('bisheng.tool.domain.langchain.linsight_knowledge')
@@ -171,8 +180,8 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
     login_user = SimpleNamespace(
         user_id=7,
         is_admin=lambda: False,
-        aget_user_access_resource_ids=AsyncMock(side_effect=[['1', '2'], ['2']]),
-        rebac_list_accessible=AsyncMock(return_value=['2']),
+        aget_user_access_resource_ids=AsyncMock(return_value=['1', '2']),
+        rebac_list_accessible=AsyncMock(side_effect=AssertionError('coarse relation list should not be used')),
     )
     tool_service = ToolServices(request=None, login_user=login_user)
 
@@ -204,7 +213,9 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
     assert result[1].delete is True
     assert mock_filter_ids.call_args_list[0].args[2] == 'use_tool'
     assert mock_filter_ids.call_args_list[1].args[2] == 'edit_tool'
+    assert mock_filter_ids.call_args_list[1].args[1] == [1, 2]
     assert mock_filter_ids.call_args_list[2].args[2] == 'delete_tool'
+    assert mock_filter_ids.call_args_list[2].args[1] == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -259,7 +270,7 @@ async def test_update_and_delete_tools_use_action_level_permissions():
     ), patch.object(
         ToolServices,
         'delete_tool_hook',
-        new=MagicMock(return_value=True),
+        new_callable=AsyncMock,
         create=True,
     ):
         await tool_service.delete_tools(12)
@@ -324,3 +335,61 @@ async def test_update_tools_uses_edit_tool_permission():
         await tool_service.update_tools(req)
 
     mock_has_permission.assert_awaited_once_with(login_user, '12', ['edit_tool'])
+
+
+@pytest.mark.asyncio
+async def test_add_tool_hook_writes_owner_tuple_from_async_context(monkeypatch):
+    tool_module = _load_tool_service_module()
+    write_owner = AsyncMock()
+    create_tool_audit = MagicMock()
+
+    owner_service_module = ModuleType('bisheng.permission.domain.services.owner_service')
+    owner_service_module.OwnerService = SimpleNamespace(write_owner_tuple=write_owner)
+    monkeypatch.setitem(sys.modules, 'bisheng.permission.domain.services.owner_service', owner_service_module)
+
+    api_module = ModuleType('bisheng.api')
+    api_module.__path__ = []
+    services_module = ModuleType('bisheng.api.services')
+    services_module.__path__ = []
+    audit_log_module = ModuleType('bisheng.api.services.audit_log')
+    audit_log_module.AuditLogService = SimpleNamespace(create_tool=create_tool_audit)
+    monkeypatch.setitem(sys.modules, 'bisheng.api', api_module)
+    monkeypatch.setitem(sys.modules, 'bisheng.api.services', services_module)
+    monkeypatch.setitem(sys.modules, 'bisheng.api.services.audit_log', audit_log_module)
+
+    user = SimpleNamespace(user_id=7)
+    tool_type = SimpleNamespace(id=12)
+
+    await tool_module.ToolServices.add_gpts_tools_hook(None, user, tool_type)
+
+    write_owner.assert_awaited_once_with(7, 'tool', '12')
+    create_tool_audit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_tool_hook_cleans_fga_tuples_from_async_context(monkeypatch):
+    tool_module = _load_tool_service_module()
+    delete_tuples = AsyncMock()
+    delete_tool_audit = MagicMock()
+
+    owner_service_module = ModuleType('bisheng.permission.domain.services.owner_service')
+    owner_service_module.OwnerService = SimpleNamespace(delete_resource_tuples=delete_tuples)
+    monkeypatch.setitem(sys.modules, 'bisheng.permission.domain.services.owner_service', owner_service_module)
+
+    api_module = ModuleType('bisheng.api')
+    api_module.__path__ = []
+    services_module = ModuleType('bisheng.api.services')
+    services_module.__path__ = []
+    audit_log_module = ModuleType('bisheng.api.services.audit_log')
+    audit_log_module.AuditLogService = SimpleNamespace(delete_tool=delete_tool_audit)
+    monkeypatch.setitem(sys.modules, 'bisheng.api', api_module)
+    monkeypatch.setitem(sys.modules, 'bisheng.api.services', services_module)
+    monkeypatch.setitem(sys.modules, 'bisheng.api.services.audit_log', audit_log_module)
+
+    user = SimpleNamespace(user_id=7)
+    tool_type = SimpleNamespace(id=12)
+
+    await tool_module.ToolServices.delete_tool_hook(None, user, tool_type)
+
+    delete_tuples.assert_awaited_once_with('tool', '12')
+    delete_tool_audit.assert_called_once()

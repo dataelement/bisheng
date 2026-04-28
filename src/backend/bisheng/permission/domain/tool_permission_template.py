@@ -41,7 +41,7 @@ TOOL_PERMISSION_TEMPLATE: dict = {
             'items': [
                 {'id': 'manage_tool_owner', 'label': '管理工具所有者', 'relation': 'can_manage'},
                 {'id': 'manage_tool_manager', 'label': '管理工具管理者', 'relation': 'can_manage'},
-                {'id': 'manage_tool_viewer', 'label': '管理工具使用者', 'relation': 'can_manage'},
+                {'id': 'manage_tool_viewer', 'label': '管理工具编辑者与使用者', 'relation': 'can_manage'},
             ],
         },
     ],

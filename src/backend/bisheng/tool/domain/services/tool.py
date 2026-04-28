@@ -8,8 +8,6 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
-from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.utils import get_url_content
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
@@ -69,7 +67,6 @@ class ToolServices(BaseModel):
         res: List[GptsToolsTypeRead] = []
         tool_type_children = {}
         for one in all_tool_type:
-            tool_type_id.append(one.id)
             tool_type_children[one.id] = []
             res.append(GptsToolsTypeRead.model_validate(one))
 
@@ -86,23 +83,21 @@ class ToolServices(BaseModel):
                 one.delete = True
             else:
                 if write_tool_type is None:
-                    write_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
                     filtered_write = await ToolPermissionService.filter_tool_ids_by_permission_async(
                         self.login_user,
-                        [int(x) for x in write_resources],
+                        tool_type_id,
                         'edit_tool',
                     )
-                    write_tool_type = {int(x): True for x in filtered_write}
-                one.write = write_tool_type.get(one.id, False)
+                    write_tool_type = {int(x) for x in filtered_write}
+                one.write = one.id in write_tool_type
                 if delete_tool_type is None:
-                    delete_resources = await self.login_user.rebac_list_accessible('can_delete', 'tool')
                     filtered_delete = await ToolPermissionService.filter_tool_ids_by_permission_async(
                         self.login_user,
-                        [int(x) for x in delete_resources],
+                        tool_type_id,
                         'delete_tool',
                     )
-                    delete_tool_type = {int(x): True for x in filtered_delete}
-                one.delete = delete_tool_type.get(one.id, False)
+                    delete_tool_type = {int(x) for x in filtered_delete}
+                one.delete = one.id in delete_tool_type
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
@@ -146,7 +141,7 @@ class ToolServices(BaseModel):
         # Add Tool Category and Corresponding Tools List
         res = await GptsToolsDao.insert_tool_type(req)
 
-        self.add_gpts_tools_hook(self.request, self.login_user, res)
+        await self.add_gpts_tools_hook(self.request, self.login_user, res)
 
         # F017: fan out group-sharing for Root-created tool types (D6).
         # share_on_create owns the Root-only gate + FGA + is_shared flip +
@@ -165,13 +160,14 @@ class ToolServices(BaseModel):
         return res
 
     @classmethod
-    def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
+    async def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
         """ After adding custom toolshookFunction """
         # F008: Write owner tuple to OpenFGA (INV-2)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.write_owner_tuple_sync(user.user_id, 'tool', str(gpts_tool_type.id))
+        await OwnerService.write_owner_tuple(user.user_id, 'tool', str(gpts_tool_type.id))
 
-        AuditLogService.create_tool(user, get_request_ip(request), [], gpts_tool_type)
+        from bisheng.api.services.audit_log import AuditLogService
+        await asyncio.to_thread(AuditLogService.create_tool, user, get_request_ip(request), [], gpts_tool_type)
         return True
 
     async def update_tool_config(self, tool_type_id: int, extra: dict) -> bool:
@@ -219,6 +215,7 @@ class ToolServices(BaseModel):
     async def parse_openapi_schema(download_url: str, file_content: str) -> GptsToolsTypeRead:
         if download_url:
             try:
+                from bisheng.api.utils import get_url_content
                 file_content = await get_url_content(download_url)
             except Exception as e:
                 logger.exception(f'file {download_url} download error')
@@ -398,6 +395,7 @@ class ToolServices(BaseModel):
     @classmethod
     async def update_tool_hook(cls, request: Request, user: UserPayload, exist_tool_type):
         # F008: removed GroupResourceDao for audit (AC-08)
+        from bisheng.api.services.audit_log import AuditLogService
         await asyncio.to_thread(AuditLogService.update_tool, user, get_request_ip(request), [], exist_tool_type)
 
     async def delete_tools(self, tool_type_id: int) -> bool:
@@ -416,19 +414,20 @@ class ToolServices(BaseModel):
             raise UnAuthorizedError()
 
         await GptsToolsDao.delete_tool_type(tool_type_id)
-        await asyncio.to_thread(self.delete_tool_hook, self.request, self.login_user, exist_tool_type)
+        await self.delete_tool_hook(self.request, self.login_user, exist_tool_type)
         return True
 
     @classmethod
-    def delete_tool_hook(cls, request, user: UserPayload, gpts_tool_type) -> bool:
+    async def delete_tool_hook(cls, request, user: UserPayload, gpts_tool_type) -> bool:
         """ After deleting the customizerhookFunction """
         logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
 
         # F008: Clean up all FGA tuples (AC-03)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.delete_resource_tuples_sync('tool', str(gpts_tool_type.id))
+        await OwnerService.delete_resource_tuples('tool', str(gpts_tool_type.id))
 
-        AuditLogService.delete_tool(user, get_request_ip(request), [], gpts_tool_type)
+        from bisheng.api.services.audit_log import AuditLogService
+        await asyncio.to_thread(AuditLogService.delete_tool, user, get_request_ip(request), [], gpts_tool_type)
         return True
 
     async def refresh_all_mcp(self) -> list[str]:

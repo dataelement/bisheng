@@ -271,6 +271,7 @@ class AssistantAgent(AssistantUtils):
                                                         app_name=self.assistant.name,
                                                         app_type=ApplicationTypeEnum.ASSISTANT,
                                                         user_id=self.invoke_user_id,
+                                                        skip_unauthorized=True,
                                                         llm=self.llm,
                                                         callbacks=callbacks)
 

@@ -85,6 +85,17 @@ function formatKnowledgeSpaceGbInput(n: number): string {
   if (r < KB_SPACE_FILE_GB_MIN || r > KB_SPACE_FILE_GB_MAX) return "500"
   return Number.isInteger(r) ? String(r) : r.toFixed(1)
 }
+
+/** Clamp and format after blur — allows odd drafts while typing, fixes display on blur. */
+function clampKnowledgeQuotaGbDisplay(raw: string): string {
+  const t = raw.trim().replace(/，/g, ".")
+  if (!t) return "500"
+  const n = Number(t)
+  if (!Number.isFinite(n)) return "500"
+  const r = Math.round(n * 10) / 10
+  const clamped = Math.max(KB_SPACE_FILE_GB_MIN, Math.min(KB_SPACE_FILE_GB_MAX, r))
+  return Number.isInteger(clamped) ? String(clamped) : clamped.toFixed(1)
+}
 /** 工作台四项（首页 / 应用 / 订阅 / 知识空间）新建角色默认全开，与 PRD 一致 */
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
@@ -707,12 +718,12 @@ export default function Roles() {
                   <>
                     <Input
                       type="number"
-                      min={KB_SPACE_FILE_GB_MIN}
-                      max={KB_SPACE_FILE_GB_MAX}
                       step={0.1}
                       value={quotaFileGb}
                       onChange={(e) => setQuotaFileGb(e.target.value)}
+                      onBlur={() => setQuotaFileGb((prev) => clampKnowledgeQuotaGbDisplay(prev))}
                       className="w-[120px]"
+                      inputMode="decimal"
                     />
                     <span className="text-sm">GB</span>
                   </>

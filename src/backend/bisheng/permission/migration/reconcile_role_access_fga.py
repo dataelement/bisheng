@@ -30,13 +30,13 @@ from sqlalchemy import text as sa_text
 
 # Re-use the same mapping as the original migration
 ACCESS_TYPE_MAPPING: dict[int, tuple[str, str]] = {
-    1:  ('knowledge_library', 'viewer'),
-    3:  ('knowledge_library', 'editor'),
-    5:  ('assistant', 'viewer'),
-    6:  ('assistant', 'editor'),
-    7:  ('tool', 'viewer'),
-    8:  ('tool', 'editor'),
-    9:  ('workflow', 'viewer'),
+    1: ('knowledge_library', 'viewer'),
+    3: ('knowledge_library', 'editor'),
+    5: ('assistant', 'viewer'),
+    6: ('assistant', 'editor'),
+    7: ('tool', 'viewer'),
+    8: ('tool', 'editor'),
+    9: ('workflow', 'viewer'),
     10: ('workflow', 'editor'),
     11: ('dashboard', 'viewer'),
     12: ('dashboard', 'editor'),
@@ -76,7 +76,7 @@ async def _candidate_user_ids() -> set[int]:
                 )
                 user_ids.update(int(row[0]) for row in users.fetchall())
             except Exception as e:
-                logger.warning('Failed to load all active users for stale tuple scan: %s', e)
+                logger.warning(f'Failed to load all active users for stale tuple scan: {e}')
             return user_ids
 
 
@@ -150,7 +150,7 @@ async def _build_actual_set(user_ids: set[int]) -> set[tuple[str, str, str, str]
         try:
             tuples = await fga.read_tuples(user=user_filter)
         except Exception as e:
-            logger.warning('Failed to read tuples for %s: %s', user_filter, e)
+            logger.warning(f'Failed to read tuples for {user_filter}: {e}')
             continue
         for t in tuples:
             user = t.get('user', '')
@@ -218,15 +218,15 @@ async def reconcile(dry_run: bool = False) -> Stats:
     logger.info('Building desired set from MySQL role_access ...')
     desired = await _build_desired_set()
     stats.desired = len(desired)
-    logger.info('Desired tuples: %d', stats.desired)
+    logger.info(f'Desired tuples: {stats.desired}')
 
     role_user_ids = await _candidate_user_ids()
-    logger.info('Candidate users for role_access FGA scan: %d', len(role_user_ids))
+    logger.info(f'Candidate users for role_access FGA scan: {len(role_user_ids)}')
 
     logger.info('Building actual set from FGA ...')
     actual = await _build_actual_set(role_user_ids)
     stats.actual = len(actual)
-    logger.info('Actual tuples: %d', stats.actual)
+    logger.info(f'Actual tuples: {stats.actual}')
 
     protected = await _resource_permission_user_binding_set()
     to_write = desired - actual
@@ -237,19 +237,19 @@ async def reconcile(dry_run: bool = False) -> Stats:
     stats.protected = len(stale & protected)
 
     logger.info(
-        'To write: %d, to delete: %d, protected by explicit bindings: %d',
-        stats.to_write, stats.to_delete, stats.protected,
+        f'To write: {stats.to_write}, to delete: {stats.to_delete}, '
+        f'protected by explicit bindings: {stats.protected}'
     )
 
     if dry_run:
         if to_delete:
             logger.info('Sample deletes (first 20):')
             for item in list(to_delete)[:20]:
-                logger.info('  DELETE %s', item)
+                logger.info(f'  DELETE {item}')
         if to_write:
             logger.info('Sample writes (first 20):')
             for item in list(to_write)[:20]:
-                logger.info('  WRITE  %s', item)
+                logger.info(f'  WRITE  {item}')
         return stats
 
     operations: list[TupleOperation] = []
@@ -272,13 +272,13 @@ async def reconcile(dry_run: bool = False) -> Stats:
         affected_user_ids.add(int(uid))
 
     if operations:
-        logger.info('Executing %d FGA operations ...', len(operations))
+        logger.info(f'Executing {len(operations)} FGA operations ...')
         await PermissionService.batch_write_tuples(operations, crash_safe=True)
         stats.written = stats.to_write
         stats.deleted = stats.to_delete
 
     if affected_user_ids:
-        logger.info('Invalidating cache for %d users ...', len(affected_user_ids))
+        logger.info(f'Invalidating cache for {len(affected_user_ids)} users ...')
         for uid in affected_user_ids:
             await PermissionCache.invalidate_user(uid)
 
@@ -297,9 +297,9 @@ async def _main(dry_run: bool) -> None:
         elapsed = time.time() - t0
 
         logger.info(
-            'Reconcile %s in %.1fs — desired=%d actual=%d write=%d delete=%d protected=%d',
-            'DRY-RUN' if dry_run else 'DONE',
-            elapsed, stats.desired, stats.actual, stats.to_write, stats.to_delete, stats.protected,
+            f"Reconcile {'DRY-RUN' if dry_run else 'DONE'} in {elapsed:.1f}s — "
+            f'desired={stats.desired} actual={stats.actual} write={stats.to_write} '
+            f'delete={stats.to_delete} protected={stats.protected}'
         )
     finally:
         await close_app_context()
