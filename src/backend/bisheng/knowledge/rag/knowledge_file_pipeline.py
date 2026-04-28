@@ -9,6 +9,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
+from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
@@ -67,6 +68,12 @@ class KnowledgeFilePipeline(BaseFilePipeline):
 
     def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
         abstract_transformers = self._init_abstract_transformers()
+        # FileEncodingTransformer runs right after AbstractTransformer (in _init_abstract_transformers),
+        # using the abstract field for LLM classification. When shougang is disabled it skips internally.
+        abstract_transformers.append(FileEncodingTransformer(
+            invoke_user_id=self.invoke_user_id,
+            knowledge_file=self.db_file,
+        ))
         abstract_transformers.append(ExtraFileTransformer(
             loader=self.loader,
             document_id=str(self.db_file.id),

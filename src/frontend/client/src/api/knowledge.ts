@@ -171,6 +171,7 @@ export interface KnowledgeFile {
     approvalRequestId?: number;
     approvalStatus?: string;
     approvalReason?: string;
+    fileEncoding?: string | null;        // mapped from file_encoding
     isPendingApproval?: boolean;
     // Transient UI-only fields
     isCreating?: boolean;
@@ -1344,4 +1345,18 @@ export async function getFileDownloadApi(
         original_url: data?.original_url ?? "",
         preview_url: data?.preview_url ?? "",
     };
+}
+
+/**
+ * Update a file's encoding (shougang feature). Owner/admin only.
+ */
+export async function updateFileEncoding(
+    spaceId: string,
+    fileId: string,
+    encoding: string,
+): Promise<KnowledgeFile> {
+    return await request.put(
+        `/api/v1/knowledge/space/${spaceId}/files/${fileId}/encoding`,
+        { encoding },
+    );
 }

@@ -57,6 +57,7 @@ export const useGetBsConfig = (
       if (!data.voiceInput) data.voiceInput = { enabled: false, model: '' };
       if (!data.knowledgeBase) data.knowledgeBase = { enabled: false, prompt: '' };
       if (!data.fileUpload) data.fileUpload = { enabled: false, prompt: '' };
+      if (!data.shougang) data.shougang = { enabled: false };
 
       // Update favicon
       if (data.assistantIcon.image) {

@@ -938,6 +938,7 @@ export function KnowledgeSpaceContent({
                                     handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
                                     isAdmin={isAdmin}
+                                    currentUserRole={space.role}
                                     onDownload={(id) => handleSingleDownload(id)}
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
