@@ -28,6 +28,7 @@ from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import get_request_ip
 
 
@@ -210,6 +211,13 @@ class FlowService(BaseService):
 
         payload = jsonable_encoder(flow_info)
         payload['can_share'] = await user_may_share_app(login_user, 'workflow', flow_id)
+        # Attach creator's user_name (None if user has been removed) so callers
+        # don't need a separate lookup. user_id is already in payload.
+        if flow_info.user_id:
+            creator = await UserDao.aget_user(flow_info.user_id)
+            payload['user_name'] = creator.user_name if creator else None
+        else:
+            payload['user_name'] = None
         return resp_200(data=payload)
 
     @classmethod
