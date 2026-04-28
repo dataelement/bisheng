@@ -15,6 +15,7 @@ import { AppSearchBar } from './components/AppSearchBar'
 
 const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+const appLastOriginKey = 'app-last-origin';
 
 // --- 组件：智能体卡片 (广场版 Horizontal) ---
 const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
@@ -219,6 +220,7 @@ export default function ExplorePlaza() {
         const flowType = agent.flow_type || agent.type
         try {
             sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
+            sessionStorage.setItem(appLastOriginKey, 'explore');
         } catch {
             // ignore storage failures
         }

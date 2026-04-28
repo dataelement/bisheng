@@ -418,6 +418,7 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
   const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+  const appLastOriginKey = 'app-last-origin';
 
   const { data: dailyApps = [] } = useQuery<any[]>(
     ['recommendedApps'],
@@ -432,6 +433,7 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
     try {
       sessionStorage.setItem(`app-chat-entry:${_chatId}`, 'home')
       sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'home')
+      sessionStorage.setItem(appLastOriginKey, 'home')
     } catch {
       // ignore storage failures
     }

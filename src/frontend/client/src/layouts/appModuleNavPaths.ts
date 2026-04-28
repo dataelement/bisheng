@@ -7,5 +7,8 @@ export const lastSectionPaths: Record<string, string> = {};
 export function appsSectionLinkTarget(): string {
   const p = lastSectionPaths.apps;
   if (!p) return '/apps';
-  return p.startsWith('/apps/explore') ? '/apps' : p;
+  // App center tab should always land on the center home when current path is
+  // inside app chat (/app/*) or explore sub-page (/apps/explore).
+  if (p.startsWith('/apps/explore') || p.startsWith('/app/')) return '/apps';
+  return p;
 }

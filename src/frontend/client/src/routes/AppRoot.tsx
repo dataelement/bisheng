@@ -32,6 +32,7 @@ export default function AppRoot() {
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
     const appOriginStorageKey = (conversationId: string) => `app-chat-origin:${conversationId}`;
     const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+    const appLastOriginKey = 'app-last-origin';
     /**
      * H5 顶栏左侧：应用中心 / 探索 / 首页推荐 进入会话时都应显示「返回」并走 handleGoBack，
      * 否则会落在默认的抽屉按钮，用户以为在退出应用会话，实际只开了侧栏；返回逻辑也与 PC 侧栏不一致。
@@ -119,6 +120,16 @@ export default function AppRoot() {
             navigate('/apps');
             return;
         }
+        let persistedLastOrigin: string | null = null;
+        try {
+            persistedLastOrigin = sessionStorage.getItem(appLastOriginKey);
+        } catch {
+            // ignore storage failures
+        }
+        if (persistedLastOrigin === 'center' || persistedLastOrigin === 'explore') {
+            navigate('/apps');
+            return;
+        }
         if (
             fromHomeEntry ||
             (from === 'home-recommended' && entry === 'home') ||
@@ -190,6 +201,7 @@ export default function AppRoot() {
             if (flowId) {
                 sessionStorage.setItem(appFlowOriginKey(flowId), origin);
             }
+            sessionStorage.setItem(appLastOriginKey, origin);
         } catch {
             // ignore storage failures
         }

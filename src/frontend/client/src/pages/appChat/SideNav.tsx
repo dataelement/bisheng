@@ -74,6 +74,7 @@ export function SideNav() {
     const { conversationId, fid: flowId, type: flowType } = useParams();
     const appOriginStorageKey = (id: string) => `app-chat-origin:${id}`;
     const appFlowOriginKey = (id: string) => `app-flow-origin:${id}`;
+    const appLastOriginKey = 'app-last-origin';
     const handleGoBack = () => {
         let fromHomeEntry = false;
         if (conversationId) {
@@ -111,6 +112,16 @@ export function SideNav() {
             }
         }
         if (persistedFlowOrigin === 'center' || persistedFlowOrigin === 'explore') {
+            navigate('/apps');
+            return;
+        }
+        let persistedLastOrigin: string | null = null;
+        try {
+            persistedLastOrigin = sessionStorage.getItem(appLastOriginKey);
+        } catch {
+            // ignore storage failures
+        }
+        if (persistedLastOrigin === 'center' || persistedLastOrigin === 'explore') {
             navigate('/apps');
             return;
         }

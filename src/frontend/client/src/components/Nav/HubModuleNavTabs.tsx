@@ -6,7 +6,7 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import { useAuthContext, useLocalize } from '~/hooks';
-import { lastSectionPaths } from '~/layouts/appModuleNavPaths';
+import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
 import { canOpenWorkbench } from '~/utils/platformAccess';
 
@@ -74,15 +74,6 @@ export function useHubModuleLinks(): HubModuleLink[] {
         closeDrawerOnNavigate: true,
       },
       {
-        section: 'apps',
-        to: hasPlugin('apps') || !menuApprovalMode ? (lastSectionPaths.apps || '/apps') : '/menu-unavailable',
-        icon: GlobeIcon,
-        label: localize('com_nav_app_center'),
-        isActive:
-          matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-        closeDrawerOnNavigate: true,
-      },
-      {
         section: 'channel' as const,
         to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
         icon: LinkIcon,
@@ -96,6 +87,15 @@ export function useHubModuleLinks(): HubModuleLink[] {
         icon: BookOpenIcon,
         label: localize('com_knowledge.knowledge_space'),
         isActive: pathname.startsWith('/knowledge'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'apps' as const,
+        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
+        icon: GlobeIcon,
+        label: localize('com_nav_app_center'),
+        isActive:
+          matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
         closeDrawerOnNavigate: true,
       },
     ].filter((link) => {

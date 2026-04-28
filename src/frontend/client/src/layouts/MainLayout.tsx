@@ -28,7 +28,7 @@ import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
-import { lastSectionPaths } from './appModuleNavPaths';
+import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -137,36 +137,47 @@ function Sidebar({
     );
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
-  const links = useMemo(() => {
+  const links = useMemo<Array<{
+    section: 'home' | 'apps' | 'channel' | 'knowledge';
+    to: string;
+    icon: React.ReactNode;
+    label: string;
+    isActive: boolean;
+    closeDrawerOnNavigate?: boolean;
+  }>>(() => {
     if (!canOpenWorkbenchEntry) return [];
     return [
       {
-        section: 'home',
+        section: 'home' as const,
         to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
         icon: <HomeIcon />,
         label: localize('com_nav_home'),
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+        closeDrawerOnNavigate: true,
       },
       {
-        section: 'apps',
-        to: hasPlugin('apps') || !menuApprovalMode ? (lastSectionPaths.apps || '/apps') : '/menu-unavailable',
-        icon: <GlobeIcon />,
-        label: localize('com_nav_app_center'),
-        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-      },
-      {
-        section: 'channel',
+        section: 'channel' as const,
         to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
         icon: <LinkIcon />,
         label: localize('com_ui_channel'),
         isActive: pathname.startsWith('/channel'),
+        closeDrawerOnNavigate: true,
       },
       {
-        section: 'knowledge',
+        section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
         icon: <BookOpenIcon />,
         label: localize('com_knowledge.knowledge_space'),
         isActive: pathname.startsWith('/knowledge'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'apps' as const,
+        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
+        icon: <GlobeIcon />,
+        label: localize('com_nav_app_center'),
+        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+        closeDrawerOnNavigate: true,
       },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
