@@ -167,7 +167,7 @@ class TupleDeduplicator:
             existing_rel = self.memory.get((user, object_))
             if existing_rel is None:
                 self.memory[(user, object_)] = relation
-                return DedupDecision(True, relation)
+                return DedupDecision(True, '')
             existing_prio = self.relation_priority.get(existing_rel)
             if new_prio >= existing_prio:
                 self.memory[(user, object_)] = relation

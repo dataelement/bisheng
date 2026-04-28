@@ -3,8 +3,8 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy import Integer
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
 
@@ -25,7 +25,7 @@ class MessageBase(SQLModelSerializable):
     mark_user: Optional[int] = Field(default=None, index=False, description='Flagging User')
     mark_user_name: Optional[str] = Field(default=None, index=False, description='Flagging User')
     message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='Chat Message')
-    extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='Connection information, etc.')
+    extra: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='Connection information, etc.')
     type: str = Field(index=False, description='Type of Message')
     category: str = Field(index=False, max_length=32, description='Message category, questionetc.')
     flow_id: str = Field(index=True, description='Corresponding Skillsid')
@@ -106,11 +106,11 @@ class MessageDao(MessageBase):
 
     @classmethod
     def app_list_group_by_chat_id(
-            cls,
-            page_size: int,
-            page_num: int,
-            flow_ids: Optional[list[str]],
-            user_ids: Optional[list[int]],
+        cls,
+        page_size: int,
+        page_num: int,
+        flow_ids: Optional[list[str]],
+        user_ids: Optional[list[int]],
     ) -> Tuple[List[Dict], int]:
         with get_sync_db_session() as session:
             count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
@@ -405,7 +405,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def afilter_message_by_chat_id(cls, chat_id: str, flow_id: str, message_id: int = None, page_size: int = 20) \
-            -> List[ChatMessage]:
+        -> List[ChatMessage]:
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).where(ChatMessage.flow_id == flow_id)
         if message_id:
             statement = statement.where(ChatMessage.id < message_id)

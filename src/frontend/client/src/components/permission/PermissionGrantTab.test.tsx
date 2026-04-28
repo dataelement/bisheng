@@ -99,7 +99,7 @@ describe("PermissionGrantTab", () => {
     );
   });
 
-  it("marks already granted departments as checked without submitting them again", async () => {
+  it("marks already granted departments as disabled without selecting them again", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "department",
@@ -124,9 +124,10 @@ describe("PermissionGrantTab", () => {
     const checkbox = departmentLabel.parentElement?.querySelector('[role="checkbox"]');
 
     await waitFor(() => {
-      expect(checkbox).toHaveAttribute("data-state", "checked");
+      expect(checkbox).toHaveAttribute("data-state", "unchecked");
       expect(checkbox).toBeDisabled();
     });
+    expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
 
     fireEvent.click(departmentLabel);
     fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
@@ -134,7 +135,7 @@ describe("PermissionGrantTab", () => {
     expect(mockedAuthorizeResource).not.toHaveBeenCalled();
   });
 
-  it("marks already granted users as checked without submitting them again", async () => {
+  it("marks already granted users as disabled without selecting them again", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "user",
@@ -159,11 +160,50 @@ describe("PermissionGrantTab", () => {
     const checkbox = userLabel.parentElement?.querySelector('[role="checkbox"]');
 
     await waitFor(() => {
-      expect(checkbox).toHaveAttribute("data-state", "checked");
+      expect(checkbox).toHaveAttribute("data-state", "unchecked");
       expect(checkbox).toBeDisabled();
     });
+    expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
 
     fireEvent.click(userLabel);
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
+
+    expect(mockedAuthorizeResource).not.toHaveBeenCalled();
+  });
+
+  it("marks already granted user groups as disabled without selecting them again", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user_group",
+        subject_id: 9,
+        subject_name: "测试用户组",
+        relation: "viewer",
+      },
+    ] as any);
+    mockedGetResourceGrantUserGroups.mockResolvedValue([
+      { id: 9, group_name: "测试用户组" },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_user_group" }));
+
+    const userGroupLabel = await screen.findByText("测试用户组");
+    const checkbox = userGroupLabel.parentElement?.querySelector('[role="checkbox"]');
+
+    await waitFor(() => {
+      expect(checkbox).toHaveAttribute("data-state", "unchecked");
+      expect(checkbox).toBeDisabled();
+    });
+    expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
+
+    fireEvent.click(userGroupLabel);
     fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
 
     expect(mockedAuthorizeResource).not.toHaveBeenCalled();

@@ -80,52 +80,16 @@ export function SideNav() {
     type AppSurfaceLocationState = { appSurfaceReturn?: string };
 
     const handleGoBack = () => {
-        const go = (to: string) => navigate(to, { replace: true });
-        const defaultPath = '/apps';
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const routeConversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        const searchParams = new URLSearchParams(location.search);
-        const returnTo = searchParams.get('returnTo');
-        const from = searchParams.get('from');
-        const entry = searchParams.get('entry');
-        const surfaceReturn = (location.state as AppSurfaceLocationState | null)?.appSurfaceReturn;
-
-        const normalizedReturnTo = normalizeAppChatReturn(returnTo);
-        if (normalizedReturnTo) {
-            if (routeConversationId) writeAppChatReturnTo(routeConversationId, normalizedReturnTo);
-            go(normalizedReturnTo);
+        // Mirror the browser's back behavior: pop one entry off history. If
+        // there is no usable previous entry (direct landing / shared link),
+        // fall back to /apps so we never get stuck. URL-param/sessionStorage
+        // routing was unreliable when the entry point's URL did not reflect
+        // the user's perceived navigation source.
+        if (typeof window !== 'undefined' && window.history.length > 1) {
+            navigate(-1);
             return;
         }
-
-        // Fallback for legacy links where returnTo might be stripped later.
-        const fromReturnTo =
-            from === 'center'
-                ? '/apps'
-                : from === 'explore'
-                    ? '/apps/explore'
-                    : from === 'home-recommended' && entry === 'home'
-                        ? '/c/new'
-                        : null;
-        if (fromReturnTo) {
-            if (routeConversationId) writeAppChatReturnTo(routeConversationId, fromReturnTo);
-            go(fromReturnTo);
-            return;
-        }
-
-        const storedReturnTo = routeConversationId ? readAppChatReturnTo(routeConversationId) : null;
-        if (storedReturnTo) {
-            go(storedReturnTo);
-            return;
-        }
-        
-        const normalizedSurfaceReturn = normalizeAppChatReturn(surfaceReturn);
-        if (normalizedSurfaceReturn) {
-            if (routeConversationId) writeAppChatReturnTo(routeConversationId, normalizedSurfaceReturn);
-            go(normalizedSurfaceReturn);
-            return;
-        }
-        go(defaultPath);
+        navigate('/apps', { replace: true });
     };
 
     const localize = useLocalize();

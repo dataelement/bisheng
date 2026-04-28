@@ -162,10 +162,7 @@ class WorkFlowService(BaseService):
         readable_type_ids = None
         if not user.is_admin():
             required_permission = 'edit_app' if managed else permission_id
-            required_relation = cls._relation_for_app_permission(required_permission)
-            readable_type_ids = await cls._app_type_ids_for_relation(user, required_relation, flow_type)
-            if not cls._has_any_app_type_ids(readable_type_ids):
-                readable_type_ids = None
+            readable_type_ids = await cls._app_type_ids_for_permission(user, required_permission, flow_type)
 
         # Get a list of skills visible to the user
         if user.is_admin():
@@ -209,33 +206,46 @@ class WorkFlowService(BaseService):
         return cls._APP_PERMISSION_TO_MIN_RELATION.get(permission_id, 'can_read')
 
     @classmethod
-    async def _app_type_ids_for_relation(
+    async def _app_type_ids_for_permission(
         cls,
         user: UserPayload,
-        relation: str,
+        permission_id: str,
         flow_type: Optional[int],
     ) -> Dict[int, list[str]]:
         from bisheng.permission.domain.services.permission_service import PermissionService
 
+        relation = cls._relation_for_app_permission(permission_id)
         targets: list[tuple[int, str]] = []
         if flow_type in (None, FlowType.WORKFLOW.value):
             targets.append((FlowType.WORKFLOW.value, 'workflow'))
         if flow_type in (None, FlowType.ASSISTANT.value):
             targets.append((FlowType.ASSISTANT.value, 'assistant'))
 
-        results = await asyncio.gather(*[
-            PermissionService.list_accessible_ids(
-                user_id=user.user_id,
-                relation=relation,
-                object_type=object_type,
-                login_user=user,
-            )
-            for _, object_type in targets
-        ])
-        return {
-            app_type: [str(one) for one in (ids or [])]
-            for (app_type, _), ids in zip(targets, results)
-        }
+        fga_results, binding_type_ids = await asyncio.gather(
+            asyncio.gather(*[
+                PermissionService.list_accessible_ids(
+                    user_id=user.user_id,
+                    relation=relation,
+                    object_type=object_type,
+                    login_user=user,
+                )
+                for _, object_type in targets
+            ]),
+            ApplicationPermissionService.get_bound_app_type_ids_async(
+                user,
+                [permission_id],
+                flow_type,
+            ),
+        )
+
+        app_type_ids: dict[int, list[str]] = {}
+        for (app_type, _), ids in zip(targets, fga_results):
+            merged = [
+                *(str(one) for one in (ids or [])),
+                *(str(one) for one in binding_type_ids.get(app_type, [])),
+            ]
+            app_type_ids[app_type] = list(dict.fromkeys(merged))
+        return app_type_ids
 
     @staticmethod
     def _has_any_app_type_ids(app_type_ids: Optional[Dict[int, list[str]]]) -> bool:

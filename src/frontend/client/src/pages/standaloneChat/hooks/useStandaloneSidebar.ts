@@ -242,9 +242,9 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
     })();
   }, [flowId, numericFlowType, apiVersion, mode, navigate, setCurrentApp]);
 
-  // Initialize: fetch conversations only. Do NOT auto-create a new chat when
-  // the list is empty — the page renders an empty-state CTA (TC-APP-PUB-013/014/015)
-  // that invokes createNewChat() on user click.
+  // Initialize conversation state on first load.
+  // Guest mode should always land on an active chat so passwordless pages do
+  // not look "empty" on first visit.
   useEffect(() => {
     if (initializedRef.current || !flowId) return;
     initializedRef.current = true;

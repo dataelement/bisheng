@@ -187,6 +187,15 @@ class TestCheckpoint:
 class TestDedup:
     """Test _collect and _dedup_tuples logic."""
 
+    def test_global_dedup_collects_first_tuple(self):
+        """_collect should buffer the first tuple for a new (user, object)."""
+        m = RBACToReBACMigrator(dry_run=True)
+        m._collect([
+            TupleOperation(action='write', user='user:1', relation='viewer', object='workflow:x'),
+        ])
+        assert len(m._buffer) == 1
+        assert m._buffer[0].relation == 'viewer'
+
     def test_dedup_keeps_highest(self):
         m = RBACToReBACMigrator(dry_run=True)
         tuples = [
@@ -483,17 +492,24 @@ class TestStep3RoleAccess:
         """Each AccessType correctly maps to (object_type, relation)."""
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 10, 'role_id': 5}])
+        await insert_rows(session, 'knowledge', [
+            {'id': 101, 'user_id': 1, 'name': 'kb-101', 'type': 0},
+        ])
+        await insert_rows(session, 'flow', [
+            {'id': 'ast-1', 'user_id': 1, 'flow_type': 5},
+            {'id': 'wf-1', 'user_id': 1, 'flow_type': 10},
+        ])
         await insert_rows(session, 'roleaccess', [
-            {'role_id': 5, 'third_id': 'res-1', 'type': 1},   # KNOWLEDGE → knowledge_library, viewer
-            {'role_id': 5, 'third_id': 'res-2', 'type': 6},   # ASSISTANT_WRITE → assistant, editor
-            {'role_id': 5, 'third_id': 'res-3', 'type': 9},   # WORKFLOW → workflow, viewer
+            {'role_id': 5, 'third_id': '101', 'type': 1},     # KNOWLEDGE → knowledge_library, viewer
+            {'role_id': 5, 'third_id': 'ast-1', 'type': 6},   # ASSISTANT_WRITE → assistant, editor
+            {'role_id': 5, 'third_id': 'wf-1', 'type': 9},    # WORKFLOW → workflow, viewer
         ])
         count = await migrator_dry.step3_role_access()
-        assert count == 4
-        assert migrator_dry._global_seen[('user:10', 'knowledge_library:res-1')] == 'viewer'
-        assert migrator_dry._global_seen[('user:10', 'knowledge_space:res-1')] == 'viewer'
-        assert migrator_dry._global_seen[('user:10', 'assistant:res-2')] == 'editor'
-        assert migrator_dry._global_seen[('user:10', 'workflow:res-3')] == 'viewer'
+        assert count == 3
+        assert migrator_dry._global_seen[('user:10', 'knowledge_library:101')] == 'viewer'
+        assert ('user:10', 'knowledge_space:101') not in migrator_dry._global_seen
+        assert migrator_dry._global_seen[('user:10', 'assistant:ast-1')] == 'editor'
+        assert migrator_dry._global_seen[('user:10', 'workflow:wf-1')] == 'viewer'
 
     @pytest.mark.asyncio
     async def test_expand_to_users(self, migrator_dry, patch_db):
@@ -502,6 +518,9 @@ class TestStep3RoleAccess:
         await insert_rows(session, 'userrole', [
             {'user_id': 1, 'role_id': 3},
             {'user_id': 2, 'role_id': 3},
+        ])
+        await insert_rows(session, 'flow', [
+            {'id': 'wf-1', 'user_id': 1, 'flow_type': 10},
         ])
         await insert_rows(session, 'roleaccess', [
             {'role_id': 3, 'third_id': 'wf-1', 'type': 9},
@@ -516,14 +535,89 @@ class TestStep3RoleAccess:
         """Same user + resource with READ(viewer) and WRITE(editor) → keeps editor only."""
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
+        await insert_rows(session, 'knowledge', [
+            {'id': 301, 'user_id': 1, 'name': 'kb-301', 'type': 0},
+        ])
         await insert_rows(session, 'roleaccess', [
-            {'role_id': 3, 'third_id': 'kb-1', 'type': 1},   # viewer
-            {'role_id': 3, 'third_id': 'kb-1', 'type': 3},   # editor
+            {'role_id': 3, 'third_id': '301', 'type': 1},   # viewer
+            {'role_id': 3, 'third_id': '301', 'type': 3},   # editor
         ])
         count = await migrator_dry.step3_role_access()
-        assert count == 2
-        assert migrator_dry._global_seen[('user:1', 'knowledge_library:kb-1')] == 'editor'
-        assert migrator_dry._global_seen[('user:1', 'knowledge_space:kb-1')] == 'editor'
+        assert count == 1
+        assert migrator_dry._global_seen[('user:1', 'knowledge_library:301')] == 'editor'
+        assert ('user:1', 'knowledge_space:301') not in migrator_dry._global_seen
+
+    @pytest.mark.asyncio
+    async def test_write_mode_replaces_lower_relation_across_flushes(
+        self,
+        migrator_write,
+        mock_fga,
+        patch_db,
+    ):
+        """When higher permission appears later, OpenFGA keeps only the highest relation."""
+        session = patch_db
+        migrator_write.batch_size = 1
+        await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
+        await insert_rows(session, 'knowledge', [
+            {'id': 301, 'user_id': 1, 'name': 'kb-301', 'type': 0},
+        ])
+        await insert_rows(session, 'roleaccess', [
+            {'role_id': 3, 'third_id': '301', 'type': 1},   # viewer
+            {'role_id': 3, 'third_id': '301', 'type': 3},   # editor
+        ])
+
+        count = await migrator_write.step3_role_access()
+
+        assert count == 1
+        assert ('knowledge_library:301', 'viewer', 'user:1') not in mock_fga._tuples
+        assert ('knowledge_library:301', 'editor', 'user:1') in mock_fga._tuples
+
+    @pytest.mark.asyncio
+    async def test_skip_missing_resource(self, migrator_dry, patch_db):
+        """role_access records for missing resources must be skipped."""
+        session = patch_db
+        await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
+        await insert_rows(session, 'roleaccess', [
+            {'role_id': 3, 'third_id': 'missing-wf', 'type': 9},
+        ])
+        count = await migrator_dry.step3_role_access()
+        assert count == 0
+        assert ('user:1', 'workflow:missing-wf') not in migrator_dry._global_seen
+
+    @pytest.mark.asyncio
+    async def test_step3_skips_knowledge_space_records(self, migrator_dry, patch_db):
+        """Step 3 migrates knowledge_library only; knowledge_space is handled by other steps."""
+        session = patch_db
+        await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
+        await insert_rows(session, 'knowledge', [
+            {'id': 201, 'user_id': 1, 'name': 'kb-201', 'type': 0},
+            {'id': 202, 'user_id': 1, 'name': 'space-202', 'type': 3},
+        ])
+        await insert_rows(session, 'roleaccess', [
+            {'role_id': 3, 'third_id': '201', 'type': 1},
+            {'role_id': 3, 'third_id': '202', 'type': 1},
+        ])
+        count = await migrator_dry.step3_role_access()
+        assert count == 1
+        assert ('user:1', 'knowledge_library:201') in migrator_dry._global_seen
+        assert ('user:1', 'knowledge_space:201') not in migrator_dry._global_seen
+        assert ('user:1', 'knowledge_library:202') not in migrator_dry._global_seen
+        assert ('user:1', 'knowledge_space:202') not in migrator_dry._global_seen
+
+    @pytest.mark.asyncio
+    async def test_skip_deleted_tool(self, migrator_dry, patch_db):
+        """Deleted tools should not receive migrated role_access tuples."""
+        session = patch_db
+        await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
+        await insert_rows(session, 't_gpts_tools', [
+            {'id': 1, 'user_id': 1, 'name': 'deleted', 'is_delete': 1},
+        ])
+        await insert_rows(session, 'roleaccess', [
+            {'role_id': 3, 'third_id': '1', 'type': 7},
+        ])
+        count = await migrator_dry.step3_role_access()
+        assert count == 0
+        assert ('user:1', 'tool:1') not in migrator_dry._global_seen
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -538,12 +632,15 @@ class TestStep4SpaceChannelMembers:
     async def test_active_only(self, migrator_dry, patch_db):
         """Only ACTIVE members migrated."""
         session = patch_db
+        await insert_rows(session, 'knowledge', [
+            {'id': 1, 'user_id': 1, 'name': 'space-1', 'type': 3},
+        ])
         await insert_rows(session, 'space_channel_member', [
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 1,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 1,
              'user_role': 'member', 'status': 'ACTIVE'},
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 2,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 2,
              'user_role': 'member', 'status': 'PENDING'},
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 3,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 3,
              'user_role': 'member', 'status': 'REJECTED'},
         ])
         count = await migrator_dry.step4_space_channel_members()
@@ -553,33 +650,42 @@ class TestStep4SpaceChannelMembers:
     async def test_role_mapping(self, migrator_dry, patch_db):
         """creator→owner, admin→manager, member→viewer."""
         session = patch_db
+        await insert_rows(session, 'knowledge', [
+            {'id': 1, 'user_id': 1, 'name': 'space-1', 'type': 3},
+        ])
         await insert_rows(session, 'space_channel_member', [
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 1,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 1,
              'user_role': 'creator', 'status': 'ACTIVE'},
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 2,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 2,
              'user_role': 'admin', 'status': 'ACTIVE'},
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 3,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 3,
              'user_role': 'member', 'status': 'ACTIVE'},
         ])
         count = await migrator_dry.step4_space_channel_members()
         assert count == 3
-        assert migrator_dry._global_seen[('user:1', 'knowledge_space:sp-1')] == 'owner'
-        assert migrator_dry._global_seen[('user:2', 'knowledge_space:sp-1')] == 'manager'
-        assert migrator_dry._global_seen[('user:3', 'knowledge_space:sp-1')] == 'viewer'
+        assert migrator_dry._global_seen[('user:1', 'knowledge_space:1')] == 'owner'
+        assert migrator_dry._global_seen[('user:2', 'knowledge_space:1')] == 'manager'
+        assert migrator_dry._global_seen[('user:3', 'knowledge_space:1')] == 'viewer'
 
     @pytest.mark.asyncio
     async def test_type_mapping(self, migrator_dry, patch_db):
         """space→knowledge_space, channel→channel."""
         session = patch_db
+        await insert_rows(session, 'knowledge', [
+            {'id': 1, 'user_id': 1, 'name': 'space-1', 'type': 3},
+        ])
+        await insert_rows(session, 'channel', [
+            {'id': 'ch-1', 'user_id': 1, 'name': 'channel-1'},
+        ])
         await insert_rows(session, 'space_channel_member', [
-            {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 1,
+            {'business_id': '1', 'business_type': 'space', 'user_id': 1,
              'user_role': 'member', 'status': 'ACTIVE'},
             {'business_id': 'ch-1', 'business_type': 'channel', 'user_id': 2,
              'user_role': 'member', 'status': 'ACTIVE'},
         ])
         count = await migrator_dry.step4_space_channel_members()
         assert count == 2
-        assert ('user:1', 'knowledge_space:sp-1') in migrator_dry._global_seen
+        assert ('user:1', 'knowledge_space:1') in migrator_dry._global_seen
         assert ('user:2', 'channel:ch-1') in migrator_dry._global_seen
 
     @pytest.mark.asyncio
@@ -588,18 +694,24 @@ class TestStep4SpaceChannelMembers:
         Migration must normalize case before mapping lookup.
         """
         session = patch_db
+        await insert_rows(session, 'knowledge', [
+            {'id': 1, 'user_id': 1, 'name': 'space-1', 'type': 3},
+        ])
+        await insert_rows(session, 'channel', [
+            {'id': 'ch-1', 'user_id': 1, 'name': 'channel-1'},
+        ])
         await insert_rows(session, 'space_channel_member', [
-            {'business_id': 'sp-1', 'business_type': 'SPACE', 'user_id': 1,
+            {'business_id': '1', 'business_type': 'SPACE', 'user_id': 1,
              'user_role': 'CREATOR', 'status': 'ACTIVE'},
-            {'business_id': 'sp-1', 'business_type': 'SPACE', 'user_id': 2,
+            {'business_id': '1', 'business_type': 'SPACE', 'user_id': 2,
              'user_role': 'ADMIN', 'status': 'ACTIVE'},
             {'business_id': 'ch-1', 'business_type': 'CHANNEL', 'user_id': 3,
              'user_role': 'MEMBER', 'status': 'ACTIVE'},
         ])
         count = await migrator_dry.step4_space_channel_members()
         assert count == 3
-        assert migrator_dry._global_seen[('user:1', 'knowledge_space:sp-1')] == 'owner'
-        assert migrator_dry._global_seen[('user:2', 'knowledge_space:sp-1')] == 'manager'
+        assert migrator_dry._global_seen[('user:1', 'knowledge_space:1')] == 'owner'
+        assert migrator_dry._global_seen[('user:2', 'knowledge_space:1')] == 'manager'
         assert migrator_dry._global_seen[('user:3', 'channel:ch-1')] == 'viewer'
 
 
@@ -804,16 +916,16 @@ async def _seed_comprehensive_data(session):
     ])
     # Role access (non-WEB_MENU)
     await insert_rows(session, 'roleaccess', [
-        {'role_id': 3, 'third_id': 'kb-1', 'type': 1},    # viewer
-        {'role_id': 3, 'third_id': 'kb-1', 'type': 3},    # editor (dedup with above)
+        {'role_id': 3, 'third_id': '1', 'type': 1},       # viewer
+        {'role_id': 3, 'third_id': '1', 'type': 3},       # editor (dedup with above)
         {'role_id': 4, 'third_id': 'wf-1', 'type': 9},    # viewer
         {'role_id': 3, 'third_id': 'menu1', 'type': 99},   # WEB_MENU — skip
     ])
     # Space/channel members
     await insert_rows(session, 'space_channel_member', [
-        {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 2,
+        {'business_id': '2', 'business_type': 'space', 'user_id': 2,
          'user_role': 'creator', 'status': 'ACTIVE'},
-        {'business_id': 'sp-1', 'business_type': 'space', 'user_id': 3,
+        {'business_id': '2', 'business_type': 'space', 'user_id': 3,
          'user_role': 'member', 'status': 'ACTIVE'},
         {'business_id': 'ch-1', 'business_type': 'channel', 'user_id': 4,
          'user_role': 'admin', 'status': 'ACTIVE'},
@@ -828,7 +940,8 @@ async def _seed_comprehensive_data(session):
     ])
     # Knowledge
     await insert_rows(session, 'knowledge', [
-        {'user_id': 2, 'name': 'kb-1', 'type': 0},
+        {'id': 1, 'user_id': 2, 'name': 'kb-1', 'type': 0},
+        {'id': 2, 'user_id': 2, 'name': 'space-1', 'type': 3},
     ])
     # Tools
     await insert_rows(session, 't_gpts_tools', [
@@ -837,7 +950,7 @@ async def _seed_comprehensive_data(session):
     ])
     # Channel
     await insert_rows(session, 'channel', [
-        {'user_id': 4, 'name': 'chan1'},
+        {'id': 'ch-1', 'user_id': 4, 'name': 'chan1'},
     ])
     # Department memberships
     await insert_rows(session, 'user_department', [
@@ -941,7 +1054,7 @@ class TestCheckpointResume:
     """Resume from a partial checkpoint."""
 
     @pytest.mark.asyncio
-    async def test_resume_from_step3(self, patch_db, mock_fga, tmp_checkpoint_dir):
+    async def test_execute_resume_from_step3(self, patch_db, mock_fga, tmp_checkpoint_dir):
         session = patch_db
         await _seed_comprehensive_data(session)
 
@@ -950,7 +1063,7 @@ class TestCheckpointResume:
         m_setup._save_checkpoint(2)
 
         # Resume: should skip steps 1-2, execute 3-6
-        m = RBACToReBACMigrator(dry_run=True, checkpoint_dir=tmp_checkpoint_dir)
+        m = RBACToReBACMigrator(dry_run=False, checkpoint_dir=tmp_checkpoint_dir)
         m._fga = mock_fga
         with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
             stats = await m.run()
@@ -960,10 +1073,29 @@ class TestCheckpointResume:
         assert stats.step6_folder_hierarchy >= 0  # executed
 
     @pytest.mark.asyncio
-    async def test_step_flag_overrides_checkpoint(self, patch_db, mock_fga, tmp_checkpoint_dir):
-        """--step N should override checkpoint if N > checkpoint."""
+    async def test_dry_run_ignores_saved_checkpoint(self, patch_db, mock_fga, tmp_checkpoint_dir):
+        """dry-run should preview from --step/default, not from saved checkpoint."""
         session = patch_db
         await _seed_comprehensive_data(session)
+
+        m_setup = RBACToReBACMigrator(checkpoint_dir=tmp_checkpoint_dir)
+        m_setup._save_checkpoint(2)
+
+        m = RBACToReBACMigrator(dry_run=True, checkpoint_dir=tmp_checkpoint_dir)
+        m._fga = mock_fga
+        with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
+            stats = await m.run()
+        assert stats.step1_super_admin > 0  # executed despite checkpoint
+        assert stats.step2_user_group > 0   # executed despite checkpoint
+        assert stats.step3_role_access >= 0
+
+    @pytest.mark.asyncio
+    async def test_dry_run_step_starts_from_requested_step(self, patch_db, mock_fga, tmp_checkpoint_dir):
+        session = patch_db
+        await _seed_comprehensive_data(session)
+
+        m_setup = RBACToReBACMigrator(checkpoint_dir=tmp_checkpoint_dir)
+        m_setup._save_checkpoint(2)
 
         m = RBACToReBACMigrator(dry_run=True, start_step=5, checkpoint_dir=tmp_checkpoint_dir)
         m._fga = mock_fga
