@@ -88,19 +88,24 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     }, [data]);
 
     return <div className="relative h-full flex flex-col">
-        <HeaderTitle
-            readOnly={readOnly}
-            hideShare={hideShare}
-            conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
-        />
         <div className="min-h-0 flex-1 flex flex-col bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">
             {showChatEmptyState ? (
                 <div className="flex min-h-0 flex-1 flex-col">
+                    <HeaderTitle
+                        readOnly={readOnly}
+                        hideShare={hideShare}
+                        conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
+                    />
                     <ChatEmptyState onNewChat={createNewChat} />
                 </div>
             ) : (
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
+                        <HeaderTitle
+                            readOnly={readOnly}
+                            hideShare={hideShare}
+                            conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
+                        />
                         <div className="flex min-h-0 flex-1 overflow-hidden">
                             <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
                                 <ChatMessages
