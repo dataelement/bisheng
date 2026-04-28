@@ -124,7 +124,7 @@ describe("SubjectSearchDepartment", () => {
     ]);
   });
 
-  it("shows already granted departments as checked and disabled", async () => {
+  it("shows already granted departments as disabled without selecting them", async () => {
     render(
       <SubjectSearchDepartment
         value={[]}
@@ -140,8 +140,9 @@ describe("SubjectSearchDepartment", () => {
     const departmentLabel = await screen.findByText("全集团");
     const checkbox = within(departmentLabel.parentElement as HTMLElement).getByRole("checkbox");
 
-    expect(checkbox).toHaveAttribute("data-state", "checked");
+    expect(checkbox).toHaveAttribute("data-state", "unchecked");
     expect(checkbox).toBeDisabled();
+    expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
   });
 
   it("uses resource-scoped department candidates when a resource is provided", async () => {
