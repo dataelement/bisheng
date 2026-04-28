@@ -9,6 +9,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
@@ -539,6 +540,61 @@ class TestPermissionApiIntegration:
         assert body['status_code'] == 200
         assert body['data'][0]['name'] == '研发部'
         mock_list_departments.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_grant_subject_departments_helper_returns_member_counts(self):
+        from bisheng.permission.api.endpoints import resource_permission
+
+        departments = [
+            SimpleNamespace(
+                id=10,
+                dept_id='BS@10',
+                name='默认组织',
+                parent_id=None,
+                path='/10/',
+                sort_order=0,
+                source='local',
+                status='active',
+            ),
+            SimpleNamespace(
+                id=11,
+                dept_id='BS@11',
+                name='研发部',
+                parent_id=10,
+                path='/10/11/',
+                sort_order=0,
+                source='local',
+                status='active',
+            ),
+        ]
+
+        class FakeResult:
+            def all(self):
+                return [(10, 3), (11, 1)]
+
+        class FakeSession:
+            async def exec(self, _statement):
+                return FakeResult()
+
+        class FakeSessionContext:
+            async def __aenter__(self):
+                return FakeSession()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        with patch(
+            'bisheng.database.models.department.DepartmentDao.aget_all_active',
+            new_callable=AsyncMock,
+            return_value=departments,
+        ), patch(
+            'bisheng.core.database.get_async_db_session',
+            return_value=FakeSessionContext(),
+        ):
+            tree = await resource_permission._list_knowledge_space_grant_departments()
+
+        assert tree[0]['member_count'] == 3
+        assert tree[0]['children'][0]['member_count'] == 1
 
     def test_workflow_grant_subject_departments_endpoint_uses_permission_access_not_department_admin(self):
         app = _make_app(_ViewerUser)

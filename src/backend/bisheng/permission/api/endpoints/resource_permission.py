@@ -594,11 +594,34 @@ async def _list_knowledge_space_grant_users(
 
 
 async def _list_knowledge_space_grant_departments() -> list[dict]:
-    from bisheng.database.models.department import DepartmentDao
+    from sqlalchemy import func
+    from sqlmodel import select
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import DepartmentDao, UserDepartment
 
     departments = await DepartmentDao.aget_all_active()
     if not departments:
         return []
+
+    dept_ids = [
+        int(dept.id)
+        for dept in departments
+        if getattr(dept, 'id', None) is not None
+    ]
+    async with get_async_db_session() as session:
+        count_result = await session.exec(
+            select(
+                UserDepartment.department_id,
+                func.count(UserDepartment.id),
+            )
+            .where(UserDepartment.department_id.in_(dept_ids))
+            .group_by(UserDepartment.department_id)
+        )
+        count_map = {
+            int(dept_id): int(count)
+            for dept_id, count in count_result.all()
+        }
 
     nodes = {
         int(dept.id): {
@@ -610,7 +633,7 @@ async def _list_knowledge_space_grant_departments() -> list[dict]:
             'sort_order': int(getattr(dept, 'sort_order', 0) or 0),
             'source': dept.source,
             'status': dept.status,
-            'member_count': 0,
+            'member_count': count_map.get(int(dept.id), 0),
             'children': [],
         }
         for dept in departments
