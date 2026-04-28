@@ -25,6 +25,7 @@ export default function AppCenter() {
 
     const isH5Layout = useMediaQuery('(max-width: 576px)');
     const isMobileLayout = usePrefersMobileLayout();
+    const appLastOriginKey = 'app-last-origin';
     const appGridRef = useRef<HTMLDivElement | null>(null);
     const [appGridCols, setAppGridCols] = useState(() => {
         if (typeof window === 'undefined') return 4;
@@ -77,6 +78,17 @@ export default function AppCenter() {
     useEffect(() => {
         fetchApps();
     }, [fetchApps]);
+
+    // Entering app center should reset app-return origin to center.
+    // This avoids stale "home-recommended" state on another machine/session
+    // causing app-chat back action to jump to /c/new unexpectedly.
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(appLastOriginKey, 'center');
+        } catch {
+            // ignore storage failures
+        }
+    }, []);
 
     const exploreLink = (
         <Link

@@ -128,8 +128,7 @@ export function SideNav() {
         if (
             fromHomeEntry ||
             (from === 'home-recommended' && entry === 'home') ||
-            persistedOrigin === 'home' ||
-            persistedFlowOrigin === 'home'
+            persistedOrigin === 'home'
         ) {
             navigate('/c/new');
             return;

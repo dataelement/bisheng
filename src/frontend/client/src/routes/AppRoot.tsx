@@ -133,8 +133,7 @@ export default function AppRoot() {
         if (
             fromHomeEntry ||
             (from === 'home-recommended' && entry === 'home') ||
-            persistedOrigin === 'home' ||
-            persistedFlowOrigin === 'home'
+            persistedOrigin === 'home'
         ) {
             navigate('/c/new');
             return;
