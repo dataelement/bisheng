@@ -32,10 +32,14 @@ FLOW_TYPE_MAPPING: dict[int, str] = {
 }
 
 RELATION_PRIORITY: dict[str, int] = {
+    'super_admin': 7,
+    'admin': 6,  # for user group
+    'member': 5,  # for user group
     'owner': 4,
     'manager': 3,
     'editor': 2,
     'viewer': 1,
+    'parent': 0,
 }
 
 SCM_ROLE_MAPPING: dict[str, str] = {

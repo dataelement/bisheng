@@ -160,10 +160,15 @@ class TupleDeduplicator:
             self._conn.commit()
 
     def record(self, user: str, object_: str, relation: str) -> DedupDecision:
-        new_prio = self.relation_priority.get(relation, 0)
+        new_prio = self.relation_priority.get(relation, None)
+        if new_prio is None:
+            raise RuntimeError(f"relation {relation} not found in relation_priority")
         if self.backend == 'memory':
-            existing_rel = self.memory.get((user, object_), '')
-            existing_prio = self.relation_priority.get(existing_rel, 0)
+            existing_rel = self.memory.get((user, object_))
+            if existing_rel is None:
+                self.memory[(user, object_)] = relation
+                return DedupDecision(True, relation)
+            existing_prio = self.relation_priority.get(existing_rel)
             if new_prio >= existing_prio:
                 self.memory[(user, object_)] = relation
                 return DedupDecision(True, existing_rel)
