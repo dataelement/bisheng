@@ -224,10 +224,6 @@ class SpaceFileDao(KnowledgeFileDao):
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == 1,
-            col(KnowledgeFile.status).in_([
-                KnowledgeFileStatus.PROCESSING.value,
-                KnowledgeFileStatus.SUCCESS.value,
-            ]),
             col(KnowledgeFile.file_source).in_([FileSource.SPACE_UPLOAD.value,
                                                 FileSource.CHANNEL.value]),
         )

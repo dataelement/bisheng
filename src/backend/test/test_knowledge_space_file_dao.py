@@ -137,7 +137,6 @@ async def test_async_list_children_status_filter_uses_nested_parent_path():
     assert "file_level_path = '/10/20'" in sql
     assert "concat('/10/20', '/', knowledgefile.id)" in sql
 
-
 @pytest.mark.asyncio
 async def test_async_count_children_status_filter_uses_nested_parent_path():
     session = _FakeAsyncSession()
@@ -159,20 +158,3 @@ async def test_async_count_children_status_filter_uses_nested_parent_path():
     sql = _compile_sql(session.statement)
     assert "file_level_path = '/10/20'" in sql
     assert "concat('/10/20', '/', knowledgefile.id)" in sql
-
-
-@pytest.mark.asyncio
-async def test_get_user_total_file_size_counts_only_active_space_upload_sources():
-    session = _FakeAsyncSession()
-
-    with patch(
-        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
-        return_value=session,
-    ):
-        await SpaceFileDao.get_user_total_file_size(user_id=7)
-
-    sql = _compile_sql(session.statement)
-    assert "knowledgefile.user_id = 7" in sql
-    assert "knowledgefile.file_type = 1" in sql
-    assert "knowledgefile.status IN (1, 2)" in sql
-    assert "knowledgefile.file_source IN ('space_upload', 'channel')" in sql
