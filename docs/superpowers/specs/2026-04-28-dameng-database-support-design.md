@@ -96,14 +96,33 @@ Each function branches on `conn.dialect.name`.
 
 ---
 
-## Component 2: MySQL → DaMeng SQL Mapping
+## Component 2: Dialect-Agnostic Introspection via SQLAlchemy Inspector
 
-| MySQL | DaMeng |
-|---|---|
-| `information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()` | `SYSOBJECTS WHERE TYPE='UTAB' AND SCHID=(SELECT ID FROM SYSSCHEMAS WHERE NAME=CURRENT_SCHEMA())` |
-| `information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()` | `SYSCOLUMNS WHERE ID=(SELECT ID FROM SYSOBJECTS WHERE NAME=:t AND SCHID=...)` |
-| `information_schema.STATISTICS WHERE INDEX_NAME=:i` | `SYSINDEXES WHERE NAME=:i AND ID=(SELECT ID FROM SYSOBJECTS WHERE NAME=:t ...)` |
-| `CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS` | `LENGTH$ FROM SYSCOLUMNS WHERE ...` |
+Instead of raw `information_schema` SQL (which is MySQL-specific), all migration guard helpers use SQLAlchemy's `inspect()` API. This is dialect-agnostic and works on any properly-implemented SQLAlchemy dialect including DaMeng — no MySQL→DaMeng SQL mapping needed.
+
+```python
+from sqlalchemy import inspect
+
+def table_exists(conn, table_name: str) -> bool:
+    return inspect(conn).has_table(table_name)
+
+def column_exists(conn, table_name: str, column_name: str) -> bool:
+    cols = [c["name"] for c in inspect(conn).get_columns(table_name)]
+    return column_name in cols
+
+def index_exists(conn, table_name: str, index_name: str) -> bool:
+    indexes = [i["name"] for i in inspect(conn).get_indexes(table_name)]
+    return index_name in indexes
+
+def get_version_num_length(conn) -> int | None:
+    cols = inspect(conn).get_columns("alembic_version")
+    for c in cols:
+        if c["name"] == "version_num":
+            return getattr(c["type"], "length", None)
+    return None
+```
+
+This eliminates all `information_schema`, `DATABASE()`, `SYSOBJECTS`, `SYSCOLUMNS`, and `SYSINDEXES` references from the codebase entirely.
 
 ---
 
