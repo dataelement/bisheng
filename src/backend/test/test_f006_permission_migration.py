@@ -10,7 +10,7 @@ import json
 import os
 import tempfile
 from contextlib import asynccontextmanager
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from sqlalchemy import text
@@ -234,6 +234,39 @@ class TestDedup:
         m._collect([TupleOperation(action='write', user='user:1', relation='owner', object='workflow:x')])
         assert len(m._buffer) == 1
         assert m._buffer[0].relation == 'owner'
+
+    def test_sqlite_dedup_backend_tracks_highest(self, tmp_path):
+        m = RBACToReBACMigrator(
+            dry_run=True,
+            dedup_backend='sqlite',
+            dedup_db_path=str(tmp_path / 'dedup.sqlite3'),
+        )
+        m._collect([
+            TupleOperation(action='write', user='user:1', relation='viewer', object='workflow:x'),
+            TupleOperation(action='write', user='user:1', relation='owner', object='workflow:x'),
+        ])
+        seen = dict(m._deduplicator.iter_seen())
+        assert seen[('user:1', 'workflow:x')] == 'owner'
+
+    def test_sqlite_dedup_default_path_is_isolated(self):
+        first = RBACToReBACMigrator(dry_run=True, dedup_backend='sqlite')
+        first._collect([
+            TupleOperation(action='write', user='user:1', relation='viewer', object='workflow:x'),
+        ])
+        first_path = first._deduplicator.db_path
+        assert dict(first._deduplicator.iter_seen()) == {('user:1', 'workflow:x'): 'viewer'}
+        first._deduplicator.close()
+
+        second = RBACToReBACMigrator(dry_run=True, dedup_backend='sqlite')
+        try:
+            assert second._deduplicator.db_path != first_path
+            assert dict(second._deduplicator.iter_seen()) == {}
+        finally:
+            second._deduplicator.close()
+
+    def test_invalid_batch_size_rejected(self):
+        with pytest.raises(ValueError, match='batch_size must be greater than 0'):
+            RBACToReBACMigrator(dry_run=True, batch_size=0)
 
     def test_relations_without_priority_treated_as_zero(self):
         """Relations not in RELATION_PRIORITY (like 'parent', 'super_admin', 'member')
@@ -941,3 +974,53 @@ class TestCheckpointResume:
         assert stats.step5_resource_owners >= 0  # executed
         assert stats.step6_folder_hierarchy >= 0  # executed
         assert stats.step7_department_membership >= 0  # executed
+
+    @pytest.mark.asyncio
+    async def test_only_step_runs_one_step_without_checkpoint(self, mock_fga, tmp_checkpoint_dir):
+        """--only-step N should run exactly one step and leave checkpoint unchanged."""
+        setup = RBACToReBACMigrator(checkpoint_dir=tmp_checkpoint_dir)
+        setup._save_checkpoint(2)
+
+        step1 = AsyncMock(return_value=11)
+        step3 = AsyncMock(return_value=33)
+        step8 = AsyncMock(return_value=88)
+        m = RBACToReBACMigrator(
+            dry_run=False,
+            only_step=3,
+            checkpoint_dir=tmp_checkpoint_dir,
+        )
+        m._migration_steps = Mock(return_value=[
+            (1, 'Step One', step1),
+            (3, 'Step Three', step3),
+            (8, 'Step Eight', step8),
+        ])
+
+        with patch(
+            'bisheng.core.openfga.manager.aget_fga_client',
+            new_callable=AsyncMock,
+            return_value=mock_fga,
+        ), patch('bisheng.core.openfga.manager.get_fga_client', return_value=None):
+            stats = await m.run()
+
+        step1.assert_not_awaited()
+        step3.assert_awaited_once()
+        step8.assert_not_awaited()
+        assert stats.step3_role_access == 33
+        assert stats.total == 33
+        assert m._load_checkpoint() == 2
+
+    @pytest.mark.asyncio
+    async def test_only_step_rejects_invalid_step(self, mock_fga, tmp_checkpoint_dir):
+        m = RBACToReBACMigrator(
+            dry_run=True,
+            only_step=9,
+            checkpoint_dir=tmp_checkpoint_dir,
+        )
+
+        with patch(
+            'bisheng.core.openfga.manager.aget_fga_client',
+            new_callable=AsyncMock,
+            return_value=mock_fga,
+        ), patch('bisheng.core.openfga.manager.get_fga_client', return_value=None):
+            with pytest.raises(ValueError, match='--only-step must be between'):
+                await m.run()
