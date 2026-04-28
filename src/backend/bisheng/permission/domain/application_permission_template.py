@@ -6,25 +6,44 @@ Applies to both workflow and assistant top-level app resources.
 from __future__ import annotations
 
 from typing import Dict, List, Set
-
-_RELATION_LEVEL: Dict[str, int] = {
-    'can_read': 1,
-    'can_edit': 2,
-    'can_manage': 3,
-    'can_delete': 4,
-}
-
-_MODEL_LEVEL: Dict[str, int] = {
-    'viewer': 1,
-    'editor': 2,
-    'manager': 3,
-    'owner': 4,
-}
 _COMPUTED_TO_MODEL_RELATION: Dict[str, str] = {
     'can_read': 'viewer',
     'can_edit': 'editor',
     'can_manage': 'manager',
     'can_delete': 'owner',
+}
+_DEFAULT_PERMISSION_IDS_BY_RELATION: Dict[str, Set[str]] = {
+    'viewer': {
+        'view_app',
+    },
+    'editor': {
+        'view_app',
+        'use_app',
+        'edit_app',
+    },
+    'manager': {
+        'view_app',
+        'use_app',
+        'edit_app',
+        'publish_app',
+        'unpublish_app',
+        'share_app',
+        'manage_app_owner',
+        'manage_app_manager',
+        'manage_app_viewer',
+    },
+    'owner': {
+        'view_app',
+        'use_app',
+        'edit_app',
+        'delete_app',
+        'publish_app',
+        'unpublish_app',
+        'share_app',
+        'manage_app_owner',
+        'manage_app_manager',
+        'manage_app_viewer',
+    },
 }
 
 APPLICATION_PERMISSION_TEMPLATE: dict = {
@@ -73,9 +92,4 @@ def application_template_permissions() -> List[dict]:
 
 def default_permission_ids_for_relation(relation: str) -> Set[str]:
     normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
-    relation_level = _MODEL_LEVEL.get(normalized, 0)
-    return {
-        item['id']
-        for item in application_template_permissions()
-        if relation_level >= _RELATION_LEVEL.get(item['relation'], 99)
-    }
+    return set(_DEFAULT_PERMISSION_IDS_BY_RELATION.get(normalized, set()))

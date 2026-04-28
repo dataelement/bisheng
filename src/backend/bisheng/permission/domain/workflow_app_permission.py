@@ -10,33 +10,49 @@ import asyncio
 import logging
 from typing import Dict, List, Optional, Set, Tuple
 
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao
 
 logger = logging.getLogger(__name__)
 
-# Mirrors ``RolesAndPermissions.tsx`` RELATION_LEVEL / MODEL_LEVEL for the 应用/工作流 module.
-_RELATION_ORDER = {'can_read': 1, 'can_edit': 2, 'can_manage': 3, 'can_delete': 4}
-_MODEL_ORDER = {'viewer': 1, 'editor': 2, 'manager': 3, 'owner': 4}
 _COMPUTED_TO_MODEL_RELATION = {
     'can_read': 'viewer',
     'can_edit': 'editor',
     'can_manage': 'manager',
     'can_delete': 'owner',
 }
-
-# (permission_id, minimum template relation) — same ids as platform TEMPLATE_SECTIONS.
-_APP_PERMISSION_DEFINITIONS: List[Tuple[str, str]] = [
-    ('view_app', 'can_read'),
-    ('use_app', 'can_read'),
-    ('edit_app', 'can_edit'),
-    ('delete_app', 'can_delete'),
-    ('publish_app', 'can_manage'),
-    ('unpublish_app', 'can_manage'),
-    ('share_app', 'can_manage'),
-    ('manage_app_owner', 'can_manage'),
-    ('manage_app_manager', 'can_manage'),
-    ('manage_app_viewer', 'can_manage'),
-]
+_DEFAULT_PERMISSION_IDS_BY_RELATION: Dict[str, Set[str]] = {
+    'viewer': {
+        'view_app',
+    },
+    'editor': {
+        'view_app',
+        'use_app',
+        'edit_app',
+    },
+    'manager': {
+        'view_app',
+        'use_app',
+        'edit_app',
+        'publish_app',
+        'unpublish_app',
+        'share_app',
+        'manage_app_owner',
+        'manage_app_manager',
+        'manage_app_viewer',
+    },
+    'owner': {
+        'view_app',
+        'use_app',
+        'edit_app',
+        'delete_app',
+        'publish_app',
+        'unpublish_app',
+        'share_app',
+        'manage_app_owner',
+        'manage_app_manager',
+        'manage_app_viewer',
+    },
+}
 
 # get_permission_level() returns owner | can_manage | can_edit | can_read
 _PERMISSION_LEVEL_TO_FG_RELATION = {
@@ -52,12 +68,7 @@ SHARE_APP_PERMISSION_ID = 'share_app'
 def default_app_permission_ids_for_relation(relation: str) -> Set[str]:
     """Default permission ids for a built-in FGA relation (viewer/editor/manager/owner)."""
     normalized = _COMPUTED_TO_MODEL_RELATION.get(relation or '', relation or '')
-    ml = _MODEL_ORDER.get(normalized, 0)
-    out: Set[str] = set()
-    for pid, req in _APP_PERMISSION_DEFINITIONS:
-        if ml >= _RELATION_ORDER.get(req, 99):
-            out.add(pid)
-    return out
+    return set(_DEFAULT_PERMISSION_IDS_BY_RELATION.get(normalized, set()))
 
 
 def _permission_ids_for_relation(relation: str, model: Optional[dict]) -> Set[str]:

@@ -159,7 +159,7 @@ async def test_get_effective_permission_ids_async_does_not_fallback_for_bound_em
 
 
 @pytest.mark.asyncio
-async def test_get_app_permission_map_async_uses_system_relation_defaults_when_permissions_not_explicit():
+async def test_get_app_permission_map_async_system_viewer_defaults_to_view_only():
     login_user = SimpleNamespace(
         user_id=7,
         get_user_group_ids=AsyncMock(return_value=[]),
@@ -217,7 +217,7 @@ async def test_get_app_permission_map_async_uses_system_relation_defaults_when_p
             ['view_app', 'use_app', 'edit_app'],
         )
 
-    assert permission_map == {'wf-1': {'view_app', 'use_app'}}
+    assert permission_map == {'wf-1': {'view_app'}}
 
 
 @pytest.mark.asyncio
