@@ -28,6 +28,9 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = './'
     ret['waiting_list_url'] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
+    # 首钢部署专属命名空间：整段透传给前端，未来加新字段不需要再改本文件
+    shougang_conf = (await bisheng_settings.aget_all_config()).get('shougang', None)
+    ret['shougang'] = shougang_conf if isinstance(shougang_conf, dict) else None
     return resp_200(data=ret)
 
 
