@@ -5,7 +5,7 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import MonitorIcon from '~/components/ui/icon/Monitor';
-import { Menu, X } from 'lucide-react';
+import { LayoutDashboard, Menu, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
@@ -189,7 +189,7 @@ function Sidebar({
       {
         section: 'portal-admin' as const,
         to: '/shougang-portal-admin',
-        icon: <MonitorIcon />,
+        icon: <LayoutDashboard />,
         label: localize('com_nav_portal_admin'),
         isActive: pathname.startsWith('/shougang-portal-admin'),
         closeDrawerOnNavigate: true,
