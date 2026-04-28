@@ -171,7 +171,7 @@ class QuotaService:
         role_quota: Union[int, float],
         tenant_id: int,
         resource_type: str,
-    ) -> tuple[int, Optional[tuple[int, str, int, int, str]]]:
+    ) -> tuple[Union[int, float], Optional[tuple[int, str, Union[int, float], Union[int, float], str]]]:
         """F016 T04 — Tenant-chain hard-limit check (leaf + Root if Child).
 
         Returns ``(effective_remaining, blocker)``:
@@ -230,7 +230,7 @@ class QuotaService:
             else resource_type
         )
 
-        tenant_min_remaining: int = -1
+        tenant_min_remaining: Union[int, float] = -1
         for t in chain:
             limit = (t.quota_config or {}).get(cap_key, -1)
             if limit == -1:
@@ -255,6 +255,24 @@ class QuotaService:
         if tenant_min_remaining == -1:
             return role_quota, None
         return min(tenant_min_remaining, role_quota), None
+
+    @staticmethod
+    def _make_storage_quota_error(
+        blocker: tuple[int, str, Union[int, float], Union[int, float], str],
+        resource_type: str,
+    ) -> TenantStorageQuotaExceededError:
+        blocker_tid, reason, used, limit, tenant_name = blocker
+        return TenantStorageQuotaExceededError(
+            msg=(
+                f'Storage quota exceeded at tenant {blocker_tid} ({reason}) '
+                f'for {resource_type}: {used}/{limit} GB'
+            ),
+            used_gb=used,
+            quota_gb=limit,
+            tenant_name=tenant_name,
+            tenant_id=blocker_tid,
+            reason=reason,
+        )
 
     @classmethod
     async def check_quota(
@@ -301,17 +319,7 @@ class QuotaService:
                 # kwargs are flattened into response.data by main.handle_http_exception;
                 # the platform i18n template `errors.19403` consumes used_gb / quota_gb
                 # to render "当前企业存储配额已耗尽（X/Y GB）".
-                raise TenantStorageQuotaExceededError(
-                    msg=(
-                        f'Storage quota exceeded at tenant {blocker_tid} ({reason}) '
-                        f'for {resource_type}: {used}/{limit} GB'
-                    ),
-                    used_gb=used,
-                    quota_gb=limit,
-                    tenant_name=tenant_name,
-                    tenant_id=blocker_tid,
-                    reason=reason,
-                )
+                raise cls._make_storage_quota_error(blocker, resource_type)
             if reason == 'root_hardcap':
                 raise TenantQuotaExceededError(
                     msg=(
@@ -460,7 +468,8 @@ class QuotaService:
     async def get_knowledge_space_upload_limit_bytes(cls, login_user) -> Optional[int]:
         """Total upload cap in bytes for knowledge-space files (role max × tenant chain).
 
-        ``None`` means unlimited. ``0`` means no remaining headroom under tenant policy.
+        ``None`` means unlimited. Tenant storage exhaustion raises 19403 so
+        callers do not misreport tenant policy as an account upload-cap error.
         """
         if login_user and login_user.is_admin():
             return None
@@ -475,13 +484,13 @@ class QuotaService:
         if role_gb == -1:
             eff, blocker = await cls._apply_tenant_chain_cap(-1, tenant_id, 'knowledge_space_file')
             if blocker is not None:
-                return 0
+                raise cls._make_storage_quota_error(blocker, 'knowledge_space_file')
             if eff == -1:
                 return None
             return cls._knowledge_space_quota_gb_to_bytes(float(eff))
         eff, blocker = await cls._apply_tenant_chain_cap(role_gb, tenant_id, 'knowledge_space_file')
         if blocker is not None:
-            return 0
+            raise cls._make_storage_quota_error(blocker, 'knowledge_space_file')
         return cls._knowledge_space_quota_gb_to_bytes(float(eff))
 
     @classmethod
@@ -506,7 +515,7 @@ class QuotaService:
         return result
 
     @classmethod
-    async def _count_resource(cls, col: str, val, resource_type: str) -> int:
+    async def _count_resource(cls, col: str, val, resource_type: str) -> Union[int, float]:
         """Shared resource counting — used by both tenant and user counts."""
         from bisheng.core.database import get_async_db_session
         from sqlalchemy import text
@@ -529,7 +538,7 @@ class QuotaService:
                 result = await session.execute(text(sql), {param: val})
                 count = result.scalar() or 0
                 if resource_type in ('knowledge_space_file', 'storage_gb'):
-                    count = count // (1024 * 1024 * 1024)
+                    count = float(count) / (1024 * 1024 * 1024)
                 return count
         except Exception as e:
             logger.warning('Failed to count resource %s for %s=%s: %s', resource_type, col, val, e)

@@ -27,6 +27,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
     MembershipStatusEnum,
 )
+from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -1872,22 +1873,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
         for one in file_path:
+            processing_path = one
             if limit_bytes is not None:
                 try:
-                    incoming_size = os.path.getsize(one)
-                except OSError as exc:
-                    logger.warning('Cannot stat upload path %s: %s', one, exc)
-                    raise SpaceFileSizeLimitError() from exc
+                    processing_path, _ = file_download(one)
+                    incoming_size = os.path.getsize(processing_path)
+                except Exception as exc:
+                    logger.warning('Cannot resolve upload path %s for size check: %s', one, exc)
+                    raise SpaceFileNotFoundError() from exc
                 if incoming_size > limit_bytes or current_total_file_size + incoming_size > limit_bytes:
                     raise SpaceFileSizeLimitError()
             db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
                                                         file_info=KnowledgeFileOne(
-                                                            file_path=one,
+                                                            file_path=processing_path,
                                                             excel_rule=ExcelRule()
                                                         ), split_rule=file_split_rule.model_dump(),
                                                         file_kwargs={"level": level,
                                                                      "file_level_path": file_level_path,
-                                                                     "file_source": file_source.value})
+                                                                     "file_source": file_source.value},
+                                                        cleanup_file_path=one)
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 if getattr(db_file, 'id', None):
                     created_files.append(db_file)

@@ -306,6 +306,29 @@ class TestKI01SqlTemplateSchema:
             f'actual table is t_gpts_tools (t_ prefix); template must use that: {tmpl!r}'
         )
 
+    @pytest.mark.asyncio
+    async def test_storage_count_preserves_fractional_gb(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        class _Result:
+            def scalar(self):
+                return int(1.5 * 1024 * 1024 * 1024)
+
+        class _Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, *args, **kwargs):
+                return _Result()
+
+        with patch('bisheng.core.database.get_async_db_session', return_value=_Session()):
+            result = await QuotaService._count_resource('tenant_id', 1, 'storage_gb')
+
+        assert result == 1.5
+
 
 class TestValidateQuotaConfig:
     """AC-10c: quota_config validation."""

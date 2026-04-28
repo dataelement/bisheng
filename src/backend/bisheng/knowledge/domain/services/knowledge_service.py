@@ -349,7 +349,7 @@ class KnowledgeService(KnowledgeUtils):
                 es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
                 es_client._store._create_index_if_not_exists()
-            except Exception as e:
+            except Exception:
                 logger.exception("create knowledge index name error")
 
         # Handling the next steps in creating a Knowledge Base
@@ -844,6 +844,7 @@ class KnowledgeService(KnowledgeUtils):
         file_info: KnowledgeFileOne,
         split_rule: Dict,
         file_kwargs: Dict = None,
+        cleanup_file_path: str = None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         # download original file
@@ -853,7 +854,6 @@ class KnowledgeService(KnowledgeUtils):
         # Get file size inbytes）
         file_size = os.path.getsize(filepath)
 
-        file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
         # Does it contain duplicate files?
         content_repeat = KnowledgeFileDao.get_file_by_condition(
@@ -880,7 +880,7 @@ class KnowledgeService(KnowledgeUtils):
                 "old_name": old_name}, ensure_ascii=False)
             # Uploaded to minio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
             minio_client.put_object_tmp_sync(db_file.object_name, filepath)
-            cls.remove_unused_file(file_info.file_path)
+            cls.remove_unused_file(cleanup_file_path or file_info.file_path)
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
             # Update file size information
@@ -906,7 +906,7 @@ class KnowledgeService(KnowledgeUtils):
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
                                      file=filepath)
-        cls.remove_unused_file(file_info.file_path)
+        cls.remove_unused_file(cleanup_file_path or file_info.file_path)
 
         logger.info("upload_original_file path={}", db_file.object_name)
         KnowledgeFileDao.update(db_file)
@@ -1286,7 +1286,7 @@ class KnowledgeService(KnowledgeUtils):
                 record["updater"] = login_user.user_name
                 record["update_time"] = update_time
                 vector_client.col.upsert(record)
-        logger.debug(f"update_milvus_chunk_updater_info over")
+        logger.debug("update_milvus_chunk_updater_info over")
 
         res = es_client.client.update_by_query(
             index=db_knowledge.index_name,
