@@ -413,11 +413,10 @@ export default function apps() {
                                     showCopy={canCreateApp && canRead(item.id)}
                                     onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
                                     headSelecter={(
-                                        // skills
-                                        item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
+                                        item.version_list?.length ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
-                                        ></CardSelectVersion> : null)}
+                                        /> : null)}
                                     labelPannel={
                                         <LabelShow
                                             data={item}
