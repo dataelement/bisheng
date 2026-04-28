@@ -255,11 +255,10 @@ export function PermissionGrantTab({
             {SUBJECT_TYPES.map((type) => (
               <button
                 key={type}
-                className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                  subjectType === type
-                    ? 'bg-background text-foreground shadow'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`rounded px-3 py-1.5 text-sm transition-colors ${subjectType === type
+                  ? 'bg-background text-foreground shadow'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 onClick={() => handleSubjectTypeChange(type)}
               >
                 {subjectLabel(type)}

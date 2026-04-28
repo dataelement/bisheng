@@ -52,6 +52,18 @@ const RELATION_LEVEL: Record<string, number> = {
   can_manage: 3,
   can_delete: 4,
 }
+
+// Manage permissions form a hierarchy per resource type: owner ⊃ manager ⊃ viewer.
+// Selecting a higher tier implies all lower tiers; deselecting a lower tier
+// must also drop the higher tiers that imply it.
+const MANAGE_PERMISSION_IMPLIES: Record<string, string[]> = {
+  manage_app_owner: ["manage_app_manager", "manage_app_viewer"],
+  manage_app_manager: ["manage_app_viewer"],
+  manage_kb_owner: ["manage_kb_manager", "manage_kb_viewer"],
+  manage_kb_manager: ["manage_kb_viewer"],
+  manage_tool_owner: ["manage_tool_manager", "manage_tool_viewer"],
+  manage_tool_manager: ["manage_tool_viewer"],
+}
 const MODEL_LEVEL: Record<"owner" | "manager" | "editor" | "viewer", number> = {
   viewer: 1,
   editor: 2,
@@ -342,8 +354,18 @@ export default function RolesAndPermissions() {
 
   const togglePermission = (permissionId: string, checked: boolean) => {
     setSelectedPermissionIds((prev) => {
-      if (checked) return Array.from(new Set([...prev, permissionId]))
-      return prev.filter((id) => id !== permissionId)
+      const next = new Set(prev)
+      if (checked) {
+        next.add(permissionId)
+        const implies = MANAGE_PERMISSION_IMPLIES[permissionId]
+        if (implies) implies.forEach((id) => next.add(id))
+      } else {
+        next.delete(permissionId)
+        Object.entries(MANAGE_PERMISSION_IMPLIES).forEach(([parent, children]) => {
+          if (children.includes(permissionId)) next.delete(parent)
+        })
+      }
+      return Array.from(next)
     })
   }
 
