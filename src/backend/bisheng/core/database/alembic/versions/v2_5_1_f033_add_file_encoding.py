@@ -15,6 +15,12 @@ branch_labels = None
 depends_on = None
 
 
+def _table_exists(table: str) -> bool:
+    bind = op.get_bind()
+    insp = inspect(bind)
+    return table in insp.get_table_names()
+
+
 def _column_exists(table: str, column: str) -> bool:
     bind = op.get_bind()
     insp = inspect(bind)
@@ -22,6 +28,12 @@ def _column_exists(table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    # Fresh DB: knowledge_file is created later by SQLModel.metadata.create_all()
+    # at app startup, which already includes the file_encoding column from the
+    # model definition. This migration only needs to add the column on existing
+    # databases that were created before this revision.
+    if not _table_exists('knowledge_file'):
+        return
     if not _column_exists('knowledge_file', 'file_encoding'):
         op.add_column(
             'knowledge_file',
@@ -35,5 +47,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not _table_exists('knowledge_file'):
+        return
     if _column_exists('knowledge_file', 'file_encoding'):
         op.drop_column('knowledge_file', 'file_encoding')
