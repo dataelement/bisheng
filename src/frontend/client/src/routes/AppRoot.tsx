@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
+import { useUnactivate } from 'react-activation';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import { MobileNav } from '~/components/Nav';
@@ -37,6 +38,7 @@ export default function AppRoot() {
     const isTabletOrMobile = usePrefersMobileLayout();
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
+    const scrollLockPrevRef = useRef<{ body: string; html: string } | null>(null);
 
     type AppSurfaceLocationState = { appSurfaceReturn?: string };
 
@@ -108,13 +110,25 @@ export default function AppRoot() {
         }
         const prevBodyOverflow = document.body.style.overflow;
         const prevHtmlOverflow = document.documentElement.style.overflow;
+        scrollLockPrevRef.current = { body: prevBodyOverflow, html: prevHtmlOverflow };
         document.body.style.overflow = 'hidden';
         document.documentElement.style.overflow = 'hidden';
         return () => {
             document.body.style.overflow = prevBodyOverflow;
             document.documentElement.style.overflow = prevHtmlOverflow;
+            scrollLockPrevRef.current = null;
         };
     }, [isAuthenticated]);
+
+    // KeepAlive deactivation does not unmount this component; ensure global
+    // scroll lock is released when leaving the app-chat surface.
+    useUnactivate(() => {
+        const prev = scrollLockPrevRef.current;
+        if (!prev) return;
+        document.body.style.overflow = prev.body;
+        document.documentElement.style.overflow = prev.html;
+        scrollLockPrevRef.current = null;
+    });
 
     if (!isAuthenticated) {
         return null;
