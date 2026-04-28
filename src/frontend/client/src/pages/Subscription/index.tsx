@@ -365,6 +365,10 @@ export default function Subscription() {
 
         // 创建模式：POST /api/v1/channel/manager/create
         const res: any = await createManagerChannelApi(payload);
+        const createCode = extractApiStatusCode(res);
+        if (createCode && createCode !== 200) {
+            throw createApiStatusError(res);
+        }
         await queryClient.invalidateQueries({ queryKey: ["channels"] });
         const root = res?.data ?? res;
         const payloadRes = root?.data ?? root;
