@@ -113,24 +113,32 @@ export function SubjectSearchUser({
           </div>
         )}
         {!loading &&
-          results.map((user) => (
-            <div
-              key={user.user_id}
-              className={`flex items-center gap-2 px-3 py-2 ${
-                disabledIdSet.has(user.user_id)
-                  ? "cursor-not-allowed opacity-60"
-                  : "cursor-pointer hover:bg-gray-50"
-              }`}
-              onClick={() => toggle(user)}
-            >
-              <Checkbox
-                checked={selectedIds.has(user.user_id) || disabledIdSet.has(user.user_id)}
-                disabled={disabledIdSet.has(user.user_id)}
-              />
-              <UserIcon className="h-4 w-4 text-gray-400" />
-              <span className="truncate text-sm">{user.user_name}</span>
-            </div>
-          ))}
+          results.map((user) => {
+            const isDisabled = disabledIdSet.has(user.user_id);
+            return (
+              <div
+                key={user.user_id}
+                className={`flex items-center gap-2 px-3 py-2 ${
+                  isDisabled
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer hover:bg-gray-50"
+                }`}
+                onClick={() => toggle(user)}
+              >
+                <Checkbox
+                  checked={selectedIds.has(user.user_id)}
+                  disabled={isDisabled}
+                />
+                <UserIcon className="h-4 w-4 text-gray-400" />
+                <span className="min-w-0 flex-1 truncate text-sm">{user.user_name}</span>
+                {isDisabled && (
+                  <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                    {localize("com_permission.already_granted")}
+                  </span>
+                )}
+              </div>
+            );
+          })}
       </div>
     </div>
   );

@@ -213,6 +213,7 @@ function TreeNode({
   onToggle: (n: DepartmentNode) => void;
   onExpand: (id: number) => void;
 }) {
+  const localize = useLocalize();
   if (!matchesKeyword(node)) return null;
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expanded.has(node.id);
@@ -220,7 +221,7 @@ function TreeNode({
   const isExplicitlySelected = selectedIds.has(node.id);
   const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected;
   const isDisabled = disabledIds.has(node.id);
-  const isChecked = isExplicitlySelected || isImplicitlySelected || isDisabled;
+  const isChecked = isExplicitlySelected || isImplicitlySelected;
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
 
   return (
@@ -263,9 +264,14 @@ function TreeNode({
           }}
         />
         <Building2 className="h-4 w-4 text-gray-400" />
-        <span className="truncate text-sm">{node.name}</span>
+        <span className="min-w-0 truncate text-sm">{node.name}</span>
         {node.member_count != null && (
           <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>
+        )}
+        {isDisabled && (
+          <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+            {localize("com_permission.already_granted")}
+          </span>
         )}
       </div>
       {hasChildren && isExpanded && node.children!.map((child) => (

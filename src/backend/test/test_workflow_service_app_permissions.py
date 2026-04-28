@@ -174,6 +174,10 @@ def _load_workflow_service_module():
             async def get_app_permission_map_async(login_user, rows, permission_ids):
                 return {}
 
+            @staticmethod
+            async def get_bound_app_type_ids_async(login_user, permission_ids, flow_type=None):
+                return {}
+
         app_permission_module.ApplicationPermissionService = _DummyApplicationPermissionService
         sys.modules['bisheng.permission.domain.services.application_permission_service'] = app_permission_module
 
@@ -239,7 +243,7 @@ async def test_get_all_flows_filters_by_use_app_and_sets_write_from_edit_app():
         create=True,
     ), patch.object(
         WorkFlowService,
-        '_app_type_ids_for_relation',
+        '_app_type_ids_for_permission',
         new_callable=AsyncMock,
         return_value={FlowType.ASSISTANT.value: ['asst-1']},
         create=True,
@@ -258,6 +262,92 @@ async def test_get_all_flows_filters_by_use_app_and_sets_write_from_edit_app():
     assert total == 1
     assert [one['id'] for one in data] == ['asst-1']
     assert data[0]['write'] is True
+
+
+@pytest.mark.asyncio
+async def test_app_type_ids_for_permission_unions_fga_and_binding_ids():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids',
+        new_callable=AsyncMock,
+        side_effect=[[], ['asst-fga']],
+    ), patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_bound_app_type_ids_async',
+        new_callable=AsyncMock,
+        return_value={
+            FlowType.WORKFLOW.value: ['wf-binding'],
+            FlowType.ASSISTANT.value: ['asst-fga', 'asst-binding'],
+        },
+    ):
+        app_type_ids = await WorkFlowService._app_type_ids_for_permission(
+            login_user,
+            'view_app',
+            None,
+        )
+
+    assert app_type_ids == {
+        FlowType.WORKFLOW.value: ['wf-binding'],
+        FlowType.ASSISTANT.value: ['asst-fga', 'asst-binding'],
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_all_flows_passes_empty_prefilter_instead_of_full_scan():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        access_check=MagicMock(side_effect=AssertionError('legacy access_check should not run')),
+    )
+
+    async def _fake_get_all_apps(*args, **kwargs):
+        assert kwargs['app_type_ids'] == {
+            FlowType.WORKFLOW.value: [],
+            FlowType.ASSISTANT.value: [],
+        }
+        return [], 0
+
+    with patch.object(
+        workflow_module.FlowDao,
+        'aget_all_apps',
+        new_callable=AsyncMock,
+        side_effect=_fake_get_all_apps,
+    ) as mock_get_all_apps, patch.object(
+        workflow_module.ApplicationPermissionService,
+        'get_app_permission_map_async',
+        new_callable=AsyncMock,
+    ) as mock_permission_map, patch.object(
+        WorkFlowService,
+        '_app_type_ids_for_permission',
+        new_callable=AsyncMock,
+        return_value={
+            FlowType.WORKFLOW.value: [],
+            FlowType.ASSISTANT.value: [],
+        },
+        create=True,
+    ):
+        data, total = await WorkFlowService.get_all_flows(
+            user=login_user,
+            name='',
+            status=None,
+            tag_id=None,
+            flow_type=None,
+            page=1,
+            page_size=10,
+            managed=False,
+            permission_id='view_app',
+        )
+
+    assert data == []
+    assert total == 0
+    mock_get_all_apps.assert_awaited_once()
+    mock_permission_map.assert_not_awaited()
 
 
 @pytest.mark.asyncio

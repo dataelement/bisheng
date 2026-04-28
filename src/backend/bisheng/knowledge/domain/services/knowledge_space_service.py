@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -952,7 +951,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space, has_content_permission = await self._require_space_info_permission(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
-        total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)
+        total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
         result = KnowledgeSpaceInfoResp(**space.model_dump())
         if space.user_id != self.login_user.user_id:
             create_user = await UserDao.aget_user(space.user_id)
@@ -1849,7 +1848,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Upload cap: 实际上传人 login_user 的角色配额（多角色取 max），再与租户链取 min；超管不限
         limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
-        logger.debug('space_file_upload_limit_bytes=%s user_id=%s', limit_bytes, self.login_user.user_id)
+        logger.debug(f'space_file_upload_limit_bytes={limit_bytes} user_id={self.login_user.user_id}')
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
         folder_id2name = {}
@@ -1874,40 +1873,51 @@ class KnowledgeSpaceService(KnowledgeUtils):
         failed_files = []
         preview_cache_keys = []
         created_files = []
-        for one in file_path:
-            if limit_bytes is not None:
-                try:
-                    incoming_size = os.path.getsize(one)
-                except OSError as exc:
-                    logger.warning('Cannot stat upload path %s: %s', one, exc)
-                    raise SpaceFileSizeLimitError() from exc
-                if incoming_size > limit_bytes or current_total_file_size + incoming_size > limit_bytes:
-                    raise SpaceFileSizeLimitError()
-            db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
-                                                        file_info=KnowledgeFileOne(
-                                                            file_path=one,
-                                                            excel_rule=ExcelRule()
-                                                        ), split_rule=file_split_rule.model_dump(),
-                                                        file_kwargs={"level": level,
-                                                                     "file_level_path": file_level_path,
-                                                                     "file_source": file_source.value})
-            if db_file.status != KnowledgeFileStatus.FAILED.value:
-                if getattr(db_file, 'id', None):
-                    created_files.append(db_file)
-                # Get a preview cache of this filekey
-                cache_key = self.get_preview_cache_key(
-                    knowledge_id, one
-                )
-                preview_cache_keys.append(cache_key)
-                process_files.append(db_file)
-                current_total_file_size += db_file.file_size
-            else:
-                failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
-                failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
-                failed_file.file_level_path = file_level_path
-                failed_files.append(failed_file)
+
+        async def cleanup_created_files() -> None:
+            created_file_ids = [
+                created_file.id
+                for created_file in created_files
+                if getattr(created_file, 'id', None)
+            ]
+            if not created_file_ids:
+                return
+            try:
+                await self._cleanup_resource_tuples([
+                    ('knowledge_file', created_file_id)
+                    for created_file_id in created_file_ids
+                ])
+            finally:
+                await KnowledgeFileDao.adelete_batch(created_file_ids)
 
         try:
+            for one in file_path:
+                db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
+                                                            file_info=KnowledgeFileOne(
+                                                                file_path=one,
+                                                                excel_rule=ExcelRule()
+                                                            ), split_rule=file_split_rule.model_dump(),
+                                                            file_kwargs={"level": level,
+                                                                         "file_level_path": file_level_path,
+                                                                         "file_source": file_source.value})
+                if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, 'id', None):
+                        created_files.append(db_file)
+                    # Get a preview cache of this filekey
+                    cache_key = self.get_preview_cache_key(
+                        knowledge_id, one
+                    )
+                    preview_cache_keys.append(cache_key)
+                    process_files.append(db_file)
+                    current_total_file_size += db_file.file_size
+                else:
+                    failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
+                    failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
+                    failed_file.file_level_path = file_level_path
+                    failed_files.append(failed_file)
+                if limit_bytes is not None:
+                    if current_total_file_size > limit_bytes:
+                        raise SpaceFileSizeLimitError()
             for created_file in created_files:
                 await self._initialize_child_resource_permissions(
                     'knowledge_file',
@@ -1916,17 +1926,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     parent_resource_id,
                 )
         except Exception:
-            created_file_ids = [
-                created_file.id
-                for created_file in created_files
-                if getattr(created_file, 'id', None)
-            ]
-            if created_file_ids:
-                await self._cleanup_resource_tuples([
-                    ('knowledge_file', created_file_id)
-                    for created_file_id in created_file_ids
-                ])
-                await KnowledgeFileDao.adelete_batch(created_file_ids)
+            try:
+                await cleanup_created_files()
+            except Exception as cleanup_exc:
+                logger.warning(f'Failed to cleanup files after knowledge space upload error: {cleanup_exc}')
             raise
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
