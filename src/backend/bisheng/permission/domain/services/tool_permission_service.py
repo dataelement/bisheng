@@ -30,6 +30,8 @@ class ToolPermissionService:
     def _permission_ids_for_relation(relation: str, model: dict | None = None) -> set[str]:
         if model is not None:
             permissions = model.get('permissions') or []
+            if model.get('permissions_explicit') is True:
+                return set(permissions)
             if permissions:
                 return set(permissions)
             if model.get('is_system'):
