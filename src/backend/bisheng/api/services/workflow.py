@@ -521,7 +521,7 @@ class WorkFlowService(BaseService):
         else:
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         data = cls.filter_supported_apps(data)
-        data = await cls.filter_apps_by_permission_id(user, data, 'use_app')
+        data = await cls.filter_apps_by_permission_id(user, data, 'view_app')
 
         # Reorder users in the order they are added to the stock
         data.sort(key=lambda x: user_link_order.get(x['id'], float('inf')))
@@ -576,7 +576,7 @@ class WorkFlowService(BaseService):
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)
-        data = await cls.filter_apps_by_permission_id(user, data, 'use_app')
+        data = await cls.filter_apps_by_permission_id(user, data, 'view_app')
         total = len(data)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size

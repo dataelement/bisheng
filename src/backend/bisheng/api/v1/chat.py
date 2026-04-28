@@ -1,7 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter
-from fastapi.params import Depends
+from fastapi.params import Depends, Query
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schemas import resp_200
@@ -23,6 +23,10 @@ async def get_online_chat(*,
                           limit: Optional[int] = 10,
                           sort_by: Optional[str] = None,
                           search_description: Optional[bool] = False,
+                          permission_id: str = Query(
+                              default='use_app',
+                              description='Fine-grained permission id for app list visibility',
+                          ),
                           user: UserPayload = Depends(UserPayload.get_login_user)):
     """Access to online workflows and assistants.
 
@@ -35,7 +39,8 @@ async def get_online_chat(*,
     """
     data, total = await WorkFlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value, tag_id, flow_type, page,
                                                       limit,
-                                                      skip_pagination=True, search_description=bool(search_description))
+                                                      skip_pagination=True, search_description=bool(search_description),
+                                                      permission_id=permission_id)
 
     if sort_by == 'update_time':
         data.sort(key=lambda app: -app['update_time'].timestamp() if app.get('update_time') else 0)
