@@ -282,12 +282,13 @@ export function ArticleList({
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
                         {/* H5 第一行：固定在视口顶部，不随内容滚动且不制造横向溢出 */}
-                        <div className="hidden touch-mobile:fixed touch-mobile:left-2 touch-mobile:right-2 touch-mobile:top-0 touch-mobile:z-30 touch-mobile:block touch-mobile:bg-white touch-mobile:pt-[calc(env(safe-area-inset-top,0px)+8px)] touch-mobile:pb-2">
+                        <div className="hidden touch-mobile:fixed touch-mobile:left-2 touch-mobile:right-2 touch-mobile:top-0 touch-mobile:z-30 touch-mobile:block touch-mobile:bg-white touch-mobile:pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                             <div className="mx-auto w-full max-w-[1000px] px-4">
                                 <div
                                     className={cn(
-                                        "flex h-8 items-center",
+                                        "flex h-11 min-h-11 w-full items-center",
                                         onOpenChannelNav && onCreateChannel && "justify-between",
+                                        onOpenChannelNav && !onCreateChannel && "justify-start",
                                         !onOpenChannelNav && onCreateChannel && "justify-end",
                                     )}
                                 >
@@ -298,7 +299,7 @@ export function ArticleList({
                                             aria-label={localize("com_nav_open_sidebar")}
                                             className={mobileHeadIconBtnClassName}
                                         >
-                                            <Menu className="size-4" />
+                                            <Menu className="size-4" strokeWidth={2} />
                                         </button>
                                     ) : null}
                                     {onCreateChannel ? (
@@ -316,7 +317,7 @@ export function ArticleList({
                         </div>
                         <div
                             aria-hidden
-                            className="hidden touch-mobile:block touch-mobile:h-[calc(env(safe-area-inset-top,0px)+48px)]"
+                            className="hidden touch-mobile:block touch-mobile:h-[calc(env(safe-area-inset-top,0px)+52px)]"
                         />
                         {/* H5 第二行：订阅 + 前往频道广场（在展开按钮下方） */}
                         <div className="flex min-w-0 items-end gap-2">

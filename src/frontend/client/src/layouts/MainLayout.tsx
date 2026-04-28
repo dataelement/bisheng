@@ -36,14 +36,17 @@ interface SidebarItemProps {
   active: boolean;
   label: string;
   showLabel?: boolean;
+  /** H5 应用中心抽屉：切换首页 / 应用中心时收起面板 */
+  onNavigate?: () => void;
 }
 
-function SidebarItem({ icon, to, active, label, showLabel = false }: SidebarItemProps) {
+function SidebarItem({ icon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
   return (
     <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
         <NavLink
           to={to}
+          onClick={onNavigate}
           className={cn(
             'flex cursor-pointer rounded-lg transition-colors',
             showLabel
@@ -137,41 +140,41 @@ function Sidebar({
   const links = useMemo(() => {
     if (!canOpenWorkbenchEntry) return [];
     return [
-    {
-      section: 'home',
-      to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
-      icon: <HomeIcon />,
-      label: localize('com_nav_home'),
-      isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-    },
-    {
-      section: 'apps',
-      to: hasPlugin('apps') || !menuApprovalMode ? (lastSectionPaths.apps || '/apps') : '/menu-unavailable',
-      icon: <GlobeIcon />,
-      label: localize('com_nav_app_center'),
-      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-    },
-    {
-      section: 'channel',
-      to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-      icon: <LinkIcon />,
-      label: localize('com_ui_channel'),
-      isActive: pathname.startsWith('/channel'),
-    },
-    {
-      section: 'knowledge',
-      to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
-      icon: <BookOpenIcon />,
-      label: localize('com_knowledge.knowledge_space'),
-      isActive: pathname.startsWith('/knowledge'),
-    },
-  ].filter((l) => {
-    if (l.section === 'home') return showHomeTab;
-    if (l.section === 'apps') return showAppsTab;
-    if (l.section === 'channel') return showSubscriptionTab;
-    if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-    return true;
-  });
+      {
+        section: 'home',
+        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
+        icon: <HomeIcon />,
+        label: localize('com_nav_home'),
+        isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+      },
+      {
+        section: 'apps',
+        to: hasPlugin('apps') || !menuApprovalMode ? (lastSectionPaths.apps || '/apps') : '/menu-unavailable',
+        icon: <GlobeIcon />,
+        label: localize('com_nav_app_center'),
+        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+      },
+      {
+        section: 'channel',
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        icon: <LinkIcon />,
+        label: localize('com_ui_channel'),
+        isActive: pathname.startsWith('/channel'),
+      },
+      {
+        section: 'knowledge',
+        to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
+        icon: <BookOpenIcon />,
+        label: localize('com_knowledge.knowledge_space'),
+        isActive: pathname.startsWith('/knowledge'),
+      },
+    ].filter((l) => {
+      if (l.section === 'home') return showHomeTab;
+      if (l.section === 'apps') return showAppsTab;
+      if (l.section === 'channel') return showSubscriptionTab;
+      if (l.section === 'knowledge') return showKnowledgeSpaceTab;
+      return true;
+    });
   }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
@@ -184,7 +187,7 @@ function Sidebar({
   return (
     <div
       className={cn(
-        showExpandedHubSidebar ? (overlay ? 'w-full px-2' : 'w-[38vw] px-2') : 'w-16 px-2',
+        showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
         'h-[100dvh] flex flex-col justify-between py-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
         // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
@@ -233,6 +236,11 @@ function Sidebar({
               label={link.label}
               active={link.isActive}
               showLabel={showExpandedHubSidebar}
+              onNavigate={
+                showExpandedHubSidebar && link.closeDrawerOnNavigate
+                  ? onCloseMobileApps
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -394,20 +402,6 @@ export default function MainLayout() {
           isMobile ? 'min-h-[100dvh]' : 'h-[100dvh]',
         )}
       >
-        {shouldHideSidebarOnMobileAppsArea &&
-          isAppsArea &&
-          !isAppChatRoute &&
-          !isAppsExploreRoute &&
-          !mobileSidebarOpen ? (
-          <button
-            type="button"
-            aria-label={localize('com_nav_open_sidebar')}
-            onClick={() => setMobileSidebarOpen(true)}
-            className="absolute left-2 top-2 z-[50] inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
-          >
-            <Menu className="size-4" />
-          </button>
-        ) : null}
         <KeepAlive
           name={cacheKey}
           id={cacheKey}
@@ -419,13 +413,30 @@ export default function MainLayout() {
               isMobile
                 ? 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
                 : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
-              shouldHideSidebarOnMobileAppsArea &&
+            )}
+          >
+            {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
+            {shouldHideSidebarOnMobileAppsArea &&
               isAppsArea &&
               !isAppChatRoute &&
               !isAppsExploreRoute &&
-              'pt-9',
-            )}
-          >
+              !mobileSidebarOpen ? (
+              <div
+                className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]"
+              >
+                <div className="flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
+                  <button
+                    type="button"
+                    aria-label={localize('com_nav_open_sidebar')}
+                    onClick={() => setMobileSidebarOpen(true)}
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                  >
+                    <Menu className="size-4" strokeWidth={2} />
+                  </button>
+                  <div className="min-w-0 flex-1" aria-hidden />
+                </div>
+              </div>
+            ) : null}
             {outlet}
           </div>
         </KeepAlive>

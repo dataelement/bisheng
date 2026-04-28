@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
@@ -31,11 +31,17 @@ export default function AppRoot() {
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
     const appOriginStorageKey = (conversationId: string) => `app-chat-origin:${conversationId}`;
-    const isFromHomeRecommendedEntry = (() => {
+    const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+    /**
+     * H5 顶栏左侧：应用中心 / 探索 / 首页推荐 进入会话时都应显示「返回」并走 handleGoBack，
+     * 否则会落在默认的抽屉按钮，用户以为在退出应用会话，实际只开了侧栏；返回逻辑也与 PC 侧栏不一致。
+     */
+    const preferMobileAppBackButton = useMemo(() => {
+        if (!isTabletOrMobile || !isAppConversationRoute) return false;
         const searchParams = new URLSearchParams(location.search);
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
-        if (from === 'center' || from === 'explore') return false;
+        if (from === 'center' || from === 'explore') return true;
         if (from === 'home-recommended' && entry === 'home') return true;
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
@@ -43,13 +49,26 @@ export default function AppRoot() {
         if (!conversationId) return false;
         try {
             const persistedOrigin = sessionStorage.getItem(appOriginStorageKey(conversationId));
-            if (persistedOrigin === 'center' || persistedOrigin === 'explore') return false;
-            if (persistedOrigin === 'home') return true;
-            return sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
+            if (
+                persistedOrigin === 'center' ||
+                persistedOrigin === 'explore' ||
+                persistedOrigin === 'home'
+            ) {
+                return true;
+            }
+            if (sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home') {
+                return true;
+            }
+            const flowId = pathSegments[appSegmentIndex + 2];
+            if (flowId) {
+                const fo = sessionStorage.getItem(appFlowOriginKey(flowId));
+                if (fo === 'center' || fo === 'explore' || fo === 'home') return true;
+            }
         } catch {
             return false;
         }
-    })();
+        return false;
+    }, [isTabletOrMobile, isAppConversationRoute, location.pathname, location.search]);
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
     const handleGoBack = () => {
@@ -78,12 +97,34 @@ export default function AppRoot() {
                 // ignore storage failures
             }
         }
-        // App center entries (home list / explore) should always return to app center.
-        if (from === 'center' || from === 'explore' || persistedOrigin === 'center' || persistedOrigin === 'explore') {
+        const flowId =
+            appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] ?? '' : '';
+        let persistedFlowOrigin: string | null = null;
+        if (flowId) {
+            try {
+                persistedFlowOrigin = sessionStorage.getItem(appFlowOriginKey(flowId));
+            } catch {
+                // ignore storage failures
+            }
+        }
+        // App center / 探索：URL、当前会话记录、或当前应用(flow)最近一次入口
+        if (
+            from === 'center' ||
+            from === 'explore' ||
+            persistedOrigin === 'center' ||
+            persistedOrigin === 'explore' ||
+            persistedFlowOrigin === 'center' ||
+            persistedFlowOrigin === 'explore'
+        ) {
             navigate('/apps');
             return;
         }
-        if (fromHomeEntry || (from === 'home-recommended' && entry === 'home') || persistedOrigin === 'home') {
+        if (
+            fromHomeEntry ||
+            (from === 'home-recommended' && entry === 'home') ||
+            persistedOrigin === 'home' ||
+            persistedFlowOrigin === 'home'
+        ) {
             navigate('/c/new');
             return;
         }
@@ -112,7 +153,8 @@ export default function AppRoot() {
             ...prev,
         ]);
         setSidebarVisible(false);
-        navigate(`/app/${chatId}/${flowId}/${flowType}`);
+        const qs = location.search || '';
+        navigate(`/app/${chatId}/${flowId}/${flowType}${qs}`);
     };
 
     useEffect(() => {
@@ -136,6 +178,7 @@ export default function AppRoot() {
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
         const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
+        const flowId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] : '';
         if (!conversationId) return;
         let origin: 'center' | 'explore' | 'home' | null = null;
         if (from === 'center') origin = 'center';
@@ -144,6 +187,9 @@ export default function AppRoot() {
         if (!origin) return;
         try {
             sessionStorage.setItem(appOriginStorageKey(conversationId), origin);
+            if (flowId) {
+                sessionStorage.setItem(appFlowOriginKey(flowId), origin);
+            }
         } catch {
             // ignore storage failures
         }
@@ -160,8 +206,8 @@ export default function AppRoot() {
                 className={cn(
                     "flex w-full overflow-hidden bg-[#F9F9F9]",
                     isAppConversationRoute
-                        ? "p-2 touch-mobile:p-0 max-[768px]:p-0"
-                        : "p-4 touch-mobile:p-0",
+                        ? " touch-mobile:p-0 max-[768px]:p-0"
+                        : " touch-mobile:p-0",
                 )}
                 style={{ height: `calc(100dvh - ${bannerHeight}px)` }}
             >
@@ -187,7 +233,7 @@ export default function AppRoot() {
                     {/* Mobile overlay sidebar (covers content, does not push) */}
                     {isTabletOrMobile && sidebarVisible && (
                         <div className="fixed inset-0 z-[70] flex">
-                            <div className="relative flex h-full w-[280px] max-w-[280px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
+                            <div className="relative flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                                 <SideNav />
                             </div>
                             <button
@@ -247,7 +293,7 @@ export default function AppRoot() {
                                 persistNavVisibleInLocalStorage={false}
                                 navigateToNewChatPath={false}
                                 onNewChat={handleCreateNewAppChat}
-                                preferBackButton={isFromHomeRecommendedEntry}
+                                preferBackButton={preferMobileAppBackButton}
                                 onBack={handleGoBack}
                             />
                         )}

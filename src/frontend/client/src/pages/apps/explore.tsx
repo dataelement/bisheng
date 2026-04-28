@@ -14,6 +14,7 @@ import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
 
 const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
+const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 
 // --- 组件：智能体卡片 (广场版 Horizontal) ---
 const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
@@ -216,6 +217,11 @@ export default function ExplorePlaza() {
     const handleCardClick = (agent: any) => {
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
+        try {
+            sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
+        } catch {
+            // ignore storage failures
+        }
         // Enter without chatId — AppChatEntry will resolve to most recent conversation,
         // or create a new one if the user has no conversations for this app yet.
         navigate(`/app/${flowId}/${flowType}?from=explore`);
@@ -245,7 +251,7 @@ export default function ExplorePlaza() {
                 className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
                 style={{ backgroundImage: `url(${APP_TAB_BANNER})` }}
             >
-                <div className="absolute left-5 top-5 z-10">
+                <div className="absolute left-4 top-4 z-10">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}

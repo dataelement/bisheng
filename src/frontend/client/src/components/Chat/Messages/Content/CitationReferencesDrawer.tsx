@@ -545,10 +545,20 @@ export default function CitationReferencesDrawer({
     : 'min-h-0 w-full flex-1 bg-[#fbfbfb]';
   const referenceListContent = (
     <>
-      <div className={cn(
-        'flex shrink-0 items-center justify-between border-[#ECECEC] bg-white',
-        isMobileLikeViewport ? 'h-11 px-2' : 'h-10 px-4',
-      )}>
+      <div
+        className={cn(
+          'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
+          isMobileLikeViewport
+            ? cn(
+                'px-4',
+                // 设计：左右上 16px；全屏手机在安全区下再留 16px，与对话内「查看文件」顶栏一致
+                isFullBleedMobile
+                  ? 'pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
+                  : 'pt-4',
+              )
+            : 'h-10 px-4',
+        )}
+      >
         <div className="flex items-center gap-2">
           <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
             {localize('com_msg_source_reference')}
@@ -570,10 +580,13 @@ export default function CitationReferencesDrawer({
         </button>
       </div>
 
-      <div className={cn(
-        'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]',
-        'space-y-3 px-3 py-4',
-      )}>
+      <div
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] space-y-3',
+          // 设计：标题栏与列表区间距 24px；左右与标题区对齐 16px
+          isMobileLikeViewport ? 'px-4 pt-6 pb-4' : 'px-3 py-4',
+        )}
+      >
         {references.length > 0 ? (
           references.map((item) => {
             const detail = detailMap[item.data.citationId] ?? item.detail ?? null;

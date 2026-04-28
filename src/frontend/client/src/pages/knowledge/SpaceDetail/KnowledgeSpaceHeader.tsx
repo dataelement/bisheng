@@ -31,7 +31,7 @@ import { AiChatIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
-import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 
 /** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
@@ -366,28 +366,25 @@ export function KnowledgeSpaceHeader({
     return (
         <>
         <div className="space-y-4 pt-5 pb-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
-            <div
-                className={cn(
-                    "hidden touch-mobile:flex items-end gap-3 min-h-8",
-                    currentPath.length !== 0 && "pointer-events-none opacity-0"
-                )}
-            >
-                <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
-                    {localize("com_knowledge.knowledge_space")}
-                </h1>
-                {onGoKnowledgeSquare ? (
-                    <button
-                        type="button"
-                        onClick={onGoKnowledgeSquare}
-                        className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
-                    >
-                        <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
-                        <span className="text-[12px] leading-5 font-normal text-[#212121]">
-                            前往知识广场
-                        </span>
-                    </button>
-                ) : null}
-            </div>
+            {currentPath.length === 0 && (
+                <div className="hidden touch-mobile:flex items-end gap-3 min-h-8">
+                    <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
+                        {localize("com_knowledge.knowledge_space")}
+                    </h1>
+                    {onGoKnowledgeSquare ? (
+                        <button
+                            type="button"
+                            onClick={onGoKnowledgeSquare}
+                            className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
+                        >
+                            <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
+                            <span className="text-[12px] leading-5 font-normal text-[#212121]">
+                                前往知识广场
+                            </span>
+                        </button>
+                    ) : null}
+                </div>
+            )}
 
             {/* 面包屑 / 当前空间标题 */}
             <div className="flex items-center justify-between gap-3">
@@ -439,22 +436,55 @@ export function KnowledgeSpaceHeader({
                             </Tooltip>
                         </div>
                     ) : (
-                        <div className="flex min-w-0 items-center gap-2 text-[#1d2129]">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const parent = currentPath[currentPath.length - 2];
-                                    onNavigateFolder(parent?.id);
-                                }}
-                                aria-label={localize("com_ui_go_back")}
-                                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
-                            >
-                                <ChevronLeft className="size-4" />
-                            </button>
-                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
-                                {currentPath[currentPath.length - 1]?.name || space.name}
-                            </span>
-                        </div>
+                        <>
+                            {/* 移动端（<768px）：返回上一级 + 当前文件夹名 */}
+                            <div className="flex min-w-0 items-center gap-2 text-[#1d2129] md:hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const parent = currentPath[currentPath.length - 2];
+                                        onNavigateFolder(parent?.id);
+                                    }}
+                                    aria-label={localize("com_ui_go_back")}
+                                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                >
+                                    <ChevronLeft className="size-4" />
+                                </button>
+                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                                    {currentPath[currentPath.length - 1]?.name || space.name}
+                                </span>
+                            </div>
+                            {/* PC 端：完整文件路径（空间名 / 文件夹…） */}
+                            <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm text-[#1d2129] md:flex">
+                                <button
+                                    type="button"
+                                    onClick={() => onNavigateFolder(undefined)}
+                                    className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
+                                >
+                                    {space.name}
+                                </button>
+                                {currentPath.map((seg, idx) => (
+                                    <Fragment key={seg.id ?? `path-${idx}`}>
+                                        <span className="shrink-0 text-[#86909c]" aria-hidden>
+                                            /
+                                        </span>
+                                        {idx === currentPath.length - 1 ? (
+                                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129]">
+                                                {seg.name}
+                                            </span>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => onNavigateFolder(seg.id)}
+                                                className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
+                                            >
+                                                {seg.name}
+                                            </button>
+                                        )}
+                                    </Fragment>
+                                ))}
+                            </div>
+                        </>
                     )}
                 </div>
 

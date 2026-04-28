@@ -7,6 +7,7 @@ import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
 import { useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
+import { cn } from '~/utils';
 
 const RECENT_APPS_HINT = '最近使用过的应用都在这里～';
 
@@ -90,7 +91,13 @@ export default function AppCenter() {
     );
 
     return (
-        <div className="bg-white min-h-screen flex flex-col items-center px-[12px] py-[20px] relative w-full">
+        <div
+            className={cn(
+                'bg-white min-h-screen flex flex-col items-center relative w-full',
+                // 与首页 MobileNav（px-4）水平对齐；顶栏由 MainLayout 提供，正文略留底距
+                isH5Layout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
+            )}
+        >
             {isH5Layout ? (
                 <>
                     {/* H5：一行 — 应用中心 | 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}

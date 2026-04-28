@@ -728,10 +728,18 @@ export function AddToKnowledgeModal({
                     </h2>
                 </div>
             ) : (
-                <DialogHeader className="px-6 pt-4 pb-4 touch-mobile:px-4">
-                    <DialogTitle className="text-[16px] font-medium leading-7 text-[#212121]">
+                <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-6 pb-4 pt-4 text-left touch-mobile:px-4">
+                    <DialogTitle className="min-w-0 flex-1 text-[16px] font-medium leading-7 text-[#212121]">
                         {titleLabel}
                     </DialogTitle>
+                    <button
+                        type="button"
+                        onClick={() => handleOpenChange(false)}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                        aria-label={localize("com_ui_close")}
+                    >
+                        <X className="size-5" />
+                    </button>
                 </DialogHeader>
             )}
 
@@ -761,7 +769,7 @@ export function AddToKnowledgeModal({
                     embedInChannelSheet
                         ? "flex min-h-0 flex-1 flex-col px-4 pt-4 sm:px-6"
                         : isChannelSyncCenteredMobile
-                            ? "flex min-h-0 flex-1 flex-col px-6 pt-4"
+                            ? "mb-4 flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
                             : isArticleMobileFullScreen
                                 ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[84px]"
                             : "px-6 pt-4 touch-mobile:px-4"
@@ -828,7 +836,7 @@ export function AddToKnowledgeModal({
                     embedInChannelSheet
                         ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-5 sm:py-3.5"
                         : isChannelSyncCenteredMobile
-                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 border-t border-[#ECECEC] bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]"
+                            ? "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-0"
                             : isArticleMobileFullScreen
                                 ? "fixed inset-x-0 bottom-0 z-[140] flex w-full min-w-0 shrink-0 flex-row justify-stretch gap-2 bg-white px-4 py-3"
                             : "mt-auto flex w-full min-w-0 shrink-0 flex-row justify-end bg-white px-4 py-3.5 touch-mobile:mt-auto touch-mobile:px-4 touch-mobile:py-3"
@@ -849,7 +857,7 @@ export function AddToKnowledgeModal({
                         className={cn(
                             "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
-                            "h-11 rounded-lg border-[#E5E6EB] text-[15px] text-[#4E5969] hover:bg-[#F7F8FA]",
+                            "min-h-[32px] h-8 rounded-lg border-[#E5E6EB] text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
@@ -859,9 +867,9 @@ export function AddToKnowledgeModal({
                         onClick={() => void handleConfirm()}
                         disabled={!selectedId || isConfirming}
                         className={cn(
-                            "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
+                            "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
-                            "h-11 rounded-lg text-[15px] enabled:bg-[#165DFF] enabled:text-white enabled:hover:bg-[#4080FF] disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
+                            "rounded-lg text-[14px] enabled:bg-[#165DFF] enabled:text-white enabled:hover:bg-[#4080FF] disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",

@@ -48,12 +48,12 @@ export const ChatToolDown = ({
       >
         <div
           className={cn(
-            "flex gap-2",
+            "flex gap-2 touch-mobile:gap-1",
             searchType === "netSearch" && "text-blue-600"
           )}
         >
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] touch-mobile:max-w-[min(18vw,56px)]">
             {localize("com_tools_title")}
           </span>
         </div>
@@ -124,9 +124,9 @@ export const LinsiTools = ({ tools, setTools }) => {
   return (
     <Select>
       <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 touch-mobile:px-1.5">
-        <div className={cn("flex gap-2", active && "text-blue-600")}>
+        <div className={cn("flex gap-2 touch-mobile:gap-1", active && "text-blue-600")}>
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] touch-mobile:max-w-[min(18vw,56px)]">
             {localize("com_tools_title")}
           </span>
         </div>

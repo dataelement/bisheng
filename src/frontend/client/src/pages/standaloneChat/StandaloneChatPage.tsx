@@ -98,27 +98,19 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   if (!flowId) return null;
 
+  // 免登录：圆角在侧栏+主内容整体外侧；主内容与侧栏衔接处不单独圆角
+  const guestOuterShell = isGuestMode
+    ? 'flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-[12px] bg-white touch-mobile:rounded-none'
+    : 'contents';
+
   return (
     <StandaloneChatContext.Provider value={contextValue}>
       <div className={cn('flex', isGuestMode ? 'bg-white' : 'bg-[#F9F9F9]')} style={{ height: '100dvh' }}>
         <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#F4F5F7] p-2">
-
-          {/* Desktop sidebar */}
-          {!isTabletOrMobile && (
-            <div
-              className={cn(
-                'transition-all duration-300 overflow-hidden flex-shrink-0',
-                sidebarVisible ? 'w-[280px]' : 'w-0',
-              )}
-            >
-              <StandaloneSideNav sidebar={sidebar} />
-            </div>
-          )}
-
-          {/* Mobile overlay sidebar */}
+          {/* Mobile overlay sidebar (covers full area; stays outside the guest rounded shell) */}
           {isTabletOrMobile && sidebarVisible && (
             <div className="absolute inset-0 z-[70] flex">
-              <div className="h-full w-[280px] max-w-[280px] border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
+              <div className="h-full w-[240px] max-w-[240px] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                 <StandaloneSideNav sidebar={sidebar} onCloseSidebar={toggleSidebar} />
               </div>
               <button
@@ -130,58 +122,71 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
             </div>
           )}
 
-          {/* Toggle button (desktop) */}
-          {!isTabletOrMobile && (
-            <NavToggle
-              navVisible={sidebarVisible}
-              onToggle={toggleSidebar}
-              isHovering={isHovering}
-              setIsHovering={setIsHovering}
-              className="fixed top-1/2 z-[50]"
-              translateX={sidebarWidth - 5}
-            />
-          )}
-
-          {/* Chat panel */}
-          <div
-            className={cn(
-              'relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden',
-              'p-0',
+          <div className={guestOuterShell}>
+            {/* Desktop sidebar */}
+            {!isTabletOrMobile && (
+              <div
+                className={cn(
+                  'transition-all duration-300 overflow-hidden flex-shrink-0',
+                  sidebarVisible ? 'w-[280px]' : 'w-0',
+                )}
+              >
+                <StandaloneSideNav sidebar={sidebar} />
+              </div>
             )}
-          >
-            {isTabletOrMobile && (
-              <MobileNav
-                variant="chat"
+
+            {/* Toggle button (desktop) */}
+            {!isTabletOrMobile && (
+              <NavToggle
                 navVisible={sidebarVisible}
-                setNavVisible={setSidebarVisible}
-                persistNavVisibleInLocalStorage={false}
-                navigateToNewChatPath={false}
-                onNewChat={createNewChat}
+                onToggle={toggleSidebar}
+                isHovering={isHovering}
+                setIsHovering={setIsHovering}
+                className="fixed top-1/2 z-[50]"
+                translateX={sidebarWidth - 5}
               />
             )}
+
+            {/* Chat panel */}
             <div
               className={cn(
-                'min-h-0 min-w-0 flex-1 overflow-hidden',
-                isGuestMode
-                  ? 'rounded-xl bg-white'
-                  : 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
-                'touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none',
+                'relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden',
+                'p-0',
               )}
             >
-              {activeChatId ? (
-                <AppChat
-                  chatId={activeChatId}
-                  flowId={flowId}
-                  flowType={numericFlowType}
-                  apiVersion={apiVersion}
-                  isGuestMode={isGuestMode}
+              {isTabletOrMobile && (
+                <MobileNav
+                  variant="chat"
+                  navVisible={sidebarVisible}
+                  setNavVisible={setSidebarVisible}
+                  persistNavVisibleInLocalStorage={false}
+                  navigateToNewChatPath={false}
+                  onNewChat={createNewChat}
                 />
-              ) : historyLoaded ? (
-                <ChatEmptyState onNewChat={createNewChat} />
-              ) : null}
+              )}
+              <div
+                className={cn(
+                  'min-h-0 min-w-0 flex-1 overflow-hidden',
+                  isGuestMode
+                    ? 'bg-white'
+                    : 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
+                  !isGuestMode && 'touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none',
+                )}
+              >
+                {activeChatId ? (
+                  <AppChat
+                    chatId={activeChatId}
+                    flowId={flowId}
+                    flowType={numericFlowType}
+                    apiVersion={apiVersion}
+                    isGuestMode={isGuestMode}
+                  />
+                ) : historyLoaded ? (
+                  <ChatEmptyState onNewChat={createNewChat} />
+                ) : null}
+              </div>
             </div>
           </div>
-
         </div>
       </div>
     </StandaloneChatContext.Provider>
