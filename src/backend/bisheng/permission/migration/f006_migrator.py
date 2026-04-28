@@ -122,14 +122,21 @@ class RBACToReBACMigrator:
             if self.only_step is not None:
                 self._validate_step_range(self.only_step, '--only-step')
 
-            checkpoint = 0 if self.only_step is not None else max(
-                self._load_checkpoint(),
-                self.start_step - 1,
-            )
+            if self.only_step is not None:
+                checkpoint = 0
+            elif self.dry_run:
+                checkpoint = self.start_step - 1
+            else:
+                checkpoint = max(
+                    self._load_checkpoint(),
+                    self.start_step - 1,
+                )
             mode = 'DRY-RUN' if self.dry_run else 'EXECUTE'
             logger.info(f'=== F006 Permission Migration ({mode}) ===')
             if self.only_step is not None:
                 logger.info(f'Running only step {self.only_step}')
+            elif self.dry_run:
+                logger.info(f'Dry-run ignores saved checkpoint; preview starts from step {self.start_step}')
             elif checkpoint > 0:
                 logger.info(f'Resuming from checkpoint: step {checkpoint} completed')
             selected_steps = [
