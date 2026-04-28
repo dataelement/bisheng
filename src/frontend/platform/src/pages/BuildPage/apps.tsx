@@ -409,14 +409,14 @@ export default function apps() {
                                     onSetting={(item) => handleSetting(item)}
                                     onPermission={canManage(item.id) ? handleOpenPermission : undefined}
                                     showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
+                                    canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     showCopy={canCreateApp && canRead(item.id)}
                                     onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
                                     headSelecter={(
-                                        // skills
-                                        item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
+                                        item.version_list?.length ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
-                                        ></CardSelectVersion> : null)}
+                                        /> : null)}
                                     labelPannel={
                                         <LabelShow
                                             data={item}

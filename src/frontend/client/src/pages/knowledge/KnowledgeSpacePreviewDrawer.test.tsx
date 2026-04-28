@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
-import { SpaceRole, VisibilityType, getJoinedSpacesApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
+import { SpaceRole, VisibilityType, getJoinedSpacesApi, getSpaceChildrenApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
 
 jest.mock("~/Providers", () => ({
   useToastContext: () => ({
@@ -73,6 +73,8 @@ jest.mock("~/api/knowledge", () => ({
 describe("KnowledgeSpacePreviewDrawer", () => {
   test("keeps fallback detail visible for unjoined square spaces when info fetch is denied", async () => {
     const mockedGetSpaceInfoApi = jest.mocked(getSpaceInfoApi);
+    const mockedGetSpaceChildrenApi = jest.mocked(getSpaceChildrenApi);
+    mockedGetSpaceChildrenApi.mockResolvedValue({ data: [], total: 0 });
     mockedGetSpaceInfoApi.mockRejectedValue(new Error("permission denied"));
 
     const baseSpace = {
@@ -131,6 +133,69 @@ describe("KnowledgeSpacePreviewDrawer", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     expect(mockedGetSpaceInfoApi).toHaveBeenCalledTimes(1);
+  });
+
+  test("loads files for unjoined public square spaces", async () => {
+    const mockedGetSpaceInfoApi = jest.mocked(getSpaceInfoApi);
+    const mockedGetSpaceChildrenApi = jest.mocked(getSpaceChildrenApi);
+    const publicSpace = {
+      id: "space-public",
+      name: "公开空间",
+      description: "公开可浏览",
+      icon: "",
+      visibility: VisibilityType.PUBLIC,
+      creator: "Zhou",
+      creatorId: "u-1",
+      memberCount: 3,
+      fileCount: 1,
+      totalFileCount: 1,
+      role: SpaceRole.MEMBER,
+      isPinned: false,
+      createdAt: "",
+      updatedAt: "",
+      tags: [],
+      isReleased: true,
+      isFollowed: false,
+      isPending: false,
+    };
+
+    mockedGetSpaceInfoApi.mockResolvedValue(publicSpace as any);
+    mockedGetSpaceChildrenApi.mockResolvedValue({
+      data: [
+        {
+          id: "file-1",
+          name: "公开文件.pdf",
+          type: "pdf",
+          tags: [],
+          path: "公开文件.pdf",
+          spaceId: "space-public",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      total: 1,
+    } as any);
+
+    render(
+      <KnowledgeSpacePreviewDrawer
+        spaceId={publicSpace.id}
+        initialSpace={publicSpace as any}
+        open
+        onOpenChange={() => undefined}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockedGetSpaceChildrenApi).toHaveBeenCalledWith(
+        expect.objectContaining({
+          space_id: "space-public",
+          file_status: [2],
+        })
+      );
+      expect(screen.getByTestId("file-card")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("加入后可查看详情")).not.toBeInTheDocument();
   });
 
   test("allows reapplying from rejected preview state", async () => {

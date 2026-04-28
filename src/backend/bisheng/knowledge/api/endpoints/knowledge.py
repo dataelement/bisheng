@@ -458,7 +458,7 @@ async def get_QA_list(*,
                       status: Optional[int] = None,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Get knowledge base file information. """
-    db_knowledge = await KnowledgeService.ajudge_qa_knowledge_write(login_user, qa_knowledge_id)
+    db_knowledge = await KnowledgeService.ajudge_qa_knowledge_view(login_user, qa_knowledge_id)
 
     qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                        page_num, question, answer,
@@ -609,6 +609,9 @@ def qa_status_switch(*,
 def qa_detail(*, id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Add knowledge base information. """
     qa_knowledge = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    if not qa_knowledge:
+        raise NotFoundError()
+    KnowledgeService.judge_qa_knowledge_view(login_user, qa_knowledge.knowledge_id)
     qa_knowledge.answers = json.loads(qa_knowledge.answers)[0]
     return resp_200(data=qa_knowledge)
 

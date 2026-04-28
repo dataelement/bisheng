@@ -779,7 +779,7 @@ export function CreateChannelDrawer({
                                             showToast({
                                                 message: isEditMode
                                                     ? (localize("com_subscription.update_failed_retry") || localize("com_subscription.save_failed"))
-                                                    : (localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry")),
+                                                    : localize("com_subscription.create_channel_failed_retry"),
                                                 severity: NotificationSeverity.ERROR
                                             });
                                         }

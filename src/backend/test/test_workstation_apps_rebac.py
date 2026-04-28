@@ -141,7 +141,7 @@ async def test_get_recommended_apps_does_not_use_relation_visibility_helper():
 
 
 @pytest.mark.asyncio
-async def test_get_recommended_apps_filters_by_use_app_permission():
+async def test_get_recommended_apps_filters_by_view_app_permission():
     module = _load_apps_endpoint_module()
     login_user = MagicMock()
     login_user.is_admin.return_value = False
@@ -154,13 +154,13 @@ async def test_get_recommended_apps_filters_by_use_app_permission():
         {'id': 'asst-1', 'flow_type': module.FlowType.ASSISTANT.value},
     ]
 
-    async def filter_use_app(user, data, permission_id='use_app'):
-        assert permission_id == 'use_app'
+    async def filter_view_app(user, data, permission_id='use_app'):
+        assert permission_id == 'view_app'
         return [one for one in data if one['id'] == 'wf-1']
 
     with patch.object(module.WorkStationService, 'get_config', return_value=config), \
          patch.object(module.FlowDao, 'get_all_apps', return_value=(apps, 2)), \
-         patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_use_app), \
+         patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_view_app), \
          patch.object(module.WorkFlowService, 'add_extra_field', side_effect=lambda user, data: data):
         result = await module.get_recommended_apps(login_user=login_user)
 
@@ -186,7 +186,7 @@ async def test_get_used_apps_does_not_use_relation_visibility_helper():
 
 
 @pytest.mark.asyncio
-async def test_get_used_apps_filters_by_use_app_permission():
+async def test_get_used_apps_filters_by_view_app_permission():
     module = _load_apps_endpoint_module()
     login_user = MagicMock()
     login_user.is_admin.return_value = False
@@ -199,14 +199,14 @@ async def test_get_used_apps_filters_by_use_app_permission():
         {'id': 'asst-1', 'flow_type': module.FlowType.ASSISTANT.value, 'logo': ''},
     ]
 
-    async def filter_use_app(user, data, permission_id='use_app'):
-        assert permission_id == 'use_app'
+    async def filter_view_app(user, data, permission_id='use_app'):
+        assert permission_id == 'view_app'
         return [one for one in data if one['id'] == 'wf-1']
 
     with patch.object(module.MessageSessionDao, 'get_user_used_apps', new_callable=AsyncMock, return_value=used_apps, create=True), \
          patch.object(module.UserLinkDao, 'get_user_link', return_value=[], create=True), \
          patch.object(module.FlowDao, 'aget_all_apps', new_callable=AsyncMock, return_value=(apps, 2), create=True), \
-         patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_use_app), \
+         patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_view_app), \
          patch.object(module.WorkFlowService, 'get_logo_share_link', side_effect=lambda logo: logo), \
          patch.object(module.TagDao, 'get_tags_by_resource', return_value={}, create=True), \
          patch.object(module, 'batch_user_may_share_app', new_callable=AsyncMock, return_value=[False]):

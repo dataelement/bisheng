@@ -15,7 +15,12 @@ async def run_migration(
     dry_run: bool = False,
     verify: bool = False,
     step: int = 1,
+    only_step: int | None = None,
     force: bool = False,
+    batch_size: int = 1000,
+    dedup_backend: str = 'memory',
+    dedup_db_path: str | None = None,
+    progress: bool | None = None,
 ) -> int:
     from bisheng.common.services.config_service import settings
     from bisheng.core.cache.redis_manager import get_redis_client
@@ -26,18 +31,25 @@ async def run_migration(
     await initialize_app_context(config=settings)
 
     try:
-        fga = await aget_fga_client()
-        if fga is None:
-            fga = get_fga_client()
-        if fga is None:
-            logger.error('OpenFGA client not available. Cannot execute permission migration.')
-            return 1
+        if not dry_run:
+            fga = await aget_fga_client()
+            if fga is None:
+                fga = get_fga_client()
+            if fga is None:
+                logger.error('OpenFGA client not available. Cannot execute permission migration.')
+                return 1
 
         redis_client = await get_redis_client()
         completed_key = 'migration:f006:completed'
         lock_key = 'migration:f006:lock'
 
-        if not dry_run and not verify and not force and await redis_client.aget(completed_key):
+        if (
+            not dry_run
+            and not verify
+            and only_step is None
+            and not force
+            and await redis_client.aget(completed_key)
+        ):
             logger.info('F006 migration already completed. Use --force to execute again.')
             return 0
 
@@ -57,7 +69,12 @@ async def run_migration(
                         dry_run=True,
                         verify_only=False,
                         start_step=step,
+                        only_step=only_step,
                         checkpoint_dir=checkpoint_dir,
+                        batch_size=batch_size,
+                        dedup_backend=dedup_backend,
+                        dedup_db_path=dedup_db_path,
+                        progress=progress,
                     )
                     result = await migrator.run()
             else:
@@ -65,8 +82,13 @@ async def run_migration(
                     dry_run=dry_run,
                     verify_only=verify,
                     start_step=step,
+                    only_step=only_step,
+                    batch_size=batch_size,
+                    dedup_backend=dedup_backend,
+                    dedup_db_path=dedup_db_path,
+                    progress=progress,
                 )
-                if force and not verify:
+                if force and only_step is None and not verify:
                     migrator.clear_checkpoint()
                 result = await migrator.run()
 
@@ -84,11 +106,19 @@ async def run_migration(
                 logger.info('F006 dry-run done in %.1fs: total=%d', elapsed, result.total)
                 return 0
 
-            await redis_client.aset(completed_key, json.dumps({
-                'timestamp': datetime.now().isoformat(),
-                'stats': result.to_dict(),
-            }))
-            logger.info('F006 migration done in %.1fs: total=%d', elapsed, result.total)
+            if only_step is None:
+                await redis_client.aset(completed_key, json.dumps({
+                    'timestamp': datetime.now().isoformat(),
+                    'stats': result.to_dict(),
+                }))
+                logger.info('F006 migration done in %.1fs: total=%d', elapsed, result.total)
+            else:
+                logger.info(
+                    'F006 migration step %d done in %.1fs: total=%d',
+                    only_step,
+                    elapsed,
+                    result.total,
+                )
             return 0
         finally:
             if not dry_run and not verify and lock_acquired:
@@ -105,6 +135,18 @@ def main() -> None:
     parser.add_argument('--verify', action='store_true', help='Verify old/new permission results')
     parser.add_argument('--step', type=int, default=1, metavar='N', help='Start from step N')
     parser.add_argument(
+        '--only-step',
+        type=int,
+        metavar='N',
+        help='Run only step N without reading or writing the checkpoint',
+    )
+    parser.add_argument('--batch-size', type=int, default=1000, metavar='N')
+    parser.add_argument('--dedup-backend', choices=('memory', 'sqlite'), default='memory')
+    parser.add_argument('--dedup-db', help='SQLite dedup database path when using sqlite backend')
+    progress_group = parser.add_mutually_exclusive_group()
+    progress_group.add_argument('--progress', action='store_true', default=None)
+    progress_group.add_argument('--no-progress', action='store_false', dest='progress')
+    parser.add_argument(
         '--force',
         action='store_true',
         help='Ignore the completed marker and execute migration again',
@@ -119,7 +161,12 @@ def main() -> None:
             dry_run=args.dry_run,
             verify=args.verify,
             step=args.step,
+            only_step=args.only_step,
             force=args.force,
+            batch_size=args.batch_size,
+            dedup_backend=args.dedup_backend,
+            dedup_db_path=args.dedup_db,
+            progress=args.progress,
         )
     )
     sys.exit(exit_code)
