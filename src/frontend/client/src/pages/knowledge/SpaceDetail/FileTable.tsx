@@ -26,13 +26,17 @@ import {
 } from "~/components";
 import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
+import { EditEncodingModal } from "./EditEncodingModal";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
+import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize } from "~/hooks";
+import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
+import { useToastContext } from "~/Providers";
+import { NotificationSeverity } from "~/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
@@ -48,6 +52,7 @@ const COLUMN_CONFIG = {
     fileType: { minWidth: 100, initialWidth: 120 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
+    fileEncoding: { minWidth: 140, initialWidth: 180 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
@@ -350,6 +355,7 @@ function FileTableHeader({
     isAllSelected,
     isIndeterminate,
     onSelectAll,
+    shougangEnabled,
 }: {
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
@@ -363,6 +369,7 @@ function FileTableHeader({
     isAllSelected: boolean;
     isIndeterminate: boolean;
     onSelectAll: () => void;
+    shougangEnabled: boolean;
 }) {
     const localize = useLocalize();
     const currentSort = { key: sortBy, direction: sortDirection };
@@ -436,6 +443,23 @@ function FileTableHeader({
                     <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
                 </TableHead>
 
+                {/* 文件编码 — 仅 shougang 模式显示 */}
+                {shougangEnabled && (
+                    <TableHead
+                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                        style={{
+                            width: columnWidths.fileEncoding,
+                            minWidth: columnWidths.fileEncoding,
+                            maxWidth: columnWidths.fileEncoding,
+                        }}
+                    >
+                        <div className="flex items-center gap-1.5 border-l pl-3">
+                            {localize("com_knowledge.file_encoding")}
+                        </div>
+                        <ResizeHandle columnKey="fileEncoding" onResizeStart={onResizeStart} />
+                    </TableHead>
+                )}
+
                 {/* 更新时间 */}
                 <SortableHeader
                     sortKey={SortType.UPDATE_TIME}
@@ -480,6 +504,8 @@ interface FileTableProps {
     handleSelectAll: (isAllSelected: boolean) => void;
     handleSelectFile: (id: string, selected: boolean) => void;
     isAdmin: boolean;
+    /** The current user's role within this specific space. Used to gate encoding edits. */
+    currentUserRole?: SpaceRole | null;
     onDownload: (id: string) => void;
     onEditTags: (id: string) => void;
     onRename: (id: string, newName: string) => void;
@@ -499,11 +525,55 @@ interface FileTableProps {
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
     const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
+    const localize = useLocalize();
+
+    // Shougang feature gate
+    const { data: bsConfig } = useGetBsConfig();
+    const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
+    const { showToast } = useToastContext();
+
+    const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
+
+    // Encoding edits are restricted to the space creator or space admin.
+    // currentUserRole carries the user's role within this specific space (not platform-admin).
+    const canEditEncoding =
+        currentUserRole === SpaceRole.CREATOR ||
+        currentUserRole === SpaceRole.ADMIN;
+
+    const handleOpenEditEncoding = (file: KnowledgeFile) => {
+        if (!canEditEncoding) return;
+        setEditingEncodingFile(file);
+    };
+
+    const handleSubmitEncoding = async (newEncoding: string) => {
+        if (!editingEncodingFile) return;
+        try {
+            await updateFileEncoding(
+                String(editingEncodingFile.spaceId),
+                String(editingEncodingFile.id),
+                newEncoding,
+            );
+            // Trigger file list reload via the existing custom event mechanism
+            window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
+                detail: { spaceId: editingEncodingFile.spaceId },
+            }));
+            showToast?.({
+                message: localize("com_knowledge.file_encoding_update_success"),
+                severity: NotificationSeverity.SUCCESS,
+            });
+        } catch (e) {
+            showToast?.({
+                message: localize("com_knowledge.file_encoding_update_failed"),
+                severity: NotificationSeverity.ERROR,
+            });
+            throw e;
+        }
+    };
 
     const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
@@ -536,6 +606,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         isAllSelected={isAllSelected}
                         isIndeterminate={isIndeterminate}
                         onSelectAll={() => handleSelectAll(isAllSelected)}
+                        shougangEnabled={shougangEnabled}
                     />
                     <TableBody>
                         {files.map((file) => (
@@ -566,6 +637,9 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 showStatusColumn={showStatusColumn}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}
+                                shougangEnabled={shougangEnabled}
+                                canEditEncoding={canEditEncoding}
+                                onEditEncoding={handleOpenEditEncoding}
                             />
                         ))}
                     </TableBody>
@@ -579,6 +653,15 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     style={{
                         background: "linear-gradient(to left, rgba(0,0,0,0.06), transparent)",
                     }}
+                />
+            )}
+
+            {shougangEnabled && (
+                <EditEncodingModal
+                    file={editingEncodingFile}
+                    open={!!editingEncodingFile}
+                    onClose={() => setEditingEncodingFile(null)}
+                    onSubmit={handleSubmitEncoding}
                 />
             )}
         </div>
@@ -610,6 +693,9 @@ function FileRow({
     showStatusColumn,
     showLeftShadow,
     showRightShadow,
+    shougangEnabled = false,
+    canEditEncoding = false,
+    onEditEncoding,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -632,6 +718,9 @@ function FileRow({
     showStatusColumn: boolean;
     showLeftShadow: boolean;
     showRightShadow: boolean;
+    shougangEnabled?: boolean;
+    canEditEncoding?: boolean;
+    onEditEncoding?: (file: KnowledgeFile) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -893,6 +982,42 @@ function FileRow({
                     )}
                 </div>
             </TableCell>
+
+            {/* 文件编码 — 仅 shougang 模式显示 */}
+            {shougangEnabled && (
+                <TableCell
+                    style={{
+                        width: columnWidths.fileEncoding,
+                        minWidth: columnWidths.fileEncoding,
+                        maxWidth: columnWidths.fileEncoding,
+                    }}
+                    className={cn("border-l py-3", rowBg)}
+                >
+                    {file.status === FileStatus.PROCESSING && !file.fileEncoding ? (
+                        <span className="text-muted-foreground italic text-sm">
+                            {localize("com_knowledge.file_encoding_generating")}
+                        </span>
+                    ) : file.fileEncoding ? (
+                        <button
+                            type="button"
+                            onClick={() => onEditEncoding?.(file)}
+                            disabled={!canEditEncoding}
+                            className={cn(
+                                "flex items-center gap-1 text-sm",
+                                canEditEncoding && "hover:underline cursor-pointer",
+                            )}
+                            title={file.fileEncoding}
+                        >
+                            {canEditEncoding && (
+                                <PencilLineIcon className="size-3 opacity-60 shrink-0" />
+                            )}
+                            <span className="truncate">{file.fileEncoding}</span>
+                        </button>
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    )}
+                </TableCell>
+            )}
 
             {/* 更新时间 — 操作按钮改到行末占位列，避免盖住文字 */}
             <TableCell

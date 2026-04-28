@@ -1955,6 +1955,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
         return updated_file
 
+    async def update_file_encoding(
+        self, file_id: int, encoding: str,
+    ) -> KnowledgeFile:
+        """Update a file's file_encoding (shougang feature). Owner/admin only."""
+        file_record = await self._get_file_for_action(file_id)
+        # Reuse 'rename_file' permission action — that action is owner/admin-only,
+        # matching the required privilege level for editing encoding.
+        await self._require_permission_id(
+            'knowledge_file', file_id, 'rename_file',
+            space_id=file_record.knowledge_id,
+        )
+
+        cleaned = encoding.strip()
+        if not cleaned:
+            raise ValueError("encoding cannot be empty after strip")
+
+        file_record.file_encoding = cleaned
+        file_record.updater_id = self.login_user.user_id
+        file_record.updater_name = self.login_user.user_name
+        return await KnowledgeFileDao.async_update(file_record)
+
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 

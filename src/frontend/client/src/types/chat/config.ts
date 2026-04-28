@@ -547,6 +547,7 @@ export type BsConfig = {
   linsight_invitation_code: boolean
   linsight_cache_dir: string
   waiting_list_url: string
+  shougang?: { enabled: boolean; prefix?: string };
 };
 
 export const configSchema = z.object({

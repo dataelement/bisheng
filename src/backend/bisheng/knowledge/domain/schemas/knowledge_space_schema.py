@@ -86,6 +86,13 @@ class FileRenameReq(BaseModel):
     name: str = Field(..., description="New File Name")
 
 
+class FileEncodingUpdateReq(BaseModel):
+    encoding: str = Field(
+        ..., min_length=1, max_length=64,
+        description="New file encoding (free text, 1-64 chars)",
+    )
+
+
 class BatchDeleteReq(BaseModel):
     file_ids: List[int] = Field(default_factory=list, description="List of file IDs to delete")
     folder_ids: List[int] = Field(default_factory=list, description="List of folder IDs to delete")

@@ -28,6 +28,11 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = './'
     ret['waiting_list_url'] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
+    shougang_conf = await bisheng_settings.aget_shougang_conf()
+    if shougang_conf.enabled:
+        ret['shougang'] = {'enabled': True, 'prefix': shougang_conf.prefix}
+    else:
+        ret['shougang'] = {'enabled': False}
     return resp_200(data=ret)
 
 

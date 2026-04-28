@@ -74,6 +74,13 @@ class KnowledgeFileBase(SQLModelSerializable):
     user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                     description='User-defined metadata')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
+    file_encoding: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        sa_column=Column(String(64), nullable=True),
+        description='File encoding for shougang deployment, e.g. "GF-ZD-SC-202604-00001". '
+                    'NULL when shougang is disabled or encoding generation has not run yet.',
+    )
     updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
     updater_name: Optional[str] = Field(default=None, index=True)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
