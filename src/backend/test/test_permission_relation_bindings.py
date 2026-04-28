@@ -1,8 +1,9 @@
 """Regression tests for permission relation-model bindings."""
 
-import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 @pytest.fixture

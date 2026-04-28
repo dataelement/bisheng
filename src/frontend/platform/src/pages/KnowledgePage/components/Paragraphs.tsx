@@ -5,7 +5,6 @@ import { Dialog, DialogContent } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, readFileByLibDatabase, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
@@ -830,23 +829,23 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                             disabled={!selectedFileId}
                         />
                     </div>
+                    {canEditKb && (
                     <Button
                         variant="outline"
                         onClick={handleMetadataClick}
-                        disabled={!canEditKb}
-                        className="px-4 whitespace-nowrap disabled:pointer-events-auto"
+                        className="px-4 whitespace-nowrap"
                     >
                         <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                         {t('metadialog.title')}
                     </Button>
-                    <Tip content={!canEditKb && t('common.noPermission')} side='top'>
+                    )}
+                    {canEditKb && (
                         <Button
-                            disabled={!canEditKb}
                             onClick={handleAdjustSegmentation}
-                            className={`px-4 whitespace-nowrap disabled:pointer-events-auto`}>
+                            className={`px-4 whitespace-nowrap`}>
                             {t('segment.adjustStrategy')}
                         </Button>
-                    </Tip>
+                    )}
                 </div>
             </div>
 

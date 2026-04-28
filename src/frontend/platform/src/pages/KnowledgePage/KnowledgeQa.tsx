@@ -6,13 +6,11 @@ import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDial
 import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
-import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import { userContext } from "@/contexts/userContext";
 import { copyQaDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "@/controllers/API";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
@@ -319,6 +317,13 @@ export default function KnowledgeQa(params) {
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
         KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
+    const isLibraryBusy = (el: any) =>
+        [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
+    const canCopy = (el: any) =>
+        canUseCopy(el) && el.state === KnowledgeBaseStatus.Published;
+    const hasRowActions = (el: any) =>
+        canManageKb(el) || canCopy(el) || canEdit(el) || canDelete(el);
+    const showOperationsColumn = visibleLibs.some((el: any) => isLibraryBusy(el) || hasRowActions(el));
 
     useEffect(() => {
         const todos = datalist.filter(lib => lib.state === KnowledgeBaseStatus.Copying);
@@ -417,7 +422,9 @@ export default function KnowledgeQa(params) {
                             <TableHead>{t('lib.libraryName', { ns: 'bs' })}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead>{t('lib.createUser', { ns: 'bs' })}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
+                            {showOperationsColumn && (
+                                <TableHead className="text-right">{t('operations')}</TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -440,7 +447,6 @@ export default function KnowledgeQa(params) {
                                             <div>
                                                 <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                     {el.name}
-                                                    <PermissionBadge level={permLevels[String(el.id)]} />
                                                 </div>
                                                 <QuestionTooltip
                                                     content={el.description || ''}
@@ -460,13 +466,13 @@ export default function KnowledgeQa(params) {
                                 <TableCell className="max-w-[300px] break-all">
                                     <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                                 </TableCell>
-                                <TableCell className="text-right">
+                                {showOperationsColumn && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <Select
+                                        {(isLibraryBusy(el) || hasRowActions(el)) && <Select
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
-                                                if (el.state === 2 || el.state === 0) return;
+                                                if (isLibraryBusy(el) || !hasRowActions(el)) return;
                                                 if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {
@@ -482,9 +488,7 @@ export default function KnowledgeQa(params) {
                                                         setModalKey(prev => prev + 1);
                                                         break;
                                                     case 'copy':
-                                                        canUseCopy(el) &&
-                                                            el.state === KnowledgeBaseStatus.Published &&
-                                                            handleCopy(el);
+                                                        canCopy(el) && handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         canEdit(el) && handleOpenSettings(el);
@@ -509,10 +513,10 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                                    hasRowActions(el) && <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                                 )}
                                             </SelectTrigger>
-                                            <SelectContent
+                                            {hasRowActions(el) && <SelectContent
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="z-50 overflow-visible"
                                             >
@@ -524,26 +528,21 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                <Tip content={!canUseCopy(el) && t('noPermission')} side='top'>
+                                                {canCopy(el) && (
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        disabled={
-                                                            !canUseCopy(el) ||
-                                                            el.state !== KnowledgeBaseStatus.Published ||
-                                                            copyLoadingId === el.id
-                                                        }
+                                                        disabled={copyLoadingId === el.id}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
                                                             {t('lib.copy', { ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                                <Tip content={!canEdit(el) && t('noPermission')} side='top'>
+                                                )}
+                                                {canEdit(el) && (
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!canEdit(el)}
                                                         showIcon={false}
                                                     >
                                                         <div className="flex gap-2 items-center">
@@ -551,23 +550,22 @@ export default function KnowledgeQa(params) {
                                                             {t('setting')}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                                <Tip content={!canDelete(el) && t('noPermission')} side='top'>
+                                                )}
+                                                {canDelete(el) && (
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
-                                                        disabled={!canDelete(el)}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />
                                                             {t('delete')}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                            </SelectContent>
-                                        </Select>
+                                                )}
+                                            </SelectContent>}
+                                        </Select>}
                                     </div>
-                                </TableCell>
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>

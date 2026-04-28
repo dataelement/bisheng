@@ -246,6 +246,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     // Batch Download
     const [isDownloading, setIsDownloading] = useState(false);
     const canBatchEditTags = canEditKb && selectedFileObjs.length > 0 && selectedFileObjs.every(file => file.status === 2);
+    const hasRowActions = canEditKb || canDeleteKb;
     const handleBatchDownload = async () => {
         setIsDownloading(true);
         try {
@@ -401,7 +402,8 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                             {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
                             <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
                         </Button>
-                        <Tip content={!canEditKb ? t('noOperationPermission') : !canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
+                        {canEditKb && (
+                            <Tip content={!canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
                             <KnowledgeTagSelect
                                 knowledgeId={id}
                                 fileIds={selectedFileObjs.map(f => Number(f.id))}
@@ -418,30 +420,27 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                     <span className="hidden sm:inline">{t('tags')}</span>
                                 </Button>
                             </KnowledgeTagSelect>
-                        </Tip>
-                        <Tip content={!canDeleteKb && t('noOperationPermission')} side='bottom'>
+                            </Tip>
+                        )}
+                        {canDeleteKb && (
                             <Button
                                 variant="outline"
                                 onClick={handleBatchDelete}
-                                disabled={!canDeleteKb}
                                 className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                             >
                                 <Trash2 size={16} />
                                 <span className="hidden sm:inline">{t('delete')}</span>
                             </Button>
-                        </Tip>
-                        {hasSelectedFailedFiles && (
-                            <Tip content={!canEditKb && t('noOperationPermission')} side='bottom'>
+                        )}
+                        {canEditKb && hasSelectedFailedFiles && (
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchRetry}
-                                    disabled={!canEditKb}
                                     className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                                 >
                                     <RotateCw size={16} />
                                     <span className="hidden sm:inline">{t('retry')}</span>
                                 </Button>
-                            </Tip>
                         )}
                     </div>
                 )}
@@ -453,15 +452,16 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         setSelectedFileObjs([]);
                         setIsAllSelected(false);
                     }} />
-                    <Button
-                        variant="outline"
-                        onClick={() => setMetadataOpen(true)}
-                        disabled={!canEditKb}
-                        className="px-2 md:px-4 whitespace-nowrap h-9"
-                    >
-                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
-                        <span className="hidden md:inline">{t('metaData')}</span>
-                    </Button>
+                    {canEditKb && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setMetadataOpen(true)}
+                            className="px-2 md:px-4 whitespace-nowrap h-9"
+                        >
+                            <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
+                            <span className="hidden md:inline">{t('metaData')}</span>
+                        </Button>
+                    )}
                     {canEditKb && (
                         <Link to={`/filelib/upload/${id}`}>
                             <Button className="px-4 md:px-8 h-9">{t('uploadFile')}</Button>
@@ -597,7 +597,9 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                     </DropdownMenu>
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                            {hasRowActions && (
+                                <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -660,14 +662,12 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 <TableCell>
                                     <StatusIndicator status={el.status} remark={el.remark} />
                                 </TableCell>
-                                <TableCell className="text-right">
+                                {hasRowActions && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
-                                        {el.status === 3 && (
-                                            <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
+                                        {canEditKb && el.status === 3 && (
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    disabled={!canEditKb}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object
@@ -677,13 +677,8 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                                 >
                                                     <RotateCw size={16} />
                                                 </Button>
-                                            </Tip>
                                         )}
-                                        <Tip
-                                            content={!canDeleteKb && t('noOperationPermission')}
-                                            side='top'
-                                            styleClasses="-translate-x-6"
-                                        >
+                                        {canDeleteKb && (
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -692,14 +687,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                                     e.stopPropagation();
                                                     handleDelete(el.id);
                                                 }}
-                                                disabled={!canDeleteKb}
                                                 title={t('delete')}
                                             >
                                                 <Trash2 size={16} />
                                             </Button>
-                                        </Tip>
+                                        )}
                                     </div>
-                                </TableCell>
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>

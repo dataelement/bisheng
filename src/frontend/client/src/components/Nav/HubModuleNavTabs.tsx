@@ -6,7 +6,7 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import { useAuthContext, useLocalize } from '~/hooks';
-import { lastSectionPaths } from '~/layouts/appModuleNavPaths';
+import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
 import { canOpenWorkbench } from '~/utils/platformAccess';
 
@@ -62,51 +62,50 @@ export function useHubModuleLinks(): HubModuleLink[] {
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
-  return useMemo(
-    () => {
-      if (!canOpenWorkbenchEntry) return [];
-      return [
-        {
-          section: 'home',
-          to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
-          icon: HomeIcon,
-          label: localize('com_nav_home'),
-          isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
-          closeDrawerOnNavigate: false,
-        },
-        {
-          section: 'apps',
-          to: hasPlugin('apps') || !menuApprovalMode ? (lastSectionPaths.apps || '/apps') : '/menu-unavailable',
-          icon: GlobeIcon,
-          label: localize('com_nav_app_center'),
-          isActive:
-            matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
-          closeDrawerOnNavigate: false,
-        },
-        {
-          section: 'channel',
-          to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-          icon: LinkIcon,
-          label: localize('com_ui_channel'),
-          isActive: pathname.startsWith('/channel'),
-          closeDrawerOnNavigate: true,
-        },
-        {
-          section: 'knowledge',
-          to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
-          icon: BookOpenIcon,
-          label: localize('com_knowledge.knowledge_space'),
-          isActive: pathname.startsWith('/knowledge'),
-          closeDrawerOnNavigate: true,
-        },
-      ].filter((link) => {
-        if (link.section === 'home') return showHomeTab;
-        if (link.section === 'apps') return showAppsTab;
-        if (link.section === 'channel') return showSubscriptionTab;
-        if (link.section === 'knowledge') return showKnowledgeSpaceTab;
-        return true;
-      });
-    },
+  return useMemo((): HubModuleLink[] => {
+    if (!canOpenWorkbenchEntry) return [];
+    return [
+      {
+        section: 'home' as const,
+        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
+        icon: HomeIcon,
+        label: localize('com_nav_home'),
+        isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'channel' as const,
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        icon: LinkIcon,
+        label: localize('com_ui_channel'),
+        isActive: pathname.startsWith('/channel'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'knowledge' as const,
+        to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
+        icon: BookOpenIcon,
+        label: localize('com_knowledge.knowledge_space'),
+        isActive: pathname.startsWith('/knowledge'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'apps' as const,
+        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
+        icon: GlobeIcon,
+        label: localize('com_nav_app_center'),
+        isActive:
+          matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
+        closeDrawerOnNavigate: true,
+      },
+    ].filter((link) => {
+      if (link.section === 'home') return showHomeTab;
+      if (link.section === 'apps') return showAppsTab;
+      if (link.section === 'channel') return showSubscriptionTab;
+      if (link.section === 'knowledge') return showKnowledgeSpaceTab;
+      return true;
+    });
+  },
     [canOpenWorkbenchEntry, localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
   );
 }

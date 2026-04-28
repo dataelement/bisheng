@@ -105,18 +105,14 @@ export function KnowledgeSpaceContent({
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
-    const [viewMode, setViewModeState] = useState<"card" | "list">("list");
+    const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
+        if (typeof window === "undefined") return "list";
+        return localStorage.getItem("knowledge-view-mode") === "card" ? "card" : "list";
+    });
     const setViewMode = (mode: "card" | "list") => {
-        if (mode !== "list") {
-            return;
-        }
-        setViewModeState("list");
-        localStorage.setItem("knowledge-view-mode", "list");
+        setViewModeState(mode);
+        localStorage.setItem("knowledge-view-mode", mode);
     };
-
-    useEffect(() => {
-        localStorage.setItem("knowledge-view-mode", "list");
-    }, []);
 
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -817,7 +813,7 @@ export function KnowledgeSpaceContent({
                 onSearch={handleSearch}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
-                enableCardMode={false}
+                enableCardMode={!isH5}
                 statusFilter={statusFilter}
                 onFilterStatus={handleStatusFilter}
                 sortBy={sortBy}
@@ -966,17 +962,19 @@ export function KnowledgeSpaceContent({
                 </div>
             </div>
 
-            {/* Reserve space for mobile fixed footer */}
-            {isH5 ? <div aria-hidden className="h-[calc(env(safe-area-inset-bottom,0px)+88px)]" /> : null}
+            {/* Reserve space for mobile fixed footer（高度与底栏+安全区一致，避免列表被裁切或露出） */}
+            {isH5 ? <div aria-hidden className="h-[calc(env(safe-area-inset-bottom,0px)+80px)]" /> : null}
 
-            {/* Footer */}
-            <div className={cn(isH5 ? "fixed bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] left-1/2 z-30 w-full max-w-[1000px] -translate-x-1/2 px-4" : "")}>
+            {/* Footer：H5 贴底无 8px 缝，白底延至安全区，避免下方内容渗出 */}
+            <div
+                className={cn(
+                    isH5 && "fixed bottom-0 left-0 right-0 z-30 bg-white pb-[env(safe-area-inset-bottom,0px)]",
+                )}
+            >
                 <div
                     className={cn(
-                        "flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3",
-                        isH5
-                            ? "w-full flex-nowrap justify-end pb-2"
-                            : ""
+                        "mx-auto flex w-full max-w-[1000px] flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3",
+                        isH5 && "flex-nowrap justify-end",
                     )}
                 >
                     {!isH5 && (

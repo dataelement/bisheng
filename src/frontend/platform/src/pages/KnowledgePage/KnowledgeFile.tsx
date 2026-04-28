@@ -372,6 +372,13 @@ export default function KnowledgeFile() {
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
         KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
+    const isLibraryBusy = (el: any) =>
+        [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
+    const canCopy = (el: any) =>
+        canUseCopy(el) && el.state === KnowledgeBaseStatus.Published;
+    const hasRowActions = (el: any) =>
+        canManageKb(el) || canCopy(el) || canEdit(el) || canDelete(el);
+    const showOperationsColumn = visibleLibs.some((el: any) => isLibraryBusy(el) || hasRowActions(el));
 
     // Enable polling during copying
     useEffect(() => {
@@ -524,7 +531,9 @@ export default function KnowledgeFile() {
                             <TableHead>{t('lib.libraryName', { ns: 'bs' })}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead>{t('lib.createUser', { ns: 'bs' })}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
+                            {showOperationsColumn && (
+                                <TableHead className="text-right">{t('operations')}</TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -575,13 +584,13 @@ export default function KnowledgeFile() {
                                     <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                                 </TableCell>
 
-                                <TableCell className="text-right">
+                                {showOperationsColumn && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <Select
+                                        {(isLibraryBusy(el) || hasRowActions(el)) && <Select
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
-                                                if (el.state === 2 || el.state === 0) return;
+                                                if (isLibraryBusy(el) || !hasRowActions(el)) return;
                                                 if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {
@@ -600,9 +609,7 @@ export default function KnowledgeFile() {
                                                         setModalKey(prev => prev + 1);
                                                         break;
                                                     case 'copy':
-                                                        canUseCopy(el) &&
-                                                            el.state === KnowledgeBaseStatus.Published &&
-                                                            handleCopy(el);
+                                                        canCopy(el) && handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         canEdit(el) && handleOpenSettings(el);
@@ -629,10 +636,10 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                                    hasRowActions(el) && <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                                 )}
                                             </SelectTrigger>
-                                            <SelectContent
+                                            {hasRowActions(el) && <SelectContent
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
@@ -646,28 +653,21 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                <Tip content={!canUseCopy(el) && t('noOperationPermission')} side='top'>
+                                                {canCopy(el) && (
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        className="data-[disabled]:pointer-events-auto"
-                                                        disabled={
-                                                            !canUseCopy(el) ||
-                                                            el.state !== KnowledgeBaseStatus.Published ||
-                                                            copyLoadingId === el.id
-                                                        }
+                                                        disabled={copyLoadingId === el.id}
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
                                                             {t('lib.copy', { ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                                <Tip content={!canEdit(el) && t('noOperationPermission')} side='top'>
+                                                )}
+                                                {canEdit(el) && (
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!canEdit(el)}
-                                                        className="data-[disabled]:pointer-events-auto"
                                                         showIcon={false}
                                                     >
                                                         <div className="flex gap-2 items-center">
@@ -675,24 +675,22 @@ export default function KnowledgeFile() {
                                                             {t('settings')}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                                <Tip content={!canDelete(el) && t('noOperationPermission')} side='top'>
+                                                )}
+                                                {canDelete(el) && (
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
-                                                        className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!canDelete(el)}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />
                                                             {t('delete')}
                                                         </div>
                                                     </SelectItem>
-                                                </Tip>
-                                            </SelectContent>
-                                        </Select>
+                                                )}
+                                            </SelectContent>}
+                                        </Select>}
                                     </div>
-                                </TableCell>
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>

@@ -46,7 +46,7 @@ const AiModelSelect = memo(
                 disabled={disabled}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(30vw,120px)] gap-1 overflow-hidden border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-black/5 focus:ring-0">
+                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(30vw,120px)] touch-mobile:max-w-[min(24vw,88px)] touch-mobile:px-1.5 gap-1 overflow-hidden border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-black/5 focus:ring-0">
                     <div className="min-w-0 flex-1 overflow-hidden">
                         <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-normal">
                             {label}

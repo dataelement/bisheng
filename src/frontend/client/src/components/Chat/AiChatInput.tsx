@@ -334,7 +334,14 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                <div className={`relative flex w-full flex-col items-start gap-[10px] overflow-hidden bg-surface-tertiary p-2 touch-mobile:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl touch-mobile:rounded-2xl'}`}>
+                <div
+                    className={cn(
+                        "relative flex w-full flex-col items-start gap-0 overflow-hidden bg-surface-tertiary p-2 touch-mobile:bg-[#f4f5f7]",
+                        // 有「附件 / 知识」标签时收紧顶部，避免 0 高度的 InputFiles 占位 + gap + pt 叠出一大块空区（移动端尤明显）
+                        hasSelectionTags && "touch-mobile:pt-1.5",
+                        size === "mini" ? "rounded-xl" : "rounded-3xl touch-mobile:rounded-2xl"
+                    )}
+                >
                     {/* File upload area: file list only. Trigger moves to "+" menu
                         when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {
@@ -372,7 +379,7 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {hasSelectionTags && (
-                        <div className="mx-1 mt-1 mb-1 max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                        <div className="mx-1 mb-2.5 max-h-[72px] overflow-y-auto scrollbar-on-hover">
                             <div className="flex flex-wrap gap-1">
                                 {uploadingFiles.map((file) => (
                                     <UploadingFileTag key={file.id} name={file.name} />
@@ -419,7 +426,7 @@ const AiChatInput = memo(
                         rows={1}
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm pb-0 pl-3 pr-4",
+                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pl-3 pr-4",
                             hasSelectionTags ? "pt-0" : "pt-1.5",
                             "placeholder-black/50 dark:placeholder-white/50",
                             "max-h-[240px] scrollbar-gutter-stable",
@@ -430,66 +437,9 @@ const AiChatInput = memo(
                         )}
                     />
 
-                    <div className="relative h-7 w-full">
-                        {/* Send / Stop / Voice buttons — matching ChatForm styles */}
-                        <div className="absolute bottom-0 right-2 flex items-center gap-2">
-                            {/* Voice input (Speech to Text) */}
-                            {showVoice && (
-                                <SpeechToTextComponent
-                                    disabled={disabled}
-                                    onChange={(e) => {
-                                        const newText = (text || "") + e;
-                                        setText(newText);
-                                    }}
-                                />
-                            )}
-
-                            {/* Stop or Send button — same styles as ChatForm SendButton/StopButton */}
-                            {isStreaming ? (
-                                <button
-                                    type="button"
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
-                                    onClick={onStop}
-                                    aria-label="Stop generating"
-                                >
-                                    <svg
-                                        width="24"
-                                        height="24"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className="icon-lg text-surface-primary"
-                                    >
-                                        <rect
-                                            x="7"
-                                            y="7"
-                                            width="10"
-                                            height="10"
-                                            rx="1.25"
-                                            fill="currentColor"
-                                        />
-                                    </svg>
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={handleSend}
-                                    disabled={
-                                        !text?.trim() ||
-                                        disabled ||
-                                        fileUploading
-                                    }
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
-                                    aria-label="Send message"
-                                    data-testid="send-button"
-                                >
-                                    <SendIcon size={24} />
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Toolbar: model select + knowledge base + tools */}
-                        <div className="input-bottom-left absolute bottom-0 left-2 flex gap-2 items-center">
+                    <div className="flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
+                        {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
+                        <div className="input-bottom-left flex min-w-0 flex-1 items-center gap-2 touch-mobile:-ml-1 touch-mobile:gap-1 touch-mobile:pl-0 overflow-hidden">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}
@@ -541,6 +491,60 @@ const AiChatInput = memo(
                                     }}
                                     disabled={toolsDisabled}
                                 />
+                            )}
+                        </div>
+
+                        {/* Send / Stop / Voice — 固定宽度列，不参与挤压 */}
+                        <div className="flex shrink-0 items-center gap-1.5 touch-mobile:gap-1">
+                            {showVoice && (
+                                <SpeechToTextComponent
+                                    disabled={disabled}
+                                    onChange={(e) => {
+                                        const newText = (text || "") + e;
+                                        setText(newText);
+                                    }}
+                                />
+                            )}
+                            {isStreaming ? (
+                                <button
+                                    type="button"
+                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
+                                    onClick={onStop}
+                                    aria-label="Stop generating"
+                                >
+                                    <svg
+                                        width="24"
+                                        height="24"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="icon-lg text-surface-primary"
+                                    >
+                                        <rect
+                                            x="7"
+                                            y="7"
+                                            width="10"
+                                            height="10"
+                                            rx="1.25"
+                                            fill="currentColor"
+                                        />
+                                    </svg>
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleSend}
+                                    disabled={
+                                        !text?.trim() ||
+                                        disabled ||
+                                        fileUploading
+                                    }
+                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    aria-label="Send message"
+                                    data-testid="send-button"
+                                >
+                                    <SendIcon size={24} />
+                                </button>
                             )}
                         </div>
                     </div>

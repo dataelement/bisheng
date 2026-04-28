@@ -45,8 +45,8 @@ const Nav = ({
       if (savedNavVisible === null) {
         toggleNavVisible();
       }
-      // 移动端：与频道/知识空间抽屉统一固定宽度
-      setNavWidth('280px');
+      // 移动端：与知识/订阅/应用中心侧栏统一 240px
+      setNavWidth('240px');
     } else {
       setNavWidth('280px');
     }
@@ -106,7 +106,7 @@ const Nav = ({
       <div
         data-testid="nav"
         className={cn(
-          'max-w-[280px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[280px] bg-white border-r border-[#ececec]',
+          'max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[280px] bg-white border-r border-[#ececec] touch-mobile:border-r-0',
           isSmallScreen && 'fixed inset-y-0 left-0 z-[70] h-[100dvh] shadow-[4px_0_24px_rgba(0,0,0,0.06)]',
         )}
         style={{
@@ -115,7 +115,7 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[280px] touch-mobile:w-full touch-desktop:w-[280px]">
+        <div className="h-full w-[240px] touch-mobile:w-full touch-desktop:w-[280px]">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(

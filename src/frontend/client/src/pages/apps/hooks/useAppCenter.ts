@@ -20,6 +20,8 @@ import { copyText, generateUUID } from '~/utils';
 export function useAppCenter() {
   const navigate = useNavigate();
   const { showToast } = useToastContext();
+  const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+  const appLastOriginKey = 'app-last-origin';
 
   const [, setRecentApps] = useRecoilState(recentAppsState);
   const [searchQuery, setSearchQuery] = useRecoilState(appSearchQueryState);
@@ -58,6 +60,12 @@ export function useAppCenter() {
   const continueChat = useCallback(
     (app: AppItem) => {
       const chatId = generateUUID(32);
+      try {
+        sessionStorage.setItem(appFlowOriginKey(String(app.id)), 'center');
+        sessionStorage.setItem(appLastOriginKey, 'center');
+      } catch {
+        // ignore storage failures
+      }
       navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center`);
     },
     [navigate],
@@ -67,6 +75,12 @@ export function useAppCenter() {
   const startChat = useCallback(
     (app: AppItem) => {
       const chatId = generateUUID(32);
+      try {
+        sessionStorage.setItem(appFlowOriginKey(String(app.id)), 'center');
+        sessionStorage.setItem(appLastOriginKey, 'center');
+      } catch {
+        // ignore storage failures
+      }
       navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center`);
     },
     [navigate],

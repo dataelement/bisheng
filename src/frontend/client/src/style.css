@@ -1792,6 +1792,23 @@ html {
   padding-top: 0;
 }
 
+/* iOS mobile Safari auto-zooms focused inputs when font-size < 16px.
+   Keep text-like form controls at >=16px on H5 to avoid sticky page zoom
+   after blur (covers create channel/knowledge and filter/search inputs). */
+@media (max-width: 767px) {
+  input[type='text'],
+  input[type='search'],
+  input[type='email'],
+  input[type='url'],
+  input[type='tel'],
+  input[type='password'],
+  input[type='number'],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 .grow {
   flex-grow: 1;
 }

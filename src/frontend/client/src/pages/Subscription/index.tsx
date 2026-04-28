@@ -453,7 +453,7 @@ export default function Subscription() {
                             aria-modal="true"
                             aria-label={localize("com_subscription.subscribe")}
                         >
-                            <div className="flex h-full w-[280px] max-w-[280px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
+                            <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                                 <ChannelSidebar
                                     mobileDrawerMode
                                     onDrawerClose={() => setChannelListDrawerOpen(false)}
@@ -515,7 +515,7 @@ export default function Subscription() {
                                             type="button"
                                             aria-label={localize("com_nav_open_sidebar")}
                                             onClick={() => setChannelListDrawerOpen(true)}
-                                            className={cn("absolute left-2 top-2 z-10", mobileHeadIconBtnClassName)}
+                                            className={cn("absolute left-4 top-4 z-10", mobileHeadIconBtnClassName)}
                                         >
                                             <Menu className="size-4" />
                                         </button>
@@ -523,7 +523,7 @@ export default function Subscription() {
                                             type="button"
                                             aria-label={localize("com_subscription.create")}
                                             onClick={handleCreateChannel}
-                                            className={cn("absolute right-2 top-2 z-10", mobileHeadIconBtnClassName)}
+                                            className={cn("absolute right-4 top-4 z-10", mobileHeadIconBtnClassName)}
                                         >
                                             <Plus className="size-4" />
                                         </button>

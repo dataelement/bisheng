@@ -66,14 +66,21 @@ export default function Root() {
                   {/* 会话消息面板区(路由) */}
                   <div className=" relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
                     {showMobileNav && isSmallScreen && !mobileNavHidden ? (
-                      <MobileNav
-                        variant="chat"
-                        navVisible={navVisible}
-                        setNavVisible={setNavVisible}
-                        persistNavVisibleInLocalStorage={false}
-                      />
+                      <>
+                        <div className="fixed inset-x-0 top-0 z-[60] px-2">
+                          <MobileNav
+                            variant="chat"
+                            navVisible={navVisible}
+                            setNavVisible={setNavVisible}
+                            persistNavVisibleInLocalStorage={false}
+                          />
+                        </div>
+                        <div aria-hidden className="h-[calc(env(safe-area-inset-top,0px)+52px)] shrink-0" />
+                      </>
                     ) : null}
-                    <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
+                    <div className={showMobileNav && isSmallScreen ? 'px-2' : ''}>
+                      <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
+                    </div>
                   </div>
                 </div>
               </div>

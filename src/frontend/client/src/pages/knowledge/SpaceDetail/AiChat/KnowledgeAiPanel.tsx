@@ -8,7 +8,7 @@
  * - History sidebar toggle
  * - Tag filter support via KnowledgeAiInput
  */
-import { HistoryIcon } from "lucide-react";
+import { ChevronLeft, HistoryIcon } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "~/components";
@@ -28,6 +28,7 @@ import { getSpaceTagsApi } from "~/api/knowledge";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useRecoilValue } from "recoil";
 import store from "~/store";
+import { cn } from "~/utils";
 
 interface KnowledgeAiPanelProps {
     spaceId: string;
@@ -102,33 +103,25 @@ export function KnowledgeAiPanel({
         renameSession(chatId, name);
 
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div
+            className={cn(
+                "relative flex w-full min-h-0 flex-1 flex-col bg-white",
+                // H5 全屏助手：父级链偶发丢高度时用视口高，输入栏才能贴底
+                isH5 ? "min-h-[100dvh]" : "h-full",
+            )}
+        >
             {/* Header */}
-            <div className="relative flex items-center justify-between px-4 py-3 shrink-0">
+            <div className="relative flex shrink-0 items-center justify-between px-4 py-3">
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
                                 variant="ghost"
-                                size="icon"
-                                className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
+                                type="button"
+                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA]"
                                 onClick={onClose}
                             >
-                                <svg
-                                    className="size-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    aria-hidden
-                                >
-                                    <path
-                                        d="M15 18L9 12L15 6"
-                                        stroke="#4E5969"
-                                        strokeWidth="2.25"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    />
-                                </svg>
+                                <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -185,8 +178,8 @@ export function KnowledgeAiPanel({
 
             {/* Messages Area */}
             {messages.length === 0 && !activeChatId ? (
-                // Welcome screen
-                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+                // Welcome screen：占满标题下剩余高度，避免把输入区顶到视窗中部
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-6 text-center">
                     <img
                         className="mx-auto block size-[80px] object-contain"
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
@@ -195,35 +188,39 @@ export function KnowledgeAiPanel({
                     <p className="text-sm text-[#86909c]">{folderQaHint}</p>
                 </div>
             ) : (
-                <AiChatMessages
-                    messages={messages}
-                    conversationId={activeChatId}
-                    title=""
-                    isLoading={isLoading}
-                    isStreaming={isStreaming}
-                    presetQuestions={[]}
-                    hideShare
-                    hideHeaderTitle
-                    flatMode
-                    knowledgeChatLayout
-                    contentWidthClassName={isH5 ? "max-w-none px-4" : undefined}
-                    emptyStateHint={folderQaHint}
-                    onPresetClick={() => { }}
-                    onRegenerate={regenerate}
-                />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <AiChatMessages
+                        messages={messages}
+                        conversationId={activeChatId}
+                        title=""
+                        isLoading={isLoading}
+                        isStreaming={isStreaming}
+                        presetQuestions={[]}
+                        hideShare
+                        hideHeaderTitle
+                        flatMode
+                        knowledgeChatLayout
+                        contentWidthClassName={isH5 ? "max-w-none px-4" : undefined}
+                        emptyStateHint={folderQaHint}
+                        onPresetClick={() => { }}
+                        onRegenerate={regenerate}
+                    />
+                </div>
             )}
 
-            {/* Input Area — with # tag support */}
-            <KnowledgeAiInput
-                key={spaceId}
-                availableTags={availableTags}
-                modelOptions={bsConfig?.models}
-                modelValue={chatModel.id}
-                isStreaming={isStreaming}
-                disabled={!bsConfig?.models?.length}
-                onSend={handleSend}
-                onStop={stopGenerating}
-            />
+            {/* Input Area：贴齐列尾（屏底） */}
+            <div className="mt-auto w-full shrink-0 bg-white pb-[env(safe-area-inset-bottom,0px)]">
+                <KnowledgeAiInput
+                    key={spaceId}
+                    availableTags={availableTags}
+                    modelOptions={bsConfig?.models}
+                    modelValue={chatModel.id}
+                    isStreaming={isStreaming}
+                    disabled={!bsConfig?.models?.length}
+                    onSend={handleSend}
+                    onStop={stopGenerating}
+                />
+            </div>
 
             {/* History sidebar overlay */}
             {showHistory && (

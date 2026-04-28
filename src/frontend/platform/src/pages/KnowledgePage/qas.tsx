@@ -5,7 +5,6 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import { downloadFile, formatDate } from "@/util/utils";
 import { ArrowLeft, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -244,6 +243,7 @@ export default function QasPage() {
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param)
     )
+    const hasSelectableActions = canEditKb || canDeleteKb;
 
     useEffect(() => {
         let cancelled = false;
@@ -496,38 +496,36 @@ export default function QasPage() {
                             <span className="text-gray-700 text-sm font-black pl-4 dark:text-white truncate max-w-80">{title}</span>
                         </div>
                     </div>
-                    <div className={selectedItems.length ? 'visible' : 'invisible'}>
-                        <Tip content={!canDeleteKb && t('noOperationPermission')} side='top'>
-                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!canDeleteKb} onClick={handleDeleteSelected}>
+                    {selectedItems.length > 0 && hasSelectableActions && (
+                    <div>
+                        {canDeleteKb && (
+                            <Button variant="outline" className="ml-2" onClick={handleDeleteSelected}>
                                 <Trash2 className="mr-2 h-4 w-4" ></Trash2> {t('delete')}
                             </Button>
-                        </Tip>
-                        <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
-                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!canEditKb} onClick={handleDisableSelected}>
+                        )}
+                        {canEditKb && (
+                            <Button variant="outline" className="ml-2" onClick={handleDisableSelected}>
                                 <SquareX className="mr-2 h-4 w-4" /> {t('disable')}
                             </Button>
-                        </Tip>
-                        <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
-                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!canEditKb} onClick={handleEnableSelected}>
+                        )}
+                        {canEditKb && (
+                            <Button variant="outline" className="ml-2" onClick={handleEnableSelected}>
                                 <SquareCheckBig className="mr-2 h-4 w-4" /> {t('enable')}
                             </Button>
-                        </Tip>
+                        )}
                     </div>
+                    )}
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
-                                <Button variant="outline" disabled={!canEditKb} className="disabled:pointer-events-auto px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>
-                            </Tip>
-                            <Button variant="outline" className="px-8" onClick={() => {
+                            {canEditKb && <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>}
+                            {canEditKb && <Button variant="outline" className="px-8" onClick={() => {
                                 getQaFile(id).then(res => {
                                     const fileUrl = res.file_list[0];
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
-                            }}>{t('export')}</Button>
-                            <Tip content={!canEditKb && t('noOperationPermission')} side='top'>
-                                <Button className="disabled:pointer-events-auto px-8" disabled={!canEditKb} onClick={() => editRef.current.open()}>{t('createQA')}</Button>
-                            </Tip>
+                            }}>{t('export')}</Button>}
+                            {canEditKb && <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
                         </div>
                     </div>
                 </div>
@@ -535,27 +533,29 @@ export default function QasPage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-8">
+                                {hasSelectableActions && <TableHead className="w-8">
                                     <Checkbox checked={selectAll} onCheckedChange={handleSelectAll} />
-                                </TableHead>
+                                </TableHead>}
                                 <TableHead className="w-[340px]">{t('question')}</TableHead>
                                 <TableHead className="w-[340px]">{t('answer')}</TableHead>
                                 <TableHead>{t('type')}</TableHead>
                                 <TableHead>{t('updateTime')}</TableHead>
                                 <TableHead>{t('createUser')}</TableHead>
-                                <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                                {hasSelectableActions && (
+                                    <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {datalist.map(el => (
                                 <TableRow key={el.id} className={canEditKb ? "hover:bg-gray-100" : ""}>
-                                    <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                                    {hasSelectableActions && <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
                                         <Checkbox
                                             checked={selectedItems.includes(el.id)}
                                             onCheckedChange={() => handleCheckboxChange(el.id)}
                                             onClick={(e) => e.stopPropagation()}
                                         />
-                                    </TableCell>
+                                    </TableCell>}
 
                                     <TableCell
                                         className="font-medium cursor-pointer"
@@ -584,22 +584,15 @@ export default function QasPage() {
                                     </TableCell>
                                     <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
-                                    <TableCell className="text-right">
+                                    {hasSelectableActions && <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-2">
-                                            <div className="flex items-center">
+                                            {canEditKb && <div className="flex items-center">
                                                 {el.status !== 2 && (
-                                                    <Tip
-                                                        content={!canEditKb && t('noOperationPermission')}
-                                                        side='top'>
-                                                        <div>
-                                                            <Switch
-                                                                checked={el.status === 1}
-                                                                disabled={!canEditKb}
-                                                                className="disabled:pointer-events-auto"
-                                                                onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
-                                                            />
-                                                        </div>
-                                                    </Tip>
+                                                    <Switch
+                                                        checked={el.status === 1}
+                                                        className="disabled:pointer-events-auto"
+                                                        onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                                    />
                                                 )}
                                                 {el.status === 2 && (
                                                     <span className="text-sm">{t('processing')}</span>
@@ -607,16 +600,12 @@ export default function QasPage() {
                                                 {el.status === 3 && (
                                                     <span className="text-sm">{t('notEnabled')}</span>
                                                 )}
-                                            </div>
-                                            <Tip
-                                                content={!canDeleteKb && t('noOperationPermission')}
-                                                styleClasses="-translate-x-6"
-                                                side='top'>
+                                            </div>}
+                                            {canDeleteKb && (
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
                                                     className="disabled:pointer-events-auto"
-                                                    disabled={!canDeleteKb}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDelete(el.id);
@@ -624,9 +613,9 @@ export default function QasPage() {
                                                 >
                                                     <Trash2 size={16} />
                                                 </Button>
-                                            </Tip>
+                                            )}
                                         </div>
-                                    </TableCell>
+                                    </TableCell>}
                                 </TableRow>
                             ))}
                         </TableBody>

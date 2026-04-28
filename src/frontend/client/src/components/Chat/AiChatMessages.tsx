@@ -243,7 +243,7 @@ export default function AiChatMessages({
     if (!hasMessages && !isLoading) {
         return (
             <div
-                className="flex-1 overflow-y-auto scrollbar-on-hover px-5 py-4 flex flex-col items-center justify-center"
+                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-hover"
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
@@ -285,7 +285,7 @@ export default function AiChatMessages({
     // --- Loading state ---
     if (isLoading) {
         return (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex min-h-0 flex-1 items-center justify-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
             </div>
         );

@@ -278,7 +278,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                       {/* Input area — moved inside the left column to be independent of sidebar */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-4">
+                        <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
                           {isLingsi ? (
                             <LinsightChatInput
                               disabled={!!shareToken}
@@ -343,7 +343,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                     {/* Input area for landing page */}
                     {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-4">
+                      <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
                         {isLingsi ? (
                           <LinsightChatInput
                             disabled={!!shareToken}
@@ -417,6 +417,8 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
+  const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
+  const appLastOriginKey = 'app-last-origin';
 
   const { data: dailyApps = [] } = useQuery<any[]>(
     ['recommendedApps'],
@@ -430,6 +432,8 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
     const flowType = agent.flow_type || agent.type
     try {
       sessionStorage.setItem(`app-chat-entry:${_chatId}`, 'home')
+      sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'home')
+      sessionStorage.setItem(appLastOriginKey, 'home')
     } catch {
       // ignore storage failures
     }

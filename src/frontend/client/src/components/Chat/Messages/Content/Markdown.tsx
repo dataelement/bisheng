@@ -23,6 +23,7 @@ import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
@@ -411,6 +412,7 @@ const Citation = ({
   onActivePopoverKeyChange,
   onClosePopover,
   onOpenDocumentPreview,
+  citationPreviewUsesHover,
 }: {
   data: Partial<CitationDisplayData>;
   children: React.ReactNode;
@@ -422,6 +424,8 @@ const Citation = ({
   onActivePopoverKeyChange: (key: string | null) => void;
   onClosePopover: (key: string) => void;
   onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
+  /** False：先点角标出溯源卡片，再点卡片进全文。True：鼠标悬停出卡片，点角标直接进全文。 */
+  citationPreviewUsesHover: boolean;
 }) => {
   const data = rawData ?? ({} as Partial<CitationDisplayData>);
   const hasData = !!rawData;
@@ -470,13 +474,46 @@ const Citation = ({
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleCitationClick = async (event?: React.MouseEvent) => {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    onActivePopoverKeyChange(nextOpen ? popoverKey : null);
+    if (nextOpen) {
+      void fetchDetail();
+    }
+  };
+
+  const scheduleClose = () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      onClosePopover(popoverKey);
+    }, 120);
+  };
+
+  const handleCitationClick = async (
+    event?: React.MouseEvent,
+    options?: { forceDocument?: boolean },
+  ) => {
     event?.preventDefault();
     event?.stopPropagation();
 
     const isWebCitation = normalizeCitationType(preview?.type || data.type) === 'web';
     if (isWebCitation && preview?.link) {
       openWebCitation(preview.link);
+      return;
+    }
+
+    // H5 / coarse primary input: tap the badge toggles the floating preview card; opening the full viewer is only via the card (forceDocument).
+    if (!citationPreviewUsesHover && !options?.forceDocument) {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      handleOpenChange(!isOpen);
       return;
     }
 
@@ -515,26 +552,6 @@ const Citation = ({
     };
   }, []);
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    onActivePopoverKeyChange(nextOpen ? popoverKey : null);
-    if (nextOpen) {
-      void fetchDetail();
-    }
-  };
-
-  const scheduleClose = () => {
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-    }
-    closeTimerRef.current = window.setTimeout(() => {
-      onClosePopover(popoverKey);
-    }, 120);
-  };
-
   if (!hasData) {
     return null;
   }
@@ -553,8 +570,14 @@ const Citation = ({
           data-citation-chunk-id={data.chunkId}
           aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ''}`}
           onClick={handleCitationClick}
-          onMouseEnter={() => handleOpenChange(true)}
-          onMouseLeave={scheduleClose}
+          onMouseEnter={() => {
+            if (!citationPreviewUsesHover) return;
+            handleOpenChange(true);
+          }}
+          onMouseLeave={() => {
+            if (!citationPreviewUsesHover) return;
+            scheduleClose();
+          }}
           className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
         >
           <span className="flex h-[18px] items-center">{children}</span>
@@ -565,8 +588,14 @@ const Citation = ({
           side="top"
           align="start"
           sideOffset={8}
-          onMouseEnter={() => handleOpenChange(true)}
-          onMouseLeave={scheduleClose}
+          onMouseEnter={() => {
+            if (!citationPreviewUsesHover) return;
+            handleOpenChange(true);
+          }}
+          onMouseLeave={() => {
+            if (!citationPreviewUsesHover) return;
+            scheduleClose();
+          }}
           className="z-50 outline-none"
         >
           <CitationPreviewCard
@@ -575,8 +604,8 @@ const Citation = ({
             label={data.label}
             isLoading={isLoading}
             error={error}
-            onCardClick={() => void handleCitationClick()}
-            onOpenDocumentPreview={() => void handleCitationClick()}
+            onCardClick={() => void handleCitationClick(undefined, { forceDocument: true })}
+            onOpenDocumentPreview={() => void handleCitationClick(undefined, { forceDocument: true })}
           />
         </Popover.Content>
       </Popover.Portal>
@@ -595,6 +624,12 @@ const Markdown = memo(({
 }: TContentProps & { webContent: any }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
+  /**
+   * 与 tailwind `touch-mobile`（max 1023px）对齐；并排除 `(pointer: coarse)`，避免大屏触控误判成鼠标。
+   */
+  const citationPreviewUsesHover =
+    useMediaQuery('(min-width: 1024px) and (hover: hover) and (pointer: fine)') &&
+    !useMediaQuery('(pointer: coarse)');
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
@@ -860,6 +895,7 @@ const Markdown = memo(({
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}
                             onOpenDocumentPreview={handleOpenDocumentPreview}
+                            citationPreviewUsesHover={citationPreviewUsesHover}
                             data={{
                               label: legacyIndex,
                               ref: `citation:${legacyIndexValue}`,
@@ -896,7 +932,9 @@ const Markdown = memo(({
                               popoverKey={`rag-legacy-${matchIndex}`}
                               activePopoverKey={activeCitationPopoverKey}
                               onActivePopoverKeyChange={setActiveCitationPopoverKey}
+                              onClosePopover={handleCloseCitationPopover}
                               onOpenDocumentPreview={handleOpenDocumentPreview}
+                              citationPreviewUsesHover={citationPreviewUsesHover}
                             >
                               {legacyIndexValue}
                             </Citation>
@@ -917,6 +955,7 @@ const Markdown = memo(({
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}
                             onOpenDocumentPreview={handleOpenDocumentPreview}
+                            citationPreviewUsesHover={citationPreviewUsesHover}
                           >
                             {citationData.label}
                           </Citation>

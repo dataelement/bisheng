@@ -141,9 +141,10 @@ export function ChannelSidebar({
         <div className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}>
             <div
                 className={[
-                    "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden",
+                    "h-full bg-white flex flex-col overflow-hidden",
+                    !mobileDrawerMode && "border-r border-[#e5e6eb]",
                     mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
-                ].join(" ")}
+                ].filter(Boolean).join(" ")}
                 style={
                     mobileDrawerMode
                         ? undefined
