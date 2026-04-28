@@ -76,7 +76,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         },
         {
           section: 'apps',
-          to: '/apps',
+          to: hasPlugin('apps') || !menuApprovalMode ? (lastSectionPaths.apps || '/apps') : '/menu-unavailable',
           icon: GlobeIcon,
           label: localize('com_nav_app_center'),
           isActive:

@@ -69,6 +69,8 @@ env:
   enable_registration: true
   # 前端上传文件的最大限制，单位MB
   uploaded_files_maximum_size: 50
+  # 工作台「无菜单权限」占位页（/menu-unavailable）展示的纯文案，可在系统配置中修改；不配置则使用前端默认文案
+  workbench_menu_unavailable_message: "暂无使用过的应用，可以前往应用广场探索更多应用"
 
 workflow:
   # 节点运行最大步数

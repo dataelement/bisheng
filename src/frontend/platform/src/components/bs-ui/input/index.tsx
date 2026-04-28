@@ -18,16 +18,24 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             const { value } = e.target;
             if (type === "number") {
-                // 使用正则表达式精确阻止负数（包括粘贴操作）
+                // Block minus (including paste)
                 if (/-/.test(value)) return;
 
-                // 阻止单独的0
-                if (props.min > 0 && value === "0") return;
+                /* Only block lone "0" when min is an integer-style floor (≥1).
+                 * For fractional min (e.g. 0.1 GB) we must allow "0"/"0."/… so users can type 0.1. */
+                const minNum = props.min === undefined ? NaN : Number(props.min as number | string)
+                if (Number.isFinite(minNum) && minNum >= 1 && value === "0") {
+                    return
+                }
 
-                // 最大长度限制
-                if (maxLength && value.length > maxLength) return;
-                // 最大值限制
-                if (props.max && value > props.max) return
+                // Max length limit
+                if (maxLength && value.length > maxLength) return
+                /* Live max clamp: numeric compare so intermediate typing is not wrongly blocked by string order */
+                if (props.max !== undefined && value !== "" && Number.isFinite(Number(value))) {
+                    const num = Number(value)
+                    const maxNum = Number(props.max as number | string)
+                    if (Number.isFinite(maxNum) && num > maxNum) return
+                }
             }
 
             setCurrentValue(value);

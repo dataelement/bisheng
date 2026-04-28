@@ -29,13 +29,13 @@ import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
 import { useAuthContext } from '@/hooks';
+import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
 import { canOpenWorkbench } from '@/utils/platformAccess';
 
 function HomeEntryRedirect() {
   const { user } = useAuthContext();
   const plugins = (user as { plugins?: string[] } | null)?.plugins;
-  const approval = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
   if (!Array.isArray(plugins)) {
     return <Navigate to="/c/new" replace />;
   }
@@ -48,7 +48,9 @@ function HomeEntryRedirect() {
     return <Navigate to="/404" replace />;
   }
   const has = (id: string) => plugins.includes(id);
-  if (has('home') || approval) {
+  // Only users with WEB_MENU `home` land on chat home; do not use menu_approval_mode here — it incorrectly
+  // forced /c/new for every user when approval was on (same class of bug as apps center).
+  if (has('home')) {
     return <Navigate to="/c/new" replace />;
   }
   if (has('apps')) {
@@ -104,9 +106,30 @@ export const router = createBrowserRouter([
             element: <Root />,
             children: [
               { index: true, element: <HomeEntryRedirect /> },
-              { path: 'c/:conversationId?', element: <ChatRoute /> },
-              { path: 'linsight/:conversationId?', element: <Sop /> },
-              { path: 'linsight/case/:sopId', element: <Sop /> },
+              {
+                path: 'c/:conversationId?',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    <ChatRoute />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'linsight/:conversationId?',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    <Sop />
+                  </MenuApprovalPluginGate>
+                ),
+              },
+              {
+                path: 'linsight/case/:sopId',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    <Sop />
+                  </MenuApprovalPluginGate>
+                ),
+              },
               // { path: 'apps', element: <AgentCenter /> },
             ],
           },
@@ -121,8 +144,22 @@ export const router = createBrowserRouter([
             path: 'chat/:conversationId/:fid/:type',
             element: <LegacyRedirect toPattern={(p) => `/app/${p.conversationId}/${p.fid}/${p.type}`} />
           },
-          { path: 'apps', element: <AgentCenter /> },
-          { path: 'apps/explore', element: <ExplorePlaza /> },
+          {
+            path: 'apps',
+            element: (
+              <MenuApprovalPluginGate pluginId="apps">
+                <AgentCenter />
+              </MenuApprovalPluginGate>
+            ),
+          },
+          {
+            path: 'apps/explore',
+            element: (
+              <MenuApprovalPluginGate pluginId="apps">
+                <ExplorePlaza />
+              </MenuApprovalPluginGate>
+            ),
+          },
           { path: 'channel', element: <Subscription /> },
           { path: 'channel/share/:channelId', element: <Subscription /> },
           { path: 'channel/:channelId', element: <Subscription /> },
