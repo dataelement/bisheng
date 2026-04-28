@@ -535,7 +535,7 @@ async def test_update_flow_status_uses_publish_and_unpublish_permissions():
 
 
 @pytest.mark.asyncio
-async def test_get_frequently_used_flows_filters_by_use_app_permission_id():
+async def test_get_frequently_used_flows_filters_by_view_app_permission_id():
     workflow_module = _load_workflow_service_module()
     WorkFlowService = workflow_module.WorkFlowService
     workflow_module.UserLinkType = SimpleNamespace(
@@ -579,7 +579,7 @@ async def test_get_frequently_used_flows_filters_by_use_app_permission_id():
         workflow_module.ApplicationPermissionService,
         'get_app_permission_map_async',
         new_callable=AsyncMock,
-        return_value={'asst-1': {'use_app'}},
+        return_value={'asst-1': {'view_app'}},
     ):
         data, total = await WorkFlowService.get_frequently_used_flows(login_user, 'app', 1, 8)
 
@@ -591,7 +591,7 @@ async def test_get_frequently_used_flows_filters_by_use_app_permission_id():
 
 
 @pytest.mark.asyncio
-async def test_get_uncategorized_flows_filters_by_use_app_permission_id():
+async def test_get_uncategorized_flows_filters_by_view_app_permission_id():
     workflow_module = _load_workflow_service_module()
     WorkFlowService = workflow_module.WorkFlowService
 
@@ -638,7 +638,7 @@ async def test_get_uncategorized_flows_filters_by_use_app_permission_id():
         workflow_module.ApplicationPermissionService,
         'get_app_permission_map_async',
         new_callable=AsyncMock,
-        return_value={'wf-1': {'use_app'}},
+        return_value={'wf-1': {'view_app'}},
     ):
         data, total = await WorkFlowService.get_uncategorized_flows(login_user, 1, 8, None)
 

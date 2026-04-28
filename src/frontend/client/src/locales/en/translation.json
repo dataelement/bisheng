@@ -1356,6 +1356,9 @@
     "15024": "MCP config parse error: {{exception}}",
     "16000": "Dataset name already exists",
     "18024": "The current account's knowledge space file upload capacity has reached the limit. Please contact the administrator to adjust the configuration.",
+    "19401": "Tenant quota has been exhausted. Please contact the administrator to adjust the configuration.",
+    "19402": "The current role quota has been exhausted. Please contact the administrator to adjust the configuration.",
+    "19403": "The current tenant storage quota has been exhausted ({{used_gb}}/{{quota_gb}} GB). Please contact the platform administrator to expand the quota.",
     "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
     "10810": "Please configure the workbench embedding model.",
     "10916": "Segmentation results are too long, try reducing the number of table segmentation rows in your custom strategy",
@@ -1404,7 +1407,8 @@
     "19050": "Maximum limit for creating channels reached (up to 10 channels)",
     "19051": "Maximum limit for administrators reached (up to 5 admins)",
     "19052": "Maximum limit for subscribing channels reached (up to 20 channels)",
-    "19053": "Knowledge space LLM is not configured. Please configure it in workbench settings first"
+    "19053": "Knowledge space LLM is not configured. Please configure it in workbench settings first",
+    "channel_create_failed": "Failed to create channel, please try again later"
   },
   "com_knowledge": {
     "add_new": "Add",

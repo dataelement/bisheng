@@ -297,6 +297,24 @@ class TestCheckQuotaExceptions:
         assert exc.value.kwargs.get('quota_gb') == 3
 
     @pytest.mark.asyncio
+    async def test_upload_limit_bytes_raises_19403_for_tenant_storage_blocker(self):
+        """Registration-time byte limit must not collapse tenant storage exhaustion into 18024."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+        from bisheng.common.errcode.tenant_quota import TenantStorageQuotaExceededError
+
+        user = _make_non_admin_user()
+        with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
+                   new=AsyncMock(return_value=[])), \
+             patch.object(QuotaService, '_apply_tenant_chain_cap',
+                          new=AsyncMock(return_value=(0, (5, 'tenant_limit', 1.5, 1.5, 'tenant-5')))):
+            with pytest.raises(TenantStorageQuotaExceededError) as exc:
+                await QuotaService.get_knowledge_space_upload_limit_bytes(user)
+
+        assert exc.value.Code == 19403
+        assert exc.value.kwargs.get('used_gb') == 1.5
+        assert exc.value.kwargs.get('quota_gb') == 1.5
+
+    @pytest.mark.asyncio
     async def test_role_quota_exhausted_raises_19402(self):
         """AC-01: chain passes but user_used >= effective → TenantRoleQuotaExceededError (19402)."""
         from bisheng.role.domain.services.quota_service import QuotaService

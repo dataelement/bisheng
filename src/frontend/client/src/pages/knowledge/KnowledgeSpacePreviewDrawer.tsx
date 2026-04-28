@@ -267,7 +267,7 @@ export function KnowledgeSpacePreviewDrawer({
             status === "joined"
         );
     const canViewFiles =
-        hasReadableGrant;
+        hasReadableGrant || isPublic;
 
     const handleClickAction = () => {
         if (!space) return;

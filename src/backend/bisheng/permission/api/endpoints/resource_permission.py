@@ -448,6 +448,8 @@ def _permission_ids_for_model(resource_type: str, relation: str, model: dict | N
     if model is None:
         return _default_permission_ids_for_relation(resource_type, relation)
     permissions = model.get('permissions') or []
+    if model.get('permissions_explicit') is True:
+        return set(permissions)
     if model.get('is_system'):
         return _default_permission_ids_for_relation(resource_type, model.get('relation') or relation)
     return set(permissions)
@@ -466,6 +468,29 @@ def _can_grant_relation_model(
 ) -> bool:
     if not _model_matches_relation(relation, model):
         return False
+
+    tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
+    if tier_map:
+        grant_tier = (
+            model.get('grant_tier')
+            if model and model.get('grant_tier') in _GRANT_TIER_VALUES
+            else _infer_grant_tier_from_relation(relation)
+        )
+        required_manage_permissions = {
+            permission_id
+            for tier, permission_id in tier_map.items()
+            if tier == grant_tier
+        }
+
+        # Custom or explicitly edited models may themselves carry management
+        # permissions. Require the caller to already hold those management
+        # capabilities so a "usage" grant cannot smuggle owner-management power.
+        if model and (not model.get('is_system') or model.get('permissions_explicit') is True):
+            model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
+            required_manage_permissions.update(model_permission_ids & set(tier_map.values()))
+
+        return bool(required_manage_permissions) and required_manage_permissions.issubset(caller_permission_ids)
+
     model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
     return model_permission_ids.issubset(caller_permission_ids)
 
@@ -594,11 +619,34 @@ async def _list_knowledge_space_grant_users(
 
 
 async def _list_knowledge_space_grant_departments() -> list[dict]:
-    from bisheng.database.models.department import DepartmentDao
+    from sqlalchemy import func
+    from sqlmodel import select
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import DepartmentDao, UserDepartment
 
     departments = await DepartmentDao.aget_all_active()
     if not departments:
         return []
+
+    dept_ids = [
+        int(dept.id)
+        for dept in departments
+        if getattr(dept, 'id', None) is not None
+    ]
+    async with get_async_db_session() as session:
+        count_result = await session.exec(
+            select(
+                UserDepartment.department_id,
+                func.count(UserDepartment.id),
+            )
+            .where(UserDepartment.department_id.in_(dept_ids))
+            .group_by(UserDepartment.department_id)
+        )
+        count_map = {
+            int(dept_id): int(count)
+            for dept_id, count in count_result.all()
+        }
 
     nodes = {
         int(dept.id): {
@@ -610,7 +658,7 @@ async def _list_knowledge_space_grant_departments() -> list[dict]:
             'sort_order': int(getattr(dept, 'sort_order', 0) or 0),
             'source': dept.source,
             'status': dept.status,
-            'member_count': 0,
+            'member_count': count_map.get(int(dept.id), 0),
             'children': [],
         }
         for dept in departments

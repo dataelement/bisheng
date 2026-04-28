@@ -60,7 +60,7 @@ describe("Knowledge-space grant subject sources", () => {
         sort_order: 0,
         source: "local",
         status: "active",
-        member_count: 0,
+        member_count: 3,
         children: [],
       },
     ] as any);
@@ -78,6 +78,7 @@ describe("Knowledge-space grant subject sources", () => {
       expect(screen.getByText("研发部")).toBeInTheDocument();
     });
 
+    expect(screen.getByText("(3)")).toBeInTheDocument();
     expect(mockedGetResourceGrantDepartmentsApi).toHaveBeenCalledWith("knowledge_space", "88");
   });
 

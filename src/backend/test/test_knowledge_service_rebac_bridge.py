@@ -384,7 +384,7 @@ def test_delete_knowledge_hook_deletes_knowledge_library_tuples():
     mock_delete_tuples.assert_called_once_with('knowledge_library', '13')
 
 
-def test_get_knowledge_info_uses_permission_service_sync_bridge():
+def test_get_knowledge_info_uses_view_permission_id():
     service_module = _load_service_module()
     KnowledgeService = service_module.KnowledgeService
     login_user = SimpleNamespace(is_admin=lambda: False, user_id=7)
@@ -396,9 +396,9 @@ def test_get_knowledge_info_uses_permission_service_sync_bridge():
         return_value=[knowledge],
     ), patch.object(
         KnowledgeService.permission_service,
-        'check_access_sync',
+        'check_permission_id_sync',
         return_value=True,
-    ) as mock_check_access, patch.object(
+    ) as mock_check_permission, patch.object(
         service_module.KnowledgeService,
         'convert_knowledge_read',
         return_value=['ok'],
@@ -410,12 +410,7 @@ def test_get_knowledge_info_uses_permission_service_sync_bridge():
         )
 
     assert result == ['ok']
-    mock_check_access.assert_called_once_with(
-        login_user=login_user,
-        owner_user_id=9,
-        knowledge_id=31,
-        access_type=AccessType.KNOWLEDGE,
-    )
+    mock_check_permission.assert_called_once_with(login_user, 31, 'view_kb')
     mock_convert.assert_called_once_with(login_user, [knowledge])
 
 
@@ -702,6 +697,27 @@ def test_judge_qa_knowledge_write_uses_permission_service_write_sync_bridge():
         owner_user_id=14,
         knowledge_id=61,
     )
+
+
+def test_judge_qa_knowledge_view_uses_view_permission_only():
+    service_module = _load_service_module()
+    KnowledgeService = service_module.KnowledgeService
+    login_user = SimpleNamespace(user_id=7)
+    qa_knowledge = SimpleNamespace(id=61, user_id=14, type=KnowledgeTypeEnum.QA.value)
+
+    with patch.object(
+        service_module.KnowledgeDao,
+        'query_by_id',
+        return_value=qa_knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'check_permission_id_sync',
+        return_value=True,
+    ) as mock_check_permission:
+        result = KnowledgeService.judge_qa_knowledge_view(login_user, 61)
+
+    assert result is qa_knowledge
+    mock_check_permission.assert_called_once_with(login_user, 61, 'view_kb')
 
 
 def test_batch_download_files_uses_permission_service_read_async_bridge():

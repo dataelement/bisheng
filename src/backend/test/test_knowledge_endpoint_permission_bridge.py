@@ -232,13 +232,13 @@ async def test_copy_qa_knowledge_uses_permission_service_read_async_bridge():
 
 
 @pytest.mark.asyncio
-async def test_get_QA_list_uses_async_qa_permission_bridge():
+async def test_get_QA_list_uses_view_permission_bridge():
     module = _load_endpoint_module()
     login_user = SimpleNamespace(user_id=7)
     db_knowledge = SimpleNamespace(id=13, user_id=10)
 
     with patch(
-        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.ajudge_qa_knowledge_write',
+        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.ajudge_qa_knowledge_view',
         new_callable=AsyncMock,
         return_value=db_knowledge,
     ) as mock_judge, patch(
@@ -332,6 +332,24 @@ def test_qa_add_uses_judge_qa_knowledge_write():
         module.qa_add(QACreate=payload, login_user=login_user)
 
     mock_judge.assert_called_once_with(login_user, 14)
+
+
+def test_qa_detail_uses_view_permission_bridge():
+    module = _load_endpoint_module()
+    login_user = SimpleNamespace(user_id=7)
+    qa_item = SimpleNamespace(id=21, knowledge_id=15, answers='["answer"]')
+
+    with patch(
+        'bisheng.knowledge.api.endpoints.knowledge.QAKnoweldgeDao.get_qa_knowledge_by_primary_id',
+        return_value=qa_item,
+    ), patch(
+        'bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.judge_qa_knowledge_view',
+    ) as mock_judge:
+        result = module.qa_detail(id=21, login_user=login_user)
+
+    mock_judge.assert_called_once_with(login_user, 15)
+    assert result.data is qa_item
+    assert qa_item.answers == 'answer'
 
 
 def test_qa_delete_uses_judge_qa_knowledge_write():

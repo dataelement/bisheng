@@ -39,7 +39,7 @@ async def get_recommended_apps(login_user=LoginUserDep):
     if not login_user.is_admin():
         kwargs['status'] = FlowStatus.ONLINE.value
     data, _ = FlowDao.get_all_apps(**kwargs)
-    data = await WorkFlowService.filter_apps_by_permission_id(login_user, data, 'use_app')
+    data = await WorkFlowService.filter_apps_by_permission_id(login_user, data, 'view_app')
 
     # Restore admin-configured order; unmatched items sort to the end.
     app_order = {app_id: idx for idx, app_id in enumerate(app_ids)}
@@ -111,7 +111,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
             page=0,
             limit=0,
         )
-    apps = await WorkFlowService.filter_apps_by_permission_id(login_user, apps, 'use_app')
+    apps = await WorkFlowService.filter_apps_by_permission_id(login_user, apps, 'view_app')
 
     def sort_key(app):
         app_id = app['id']
