@@ -24,8 +24,12 @@ import pytest
 # Helpers
 # =========================================================================
 
+_PAYLOAD_OMIT_SECONDARY = object()
+
+
 def _payload(
-    external_user_id='u1', primary='D1', secondary=None,
+    external_user_id='u1', primary='D1',
+    secondary=_PAYLOAD_OMIT_SECONDARY,
     ts=1000, name='Alice', email='a@x.com', phone=None,
     tenant_mapping=None,
     account_disabled=None,
@@ -33,15 +37,17 @@ def _payload(
     from bisheng.sso_sync.domain.schemas.payloads import (
         LoginSyncRequest, UserAttrsDTO,
     )
-    return LoginSyncRequest(
+    kw = dict(
         external_user_id=external_user_id,
         primary_dept_external_id=primary,
-        secondary_dept_external_ids=secondary or [],
         user_attrs=UserAttrsDTO(name=name, email=email, phone=phone),
         ts=ts,
         tenant_mapping=tenant_mapping,
         account_disabled=account_disabled,
     )
+    if secondary is not _PAYLOAD_OMIT_SECONDARY:
+        kw['secondary_dept_external_ids'] = secondary
+    return LoginSyncRequest(**kw)
 
 
 def _user(user_id=7, delete=0, source='sso', external_id='u1',
@@ -115,6 +121,10 @@ def patches(monkeypatch):
         m.UserDao, 'aget_token_version', AsyncMock(return_value=0),
     )
 
+    monkeypatch.setattr(
+        m.DepartmentDao, 'aget_by_ids', AsyncMock(return_value=[]),
+    )
+
     # UserDepartment DAO (post-simplify: helpers live in the DAO now)
     monkeypatch.setattr(
         m.UserDepartmentDao, 'aget_user_primary_department',
@@ -132,6 +142,16 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         m.UserDepartmentDao, 'aget_memberships_in_depts',
         AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aget_user_departments',
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aremove_member', AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        m.DepartmentAdminGrantDao, 'adelete', AsyncMock(return_value=None),
     )
     from bisheng.department.domain.services import department_change_handler as dch
     dept_execute = AsyncMock()
@@ -224,6 +244,100 @@ class TestNewUserHappyPath:
 
 
 @pytest.mark.asyncio
+class TestSecondaryDeptReconcileRemove:
+
+    async def test_explicit_empty_secondaries_removes_sso_secondary_rows(
+        self, patches, monkeypatch,
+    ):
+        from bisheng.sso_sync.domain.schemas.payloads import (
+            LoginSyncRequest,
+            UserAttrsDTO,
+        )
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        ud_rem = AsyncMock()
+        monkeypatch.setattr(m.UserDepartmentDao, 'aremove_member', ud_rem)
+        ag_del = AsyncMock()
+        monkeypatch.setattr(m.DepartmentAdminGrantDao, 'adelete', ag_del)
+        m.UserDepartmentDao.aget_user_departments = AsyncMock(
+            return_value=[
+                SimpleNamespace(department_id=12, is_primary=0),
+            ],
+        )
+        m.DepartmentDao.aget_by_ids = AsyncMock(
+            return_value=[_dept('DX', id=12)],
+        )
+
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        payload = LoginSyncRequest(
+            external_user_id='u1',
+            primary_dept_external_id='D1',
+            secondary_dept_external_ids=[],
+            user_attrs=UserAttrsDTO(name='Alice', email='a@x.com'),
+            ts=1000,
+        )
+        await LoginSyncService.execute(payload, request_ip='')
+
+        ud_rem.assert_awaited_once_with(7, 12)
+        ag_del.assert_any_await(7, 12)
+
+    async def test_local_source_secondary_not_removed_on_reconcile(
+        self, patches, monkeypatch,
+    ):
+        from bisheng.sso_sync.domain.schemas.payloads import (
+            LoginSyncRequest,
+            UserAttrsDTO,
+        )
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        ud_rem = AsyncMock()
+        monkeypatch.setattr(m.UserDepartmentDao, 'aremove_member', ud_rem)
+        m.UserDepartmentDao.aget_user_departments = AsyncMock(
+            return_value=[
+                SimpleNamespace(department_id=12, is_primary=0),
+            ],
+        )
+        m.DepartmentDao.aget_by_ids = AsyncMock(
+            return_value=[_dept('LOC', id=12, source='local')],
+        )
+
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        payload = LoginSyncRequest(
+            external_user_id='u1',
+            primary_dept_external_id='D1',
+            secondary_dept_external_ids=[],
+            user_attrs=UserAttrsDTO(name='Alice', email='a@x.com'),
+            ts=1000,
+        )
+        await LoginSyncService.execute(payload, request_ip='')
+
+        ud_rem.assert_not_awaited()
+
+    async def test_omitted_secondary_field_skips_removal_queries(self, patches, monkeypatch):
+        """Backward compat: field omitted → no reconcile-remove."""
+        from bisheng.sso_sync.domain.services.login_sync_service import (
+            LoginSyncService,
+        )
+        m = patches.module
+        aget_ud = AsyncMock(side_effect=AssertionError('should not load memberships'))
+        monkeypatch.setattr(m.UserDepartmentDao, 'aget_user_departments', aget_ud)
+        primary = _dept('D1', id=11)
+        patches.assert_chain.return_value = {'D1': primary}
+
+        await LoginSyncService.execute(_payload(), request_ip='')
+
+        aget_ud.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 class TestPrimaryDeptMissingFallback:
 
     async def test_empty_primary_skips_parent_chain(self, patches):
@@ -233,7 +347,7 @@ class TestPrimaryDeptMissingFallback:
         # Root tenant returned by sync_user in the fallback case.
         patches.sync_user.return_value = _tenant(tid=1, status='active')
 
-        payload = _payload(primary=None, secondary=[])
+        payload = _payload(primary=None)
         resp = await LoginSyncService.execute(payload, request_ip='1.2.3.4')
 
         patches.assert_chain.assert_not_awaited()
