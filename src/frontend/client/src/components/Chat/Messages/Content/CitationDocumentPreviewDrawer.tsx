@@ -26,6 +26,7 @@ export type CitationDocumentPreviewState = {
 type CitationDocumentPreviewDrawerProps = {
   preview: CitationDocumentPreviewState | null;
   onClose: () => void;
+  manageMobileNavVisibility?: boolean;
 };
 
 type CitationDocumentPreviewContentProps = {
@@ -138,6 +139,7 @@ export function CitationDocumentPreviewContent({
 export default function CitationDocumentPreviewDrawer({
   preview,
   onClose,
+  manageMobileNavVisibility = true,
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
   const isNarrowLayout = usePrefersMobileLayout();
@@ -166,12 +168,12 @@ export default function CitationDocumentPreviewDrawer({
   }, [canRenderPreview, isFullBleedMobile]);
 
   useEffect(() => {
-    if (!canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
+    if (!manageMobileNavVisibility || !canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
     setChatMobileNavHidden(true);
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [canRenderPreview, isNarrowLayout, isFullBleedMobile, setChatMobileNavHidden]);
+  }, [canRenderPreview, isNarrowLayout, isFullBleedMobile, manageMobileNavVisibility, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!canRenderPreview || isFullBleedMobile) return;

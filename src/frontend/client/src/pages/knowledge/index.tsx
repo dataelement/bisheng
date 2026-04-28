@@ -649,7 +649,8 @@ export default function Knowledge() {
                         const showMobileAiOnly = isH5 && aiPane.showAiAssistant;
                         if (showMobileAiOnly) {
                             return (
-                                <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white">
+                                // 与 MainLayout 内层卡片 min-h-[calc(100dvh-16px)]（main p-2）对齐，固定高度避免文档层滚动吃掉顶栏与输入区
+                                <div className="flex h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)] min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
                                     <KnowledgeAiPanel
                                         spaceId={String(activeSpace.id)}
                                         folderId={fileManager.currentFolderId}

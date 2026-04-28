@@ -13,7 +13,7 @@ from bisheng.permission.domain.workflow_app_permission import (
 
 
 def test_application_permission_defaults_accept_computed_relations():
-    assert default_app_permission_ids_for_relation('can_read') == {'view_app', 'use_app'}
+    assert default_app_permission_ids_for_relation('can_read') == {'view_app'}
     assert default_app_permission_ids_for_relation('can_edit') == {
         'view_app', 'use_app', 'edit_app',
     }
@@ -52,7 +52,7 @@ def test_knowledge_space_permission_defaults_accept_computed_relations():
     }
 def test_workflow_app_default_permissions_accept_computed_relations():
     assert default_workflow_app_permission_ids_for_relation('can_read') == {
-        'view_app', 'use_app',
+        'view_app',
     }
     assert default_workflow_app_permission_ids_for_relation('can_manage') >= {
         'share_app', 'manage_app_owner', 'manage_app_manager', 'manage_app_viewer',

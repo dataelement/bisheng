@@ -13,6 +13,11 @@ import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropd
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { currentChatState } from '~/pages/appChat/store/atoms';
+import {
+    normalizeAppChatReturn,
+    readAppChatReturnTo,
+    writeAppChatReturnTo,
+} from '~/pages/appChat/appChatOrigin';
 import { cn } from '~/utils';
 
 function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
@@ -71,69 +76,56 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 export function SideNav() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { conversationId, fid: flowId, type: flowType } = useParams();
-    const appOriginStorageKey = (id: string) => `app-chat-origin:${id}`;
-    const appFlowOriginKey = (id: string) => `app-flow-origin:${id}`;
-    const appLastOriginKey = 'app-last-origin';
+    const { fid: flowId, type: flowType } = useParams();
+    type AppSurfaceLocationState = { appSurfaceReturn?: string };
+
     const handleGoBack = () => {
-        let fromHomeEntry = false;
-        if (conversationId) {
-            try {
-                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
-            } catch {
-                // ignore storage failures
-            }
-        }
+        const go = (to: string) => navigate(to, { replace: true });
+        const defaultPath = '/apps';
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const routeConversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
         const searchParams = new URLSearchParams(location.search);
+        const returnTo = searchParams.get('returnTo');
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
-        let persistedOrigin: 'center' | 'explore' | 'home' | null = null;
-        if (conversationId) {
-            try {
-                const origin = sessionStorage.getItem(appOriginStorageKey(conversationId));
-                if (origin === 'center' || origin === 'explore' || origin === 'home') {
-                    persistedOrigin = origin;
-                }
-            } catch {
-                // ignore storage failures
-            }
-        }
-        // App center entries (home list / explore) should always return to app center.
-        if (from === 'center' || from === 'explore' || persistedOrigin === 'center' || persistedOrigin === 'explore') {
-            navigate('/apps');
+        const surfaceReturn = (location.state as AppSurfaceLocationState | null)?.appSurfaceReturn;
+
+        const normalizedReturnTo = normalizeAppChatReturn(returnTo);
+        if (normalizedReturnTo) {
+            if (routeConversationId) writeAppChatReturnTo(routeConversationId, normalizedReturnTo);
+            go(normalizedReturnTo);
             return;
         }
-        let persistedFlowOrigin: string | null = null;
-        if (flowId) {
-            try {
-                persistedFlowOrigin = sessionStorage.getItem(appFlowOriginKey(flowId));
-            } catch {
-                // ignore storage failures
-            }
-        }
-        if (persistedFlowOrigin === 'center' || persistedFlowOrigin === 'explore') {
-            navigate('/apps');
+
+        // Fallback for legacy links where returnTo might be stripped later.
+        const fromReturnTo =
+            from === 'center'
+                ? '/apps'
+                : from === 'explore'
+                    ? '/apps/explore'
+                    : from === 'home-recommended' && entry === 'home'
+                        ? '/c/new'
+                        : null;
+        if (fromReturnTo) {
+            if (routeConversationId) writeAppChatReturnTo(routeConversationId, fromReturnTo);
+            go(fromReturnTo);
             return;
         }
-        let persistedLastOrigin: string | null = null;
-        try {
-            persistedLastOrigin = sessionStorage.getItem(appLastOriginKey);
-        } catch {
-            // ignore storage failures
-        }
-        if (persistedLastOrigin === 'center' || persistedLastOrigin === 'explore') {
-            navigate('/apps');
+
+        const storedReturnTo = routeConversationId ? readAppChatReturnTo(routeConversationId) : null;
+        if (storedReturnTo) {
+            go(storedReturnTo);
             return;
         }
-        if (
-            fromHomeEntry ||
-            (from === 'home-recommended' && entry === 'home') ||
-            persistedOrigin === 'home'
-        ) {
-            navigate('/c/new');
+        
+        const normalizedSurfaceReturn = normalizeAppChatReturn(surfaceReturn);
+        if (normalizedSurfaceReturn) {
+            if (routeConversationId) writeAppChatReturnTo(routeConversationId, normalizedSurfaceReturn);
+            go(normalizedSurfaceReturn);
             return;
         }
-        navigate('/apps');
+        go(defaultPath);
     };
 
     const localize = useLocalize();
@@ -167,7 +159,7 @@ export function SideNav() {
                 "relative h-full w-full overflow-hidden bg-white text-[#212121] flex flex-col",
                 isTabletOrMobile
                     ? "border-r-0 px-0 pb-0 pt-0 gap-0"
-                    : "border-r border-[#e5e6eb] px-2 pb-2 pt-2 gap-4",
+                    : "border-r border-[#e5e6eb] px-3 pb-2 pt-3 gap-4",
             )}
         >
             <div className="hidden touch-mobile:block">
@@ -292,7 +284,7 @@ export function SideNav() {
                                                 } else if (flowId && flowType) {
                                                     // Last conversation deleted — land on empty state, don't auto-create
                                                     navigate(`/app/${flowId}/${flowType}`, {
-                                                        state: { fromDelete: true },
+                                                        state: { ...(location.state as object | null), fromDelete: true },
                                                     });
                                                 }
                                             }}

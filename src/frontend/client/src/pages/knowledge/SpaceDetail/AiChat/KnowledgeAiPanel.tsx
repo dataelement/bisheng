@@ -28,7 +28,6 @@ import { getSpaceTagsApi } from "~/api/knowledge";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useRecoilValue } from "recoil";
 import store from "~/store";
-import { cn } from "~/utils";
 
 interface KnowledgeAiPanelProps {
     spaceId: string;
@@ -104,11 +103,10 @@ export function KnowledgeAiPanel({
 
     return (
         <div
-            className={cn(
-                "relative flex w-full min-h-0 flex-1 flex-col bg-white",
-                // H5 全屏助手：父级链偶发丢高度时用视口高，输入栏才能贴底
-                isH5 ? "min-h-[100dvh]" : "h-full",
-            )}
+            className={
+                // h-full + min-h-0：由父级限定高度，中间消息区单独滚动；切勿 min-h-[100dvh]，否则会高出 MainLayout 卡片触发整页滚动、顶栏与输入框跟着滚走
+                "relative flex h-full min-h-0 w-full flex-1 flex-col bg-white"
+            }
         >
             {/* Header */}
             <div className="relative flex shrink-0 items-center justify-between px-4 py-3">
@@ -118,10 +116,10 @@ export function KnowledgeAiPanel({
                             <Button
                                 variant="ghost"
                                 type="button"
-                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA]"
+                                className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA]"
                                 onClick={onClose}
                             >
-                                <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden />
+                                <ChevronLeft className="size-4" strokeWidth={2} aria-hidden />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>

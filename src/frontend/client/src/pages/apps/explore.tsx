@@ -226,7 +226,9 @@ export default function ExplorePlaza() {
         }
         // Enter without chatId — AppChatEntry will resolve to most recent conversation,
         // or create a new one if the user has no conversations for this app yet.
-        navigate(`/app/${flowId}/${flowType}?from=explore`);
+        navigate(`/app/${flowId}/${flowType}?from=explore&returnTo=%2Fapps%2Fexplore`, {
+            state: { appSurfaceReturn: '/apps/explore' as const },
+        });
     }
 
     const handleShare = async (agent: any) => {

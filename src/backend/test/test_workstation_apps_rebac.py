@@ -161,7 +161,8 @@ async def test_get_recommended_apps_filters_by_view_app_permission():
     with patch.object(module.WorkStationService, 'get_config', return_value=config), \
          patch.object(module.FlowDao, 'get_all_apps', return_value=(apps, 2)), \
          patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_view_app), \
-         patch.object(module.WorkFlowService, 'add_extra_field', side_effect=lambda user, data: data):
+         patch.object(module.WorkFlowService, 'add_extra_field', side_effect=lambda user, data: data), \
+         patch.object(module.WorkFlowService, 'aenrich_apps_can_share', new_callable=AsyncMock, side_effect=lambda user, data: data, create=True):
         result = await module.get_recommended_apps(login_user=login_user)
 
     assert result['data'] == [{'id': 'wf-1', 'flow_type': module.FlowType.WORKFLOW.value}]
@@ -207,7 +208,7 @@ async def test_get_used_apps_filters_by_view_app_permission():
          patch.object(module.UserLinkDao, 'get_user_link', return_value=[], create=True), \
          patch.object(module.FlowDao, 'aget_all_apps', new_callable=AsyncMock, return_value=(apps, 2), create=True), \
          patch.object(module.WorkFlowService, 'filter_apps_by_permission_id', new=filter_view_app), \
-         patch.object(module.WorkFlowService, 'get_logo_share_link', side_effect=lambda logo: logo), \
+         patch.object(module.WorkFlowService, 'get_logo_share_link', side_effect=lambda logo: logo, create=True), \
          patch.object(module.TagDao, 'get_tags_by_resource', return_value={}, create=True), \
          patch.object(module, 'batch_user_may_share_app', new_callable=AsyncMock, return_value=[False]):
         result = await module.get_used_apps(login_user=login_user, page=1, limit=20)

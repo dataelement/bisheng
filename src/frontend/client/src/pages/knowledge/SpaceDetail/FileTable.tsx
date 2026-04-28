@@ -52,7 +52,7 @@ const COLUMN_CONFIG = {
     fileType: { minWidth: 100, initialWidth: 120 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
-    fileEncoding: { minWidth: 140, initialWidth: 180 },
+    fileEncoding: { minWidth: 160, initialWidth: 200 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;
@@ -991,31 +991,36 @@ function FileRow({
                         minWidth: columnWidths.fileEncoding,
                         maxWidth: columnWidths.fileEncoding,
                     }}
-                    className={cn("border-l py-3", rowBg)}
+                    className={cn("py-3", rowBg)}
                 >
-                    {file.status === FileStatus.PROCESSING && !file.fileEncoding ? (
-                        <span className="text-muted-foreground italic text-sm">
-                            {localize("com_knowledge.file_encoding_generating")}
-                        </span>
-                    ) : file.fileEncoding ? (
-                        <button
-                            type="button"
-                            onClick={() => onEditEncoding?.(file)}
-                            disabled={!canEditEncoding}
-                            className={cn(
-                                "flex items-center gap-1 text-sm",
-                                canEditEncoding && "hover:underline cursor-pointer",
-                            )}
-                            title={file.fileEncoding}
-                        >
-                            {canEditEncoding && (
-                                <PencilLineIcon className="size-3 opacity-60 shrink-0" />
-                            )}
-                            <span className="truncate">{file.fileEncoding}</span>
-                        </button>
-                    ) : (
-                        <span className="text-muted-foreground">—</span>
-                    )}
+                    <div className="flex h-full w-full items-center gap-1.5 overflow-hidden">
+                        {file.status === FileStatus.PROCESSING && !file.fileEncoding ? (
+                            <span className="text-muted-foreground italic text-sm">
+                                {localize("com_knowledge.file_encoding_generating")}
+                            </span>
+                        ) : file.fileEncoding ? (
+                            <>
+                                <span className="truncate text-sm text-[#86909c]" title={file.fileEncoding}>
+                                    {file.fileEncoding}
+                                </span>
+                                {canEditEncoding && (
+                                    <button
+                                        type="button"
+                                        title={localize("com_knowledge.file_encoding_edit_title")}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEditEncoding?.(file);
+                                        }}
+                                        className="hidden cursor-pointer items-center justify-center text-[#165dff] transition-colors hover:text-[#165dff]/80 group-hover:flex"
+                                    >
+                                        <PencilLineIcon className="size-3.5" />
+                                    </button>
+                                )}
+                            </>
+                        ) : (
+                            <span className="text-muted-foreground">—</span>
+                        )}
+                    </div>
                 </TableCell>
             )}
 

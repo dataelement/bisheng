@@ -493,6 +493,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalStatus: raw?.approval_status ?? undefined,
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
+        fileEncoding: raw?.file_encoding ?? null,
     };
 }
 

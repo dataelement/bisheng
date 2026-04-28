@@ -64,6 +64,10 @@ from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 from bisheng.user.domain.services.user import UserService
 
+from bisheng.department.domain.services.department_change_handler import (
+    DepartmentChangeHandler,
+)
+
 
 _USER_LOCK_KEY = 'user:sso_lock:{external_user_id}'
 
@@ -147,10 +151,14 @@ class LoginSyncService:
                     await cls._ensure_primary(
                         user.user_id, primary_dept.id, row_source=row_source,
                     )
+                    reconcile_secondary = (
+                        'secondary_dept_external_ids' in payload.model_fields_set
+                    )
                     await cls._ensure_secondaries(
                         user.user_id,
                         [d.id for d in secondary_depts],
                         row_source=row_source,
+                        reconcile_remove=reconcile_secondary,
                     )
 
                 await cls._sync_department_admin_tuples(
@@ -381,10 +389,6 @@ class LoginSyncService:
         """
         if not dept_ids:
             return
-        from bisheng.department.domain.services.department_change_handler import (
-            DepartmentChangeHandler,
-        )
-
         ops = []
         for dept_id in dict.fromkeys(int(did) for did in dept_ids):
             ops.extend(DepartmentChangeHandler.on_members_added(dept_id, [user_id]))
@@ -405,10 +409,6 @@ class LoginSyncService:
           belongs to. Only removes FGA ``admin`` when ``department_admin_grant``
           marks the grant as ``sso``; ``manual`` (management UI) is left intact.
         """
-        from bisheng.department.domain.services.department_change_handler import (
-            DepartmentChangeHandler,
-        )
-
         if admin_dept_external_ids is None:
             return
 
@@ -488,16 +488,78 @@ class LoginSyncService:
             await DepartmentAdminGrantDao.adelete(user_id, did)
 
     @classmethod
+    async def _remove_sso_secondary_membership(
+        cls,
+        user_id: int,
+        department_id: int,
+    ) -> None:
+        """Remove a secondary membership from an org-synced department.
+
+        Mirrors management UI removal: member + admin FGA + ``department_admin_grant``.
+        """
+        await UserDepartmentDao.aremove_member(user_id, department_id)
+        ops = (
+            DepartmentChangeHandler.on_member_removed(department_id, user_id)
+            + DepartmentChangeHandler.on_admin_removed(department_id, [user_id])
+        )
+        await DepartmentChangeHandler.execute_async(ops)
+        await DepartmentAdminGrantDao.adelete(user_id, department_id)
+
+    @classmethod
+    async def _reconcile_remove_sso_secondary_memberships(
+        cls,
+        user_id: int,
+        want_secondary_ids: set[int],
+        *,
+        row_source: str,
+    ) -> None:
+        """Drop secondary rows for ``source=row_source`` departments not in ``want``."""
+        memberships = await UserDepartmentDao.aget_user_departments(user_id)
+        to_drop: List[int] = []
+        for row in memberships:
+            if int(getattr(row, 'is_primary', 0) or 0) != 0:
+                continue
+            did = int(row.department_id)
+            if did in want_secondary_ids:
+                continue
+            to_drop.append(did)
+        if not to_drop:
+            return
+        unique_drop = list(dict.fromkeys(to_drop))
+        depts = await DepartmentDao.aget_by_ids(unique_drop)
+        dept_by_id = {int(d.id): d for d in depts if d.id is not None}
+        for did in unique_drop:
+            dept = dept_by_id.get(did)
+            if dept is None:
+                continue
+            if getattr(dept, 'source', '') != row_source:
+                continue
+            await cls._remove_sso_secondary_membership(user_id, did)
+
+    @classmethod
     async def _ensure_secondaries(
         cls,
         user_id: int,
         dept_ids: list[int],
         *,
         row_source: str,
+        reconcile_remove: bool,
     ) -> None:
-        """Add ``is_primary=0`` memberships for any dept_id the user does
-        not already belong to. Single IN-list lookup instead of one query
-        per dept (R2/R3 batch fix)."""
+        """Secondary departments: optional remove-then-add.
+
+        When ``reconcile_remove`` is True (payload explicitly included
+        ``secondary_dept_external_ids``), secondary memberships under
+        ``department.source == row_source`` that are absent from ``dept_ids``
+        are removed. Local-only departments are left unchanged.
+
+        When False (field omitted), only add missing secondaries (legacy
+        Gateway behaviour).
+        """
+        want_ids = {int(x) for x in dept_ids if x is not None}
+        if reconcile_remove:
+            await cls._reconcile_remove_sso_secondary_memberships(
+                user_id, want_ids, row_source=row_source,
+            )
         if not dept_ids:
             return
         existing_rows = await UserDepartmentDao.aget_memberships_in_depts(

@@ -31,10 +31,14 @@ from typing import Awaitable, Callable, Optional
 
 from loguru import logger
 from sqlalchemy import text as sa_text
-from sqlalchemy.sql import bindparam
 
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+from bisheng.permission.migration.batch_utils import (
+    ProgressTracker,
+    TupleDeduplicator,
+    iter_keyset_batches,
+)
 from bisheng.permission.migration.f006_constants import (
     ACCESS_TYPE_MAPPING,
     FLOW_TYPE_MAPPING,
@@ -47,13 +51,6 @@ from bisheng.permission.migration.f006_constants import (
     _CHECKPOINT_FILENAME,
 )
 from bisheng.permission.migration.f006_schemas import MigrationStats, VerifyReport
-from bisheng.permission.migration.batch_utils import (
-    ProgressTracker,
-    TupleDeduplicator,
-    iter_keyset_batches,
-    session_exec,
-)
-
 
 StepFn = Callable[[], Awaitable[int]]
 
@@ -89,8 +86,6 @@ class RBACToReBACMigrator:
         self.batch_size = batch_size
         self.progress = progress
         self._buffer: list[TupleOperation] = []
-        self._buffer_new_keys: set[tuple[str, str]] = set()
-        self._buffer_existing_keys: set[tuple[str, str]] = set()
         self._deduplicator = TupleDeduplicator(
             RELATION_PRIORITY,
             backend=dedup_backend,
@@ -113,9 +108,6 @@ class RBACToReBACMigrator:
                 self._fga = get_fga_client()
             if self._fga is None and not self.dry_run:
                 raise RuntimeError('OpenFGA client not available. Cannot execute migration.')
-
-            if self.verify_only:
-                return await self.verify_all()
 
             steps = self._migration_steps()
             self._validate_step_range(self.start_step, '--step')
@@ -211,17 +203,16 @@ class RBACToReBACMigrator:
 
     def _compute_summary(self):
         s = self._stats
-        s.total = (s.step1_super_admin + s.step2_user_group + s.step3_role_access
-                   + s.step4_space_channel + s.step5_resource_owners
-                   + s.step6_folder_hierarchy + s.step7_department_membership
-                   + s.step8_group_resources)
+        total_seen = 0
         # Aggregate by object_type and relation from _global_seen
         by_type: dict[str, int] = {}
         by_rel: dict[str, int] = {}
         for (_, obj), rel in self._deduplicator.iter_seen():
+            total_seen += 1
             obj_type = obj.split(':')[0] if ':' in obj else obj
             by_type[obj_type] = by_type.get(obj_type, 0) + 1
             by_rel[rel] = by_rel.get(rel, 0) + 1
+        s.total = total_seen
         s.by_object_type = by_type
         s.by_relation = by_rel
 
@@ -258,7 +249,15 @@ class RBACToReBACMigrator:
                 '说明:',
                 '- dry-run 只统计将要写入的权限 tuple，不会写入 OpenFGA，也不会保存 checkpoint。',
                 '- Step 3 的“展开前原始条目”表示 role_access 按用户角色展开后的候选权限数量，最终写入数会经过去重和高优先级覆盖。',
+                '- 各 Step 数表示该步骤去重后提交的 tuple 数；后续步骤若覆盖前面步骤的同一 key，Step 求和可以大于最终唯一 tuple 总数。',
                 '- 唯一 tuple 总数表示本次 dry-run 预计最终需要保留的唯一权限关系数量。',
+            ])
+        else:
+            lines.extend([
+                '',
+                '说明:',
+                '- 各 Step 数表示该步骤去重后提交的 tuple 数；后续步骤若覆盖前面步骤的同一 key，Step 求和可以大于最终唯一 tuple 总数。',
+                '- 唯一 tuple 总数表示迁移结束后最终保留在去重视图中的权限关系数量。',
             ])
         logger.info('\n'.join(lines))
 
@@ -323,10 +322,10 @@ class RBACToReBACMigrator:
                 async for rows in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, user_id FROM userrole '
-                                'WHERE role_id = :rid AND id > :last_id '
-                                'ORDER BY id LIMIT :limit'),
-                        {'rid': AdminRole, 'last_id': last_id},
+                            sa_text('SELECT id, user_id FROM userrole '
+                                    'WHERE role_id = :rid AND id > :last_id '
+                                    'ORDER BY id LIMIT :limit'),
+                            {'rid': AdminRole, 'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -356,9 +355,21 @@ class RBACToReBACMigrator:
                 async for rows in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, user_id, group_id, is_group_admin FROM usergroup '
-                                'WHERE id > :last_id ORDER BY id LIMIT :limit'),
-                        {'last_id': last_id},
+                            sa_text(
+                                'SELECT picked.id, picked.user_id, picked.group_id, picked.is_group_admin '
+                                'FROM ('
+                                '  SELECT ug.id, ug.user_id, ug.group_id, ug.is_group_admin, '
+                                '         ROW_NUMBER() OVER ('
+                                '           PARTITION BY ug.user_id, ug.group_id '
+                                '           ORDER BY ug.is_group_admin DESC, ug.update_time DESC, ug.create_time DESC, ug.id DESC'
+                                '         ) AS rn '
+                                '  FROM usergroup AS ug '
+                                '  WHERE ug.id > :last_id'
+                                ') AS picked '
+                                'WHERE picked.rn = 1 '
+                                'ORDER BY picked.id LIMIT :limit'
+                            ),
+                            {'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -390,10 +401,10 @@ class RBACToReBACMigrator:
                 async for role_accesses in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, role_id, third_id, type FROM roleaccess '
-                                'WHERE type != 99 AND role_id != :admin_rid '
-                                'AND id > :last_id ORDER BY id LIMIT :limit'),
-                        {'admin_rid': AdminRole, 'last_id': last_id},
+                            sa_text('SELECT id, role_id, third_id, type FROM roleaccess '
+                                    'WHERE type != 99 AND role_id != :admin_rid '
+                                    'AND id > :last_id ORDER BY id LIMIT :limit'),
+                            {'admin_rid': AdminRole, 'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -412,14 +423,14 @@ class RBACToReBACMigrator:
                         async for user_rows in iter_keyset_batches(
                             session,
                             lambda last_id, role_id=role_id: (
-                                sa_text('SELECT id, user_id FROM userrole '
-                                        'WHERE role_id = :role_id AND role_id != :admin_rid '
-                                        'AND id > :last_id ORDER BY id LIMIT :limit'),
-                                {
-                                    'role_id': role_id,
-                                    'admin_rid': AdminRole,
-                                    'last_id': last_id,
-                                },
+                                    sa_text('SELECT id, user_id FROM userrole '
+                                            'WHERE role_id = :role_id AND role_id != :admin_rid '
+                                            'AND id > :last_id ORDER BY id LIMIT :limit'),
+                                    {
+                                        'role_id': role_id,
+                                        'admin_rid': AdminRole,
+                                        'last_id': last_id,
+                                    },
                             ),
                             batch_size=self.batch_size,
                             progress=self.progress,
@@ -453,10 +464,10 @@ class RBACToReBACMigrator:
                 async for members in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text("SELECT id, business_id, business_type, user_id, user_role "
-                                "FROM space_channel_member WHERE status = 'ACTIVE' "
-                                "AND id > :last_id ORDER BY id LIMIT :limit"),
-                        {'last_id': last_id},
+                            sa_text("SELECT id, business_id, business_type, user_id, user_role "
+                                    "FROM space_channel_member WHERE status = 'ACTIVE' "
+                                    "AND id > :last_id ORDER BY id LIMIT :limit"),
+                            {'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -533,10 +544,10 @@ class RBACToReBACMigrator:
                 async for rows in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, id, user_id, flow_type FROM flow '
-                                'WHERE flow_type IN (5, 10) AND id > :last_id '
-                                'ORDER BY id LIMIT :limit'),
-                        {'last_id': str(last_id) if last_id else ''},
+                            sa_text('SELECT id, id, user_id, flow_type FROM flow '
+                                    'WHERE flow_type IN (5, 10) AND id > :last_id '
+                                    'ORDER BY id LIMIT :limit'),
+                            {'last_id': str(last_id) if last_id else ''},
                     ),
                     batch_size=self.batch_size,
                     start_cursor='',
@@ -563,8 +574,8 @@ class RBACToReBACMigrator:
                         async for rows in iter_keyset_batches(
                             session,
                             lambda last_id, query=query: (
-                                sa_text(query),
-                                {'last_id': last_id},
+                                    sa_text(query),
+                                    {'last_id': last_id},
                             ),
                             batch_size=self.batch_size,
                             start_cursor=start_cursor,
@@ -604,10 +615,10 @@ class RBACToReBACMigrator:
                 async for files in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, id, knowledge_id, file_type, file_level_path '
-                                'FROM knowledgefile WHERE id > :last_id '
-                                'ORDER BY id LIMIT :limit'),
-                        {'last_id': last_id},
+                            sa_text('SELECT id, id, knowledge_id, file_type, file_level_path '
+                                    'FROM knowledgefile WHERE id > :last_id '
+                                    'ORDER BY id LIMIT :limit'),
+                            {'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -647,9 +658,9 @@ class RBACToReBACMigrator:
                 async for rows in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, user_id, department_id FROM user_department '
-                                'WHERE id > :last_id ORDER BY id LIMIT :limit'),
-                        {'last_id': last_id},
+                            sa_text('SELECT id, user_id, department_id FROM user_department '
+                                    'WHERE id > :last_id ORDER BY id LIMIT :limit'),
+                            {'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -684,9 +695,9 @@ class RBACToReBACMigrator:
                 async for rows in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT id, group_id, third_id, type FROM groupresource '
-                                'WHERE id > :last_id ORDER BY id LIMIT :limit'),
-                        {'last_id': last_id},
+                            sa_text('SELECT id, group_id, third_id, type FROM groupresource '
+                                    'WHERE id > :last_id ORDER BY id LIMIT :limit'),
+                            {'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
                     progress=self.progress,
@@ -708,236 +719,13 @@ class RBACToReBACMigrator:
                     total += await self._flush()
         return total
 
-    # ── Verify (stub — implemented in T7) ─────────────────────────
-
-    async def verify_all(self) -> VerifyReport:
-        """Sample users/resources and compare old RBAC vs new ReBAC can_read results."""
-        from bisheng.core.database import get_async_db_session
-        from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.database.constants import AdminRole
-
-        report = VerifyReport()
-
-        async with get_async_db_session() as session:
-            with bypass_tenant_filter():
-                user_result = await session_exec(
-                    session,
-                    sa_text('SELECT DISTINCT user_id FROM userrole '
-                            'WHERE role_id != :admin_rid LIMIT 100'),
-                    {'admin_rid': AdminRole},
-                )
-                user_ids = [r[0] for r in user_result.fetchall()]
-
-                # Sample resources (each type ≤100)
-                resources: list[tuple[str, str]] = []
-
-                for query, obj_type in [
-                    ('SELECT id FROM knowledge WHERE type != 3 LIMIT 100', 'knowledge_library'),
-                    ('SELECT id FROM knowledge WHERE type = 3 LIMIT 100', 'knowledge_space'),
-                    ("SELECT id FROM flow WHERE flow_type = 10 LIMIT 100", 'workflow'),
-                    ("SELECT id FROM flow WHERE flow_type = 5 LIMIT 100", 'assistant'),
-                    ('SELECT id FROM t_gpts_tools WHERE is_delete = 0 LIMIT 100', 'tool'),
-                    ('SELECT id FROM channel LIMIT 100', 'channel'),
-                ]:
-                    try:
-                        res = await session_exec(session, sa_text(query))
-                        for row in res.fetchall():
-                            resources.append((obj_type, str(row[0])))
-                    except Exception:
-                        continue
-
-                if not user_ids:
-                    logger.warning('Verify: no users to check')
-                    return report
-
-                ur_statement = sa_text(
-                    'SELECT user_id, role_id FROM userrole WHERE user_id IN :user_ids'
-                ).bindparams(bindparam('user_ids', expanding=True))
-                ur_result = await session_exec(session, ur_statement, {'user_ids': user_ids})
-                user_role_map: dict[int, list[int]] = {}
-                for uid, rid in ur_result.fetchall():
-                    user_role_map.setdefault(uid, []).append(rid)
-
-                resource_ids_by_type: dict[str, set[str]] = {}
-                all_resource_ids: set[str] = set()
-                for obj_type, obj_id in resources:
-                    resource_ids_by_type.setdefault(obj_type, set()).add(str(obj_id))
-                    all_resource_ids.add(str(obj_id))
-
-                owner_map: dict[tuple[str, str], int] = {}
-                for query, obj_type, ids in [
-                    (
-                        'SELECT id, user_id FROM knowledge WHERE type != 3 AND id IN :ids',
-                        'knowledge_library',
-                        resource_ids_by_type.get('knowledge_library', set()),
-                    ),
-                    (
-                        'SELECT id, user_id FROM knowledge WHERE type = 3 AND id IN :ids',
-                        'knowledge_space',
-                        resource_ids_by_type.get('knowledge_space', set()),
-                    ),
-                    (
-                        'SELECT id, user_id FROM flow WHERE flow_type = 10 AND id IN :ids',
-                        'workflow',
-                        resource_ids_by_type.get('workflow', set()),
-                    ),
-                    (
-                        'SELECT id, user_id FROM flow WHERE flow_type = 5 AND id IN :ids',
-                        'assistant',
-                        resource_ids_by_type.get('assistant', set()),
-                    ),
-                    (
-                        'SELECT id, user_id FROM t_gpts_tools WHERE is_delete = 0 AND id IN :ids',
-                        'tool',
-                        resource_ids_by_type.get('tool', set()),
-                    ),
-                    (
-                        'SELECT id, user_id FROM channel WHERE id IN :ids',
-                        'channel',
-                        resource_ids_by_type.get('channel', set()),
-                    ),
-                ]:
-                    if not ids:
-                        continue
-                    try:
-                        statement = sa_text(query).bindparams(bindparam('ids', expanding=True))
-                        res = await session_exec(session, statement, {'ids': list(ids)})
-                        for oid, uid in res.fetchall():
-                            owner_map[(obj_type, str(oid))] = uid
-                    except Exception:
-                        continue
-
-                role_access_set: set[tuple[int, str, int]] = set()
-                role_ids = {
-                    role_id
-                    for role_ids_for_user in user_role_map.values()
-                    for role_id in role_ids_for_user
-                }
-                if role_ids and all_resource_ids:
-                    ra_statement = sa_text(
-                        'SELECT role_id, third_id, type FROM roleaccess '
-                        'WHERE type != 99 AND role_id IN :role_ids AND third_id IN :resource_ids'
-                    ).bindparams(
-                        bindparam('role_ids', expanding=True),
-                        bindparam('resource_ids', expanding=True),
-                    )
-                    ra_result = await session_exec(
-                        session,
-                        ra_statement,
-                        {
-                            'role_ids': list(role_ids),
-                            'resource_ids': list(all_resource_ids),
-                        },
-                    )
-                    for rid, tid, atype in ra_result.fetchall():
-                        role_access_set.add((rid, tid, atype))
-
-                # space_channel_member: (user_id, business_type, business_id) for ACTIVE
-                scm_set: set[tuple[int, str, str]] = set()
-                if all_resource_ids:
-                    try:
-                        scm_statement = sa_text(
-                            "SELECT user_id, business_type, business_id "
-                            "FROM space_channel_member WHERE status = 'ACTIVE' "
-                            "AND user_id IN :user_ids AND business_id IN :resource_ids"
-                        ).bindparams(
-                            bindparam('user_ids', expanding=True),
-                            bindparam('resource_ids', expanding=True),
-                        )
-                        scm_result = await session_exec(
-                            session,
-                            scm_statement,
-                            {
-                                'user_ids': user_ids,
-                                'resource_ids': list(all_resource_ids),
-                            },
-                        )
-                        for s_uid, s_btype, s_bid in scm_result.fetchall():
-                            # Normalize case to match scm_type_reverse lookup below.
-                            scm_set.add((s_uid, (s_btype or '').lower(), s_bid))
-                    except Exception:
-                        pass  # table may not exist
-
-        if not user_ids or not resources:
-            logger.warning('Verify: no users or resources to check')
-            return report
-
-        # Reverse map: object_type → business_type for SCM lookup
-        scm_type_reverse = {'knowledge_space': 'space', 'channel': 'channel'}
-
-        # Check each (user, resource) pair
-        for uid in user_ids:
-            for obj_type, obj_id in resources:
-                # Old system check: owner OR role_access OR space_channel_member?
-                old_result = False
-                if owner_map.get((obj_type, obj_id)) == uid:
-                    old_result = True
-                else:
-                    user_roles = user_role_map.get(uid, [])
-                    read_types = {
-                        'knowledge_library': 1,
-                        'knowledge_space': 1, 'assistant': 5, 'tool': 7,
-                        'workflow': 9, 'dashboard': 11,
-                    }
-                    read_type = read_types.get(obj_type)
-                    if read_type:
-                        for rid in user_roles:
-                            if (rid, obj_id, read_type) in role_access_set:
-                                old_result = True
-                                break
-
-                # Also check space_channel_member (Step 4 source)
-                if not old_result:
-                    biz_type = scm_type_reverse.get(obj_type)
-                    if biz_type and (uid, biz_type, obj_id) in scm_set:
-                        old_result = True
-
-                # New system check via PermissionService
-                try:
-                    from bisheng.permission.domain.services.permission_service import PermissionService
-                    new_result = await PermissionService.check(
-                        user_id=uid,
-                        relation='can_read',
-                        object_type=obj_type,
-                        object_id=obj_id,
-                    )
-                except Exception:
-                    new_result = False
-
-                report.total += 1
-                if old_result == new_result:
-                    report.match += 1
-                elif old_result and not new_result:
-                    report.regression += 1
-                    logger.warning(f'REGRESSION: user:{uid} {obj_type}:{obj_id} '
-                                   f'old=YES new=NO')
-                else:
-                    report.expansion += 1
-
-        # Print verify report
-        lines = [
-            '\n=== F006 Permission Verification ===',
-            f'Checked: {len(user_ids)} users × {len(resources)} resources = {report.total} checks',
-            f'  Match:      {report.match}',
-            f'  Regression: {report.regression}  {"← MUST be 0" if report.regression else "✓"}',
-            f'  Expansion:  {report.expansion}  (acceptable)',
-            f'Exit code: {"1 (FAIL)" if report.regression > 0 else "0 (PASS)"}',
-        ]
-        logger.info('\n'.join(lines))
-        return report
-
     # ── Tuple Collection & Writing ────────────────────────────────
 
     def _collect(self, ops: list[TupleOperation]):
         """Accumulate tuples with global cross-step dedup."""
         for op in ops:
-            key = (op.user, op.object)
             decision = self._deduplicator.record(op.user, op.object, op.relation)
             if decision.accepted:
-                if decision.existing_relation and key not in self._buffer_new_keys:
-                    self._buffer_existing_keys.add(key)
-                elif not decision.existing_relation and key not in self._buffer_existing_keys:
-                    self._buffer_new_keys.add(key)
                 self._buffer.append(op)
             # else: skip — a higher-priority relation already collected
 
@@ -948,16 +736,10 @@ class RBACToReBACMigrator:
 
         deduped = self._dedup_tuples(self._buffer)
         self._buffer.clear()
-        existing_keys = self._buffer_existing_keys
-        self._buffer_existing_keys = set()
-        self._buffer_new_keys = set()
-        unique_new_count = sum(
-            1 for item in deduped
-            if (item.user, item.object) not in existing_keys
-        )
+        unique_step_count = len(deduped)
 
         if self.dry_run:
-            return unique_new_count
+            return unique_step_count
 
         written = 0
         with ProgressTracker(
@@ -982,7 +764,7 @@ class RBACToReBACMigrator:
                     raise  # Unrecoverable — abort, don't save checkpoint
                 finally:
                     bar.update(len(batch))
-        return unique_new_count
+        return unique_step_count
 
     async def _write_singles(self, tuples: list[TupleOperation]) -> int:
         """Fall back to single-tuple writes. Record failures to FailedTuple."""
