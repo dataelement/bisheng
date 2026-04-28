@@ -8,6 +8,13 @@ import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
 import { useAuthContext, useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { SideNav } from '~/pages/appChat/SideNav';
+import {
+    copyAppChatReturnTo,
+    copyAppChatOrigin,
+    normalizeAppChatReturn,
+    readAppChatReturnTo,
+    writeAppChatReturnTo,
+} from '~/pages/appChat/appChatOrigin';
 import { appConversationsState, sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import store from '~/store';
 import { cn, generateUUID } from '~/utils';
@@ -30,126 +37,81 @@ export default function AppRoot() {
     const isTabletOrMobile = usePrefersMobileLayout();
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
-    const appOriginStorageKey = (conversationId: string) => `app-chat-origin:${conversationId}`;
-    const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
-    const appLastOriginKey = 'app-last-origin';
+
+    type AppSurfaceLocationState = { appSurfaceReturn?: string };
+
     /**
      * H5 顶栏左侧：应用中心 / 探索 / 首页推荐 进入会话时都应显示「返回」并走 handleGoBack，
      * 否则会落在默认的抽屉按钮，用户以为在退出应用会话，实际只开了侧栏；返回逻辑也与 PC 侧栏不一致。
      */
-    const preferMobileAppBackButton = useMemo(() => {
-        if (!isTabletOrMobile || !isAppConversationRoute) return false;
-        const searchParams = new URLSearchParams(location.search);
-        const from = searchParams.get('from');
-        const entry = searchParams.get('entry');
-        if (from === 'center' || from === 'explore') return true;
-        if (from === 'home-recommended' && entry === 'home') return true;
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        if (!conversationId) return false;
-        try {
-            const persistedOrigin = sessionStorage.getItem(appOriginStorageKey(conversationId));
-            if (
-                persistedOrigin === 'center' ||
-                persistedOrigin === 'explore' ||
-                persistedOrigin === 'home'
-            ) {
-                return true;
-            }
-            if (sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home') {
-                return true;
-            }
-            const flowId = pathSegments[appSegmentIndex + 2];
-            if (flowId) {
-                const fo = sessionStorage.getItem(appFlowOriginKey(flowId));
-                if (fo === 'center' || fo === 'explore' || fo === 'home') return true;
-            }
-        } catch {
-            return false;
-        }
-        return false;
-    }, [isTabletOrMobile, isAppConversationRoute, location.pathname, location.search]);
+    const preferMobileAppBackButton = useMemo(
+        () => isTabletOrMobile && isAppConversationRoute,
+        [isTabletOrMobile, isAppConversationRoute],
+    );
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
     const handleGoBack = () => {
-        let fromHomeEntry = false;
+        const go = (to: string) => navigate(to, { replace: true });
+        const defaultPath = '/apps';
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
         const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        if (conversationId) {
-            try {
-                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
-            } catch {
-                // ignore storage failures
-            }
-        }
         const searchParams = new URLSearchParams(location.search);
+        const returnTo = searchParams.get('returnTo');
         const from = searchParams.get('from');
         const entry = searchParams.get('entry');
-        let persistedOrigin: 'center' | 'explore' | 'home' | null = null;
-        if (conversationId) {
-            try {
-                const origin = sessionStorage.getItem(appOriginStorageKey(conversationId));
-                if (origin === 'center' || origin === 'explore' || origin === 'home') {
-                    persistedOrigin = origin;
-                }
-            } catch {
-                // ignore storage failures
-            }
-        }
-        const flowId =
-            appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] ?? '' : '';
-        let persistedFlowOrigin: string | null = null;
-        if (flowId) {
-            try {
-                persistedFlowOrigin = sessionStorage.getItem(appFlowOriginKey(flowId));
-            } catch {
-                // ignore storage failures
-            }
-        }
-        // App center / 探索：URL、当前会话记录、或当前应用(flow)最近一次入口
-        if (
-            from === 'center' ||
-            from === 'explore' ||
-            persistedOrigin === 'center' ||
-            persistedOrigin === 'explore' ||
-            persistedFlowOrigin === 'center' ||
-            persistedFlowOrigin === 'explore'
-        ) {
-            navigate('/apps');
+        const surfaceReturn = (location.state as AppSurfaceLocationState | null)?.appSurfaceReturn;
+
+        const normalizedReturnTo = normalizeAppChatReturn(returnTo);
+        if (normalizedReturnTo) {
+            if (conversationId) writeAppChatReturnTo(conversationId, normalizedReturnTo);
+            go(normalizedReturnTo);
             return;
         }
-        let persistedLastOrigin: string | null = null;
-        try {
-            persistedLastOrigin = sessionStorage.getItem(appLastOriginKey);
-        } catch {
-            // ignore storage failures
-        }
-        if (persistedLastOrigin === 'center' || persistedLastOrigin === 'explore') {
-            navigate('/apps');
+
+        // Fallback for legacy links where returnTo might be stripped later.
+        const fromReturnTo =
+            from === 'center'
+                ? '/apps'
+                : from === 'explore'
+                    ? '/apps/explore'
+                    : from === 'home-recommended' && entry === 'home'
+                        ? '/c/new'
+                        : null;
+        if (fromReturnTo) {
+            if (conversationId) writeAppChatReturnTo(conversationId, fromReturnTo);
+            go(fromReturnTo);
             return;
         }
-        if (
-            fromHomeEntry ||
-            (from === 'home-recommended' && entry === 'home') ||
-            persistedOrigin === 'home'
-        ) {
-            navigate('/c/new');
+
+        const storedReturnTo = conversationId ? readAppChatReturnTo(conversationId) : null;
+        if (storedReturnTo) {
+            go(storedReturnTo);
             return;
         }
-        navigate('/apps');
+
+        const normalizedSurfaceReturn = normalizeAppChatReturn(surfaceReturn);
+        if (normalizedSurfaceReturn) {
+            if (conversationId) writeAppChatReturnTo(conversationId, normalizedSurfaceReturn);
+            go(normalizedSurfaceReturn);
+            return;
+        }
+        go(defaultPath);
     };
     const handleCreateNewAppChat = () => {
         const pathSegments = location.pathname.split('/').filter(Boolean);
         const appSegmentIndex = pathSegments.indexOf('app');
         const flowId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] : '';
         const flowType = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 3] : '';
+        const conversationId =
+            appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
         if (!flowId || !flowType) {
             navigate('/apps');
             return;
         }
         const chatId = generateUUID(32);
+        if (conversationId) copyAppChatOrigin(conversationId, chatId);
+        if (conversationId) copyAppChatReturnTo(conversationId, chatId);
         const now = new Date().toISOString();
         setAppConversations((prev) => [
             {
@@ -163,9 +125,20 @@ export default function AppRoot() {
             ...prev,
         ]);
         setSidebarVisible(false);
-        const qs = location.search || '';
-        navigate(`/app/${chatId}/${flowId}/${flowType}${qs}`);
+        navigate(`/app/${chatId}/${flowId}/${flowType}`, { state: location.state });
     };
+
+    // Back-fill sessionStorage from URL/state so back button only relies on conversation return target.
+    useEffect(() => {
+        if (!isAppConversationRoute) return;
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
+        if (!conversationId) return;
+        const normalizedReturnTo = normalizeAppChatReturn(new URLSearchParams(location.search).get('returnTo'))
+            ?? normalizeAppChatReturn((location.state as AppSurfaceLocationState | null)?.appSurfaceReturn);
+        if (normalizedReturnTo) writeAppChatReturnTo(conversationId, normalizedReturnTo);
+    }, [isAppConversationRoute, location.pathname, location.search, location.state]);
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -180,31 +153,6 @@ export default function AppRoot() {
             document.documentElement.style.overflow = prevHtmlOverflow;
         };
     }, [isAuthenticated]);
-
-    useEffect(() => {
-        const searchParams = new URLSearchParams(location.search);
-        const from = searchParams.get('from');
-        const entry = searchParams.get('entry');
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        const flowId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] : '';
-        if (!conversationId) return;
-        let origin: 'center' | 'explore' | 'home' | null = null;
-        if (from === 'center') origin = 'center';
-        else if (from === 'explore') origin = 'explore';
-        else if (from === 'home-recommended' && entry === 'home') origin = 'home';
-        if (!origin) return;
-        try {
-            sessionStorage.setItem(appOriginStorageKey(conversationId), origin);
-            if (flowId) {
-                sessionStorage.setItem(appFlowOriginKey(flowId), origin);
-            }
-            sessionStorage.setItem(appLastOriginKey, origin);
-        } catch {
-            // ignore storage failures
-        }
-    }, [location.pathname, location.search]);
 
     if (!isAuthenticated) {
         return null;
@@ -271,7 +219,7 @@ export default function AppRoot() {
                     {/* Floating actions - visible when sidebar is collapsed */}
                     <div
                         className={cn(
-                            'absolute top-4 left-4 z-[40] flex items-center gap-[8px] transition-all duration-300',
+                            'absolute left-3 top-3 z-[40] flex items-center gap-[8px] transition-all duration-300',
                             sidebarVisible || (isTabletOrMobile && isAppConversationRoute)
                                 ? 'opacity-0 pointer-events-none'
                                 : 'opacity-100',

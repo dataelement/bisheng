@@ -135,7 +135,7 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def find_space_members_paginated(
-            cls, space_id: int, user_ids: Optional[List[int]] = None, page: int = 1, page_size: int = 20
+        cls, space_id: int, user_ids: Optional[List[int]] = None, page: int = 1, page_size: int = 20
     ) -> List[SpaceChannelMember]:
         """ Async: Paginate active members for a space, creators and admins first """
         role_order = case(
@@ -165,7 +165,7 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def count_space_members_with_keyword(
-            cls, space_id: int, user_ids: Optional[List[int]] = None
+        cls, space_id: int, user_ids: Optional[List[int]] = None
     ) -> int:
         """ Async: Count active members for a space, filtered by user_ids, for pagination """
         from sqlalchemy import func
@@ -456,6 +456,17 @@ class SpaceChannelMemberDao:
             col(SpaceChannelMember.business_id) == str(space_id),
             col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
             col(SpaceChannelMember.user_id) == user_id
+        )
+        async with get_async_db_session() as session:
+            await session.execute(statement)
+            await session.commit()
+            return True
+
+    @classmethod
+    async def clean_space_member(cls, space_id: int) -> bool:
+        statement = delete(SpaceChannelMember).where(
+            col(SpaceChannelMember.business_id) == str(space_id),
+            col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE
         )
         async with get_async_db_session() as session:
             await session.execute(statement)

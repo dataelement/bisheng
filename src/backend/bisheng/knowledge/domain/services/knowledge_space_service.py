@@ -49,8 +49,8 @@ from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
@@ -1007,6 +1007,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # F008: Delete all FGA tuples for this space and its child resources
         await self._cleanup_resource_tuples(child_resources + [('knowledge_space', space_id)])
+
+        # delete space channel memeber
+        await SpaceChannelMemberDao.clean_space_member(space_id)
 
         # TC-040: prune channel ➜ knowledge-space sync bindings that target
         # this space so the channel UI and the Celery sync worker stop

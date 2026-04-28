@@ -4,6 +4,12 @@ import { useSetRecoilState } from 'recoil';
 import { getAppConversationsApi } from '~/api/apps';
 import { useLocalize } from '~/hooks';
 import { generateUUID } from '~/utils';
+import {
+    deriveAppChatOriginFromEntry,
+    isAllowedAppChatReturn,
+    writeAppChatOrigin,
+    writeAppChatReturnTo,
+} from '~/pages/appChat/appChatOrigin';
 import { ChatEmptyState } from './components/ChatEmptyState';
 import { appConversationsState } from './store/appSidebarAtoms';
 
@@ -30,12 +36,29 @@ export default function AppChatEntry() {
     // hook into currentAppInfoState, so the sidebar card is populated here too.
 
     const buildQs = useCallback(() => {
-        return location.search || '';
+        const qs = new URLSearchParams(location.search || '');
+        qs.delete('from');
+        qs.delete('entry');
+        const normalized = qs.toString();
+        return normalized ? `?${normalized}` : '';
     }, [location.search]);
+
+    const deriveReturnTo = useCallback(() => {
+        const qs = new URLSearchParams(location.search || '');
+        const returnTo = qs.get('returnTo');
+        if (isAllowedAppChatReturn(returnTo)) return returnTo;
+        const sr = (location.state as { appSurfaceReturn?: string } | null)?.appSurfaceReturn;
+        if (isAllowedAppChatReturn(sr)) return sr;
+        return null;
+    }, [location.search, location.state]);
 
     const navigateToNewChat = useCallback(() => {
         if (!fid || !type) return;
         const chatId = generateUUID(32);
+        const origin = deriveAppChatOriginFromEntry(location.search, location.state);
+        if (origin) writeAppChatOrigin(chatId, origin);
+        const returnTo = deriveReturnTo();
+        if (returnTo) writeAppChatReturnTo(chatId, returnTo);
         // Seed sidebar placeholder so the new chat shows up immediately.
         setConversations((prev) => [
             {
@@ -48,8 +71,11 @@ export default function AppChatEntry() {
             },
             ...prev,
         ]);
-        navigate(`/app/${chatId}/${fid}/${type}${buildQs()}`, { replace: true });
-    }, [fid, type, localize, setConversations, navigate, buildQs]);
+        navigate(`/app/${chatId}/${fid}/${type}${buildQs()}`, {
+            replace: true,
+            state: location.state,
+        });
+    }, [fid, type, localize, setConversations, navigate, buildQs, location.search, location.state, deriveReturnTo]);
 
     useEffect(() => {
         if (fromDelete || resolvedRef.current || !fid || !type) return;
@@ -59,8 +85,15 @@ export default function AppChatEntry() {
                 const res = await getAppConversationsApi(fid, 1, 100) as { data?: { list?: Array<{ chat_id: string }> } };
                 const list = res.data?.list ?? [];
                 if (list.length > 0) {
-                    // Backend returns sessions sorted by update_time desc — list[0] is most recent.
-                    navigate(`/app/${list[0].chat_id}/${fid}/${type}${buildQs()}`, { replace: true });
+                    const chatId = list[0].chat_id;
+                    const origin = deriveAppChatOriginFromEntry(location.search, location.state);
+                    if (origin) writeAppChatOrigin(chatId, origin);
+                    const returnTo = deriveReturnTo();
+                    if (returnTo) writeAppChatReturnTo(chatId, returnTo);
+                    navigate(`/app/${chatId}/${fid}/${type}${buildQs()}`, {
+                        replace: true,
+                        state: location.state,
+                    });
                 } else {
                     navigateToNewChat();
                 }
@@ -68,7 +101,7 @@ export default function AppChatEntry() {
                 navigateToNewChat();
             }
         })();
-    }, [fromDelete, fid, type, navigate, navigateToNewChat, buildQs]);
+    }, [fromDelete, fid, type, navigate, navigateToNewChat, buildQs, deriveReturnTo, location.search, location.state]);
 
     if (fromDelete) {
         return (

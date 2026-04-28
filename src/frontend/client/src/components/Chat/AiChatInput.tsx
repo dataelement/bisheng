@@ -336,7 +336,7 @@ const AiChatInput = memo(
 
                 <div
                     className={cn(
-                        "relative flex w-full flex-col items-start gap-0 overflow-hidden bg-surface-tertiary p-2 touch-mobile:bg-[#f4f5f7]",
+                        "relative flex w-full flex-col items-start gap-0 overflow-hidden bg-surface-tertiary p-3 touch-mobile:bg-[#f4f5f7]",
                         // 有「附件 / 知识」标签时收紧顶部，避免 0 高度的 InputFiles 占位 + gap + pt 叠出一大块空区（移动端尤明显）
                         hasSelectionTags && "touch-mobile:pt-1.5",
                         size === "mini" ? "rounded-xl" : "rounded-3xl touch-mobile:rounded-2xl"
@@ -379,7 +379,7 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {hasSelectionTags && (
-                        <div className="mx-1 mb-2.5 max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                        <div className="mt-1 mb-2.5  max-h-[72px] overflow-y-auto scrollbar-on-hover">
                             <div className="flex flex-wrap gap-1">
                                 {uploadingFiles.map((file) => (
                                     <UploadingFileTag key={file.id} name={file.name} />
@@ -426,7 +426,7 @@ const AiChatInput = memo(
                         rows={1}
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pl-3 pr-4",
+                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0",
                             hasSelectionTags ? "pt-0" : "pt-1.5",
                             "placeholder-black/50 dark:placeholder-white/50",
                             "max-h-[240px] scrollbar-gutter-stable",

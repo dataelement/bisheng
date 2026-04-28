@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { AppItem } from '~/@types/app';
 import { getAllAccessibleAppsApi } from '~/api/apps';
 import { generateUUID } from '~/utils';
@@ -10,13 +10,13 @@ import { generateUUID } from '~/utils';
  */
 export function useAppSwitcher() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { fid: currentFlowId } = useParams();
 
   const [allApps, setAllApps] = useState<AppItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  console.log('allApps :>> ', allApps);
 
   /** Fetch all accessible apps (backend returns sorted by last_chat_time desc) */
   const fetchApps = useCallback(async () => {
@@ -55,16 +55,17 @@ export function useAppSwitcher() {
       setOpen(false);
       setSearchQuery('');
 
+      const navOpts = { state: location.state };
       if (app.last_chat_id) {
         // Has history: go to the most recent conversation
-        navigate(`/app/${app.last_chat_id}/${app.id}/${app.flow_type}`);
+        navigate(`/app/${app.last_chat_id}/${app.id}/${app.flow_type}`, navOpts);
       } else {
         // No history: create a new conversation
         const chatId = generateUUID(32);
-        navigate(`/app/${chatId}/${app.id}/${app.flow_type}`);
+        navigate(`/app/${chatId}/${app.id}/${app.flow_type}`, navOpts);
       }
     },
-    [navigate],
+    [location.state, navigate],
   );
 
   return {

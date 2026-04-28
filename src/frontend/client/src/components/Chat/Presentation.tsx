@@ -79,7 +79,7 @@ export default function Presentation({ isLingsi, children }: { isLingsi: boolean
           ) : null
         }
       >
-        <main className="flex h-full flex-col overflow-y-auto" role="main">
+        <main className="flex h-full min-h-0 flex-col overflow-hidden" role="main">
           {children}
         </main>
       </SidePanelGroup>

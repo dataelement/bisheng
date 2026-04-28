@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, MousePointerClick } from 'lucide-react';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
+import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
@@ -29,6 +30,7 @@ import AppAvator from '../Avator';
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
   const { conversationId: cid } = useParams();
+  const location = useLocation();
   const conversationId = (cid ?? id) || 'new';
 
   const [showCode, setShowCode] = useState(false);
@@ -244,7 +246,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               briefly floats the input up before messages arrive). */}
           {(() => {
             const loadingExistingConvo = isLoading && conversationId !== 'new';
-            const useMessagesLayout = hasMessages || loadingExistingConvo;
+            // Keep input pinned to bottom as soon as a send starts (before first token lands),
+            // otherwise mobile can briefly fall back to the centered landing layout.
+            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming;
             return (
               <div className={cn(
                 showCode ? 'hidden' : 'flex flex-col relative',
@@ -430,6 +434,9 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
     const _chatId = generateUUID(32)
     const flowId = agent.id
     const flowType = agent.flow_type || agent.type
+    const homeReturnTo = '/c/new';
+    writeAppChatOrigin(_chatId, 'home');
+    writeAppChatReturnTo(_chatId, homeReturnTo);
     try {
       sessionStorage.setItem(`app-chat-entry:${_chatId}`, 'home')
       sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'home')
@@ -453,7 +460,9 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
       } as any);
     });
     setConversation((prevState: any) => ({ ...prevState, conversationId: _chatId }))
-    navigate(`/app/${_chatId}/${flowId}/${flowType}?from=home-recommended&entry=home`)
+    navigate(`/app/${_chatId}/${flowId}/${flowType}?from=home-recommended&entry=home&returnTo=${encodeURIComponent(homeReturnTo)}`, {
+      state: { appSurfaceReturn: homeReturnTo },
+    })
   }
   const displayApps = dailyApps
 

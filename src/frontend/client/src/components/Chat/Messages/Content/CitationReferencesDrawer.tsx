@@ -769,6 +769,7 @@ export default function CitationReferencesDrawer({
         <CitationDocumentPreviewDrawer
           preview={documentPreview}
           onClose={() => setDocumentPreview(null)}
+          manageMobileNavVisibility={false}
         />
       )}
     </>
