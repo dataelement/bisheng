@@ -547,7 +547,17 @@ export type BsConfig = {
   linsight_invitation_code: boolean
   linsight_cache_dir: string
   waiting_list_url: string
-  shougang?: { enabled: boolean; prefix?: string };
+  /** 首钢部署专属命名空间；非首钢部署不出现该字段 */
+  shougang?: {
+    /** 派生自 prefix 是否非空；前端用于功能门控 (例如文件编码列) */
+    enabled?: boolean;
+    /** 文件编码前缀，例如 GF；为空则文件编码功能视为未启用 */
+    prefix?: string;
+    /** 部署标识，仅供 admin 阅读 YAML 时识别 */
+    deployment_label?: string;
+    /** 门户管理后台 URL；有值则 BiSheng 工作台侧栏显示"门户配置"菜单 */
+    portal_admin_url?: string;
+  };
 };
 
 export const configSchema = z.object({
