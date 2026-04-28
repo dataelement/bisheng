@@ -892,16 +892,14 @@ export function KnowledgeSpaceContent({
                                 ref={cardGridRef}
                                 className={cn(
                                     "w-full min-w-0 py-4",
-                                    isH5
-                                        ? viewMode === "list"
-                                            ? "grid grid-cols-1 gap-2"
-                                            : "grid grid-cols-2 gap-3"
+                                    viewMode === "list"
+                                        ? "grid grid-cols-1 gap-2"
                                         : "grid gap-4"
                                 )}
                                 style={
-                                    isH5
-                                        ? undefined
-                                        : { gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }
+                                    viewMode === "card"
+                                        ? { gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }
+                                        : undefined
                                 }
                             >
                                 {displayFiles.map((file) => (
@@ -969,6 +967,7 @@ export function KnowledgeSpaceContent({
             {/* Footer：H5 贴底无 8px 缝，白底延至安全区，避免下方内容渗出 */}
             <div
                 className={cn(
+                    "mt-auto",
                     isH5 && "fixed bottom-0 left-0 right-0 z-30 bg-white pb-[env(safe-area-inset-bottom,0px)]",
                 )}
             >

@@ -10,6 +10,7 @@ import store from "~/store";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
 import { ChatEmptyState } from "./components/ChatEmptyState";
+import { copyAppChatOrigin, copyAppChatReturnTo } from "~/pages/appChat/appChatOrigin";
 import { appConversationsState } from "./store/appSidebarAtoms";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import useChatHelpers from "./useChatHelpers";
@@ -37,6 +38,8 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     const createNewChat = useCallback(() => {
         if (!flowId || !flowType) return;
         const chatId = generateUUID(32);
+        if (cid) copyAppChatOrigin(cid, chatId);
+        if (cid) copyAppChatReturnTo(cid, chatId);
         setConversations((prev) => [{
             id: chatId,
             title: localize('com_ui_new_chat'),
@@ -45,10 +48,9 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
             updatedAt: new Date().toISOString(),
             createdAt: new Date().toISOString(),
         }, ...prev]);
-        const qs = location.search || '';
-        const nextPath = `/app/${chatId}/${flowId}/${flowType}${qs}`;
-        navigate(nextPath);
-    }, [flowId, flowType, localize, location.search, navigate, setConversations]);
+        const nextPath = `/app/${chatId}/${flowId}/${flowType}`;
+        navigate(nextPath, { state: location.state });
+    }, [flowId, flowType, localize, location.state, navigate, setConversations, cid]);
 
     const messages = chatState?.messages || [];
     const hasMessages = messages.length > 0;

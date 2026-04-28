@@ -162,20 +162,21 @@ function Sidebar({
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
         closeDrawerOnNavigate: true,
       },
-      {
-        section: 'channel' as const,
-        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-        icon: <LinkIcon />,
-        label: localize('com_ui_channel'),
-        isActive: pathname.startsWith('/channel'),
-        closeDrawerOnNavigate: true,
-      },
+
       {
         section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
         icon: <BookOpenIcon />,
         label: localize('com_knowledge.knowledge_space'),
         isActive: pathname.startsWith('/knowledge'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'channel' as const,
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        icon: <LinkIcon />,
+        label: localize('com_ui_channel'),
+        isActive: pathname.startsWith('/channel'),
         closeDrawerOnNavigate: true,
       },
       {
@@ -215,7 +216,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[100dvh] flex flex-col justify-between py-2 pl-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
         // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
         isChatSection && isMobile && 'hidden',
