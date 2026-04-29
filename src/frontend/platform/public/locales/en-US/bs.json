@@ -328,7 +328,8 @@
     "usernameMaxLength": "Username can be a maximum of 30 characters",
     "passwordRequirements": "Initial password must be at least 8 characters, including uppercase letters, lowercase letters, numbers, and symbols",
     "roleRequired": "At least one role must be selected",
-    "userCreationSuccess": "User created successfully! Username and initial password have been copied to clipboard"
+    "userCreationSuccess": "User created successfully! Username and initial password have been copied to clipboard",
+    "relationModelNameExists": "This relation model name already exists"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",
@@ -1870,7 +1871,8 @@
     "24003": "No permission for this role operation",
     "24004": "Built-in role cannot be deleted or have its core attributes modified",
     "24005": "Invalid quota_config or department_id value",
-    "10990": "Processing in the background, try again later"
+    "10990": "Processing in the background, try again later",
+    "19006": "Relation model name already exists."
   },
   "all": "All",
   "confirmButton": "Confirm",
@@ -2127,5 +2129,10 @@
     "autoDistributeLabel": "Auto-distribute Root-shared resources",
     "autoDistributeHint": "When OFF, this Child starts with NO Root-shared resources visible; super admin must open each share individually.",
     "previewTitle": "Resources that will become visible"
-  }
+  },
+  "createImport": "Create and Import",
+  "dailyFullName": "{{dailyFullName}}",
+  "failed": "Failed",
+  "inProgress": "In Progress",
+  "success": "Success"
 }

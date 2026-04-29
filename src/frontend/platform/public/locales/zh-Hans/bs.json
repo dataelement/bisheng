@@ -89,7 +89,6 @@
   },
   "login": {
     "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
-    "bottomText": "文擎毕昇",
     "account": "账号",
     "personId": "人员 ID",
     "userName": "用户名",
@@ -598,7 +597,6 @@
     "description": "描述",
     "model": "模型",
     "fileData": "文档知识库",
-    "structuredData": "结构化数据",
     "qaData": "QA知识库",
     "libraryCollection": "知识库集合",
     "createUser": "创建用户",
@@ -892,7 +890,6 @@
       "modelNameRequired": "模型显示名称不能为空",
       "modelRequired": "模型不能为空",
       "modelDuplicate": "模型不能重复",
-      "voiceTypeRequired": "音色类型不可为空",
       "modelNameDuplicate": "显示名称不能重复",
       "required": "不可为空"
     },
@@ -1309,9 +1306,6 @@
     "delete_role": "删除角色",
     "update_role": "编辑角色",
     "user_login": "用户登录",
-    "addTool": "创建工具",
-    "updateTool": "修改工具",
-    "deleteTool": "删除工具",
     "appName": "应用名称",
     "userName": "用户名",
     "userFeedback": "用户反馈",
