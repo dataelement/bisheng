@@ -91,186 +91,190 @@ export default function KnowledgeSpace() {
     return (
         <div className="h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
-                <CardContent className="pt-4 relative">
+                <CardContent className="p-0 pt-4 relative">
                     <div className="w-full max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <div className="mb-6">
-                            <div className="flex items-center mb-2">
-                                <p className="text-lg font-bold flex items-center">
-                                    <span>{t("chatConfig.prompts")}</span>
-                                </p>
-                            </div>
-                            {/* 系统提示词 */}
-                            <>
-                                <Label className="bisheng-label">{t('chatConfig.sysPrompts')}</Label>
-                                <div className="mt-3">
-                                    <Textarea
-                                        value={formData.systemPrompt}
-                                        placeholder={t('chatConfig.aiPrompt')}
-                                        className="min-h-48"
-                                        maxLength={30000}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setFormData(prev => ({ ...prev, systemPrompt: val }));
-                                            setErrors(prev => ({
-                                                ...prev,
-                                                systemPrompt: val.length >= 30000
-                                                    ? t('chatConfig.errors.maxCharacters', { count: 30000 })
-                                                    : '',
-                                            }));
-                                        }}
-                                    />
-                                    {errors.systemPrompt && (
-                                        <p className="text-xs text-red-500 mt-1">{errors.systemPrompt}</p>
-                                    )}
+                            <div className="p-5 bg-gray-50 rounded-lg">
+                                <div className="flex items-center mb-2">
+                                    <p className="text-lg font-bold flex items-center">
+                                        <span>{t("chatConfig.prompts")}</span>
+                                    </p>
                                 </div>
-                            </>
-                            {/* 用户提示词 */}
-                            <>
-                                <Label className="bisheng-label">{t('chatConfig.userPrompts')}</Label>
-                                <div className="mt-3">
-                                    <Textarea
-                                        value={formData.userPrompt}
-                                        placeholder={t('chatConfig.retrievedAndQuestion')}
-                                        className="min-h-48"
-                                        maxLength={30000}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setFormData(prev => ({ ...prev, userPrompt: val }));
-                                            setErrors(prev => ({
-                                                ...prev,
-                                                userPrompt: val.length >= 30000
-                                                    ? t('chatConfig.errors.maxCharacters', { count: 30000 })
-                                                    : '',
-                                            }));
-                                        }}
-                                    />
-                                    {errors.userPrompt && (
-                                        <p className="text-xs text-red-500 mt-1">{errors.userPrompt}</p>
-                                    )}
-                                </div>
-                            </>
-                            {/* 知识空间检索结果最大字符数 */}
-                            <>
-                                <Label className="bisheng-label">{t('chatConfig.knowledgeSpaceMaxChars')}</Label>
-                                <div className="flex items-center max-w-40">
-                                    <NonNegativeInput
-                                        className="mt-3"
-                                        value={formData.maxChunkSize ?? ''}
-                                        defaultValue={15000}
-                                        // max={15000}
-                                        onValueChange={(val) => {
-                                            setFormData(prev => ({ ...prev, maxChunkSize: val }));
-                                        }}
-                                    />
-                                    <span className="mt-3 ml-2">{t('chatConfig.character')}</span>
-                                </div>
-                            </>
-
-                            <div className="mt-6 flex justify-end gap-4">
-                                <Preview onBeforView={handleSave} />
-                                <Button onClick={handleSave}>{t('save')}</Button>
-                            </div>
-
-                            <div className="mt-8 border-t border-[#ECECEC] pt-6">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div>
-                                        <p className="text-lg font-bold">
-                                            {t("bench.departmentKnowledgeSpace", "部门知识空间")}
-                                        </p>
-                                        <p className="mt-1 text-sm text-[#86909C]">
-                                            {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，以及每个部门知识空间单独的上传审批策略。")}
-                                        </p>
+                                {/* 系统提示词 */}
+                                <>
+                                    <Label className="bisheng-label">{t('chatConfig.sysPrompts')}</Label>
+                                    <div className="mt-3">
+                                        <Textarea
+                                            value={formData.systemPrompt}
+                                            placeholder={t('chatConfig.aiPrompt')}
+                                            className="min-h-48"
+                                            maxLength={30000}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setFormData(prev => ({ ...prev, systemPrompt: val }));
+                                                setErrors(prev => ({
+                                                    ...prev,
+                                                    systemPrompt: val.length >= 30000
+                                                        ? t('chatConfig.errors.maxCharacters', { count: 30000 })
+                                                        : '',
+                                                }));
+                                            }}
+                                        />
+                                        {errors.systemPrompt && (
+                                            <p className="text-xs text-red-500 mt-1">{errors.systemPrompt}</p>
+                                        )}
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        className="bg-gray-50"
-                                        onClick={() => setManagerOpen(true)}
-                                    >
-                                        {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
-                                    </Button>
+                                </>
+                                {/* 用户提示词 */}
+                                <>
+                                    <Label className="bisheng-label">{t('chatConfig.userPrompts')}</Label>
+                                    <div className="mt-3">
+                                        <Textarea
+                                            value={formData.userPrompt}
+                                            placeholder={t('chatConfig.retrievedAndQuestion')}
+                                            className="min-h-48"
+                                            maxLength={30000}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setFormData(prev => ({ ...prev, userPrompt: val }));
+                                                setErrors(prev => ({
+                                                    ...prev,
+                                                    userPrompt: val.length >= 30000
+                                                        ? t('chatConfig.errors.maxCharacters', { count: 30000 })
+                                                        : '',
+                                                }));
+                                            }}
+                                        />
+                                        {errors.userPrompt && (
+                                            <p className="text-xs text-red-500 mt-1">{errors.userPrompt}</p>
+                                        )}
+                                    </div>
+                                </>
+                                {/* 知识空间检索结果最大字符数 */}
+                                <>
+                                    <Label className="bisheng-label">{t('chatConfig.knowledgeSpaceMaxChars')}</Label>
+                                    <div className="flex items-center max-w-40">
+                                        <NonNegativeInput
+                                            className="mt-3"
+                                            value={formData.maxChunkSize ?? ''}
+                                            defaultValue={15000}
+                                            // max={15000}
+                                            onValueChange={(val) => {
+                                                setFormData(prev => ({ ...prev, maxChunkSize: val }));
+                                            }}
+                                        />
+                                        <span className="mt-3 ml-2">{t('chatConfig.character')}</span>
+                                    </div>
+                                </>
+
+                                <div className="mt-6 flex justify-end gap-4">
+                                    <Preview onBeforView={handleSave} />
+                                    <Button onClick={handleSave}>{t('save')}</Button>
                                 </div>
-                                <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                            </div>
+
+                            <div className="p-5 rounded-lg">
+                                <div className="mt-8 border-t border-[#ECECEC] pt-6">
                                     <div className="flex items-center justify-between gap-4">
                                         <div>
-                                            <p className="text-sm font-medium text-[#1D2129]">
-                                                {t("bench.departmentKnowledgeSpaceCreatedList", "已创建知识空间")}
+                                            <p className="text-lg font-bold">
+                                                {t("bench.departmentKnowledgeSpace", "部门知识空间")}
                                             </p>
                                             <p className="mt-1 text-sm text-[#86909C]">
-                                                {t("bench.departmentKnowledgeSpaceCreatedListDesc", "已绑定部门的知识空间会统一展示在这里。")}
+                                                {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，以及每个部门知识空间单独的上传审批策略。")}
                                             </p>
                                         </div>
-                                        <span className="rounded bg-white px-2.5 py-1 text-xs text-[#4E5969] border border-[#E5E6EB]">
-                                            {departmentSpaces.length}
-                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            className="bg-gray-50"
+                                            onClick={() => setManagerOpen(true)}
+                                        >
+                                            {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
+                                        </Button>
                                     </div>
-                                    <div className="mt-4 space-y-3">
-                                        {departmentSpacesLoading ? (
-                                            <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                                                {t("loading")}
+                                    <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div>
+                                                <p className="text-sm font-medium text-[#1D2129]">
+                                                    {t("bench.departmentKnowledgeSpaceCreatedList", "已创建知识空间")}
+                                                </p>
+                                                <p className="mt-1 text-sm text-[#86909C]">
+                                                    {t("bench.departmentKnowledgeSpaceCreatedListDesc", "已绑定部门的知识空间会统一展示在这里。")}
+                                                </p>
                                             </div>
-                                        ) : !departmentSpaces.length ? (
-                                            <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                                                {t("bench.departmentKnowledgeSpaceCreatedEmpty", "暂无已创建的部门知识空间")}
-                                            </div>
-                                        ) : (
-                                            departmentSpaces.map((space) => (
-                                                <div
-                                                    key={space.id}
-                                                    className="rounded-lg border border-[#E5E6EB] bg-white px-4 py-3"
-                                                >
-                                                    <div className="flex items-start justify-between gap-4">
-                                                        <div className="min-w-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="truncate text-sm font-medium text-[#1D2129]">
-                                                                    {space.name}
+                                            <span className="rounded bg-white px-2.5 py-1 text-xs text-[#4E5969] border border-[#E5E6EB]">
+                                                {departmentSpaces.length}
+                                            </span>
+                                        </div>
+                                        <div className="mt-4 space-y-3">
+                                            {departmentSpacesLoading ? (
+                                                <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
+                                                    {t("loading")}
+                                                </div>
+                                            ) : !departmentSpaces.length ? (
+                                                <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
+                                                    {t("bench.departmentKnowledgeSpaceCreatedEmpty", "暂无已创建的部门知识空间")}
+                                                </div>
+                                            ) : (
+                                                departmentSpaces.map((space) => (
+                                                    <div
+                                                        key={space.id}
+                                                        className="rounded-lg border border-[#E5E6EB] bg-white px-4 py-3"
+                                                    >
+                                                        <div className="flex items-start justify-between gap-4">
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="truncate text-sm font-medium text-[#1D2129]">
+                                                                        {space.name}
+                                                                    </p>
+                                                                    <span className="rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]">
+                                                                        {space.department_name || "--"}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="mt-2 text-xs text-[#86909C]">
+                                                                    {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
                                                                 </p>
-                                                                <span className="rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]">
-                                                                    {space.department_name || "--"}
-                                                                </span>
-                                                            </div>
-                                                            <p className="mt-2 text-xs text-[#86909C]">
-                                                                {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
-                                                            </p>
-                                                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                                <span
-                                                                    className={
-                                                                        space.approval_enabled
-                                                                            ? "rounded bg-[#E6EDFC] px-2 py-0.5 text-xs text-[#165DFF]"
-                                                                            : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
-                                                                    }
-                                                                >
-                                                                    {space.approval_enabled
-                                                                        ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
-                                                                        : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
-                                                                </span>
-                                                                {showSensitiveCheckControl && (
+                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
                                                                     <span
                                                                         className={
-                                                                            space.sensitive_check_enabled
-                                                                                ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
+                                                                            space.approval_enabled
+                                                                                ? "rounded bg-[#E6EDFC] px-2 py-0.5 text-xs text-[#165DFF]"
                                                                                 : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
                                                                         }
                                                                     >
-                                                                        {space.sensitive_check_enabled
-                                                                            ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
-                                                                            : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
+                                                                        {space.approval_enabled
+                                                                            ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
+                                                                            : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
                                                                     </span>
-                                                                )}
+                                                                    {showSensitiveCheckControl && (
+                                                                        <span
+                                                                            className={
+                                                                                space.sensitive_check_enabled
+                                                                                    ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
+                                                                                    : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
+                                                                            }
+                                                                        >
+                                                                            {space.sensitive_check_enabled
+                                                                                ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
+                                                                                : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="h-7 px-3 bg-gray-50"
+                                                                    onClick={() => setApprovalTarget(space)}
+                                                                >
+                                                                    {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
+                                                                </Button>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <Button
-                                                                variant="outline"
-                                                                className="h-7 px-3 bg-gray-50"
-                                                                onClick={() => setApprovalTarget(space)}
-                                                            >
-                                                                {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
-                                                            </Button>
-                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))
-                                        )}
+                                                ))
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
