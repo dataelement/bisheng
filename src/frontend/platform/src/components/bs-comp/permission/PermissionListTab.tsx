@@ -5,6 +5,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu"
+import Tip from "@/components/bs-ui/tooltip/tip"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
   authorizeResource,
@@ -488,14 +489,18 @@ export function PermissionListTab({
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
-                      <span className="truncate text-[14px] leading-[22px] text-[#212121]" title={displayName}>
-                        {displayName}
-                      </span>
+                      <Tip content={displayName} side="top" styleClasses="z-[120]">
+                        <span className="truncate text-[14px] leading-[22px] text-[#212121]">
+                          {displayName}
+                        </span>
+                      </Tip>
                     </div>
 
-                    <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]" title={entryCaption}>
-                      {entryCaption}
-                    </p>
+                    <Tip content={entryCaption} side="top" styleClasses="z-[120]">
+                      <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                        {entryCaption}
+                      </p>
+                    </Tip>
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
                       {canModifyEntry && (!isOwner || canManageOwnerEntry) ? (
