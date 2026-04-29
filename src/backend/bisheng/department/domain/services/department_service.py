@@ -1359,6 +1359,85 @@ class DepartmentService:
             for r in roles
         ]
 
+    @staticmethod
+    def _department_scope_chain_ids(dept: Department) -> List[int]:
+        """Return ancestor ids from materialized path plus the department itself."""
+        chain: List[int] = []
+        seen: Set[int] = set()
+        for part in (dept.path or '').split('/'):
+            if not part.strip() or not part.isdigit():
+                continue
+            did = int(part)
+            if did not in seen:
+                seen.add(did)
+                chain.append(did)
+        if dept.id is not None:
+            did = int(dept.id)
+            if did not in seen:
+                chain.append(did)
+        return chain
+
+    @classmethod
+    async def _aget_assignable_roles_catalog(
+        cls, depts: List[Department], login_user,
+    ) -> dict:
+        """Batch build assignable-role catalogs for multiple departments."""
+        from bisheng.database.constants import AdminRole
+        from bisheng.database.models.role import Role
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        if not depts:
+            return {}
+
+        scope_by_dept_id: dict[str, set[int]] = {}
+        all_scope_ids: set[int] = set()
+        for dept in depts:
+            await _check_permission(login_user, dept_internal_id=int(dept.id))
+            scope_ids = set(cls._department_scope_chain_ids(dept))
+            if not scope_ids and dept.id is not None:
+                scope_ids = {int(dept.id)}
+            scope_by_dept_id[dept.dept_id] = scope_ids
+            all_scope_ids.update(scope_ids)
+
+        dept_scope = or_(
+            Role.department_id.is_(None),
+            Role.department_id.in_(list(all_scope_ids)),
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(Role).where(
+                    Role.id > AdminRole,
+                    or_(
+                        and_(Role.role_type == 'global', dept_scope),
+                        and_(
+                            Role.role_type == 'tenant',
+                            Role.tenant_id == login_user.tenant_id,
+                            dept_scope,
+                        ),
+                        and_(
+                            or_(Role.role_type.is_(None), Role.role_type == ''),
+                            Role.tenant_id == login_user.tenant_id,
+                            dept_scope,
+                        ),
+                    ),
+                ).order_by(Role.role_name.asc())
+                roles = (await session.exec(stmt)).all()
+
+        catalog: dict = {}
+        for dept in depts:
+            scope_ids = scope_by_dept_id.get(dept.dept_id, set())
+            catalog[dept.dept_id] = [
+                {
+                    'id': role.id,
+                    'role_name': role.role_name,
+                    'role_type': role.role_type,
+                    'department_id': role.department_id,
+                }
+                for role in roles
+                if role.department_id is None or int(role.department_id) in scope_ids
+            ]
+        return catalog
+
     @classmethod
     async def acreate_local_member(
         cls, dept_id: str, data: DepartmentLocalMemberCreate, login_user,
@@ -1451,7 +1530,7 @@ class DepartmentService:
         """Return groups the current user can actually mutate."""
         from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
-        res = await UserGroupService.alist_manageable_groups(login_user)
+        res = await UserGroupService.alist_manageable_group_options(login_user)
         out = []
         for x in res or []:
             out.append({
@@ -1697,7 +1776,7 @@ class DepartmentService:
         if not user or user.delete != 0:
             raise DepartmentMemberNotFoundError()
 
-        old_roles = UserRoleDao.get_user_roles(user_id)
+        old_roles = await UserRoleDao.aget_user_roles(user_id)
         role_ids_user = {int(r.role_id) for r in old_roles}
         if AdminRole in role_ids_user:
             raise DepartmentPermissionDeniedError()
@@ -1714,9 +1793,7 @@ class DepartmentService:
         else:
             edit_mode = 'synced_primary'
 
-        catalog: dict = {}
-        for d in depts:
-            catalog[d.dept_id] = await cls.aget_assignable_roles(d.dept_id, login_user)
+        catalog = await cls._aget_assignable_roles_catalog(depts, login_user)
 
         primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
         primary_block = None
