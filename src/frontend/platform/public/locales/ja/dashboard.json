@@ -2,21 +2,16 @@
   "chartSelector": {
     "title": "関連グラフ設定",
     "componentName": "コンポーネント: {{componentName}}",
-
     "selectCharts": "関連グラフを選択",
     "selectAll": "すべて選択",
     "unSelectAll": "すべて選択解除",
     "unnamedChart": "無名グラフ",
     "noDataset": "データセット未設定",
-
     "config": "クエリ条件設定",
     "displayType": "表示タイプ",
     "displayTypes": {
       "timeRange": "時間範囲",
       "time": "時間"
-    },
-    "dashboard": {
-
     },
     "timeGranularity": "時間粒度",
     "granularities": {
@@ -30,12 +25,10 @@
       "single": "時間",
       "range": "時間範囲"
     },
-
     "buttons": {
       "cancel": "キャンセル",
       "save": "保存"
     },
-
     "messages": {
       "saveSuccess": "関連グラフ設定を保存しました",
       "noCharts": "関連可能なグラフがありません",
@@ -59,31 +52,23 @@
     },
     "chartType": "グラフタイプ",
     "selectChartType": "グラフタイプを選択",
-
     "categoryAxis": "カテゴリ軸 / ディメンション",
     "stackItem": "積み上げ項目 / ディメンション",
     "subCategory": "サブカテゴリ / ディメンション",
     "valueAxis": "値軸 / メトリック",
-
     "sortPriority": "ソート優先順位",
     "sortHint": "ディメンションまたはメトリックを追加してソート優先順位を調整",
-
     "filter": "フィルター",
     "addFilterCondition": "フィルター条件を追加",
     "filterConditionsAdded": "フィルター条件を追加済み",
     "filterLogicHint": " ({{logic}})",
-
     "timeRange": "時間範囲",
     "selectTimeRange": "時間範囲を選択",
-
     "resultsDisplay": "結果表示",
     "allResults": "すべて",
     "limitResults": "件",
-
     "updateChartData": "グラフデータを更新",
-
     "dataSelection": "データ選択",
-
     "dialog": {
       "editDisplayName": "表示名を編集",
       "originalName": "元の名前",
@@ -96,7 +81,6 @@
       "confirm": "確認",
       "chartUpdated": "グラフが更新されました"
     },
-
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
       "dimensionLimitReached": "ディメンションの上限に達しました",
@@ -105,14 +89,12 @@
       "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
     },
-
     "sections": {
       "category": "カテゴリ軸",
       "stack": "積み上げ項目",
       "value": "メトリックエリア"
     }
   },
-
   "configPanel": {
     "title": "ダッシュボード設定",
     "dashboardStyle": "ダッシュボードスタイル",
@@ -129,13 +111,11 @@
     "metrics": "メトリック",
     "virtualMetric": "*",
     "selectDatasetPrompt": "まずデータセットを選択してください",
-
     "fieldTypes": {
       "date": "日付",
       "integer": "整数",
       "keyword": "テキスト"
     },
-
     "timeGranularity": {
       "year": "年",
       "quarter": "四半期",
@@ -173,7 +153,6 @@
     },
     "dialog": {
       "formatTitle": "数値フォーマット",
-      "chartUpdated": "グラフが更新されました",
       "formatType": "フォーマットタイプ",
       "decimalPlaces": "小数位数",
       "unit": "単位",
@@ -236,10 +215,7 @@
     },
     "toast": {
       "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください",
-      "virtualMetricConflict": "仮想メトリックと通常のメトリックを同時に追加することはできません",
-      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません",
       "saveSuccess": "保存に成功しました"
-
     },
     "enumSelect": {
       "placeholder": "選択してください",

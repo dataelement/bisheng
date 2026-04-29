@@ -121,9 +121,9 @@ export default function DepartmentUsersSelect({
         const next =
           rootDeptId != null
             ? (() => {
-                const sub = findSubtreeRoot(visible, rootDeptId)
-                return sub ? [sub] : []
-              })()
+              const sub = findSubtreeRoot(visible, rootDeptId)
+              return sub ? [sub] : []
+            })()
             : visible
         setTree(next)
         const rootIds = new Set<number>()
@@ -438,7 +438,17 @@ export default function DepartmentUsersSelect({
             value={keyword}
             onChange={(e) => handleKeywordChange(e.target.value)}
           />
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto rounded-md border"
+            // When this picker opens inside a Radix Dialog, its content is
+            // portaled outside the Dialog's react-remove-scroll shard, which
+            // preventDefaults wheel events at the document level. Driving
+            // scrollTop manually bypasses that block; pointer-drag works
+            // already because react-remove-scroll only intercepts wheel.
+            onWheel={(e) => {
+              e.currentTarget.scrollTop += e.deltaY
+            }}
+          >
             {loadingTree ? (
               <div className="py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
             ) : tree.length === 0 ? (

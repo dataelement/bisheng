@@ -2,40 +2,33 @@
   "chartSelector": {
     "title": "Chart Link Configuration",
     "componentName": "Component: {{componentName}}",
-
     "selectCharts": "Select Linked Charts",
     "selectAll": "Select All",
-    "unSelectAll":"Deselect All",
+    "unSelectAll": "Deselect All",
     "unnamedChart": "Unnamed Chart",
     "noDataset": "No dataset",
-
     "config": "Query Condition Configuration",
     "displayType": "Display Type",
     "displayTypes": {
       "timeRange": "Time Range",
       "time": "Time"
     },
-
     "timeGranularity": "Time Granularity",
     "granularities": {
       "yearMonth": "Year-Month",
       "yearMonthDay": "Year-Month-Day",
       "yearMonthDayHour": "Year-Month-Day-Hour"
     },
-
     "setDefault": "Set as Default Value",
-
     "datePicker": {
       "placeholder": "Select Date",
       "single": "Time",
       "range": "Time Range"
     },
-
     "buttons": {
       "cancel": "Cancel",
       "save": "Save"
     },
-
     "messages": {
       "saveSuccess": "Chart link configuration saved",
       "noCharts": "No charts available for linking",
@@ -47,34 +40,25 @@
     "customStyle": "Custom Style",
     "basicConfigTab": "Basic Configuration",
     "styleConfigTab": "Custom Style",
-
     "chartType": "Chart Type",
     "selectChartType": "Select Chart Type",
-
     "categoryAxis": "Category Axis / Dimension",
     "stackItem": "Stack Item / Dimension",
     "subCategory": "Sub-category / Dimension",
     "valueAxis": "Value Axis / Metric",
-
     "sortPriority": "Sort Priority",
     "sortHint": "Add dimensions or metrics to adjust sort priority",
-
     "filter": "Filter",
     "addFilterCondition": "Add Filter Condition",
     "filterConditionsAdded": "Filter conditions added",
     "filterLogicHint": " ({{logic}})",
-
     "timeRange": "Time Range",
     "selectTimeRange": "Select time range",
-
     "resultsDisplay": "Results Display",
     "allResults": "All",
     "limitResults": "records",
-
     "updateChartData": "Update Chart Data",
-
     "dataSelection": "Data Selection",
-
     "dialog": {
       "editDisplayName": "Edit Name",
       "originalName": "Original Name",
@@ -87,9 +71,7 @@
       "confirm": "Confirm",
       "chartUpdated": "Chart updated"
     },
-    "dashboard": {
-
-    },
+    "dashboard": {},
     "validation": {
       "validationFailed": "Validation failed",
       "chartTypeRequired": "Please select a chart type",
@@ -108,7 +90,6 @@
       "virtualMetricConflict": "Virtual metrics cannot be used together with non-virtual metrics",
       "multipleVirtualMetric": "Multiple virtual metrics are not allowed"
     },
-
     "sections": {
       "category": "category axis",
       "stack": "stack item",
@@ -131,13 +112,11 @@
     "metrics": "Metrics",
     "virtualMetric": "*",
     "selectDatasetPrompt": "Please select a dataset first",
-
     "fieldTypes": {
       "date": "Date",
       "integer": "Integer",
       "keyword": "Text"
     },
-
     "timeGranularity": {
       "year": "Year",
       "quarter": "Quarter",
@@ -209,7 +188,8 @@
     },
     "filterTypes": {
       "conditional": "Conditional Filter",
-      "enum": "Enum Filter"
+      "enum": "Enum Filter",
+      "noFields": "No fields available"
     },
     "operators": {
       "equals": "Equals",
