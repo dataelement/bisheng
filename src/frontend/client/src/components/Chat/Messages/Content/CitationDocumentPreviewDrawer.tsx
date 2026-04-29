@@ -250,8 +250,10 @@ export default function CitationDocumentPreviewDrawer({
       <div
         className={cn(
           'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
-          isFullBleedMobile && 'h-11 px-2 pt-[env(safe-area-inset-top,0px)]',
-          !isFullBleedMobile && 'h-10 px-4',
+          // Spec: 16px top/sides (below safe area), 24px gap to content (pb-6)
+          isFullBleedMobile &&
+            'px-4 pb-6 pt-[calc(env(safe-area-inset-top,0px)+16px)]',
+          !isFullBleedMobile && 'px-4 pb-6 pt-4',
         )}
       >
         <div className="flex min-w-0 items-center gap-2">

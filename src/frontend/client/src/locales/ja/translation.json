@@ -65,6 +65,8 @@
   "com_app_start_chat": "チャットを開始",
   "com_app_chat_sidebar_title": "アプリでの会話",
   "com_app_chat_author": "作成者",
+  "com_standalone_guest_app_name_label": "アプリ名：",
+  "com_standalone_guest_desc_label": "説明：",
   "com_app_common": "よく使う",
   "com_app_no_matching_apps": "該当するアプリがありません",
   "com_app_search_by_name": "アプリ名で検索",

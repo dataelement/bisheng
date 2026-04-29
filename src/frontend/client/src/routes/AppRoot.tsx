@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { ChevronLeft, Menu } from 'lucide-react';
@@ -41,15 +41,6 @@ export default function AppRoot() {
     const scrollLockPrevRef = useRef<{ body: string; html: string } | null>(null);
 
     type AppSurfaceLocationState = { appSurfaceReturn?: string };
-
-    /**
-     * H5 顶栏左侧：应用中心 / 探索 / 首页推荐 进入会话时都应显示「返回」并走 handleGoBack，
-     * 否则会落在默认的抽屉按钮，用户以为在退出应用会话，实际只开了侧栏；返回逻辑也与 PC 侧栏不一致。
-     */
-    const preferMobileAppBackButton = useMemo(
-        () => isTabletOrMobile && isAppConversationRoute,
-        [isTabletOrMobile, isAppConversationRoute],
-    );
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
     const handleGoBack = () => {
@@ -228,8 +219,6 @@ export default function AppRoot() {
                                 persistNavVisibleInLocalStorage={false}
                                 navigateToNewChatPath={false}
                                 onNewChat={handleCreateNewAppChat}
-                                preferBackButton={preferMobileAppBackButton}
-                                onBack={handleGoBack}
                             />
                         )}
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">

@@ -90,7 +90,7 @@ export function TopBar({
     };
 
     return (
-        <div className="flex items-center justify-between px-[24px] py-5 border-b border-[#ececec] bg-white shrink-0 select-none z-50">
+        <div className="flex items-center justify-between border-b border-[#ececec] bg-white px-4 pt-4 pb-6 shrink-0 select-none z-50">
             {/* ===== Left: TOC toggle + File name ===== */}
             <div className="flex items-center gap-3 min-w-0 flex-1">
                 {showSidebar && (
