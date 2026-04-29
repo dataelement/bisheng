@@ -11,6 +11,13 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.permission import (
+    PermissionDeniedError,
+    PermissionInvalidResourceError,
+    PermissionRelationModelNameExistsError,
+    PermissionTupleWriteError,
+)
+from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import resp_200
 from bisheng.permission.domain.application_permission_template import (
     APPLICATION_PERMISSION_TEMPLATE,
@@ -24,10 +31,6 @@ from bisheng.permission.domain.knowledge_space_permission_template import (
     KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
     default_permission_ids_for_relation as default_knowledge_space_permissions,
 )
-from bisheng.permission.domain.tool_permission_template import (
-    TOOL_PERMISSION_TEMPLATE,
-    default_permission_ids_for_relation as default_tool_permissions,
-)
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
@@ -37,13 +40,10 @@ from bisheng.permission.domain.schemas.permission_schema import (
     RelationModelItem,
     RelationModelUpdateRequest,
 )
-from bisheng.common.errcode.permission import (
-    PermissionDeniedError,
-    PermissionInvalidResourceError,
-    PermissionRelationModelNameExistsError,
-    PermissionTupleWriteError,
+from bisheng.permission.domain.tool_permission_template import (
+    TOOL_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_tool_permissions,
 )
-from bisheng.common.models.config import ConfigDao
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -158,22 +158,6 @@ def _normalize_model_dict(m: dict) -> dict:
     return out
 
 
-def _is_legacy_subscription_permission_item(
-    resource_type: str,
-    item: ResourcePermissionItem,
-    binding: dict | None,
-) -> bool:
-    # Subscription/member rows are maintained outside ReBAC. Legacy code wrote
-    # active subscribers as unbound user viewer tuples; do not surface those in
-    # the explicit authorization list.
-    return (
-        resource_type in {'knowledge_space', 'channel'}
-        and item.subject_type == 'user'
-        and item.relation == 'viewer'
-        and not (binding and binding.get('model_id'))
-    )
-
-
 def _default_relation_models() -> list[dict]:
     return [
         {
@@ -249,7 +233,7 @@ async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> li
         int(binding.get('resource_id'))
         for binding in bindings
         if binding.get('resource_type') == 'knowledge_space'
-        and str(binding.get('resource_id', '')).isdigit()
+           and str(binding.get('resource_id', '')).isdigit()
     }
     if not legacy_ids:
         return bindings
@@ -958,13 +942,13 @@ async def authorize_resource(
         if _tuple_signature(grant) in rebind_only_signatures
     ]
     tuple_grants = [
-        grant for grant in (request.grants or [])
-        if _tuple_signature(grant) not in rebind_only_signatures
-    ] + rebind_only_grants
+                       grant for grant in (request.grants or [])
+                       if _tuple_signature(grant) not in rebind_only_signatures
+                   ] + rebind_only_grants
     tuple_revokes = [
         revoke for revoke in (request.revokes or [])
         if _tuple_signature(revoke) not in rebind_only_signatures
-        and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+           and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
     ]
 
     self_owner_revokes = [
@@ -1008,9 +992,9 @@ async def authorize_resource(
         if (
             revoke.subject_type == 'department'
             and (
-                include_children is True
-                or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
-            )
+            include_children is True
+            or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+        )
         ):
             include_children_values = [True, False]
         for include_children in include_children_values:
@@ -1164,8 +1148,7 @@ async def get_resource_permissions(
             p.model_id = matched.get('model_id')
             p.model_name = model_map.get(p.model_id, {}).get('name')
             p.include_children = matched.get('include_children')
-        if _is_legacy_subscription_permission_item(resource_type, p, matched):
-            continue
+
         visible_permissions.append(p)
     permissions = visible_permissions
     permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
@@ -1330,7 +1313,8 @@ async def delete_relation_model(
                 enforce_fga_success=True,
             )
     except Exception as e:
-        logger.error('delete_relation_model failed to revoke model=%s bindings=%d error=%s', model_id, len(to_remove), e)
+        logger.error('delete_relation_model failed to revoke model=%s bindings=%d error=%s', model_id, len(to_remove),
+                     e)
         return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
 
     remain_bindings = [b for b in bindings if b.get('model_id') != model_id]
