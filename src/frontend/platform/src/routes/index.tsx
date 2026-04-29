@@ -227,6 +227,8 @@ export const getAdminRouter = () => {
 
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
+  // Backdoor entry: bypasses SSO auto-redirect when redirect_login_url is configured.
+  { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
