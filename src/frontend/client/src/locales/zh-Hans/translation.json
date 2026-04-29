@@ -68,6 +68,8 @@
   "com_app_chat_empty_cta": "开始一个新的对话吧",
   "com_app_chat_sidebar_empty": "还没有任何历史对话",
   "com_app_chat_author": "作者",
+  "com_standalone_guest_app_name_label": "应用名称：",
+  "com_standalone_guest_desc_label": "描述信息：",
   "com_app_common": "常用",
   "com_app_no_matching_apps": "未找到相关应用",
   "com_app_search_by_name": "搜索应用名称",

@@ -70,6 +70,8 @@
   "com_app_chat_empty_cta": "start a new chat~",
   "com_app_chat_sidebar_empty": "No conversations yet. Start a new chat~",
   "com_app_chat_author": "Author",
+  "com_standalone_guest_app_name_label": "App name:",
+  "com_standalone_guest_desc_label": "Description:",
   "com_app_common": "Common",
   "com_app_no_matching_apps": "No matching apps",
   "com_app_search_by_name": "Search apps by name",
