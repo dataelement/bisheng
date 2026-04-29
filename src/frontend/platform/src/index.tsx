@@ -28,6 +28,19 @@ import { QueryClient, QueryClientProvider } from "react-query";
 //   });
 // }
 
+// Backdoor entry: when landing on /admin-login, drop any stored third-party
+// redirect URLs synchronously — before React mounts and before /user/info fires —
+// so the 401 interceptor in request.ts cannot bounce us straight to the IdP.
+{
+  // @ts-ignore
+  const baseUrl: string = (typeof __APP_ENV__ !== 'undefined' && __APP_ENV__?.BASE_URL) || ''
+  const normalizedPath = window.location.pathname.replace(baseUrl, '')
+  if (normalizedPath === '/admin-login' || normalizedPath.startsWith('/admin-login/')) {
+    localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
+    localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+  }
+}
+
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
