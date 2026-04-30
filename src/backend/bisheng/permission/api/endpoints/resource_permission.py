@@ -428,12 +428,20 @@ def _default_permission_ids_for_relation(resource_type: str, relation: str) -> s
     return set()
 
 
+def _resource_permission_universe(resource_type: str) -> set[str]:
+    # The owner defaults cover the full canonical permission set for each
+    # resource type, so they can be used as the scope filter for explicit
+    # relation-model permissions persisted in DB.
+    return _default_permission_ids_for_relation(resource_type, 'owner')
+
+
 def _permission_ids_for_model(resource_type: str, relation: str, model: dict | None) -> set[str]:
     if model is None:
         return _default_permission_ids_for_relation(resource_type, relation)
+    scope = _resource_permission_universe(resource_type)
     permissions = model.get('permissions') or []
     if model.get('permissions_explicit') is True:
-        return set(permissions)
+        return set(permissions) & scope
     if model.get('is_system'):
         return _default_permission_ids_for_relation(resource_type, model.get('relation') or relation)
     return set(permissions)
