@@ -15,6 +15,8 @@ before the real module is loaded.
 import sys
 from unittest.mock import MagicMock
 
+import pytest
+
 # Stub native deps the real telemetry module imports at top level. Must run
 # before we drop the conftest pre-mock and reload the real module.
 for _mod in ('elasticsearch', 'elasticsearch.exceptions'):
@@ -38,6 +40,7 @@ from bisheng.common.constants.enums.telemetry import (  # noqa: E402
 from bisheng.common.schemas.telemetry.base_telemetry_schema import (  # noqa: E402
     UserContext,
 )
+from bisheng.common.errcode.tenant import NoTenantContextError  # noqa: E402
 from bisheng.common.services.telemetry.telemetry_service import (  # noqa: E402
     BaseTelemetryService,
 )
@@ -137,3 +140,57 @@ def test_log_event_sync_isolates_worker_context_mutations():
         )
     finally:
         current_tenant_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_init_user_context_retries_without_tenant_context(monkeypatch):
+    """Async telemetry lookup should fall back to bypass_tenant_filter().
+
+    Startup/background tasks can call telemetry with no request tenant
+    context at all. In that case the first ORM query raises
+    ``NoTenantContextError`` and the service should retry in bypass mode
+    instead of bubbling the exception into the caller.
+    """
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakeUser:
+        user_id = 123
+        user_name = 'alice'
+        groups = []
+        roles = []
+        departments = []
+
+    call_count = {'count': 0}
+
+    def fake_get_async_db_session():
+        return _FakeSession()
+
+    class _FakeRepository:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_user_with_groups_and_roles_by_user_id(self, user_id):
+            call_count['count'] += 1
+            if call_count['count'] == 1:
+                raise NoTenantContextError()
+            return _FakeUser()
+
+    monkeypatch.setattr(
+        'bisheng.common.services.telemetry.telemetry_service.get_async_db_session',
+        fake_get_async_db_session,
+    )
+    monkeypatch.setattr(
+        'bisheng.common.services.telemetry.telemetry_service.UserRepositoryImpl',
+        _FakeRepository,
+    )
+
+    user_context = await BaseTelemetryService._init_user_context(123)
+
+    assert call_count['count'] == 2
+    assert user_context == UserContext(user_id=123, user_name='alice')

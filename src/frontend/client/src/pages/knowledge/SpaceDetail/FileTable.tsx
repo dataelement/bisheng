@@ -52,7 +52,7 @@ const COLUMN_CONFIG = {
     fileType: { minWidth: 100, initialWidth: 120 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
-    fileEncoding: { minWidth: 160, initialWidth: 200 },
+    fileEncoding: { minWidth: 160, initialWidth: 204 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
 } as const;

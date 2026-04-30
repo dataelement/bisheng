@@ -17,7 +17,13 @@ import { locationContext } from '@/contexts/locationContext';
 import { ldapLoginApi, getSSOurlApi } from '@/controllers/API/pro';
 import { getWorkspaceClientUrl } from '@/utils/workspaceUrl';
 
-export const LoginPage = () => {
+interface LoginPageProps {
+    // Backdoor entry: skip SSO auto-redirect and clear any stored third-party
+    // redirect URLs so 401/logout flows do not bounce admins back to the IdP.
+    forceLocal?: boolean;
+}
+
+export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
     const { message, toast } = useToast()
@@ -38,6 +44,13 @@ export const LoginPage = () => {
     const [oauthData, setOauthData] = useState<any>(null)
 
     useEffect(() => {
+        if (forceLocal) {
+            // Strip any stale third-party URLs left by a previous visit to `/`,
+            // otherwise the 401 interceptor and logout handlers would still
+            // redirect this session to the IdP.
+            localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
+            localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+        }
         getSSOurlApi()
             .then((urls: any) => {
                 setOauthData(urls)
@@ -47,6 +60,11 @@ export const LoginPage = () => {
                 if (urls?.ldapCheckboxLabel) {
                     setLdapCheckboxLabel(urls.ldapCheckboxLabel)
                     setIsLdapLogin(true)
+                }
+                if (forceLocal) {
+                    // Backdoor route: never persist redirect URLs and never auto-jump.
+                    setOauthLoading(false)
+                    return
                 }
                 // Persist redirect URLs for interceptor access (401 / logout)
                 if (urls?.redirect_login_url) {
@@ -70,7 +88,7 @@ export const LoginPage = () => {
                 // Third-party service unavailable — fall through to normal login
                 setOauthLoading(false)
             })
-    }, [])
+    }, [forceLocal])
 
     useLoginError()
 

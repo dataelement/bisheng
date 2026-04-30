@@ -49,6 +49,15 @@ def upgrade() -> None:
             existing_nullable=True,
             existing_comment='Uploaded documents, etc.',
         )
+    if _column_type('chatmessage', 'extra') != 'longtext':
+        op.alter_column(
+            'chatmessage',
+            'extra',
+            existing_type=mysql.TEXT(),
+            type_=mysql.LONGTEXT(),
+            existing_nullable=True,
+            existing_comment='retriever documents, etc.',
+        )
 
 
 def downgrade() -> None:

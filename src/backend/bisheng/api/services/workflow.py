@@ -17,16 +17,16 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
-from bisheng.permission.domain.workflow_app_permission import (
-    batch_user_may_share_app,
-    object_type_for_flow_type,
-)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.permission.domain.workflow_app_permission import (
+    batch_user_may_share_app,
+    object_type_for_flow_type,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -155,7 +155,7 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        if flow_type is None or skip_pagination or not user.is_admin():
+        if skip_pagination:
             query_page = 0
             query_page_size = 0
 
@@ -167,12 +167,13 @@ class WorkFlowService(BaseService):
         # Get a list of skills visible to the user
         if user.is_admin():
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
-                                                     query_page, query_page_size, search_description=search_description)
+                                                      query_page, query_page_size,
+                                                      search_description=search_description)
         else:
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None,
-                                                     None, None, query_page, query_page_size,
-                                                     search_description=search_description,
-                                                     app_type_ids=readable_type_ids)
+                                                      None, None, query_page, query_page_size,
+                                                      search_description=search_description,
+                                                      app_type_ids=readable_type_ids)
         data = cls.filter_supported_apps(data)
         writeable_ids: Optional[set[str]] = None
         if not user.is_admin() and data:
@@ -191,14 +192,8 @@ class WorkFlowService(BaseService):
                 for app_id, permission_ids in permission_map.items()
                 if 'edit_app' in permission_ids
             }
-        if not skip_pagination:
-            total = len(data)
-            start_index = (page - 1) * page_size
-            end_index = start_index + page_size
-            data = data[start_index:end_index]
         data = cls.add_extra_field(user, data, managed, writeable_ids=writeable_ids)
-        data = await cls.aenrich_apps_can_share(user, data, managed)
-
+        # data = await cls.aenrich_apps_can_share(user, data, managed)  # because frontend not need and this cost most time
         return data, total
 
     @classmethod
@@ -581,7 +576,8 @@ class WorkFlowService(BaseService):
 
         # Get a list of skills visible to the user
         if user.is_admin():
-            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
+            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0,
+                                           0)
         else:
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None,
                                            flow_ids_not_in, 0, 0)

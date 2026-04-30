@@ -464,14 +464,14 @@ describe("Relation model regressions", () => {
 
     await openRebacTab();
 
-    expect(await screen.findByText("知识空间模块")).toBeInTheDocument();
-    expect(screen.getByText("查看空间")).toBeInTheDocument();
-    expect(screen.getByText("分享空间")).toBeInTheDocument();
-    expect(screen.getByText("管理空间协作者")).toBeInTheDocument();
-    expect(screen.getByText("查看文件夹")).toBeInTheDocument();
-    expect(screen.getByText("管理文件夹协作者")).toBeInTheDocument();
-    expect(screen.getByText("查看文件")).toBeInTheDocument();
-    expect(screen.getByText("管理文件协作者")).toBeInTheDocument();
+    expect(await screen.findByText("system.permissionTemplate.sectionKnowledgeSpace")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.view_space")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.share_space")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.manage_space_relation")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.view_folder")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.manage_folder_relation")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.view_file")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.manage_file_relation")).toBeInTheDocument();
     expect(screen.queryByText("分享文件夹")).not.toBeInTheDocument();
     expect(screen.queryByText("分享文件")).not.toBeInTheDocument();
   });

@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Building2, ChevronDown, Loader2, RotateCcw, Search, Trash2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -520,14 +521,34 @@ export function PermissionListTab({
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
-                      <span className="truncate text-[14px] leading-[22px] text-[#212121]">
-                        {displayName}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="truncate text-[14px] leading-[22px] text-[#212121]">
+                            {displayName}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="z-[120] max-w-xs break-all">
+                          {displayName}
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
 
-                    <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
-                      {entryCaption}
-                    </p>
+                    {entryCaption ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                            {entryCaption}
+                          </p>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="z-[120] max-w-xs break-all">
+                          {entryCaption}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                        {entryCaption}
+                      </p>
+                    )}
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
                       {canModifyEntry && (!isOwner || canManageOwnerEntry) ? (

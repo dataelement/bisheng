@@ -98,15 +98,23 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   if (!flowId) return null;
 
-  // 免登录：圆角在侧栏+主内容整体外侧；主内容与侧栏衔接处不单独圆角
+  // Guest: neutral gray page + one white rounded shell (ref. design: gray backdrop, white card)
   const guestOuterShell = isGuestMode
-    ? 'flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-[12px] bg-white touch-mobile:rounded-none'
+    ? 'flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-2xl bg-white shadow-[0_4px_32px_rgba(0,0,0,0.08)]'
     : 'contents';
 
   return (
     <StandaloneChatContext.Provider value={contextValue}>
-      <div className={cn('flex', isGuestMode ? 'bg-white' : 'bg-[#F9F9F9]')} style={{ height: '100dvh' }}>
-        <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#F4F5F7] p-2">
+      <div
+        className={cn('flex', isGuestMode ? 'bg-[#DCDDDF]' : 'bg-[#F9F9F9]')}
+        style={{ height: '100dvh' }}
+      >
+        <div
+          className={cn(
+            'relative z-0 flex h-full w-full overflow-hidden p-2',
+            isGuestMode ? 'bg-[#DCDDDF]' : 'bg-[#F4F5F7]',
+          )}
+        >
           {/* Mobile overlay sidebar (covers full area; stays outside the guest rounded shell) */}
           {isTabletOrMobile && sidebarVisible && (
             <div className="absolute inset-0 z-[70] flex">

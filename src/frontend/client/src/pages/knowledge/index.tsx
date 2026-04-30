@@ -134,7 +134,11 @@ export default function Knowledge() {
     });
 
     // ─── File management (list, pagination, search, sort, navigation) ────
-    const fileManager = useFileManager({ activeSpace, initialFolderId: urlFolderId });
+    const fileManager = useFileManager({
+        activeSpace,
+        initialFolderId: urlFolderId,
+        enabled: !showKnowledgeSquare,
+    });
 
     // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
     useActivate(() => {

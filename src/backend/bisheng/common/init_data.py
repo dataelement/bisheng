@@ -3,7 +3,6 @@ import json
 import os
 from typing import List
 
-from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from loguru import logger
 from sqlmodel import select, update
 
@@ -15,6 +14,7 @@ from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
+from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from bisheng.tool.domain.models.gpts_tools import GptsTools
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User
@@ -341,6 +341,11 @@ async def _backfill_guest_department_membership(session):
 
     user_rows = (await session.exec(select(User.user_id))).all()
     if not user_rows:
+        return
+
+    alreday_insert = (await session.exec(select(UserDepartment.id))).first()
+    if alreday_insert:
+        logger.info(f'Already have user in department, guest dept ready, not handle every times')
         return
 
     added_user_ids = []

@@ -52,6 +52,18 @@ const RELATION_LEVEL: Record<string, number> = {
   can_manage: 3,
   can_delete: 4,
 }
+
+// Manage permissions form a hierarchy per resource type: owner ⊃ manager ⊃ viewer.
+// Selecting a higher tier implies all lower tiers; deselecting a lower tier
+// must also drop the higher tiers that imply it.
+const MANAGE_PERMISSION_IMPLIES: Record<string, string[]> = {
+  manage_app_owner: ["manage_app_manager", "manage_app_viewer"],
+  manage_app_manager: ["manage_app_viewer"],
+  manage_kb_owner: ["manage_kb_manager", "manage_kb_viewer"],
+  manage_kb_manager: ["manage_kb_viewer"],
+  manage_tool_owner: ["manage_tool_manager", "manage_tool_viewer"],
+  manage_tool_manager: ["manage_tool_viewer"],
+}
 const MODEL_LEVEL: Record<"owner" | "manager" | "editor" | "viewer", number> = {
   viewer: 1,
   editor: 2,
@@ -97,6 +109,7 @@ const filterHiddenTemplatePermissions = (section: TemplateSection): TemplateSect
 const filterHiddenPermissionIds = (permissionIds: string[]) =>
   permissionIds.filter((id) => !HIDDEN_RELATION_PERMISSION_IDS.has(id))
 
+/** Fallback when permission template APIs are unavailable; labels are resolved via i18n by permission id. */
 const TEMPLATE_SECTIONS: TemplateSection[] = [
   {
     title: "知识空间模块",
@@ -104,34 +117,34 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
       {
         title: "空间级",
         items: [
-          { id: "view_space", label: "查看空间", relation: "can_read" },
-          { id: "edit_space", label: "编辑空间信息", relation: "can_edit" },
-          { id: "delete_space", label: "删除空间", relation: "can_delete" },
-          { id: "share_space", label: "分享空间", relation: "can_manage" },
-          { id: "manage_space_relation", label: "管理空间协作者", relation: "can_manage" },
+          { id: "view_space", label: "", relation: "can_read" },
+          { id: "edit_space", label: "", relation: "can_edit" },
+          { id: "delete_space", label: "", relation: "can_delete" },
+          { id: "share_space", label: "", relation: "can_manage" },
+          { id: "manage_space_relation", label: "", relation: "can_manage" },
         ],
       },
       {
         title: "文件夹级",
         items: [
-          { id: "view_folder", label: "查看文件夹", relation: "can_read" },
-          { id: "create_folder", label: "创建文件夹", relation: "can_edit" },
-          { id: "rename_folder", label: "重命名文件夹", relation: "can_edit" },
-          { id: "delete_folder", label: "删除文件夹", relation: "can_delete" },
-          { id: "download_folder", label: "下载文件夹", relation: "can_read" },
-          { id: "manage_folder_relation", label: "管理文件夹协作者", relation: "can_manage" },
+          { id: "view_folder", label: "", relation: "can_read" },
+          { id: "create_folder", label: "", relation: "can_edit" },
+          { id: "rename_folder", label: "", relation: "can_edit" },
+          { id: "delete_folder", label: "", relation: "can_delete" },
+          { id: "download_folder", label: "", relation: "can_read" },
+          { id: "manage_folder_relation", label: "", relation: "can_manage" },
         ],
       },
       {
         title: "文件级",
         items: [
-          { id: "view_file", label: "查看文件", relation: "can_read" },
-          { id: "upload_file", label: "上传文件", relation: "can_edit" },
-          { id: "rename_file", label: "重命名文件", relation: "can_edit" },
-          { id: "delete_file", label: "删除文件", relation: "can_delete" },
-          { id: "download_file", label: "下载文件", relation: "can_read" },
-          { id: "share_file", label: "分享文件", relation: "can_manage" },
-          { id: "manage_file_relation", label: "管理文件协作者", relation: "can_manage" },
+          { id: "view_file", label: "", relation: "can_read" },
+          { id: "upload_file", label: "", relation: "can_edit" },
+          { id: "rename_file", label: "", relation: "can_edit" },
+          { id: "delete_file", label: "", relation: "can_delete" },
+          { id: "download_file", label: "", relation: "can_read" },
+          { id: "share_file", label: "", relation: "can_manage" },
+          { id: "manage_file_relation", label: "", relation: "can_manage" },
         ],
       },
     ],
@@ -142,26 +155,26 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
       {
         title: "",
         items: [
-          { id: "view_app", label: "查看应用", relation: "can_read" },
-          { id: "use_app", label: "使用应用", relation: "can_read" },
-          { id: "edit_app", label: "编辑应用", relation: "can_edit" },
-          { id: "delete_app", label: "删除应用", relation: "can_delete" },
+          { id: "view_app", label: "", relation: "can_read" },
+          { id: "use_app", label: "", relation: "can_read" },
+          { id: "edit_app", label: "", relation: "can_edit" },
+          { id: "delete_app", label: "", relation: "can_delete" },
         ],
       },
       {
         title: "",
         items: [
-          { id: "publish_app", label: "发布应用", relation: "can_manage" },
-          { id: "unpublish_app", label: "下线应用", relation: "can_manage" },
-          { id: "share_app", label: "分享应用", relation: "can_manage" },
+          { id: "publish_app", label: "", relation: "can_manage" },
+          { id: "unpublish_app", label: "", relation: "can_manage" },
+          { id: "share_app", label: "", relation: "can_manage" },
         ],
       },
       {
         title: "",
         items: [
-          { id: "manage_app_owner", label: "管理应用所有者", relation: "can_manage" },
-          { id: "manage_app_manager", label: "管理应用管理者", relation: "can_manage" },
-          { id: "manage_app_viewer", label: "管理应用编辑者与使用者", relation: "can_manage" },
+          { id: "manage_app_owner", label: "", relation: "can_manage" },
+          { id: "manage_app_manager", label: "", relation: "can_manage" },
+          { id: "manage_app_viewer", label: "", relation: "can_manage" },
         ],
       },
     ],
@@ -172,48 +185,97 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
       {
         title: "",
         items: [
-          { id: "view_kb", label: "查看知识库", relation: "can_read" },
-          { id: "use_kb", label: "使用知识库", relation: "can_read" },
-          { id: "edit_kb", label: "编辑知识库", relation: "can_edit" },
-          { id: "delete_kb", label: "删除知识库", relation: "can_delete" },
+          { id: "view_kb", label: "", relation: "can_read" },
+          { id: "use_kb", label: "", relation: "can_read" },
+          { id: "edit_kb", label: "", relation: "can_edit" },
+          { id: "delete_kb", label: "", relation: "can_delete" },
         ],
       },
       {
         title: "",
         items: [
-          { id: "manage_kb_owner", label: "管理知识库所有者", relation: "can_manage" },
-          { id: "manage_kb_manager", label: "管理知识库管理者", relation: "can_manage" },
-          { id: "manage_kb_viewer", label: "管理知识库编辑者与使用者", relation: "can_manage" },
+          { id: "manage_kb_owner", label: "", relation: "can_manage" },
+          { id: "manage_kb_manager", label: "", relation: "can_manage" },
+          { id: "manage_kb_viewer", label: "", relation: "can_manage" },
         ],
       },
     ],
   },
 ]
 
-/** Display labels from TEMPLATE_SECTIONS override API payloads so copy updates apply without restarting the backend. */
-const CANONICAL_PERMISSION_LABELS: ReadonlyMap<string, string> = (() => {
-  const m = new Map<string, string>()
-  for (const section of TEMPLATE_SECTIONS) {
-    for (const col of section.columns) {
-      for (const item of col.items) {
-        m.set(item.id, item.label)
-      }
-    }
-  }
-  return m
-})()
+/** Known permission ids from backend templates; others display `item.label` from API (tests / forward compat). */
+const PERMISSION_TEMPLATE_IDS = new Set<string>([
+  "view_space",
+  "edit_space",
+  "delete_space",
+  "share_space",
+  "manage_space_relation",
+  "view_folder",
+  "create_folder",
+  "rename_folder",
+  "delete_folder",
+  "download_folder",
+  "manage_folder_relation",
+  "view_file",
+  "upload_file",
+  "rename_file",
+  "delete_file",
+  "download_file",
+  "share_file",
+  "manage_file_relation",
+  "view_app",
+  "use_app",
+  "edit_app",
+  "delete_app",
+  "publish_app",
+  "unpublish_app",
+  "share_app",
+  "manage_app_owner",
+  "manage_app_manager",
+  "manage_app_viewer",
+  "view_kb",
+  "use_kb",
+  "edit_kb",
+  "delete_kb",
+  "manage_kb_owner",
+  "manage_kb_manager",
+  "manage_kb_viewer",
+  "view_tool",
+  "use_tool",
+  "edit_tool",
+  "delete_tool",
+  "manage_tool_owner",
+  "manage_tool_manager",
+  "manage_tool_viewer",
+])
 
-function withCanonicalLabels(section: TemplateSection): TemplateSection {
-  return {
-    ...section,
-    columns: section.columns.map((col) => ({
-      ...col,
-      items: col.items.map((item) => ({
-        ...item,
-        label: CANONICAL_PERMISSION_LABELS.get(item.id) ?? item.label,
-      })),
-    })),
-  }
+const SECTION_TITLE_I18N_KEY: Readonly<Record<string, string>> = {
+  "知识空间模块": "system.permissionTemplate.sectionKnowledgeSpace",
+  "应用/工作流模块": "system.permissionTemplate.sectionApplication",
+  "知识库模块": "system.permissionTemplate.sectionKnowledgeLibrary",
+  "工具模块": "system.permissionTemplate.sectionTool",
+}
+
+const COLUMN_TITLE_I18N_KEY: Readonly<Record<string, string>> = {
+  "空间级": "system.permissionTemplate.columnSpaceLevel",
+  "文件夹级": "system.permissionTemplate.columnFolderLevel",
+  "文件级": "system.permissionTemplate.columnFileLevel",
+}
+
+function templateSectionTitle(title: string, t: (key: string) => string): string {
+  const key = SECTION_TITLE_I18N_KEY[title]
+  return key ? t(key) : title
+}
+
+function templateColumnTitle(title: string, t: (key: string) => string): string {
+  if (!title) return ""
+  const key = COLUMN_TITLE_I18N_KEY[title]
+  return key ? t(key) : title
+}
+
+function templatePermissionLabel(item: TemplatePermission, t: (key: string) => string): string {
+  if (!PERMISSION_TEMPLATE_IDS.has(item.id)) return item.label || item.id
+  return t(`system.permissionTemplate.${item.id}`)
 }
 
 export default function RolesAndPermissions() {
@@ -283,16 +345,16 @@ export default function RolesAndPermissions() {
   const templateSections = useMemo<TemplateSection[]>(() => {
     const sections = [...TEMPLATE_SECTIONS]
     if (knowledgeTemplate) {
-      sections[0] = withCanonicalLabels(knowledgeTemplate as TemplateSection)
+      sections[0] = knowledgeTemplate as TemplateSection
     }
     if (applicationTemplate) {
-      sections[1] = withCanonicalLabels(applicationTemplate as TemplateSection)
+      sections[1] = applicationTemplate as TemplateSection
     }
     if (knowledgeLibraryTemplate) {
-      sections[2] = withCanonicalLabels(knowledgeLibraryTemplate as TemplateSection)
+      sections[2] = knowledgeLibraryTemplate as TemplateSection
     }
     if (toolTemplate) {
-      sections.splice(3, 0, withCanonicalLabels(toolTemplate as TemplateSection))
+      sections.splice(3, 0, toolTemplate as TemplateSection)
     }
     return sections.map(filterHiddenTemplatePermissions)
   }, [applicationTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
@@ -342,8 +404,18 @@ export default function RolesAndPermissions() {
 
   const togglePermission = (permissionId: string, checked: boolean) => {
     setSelectedPermissionIds((prev) => {
-      if (checked) return Array.from(new Set([...prev, permissionId]))
-      return prev.filter((id) => id !== permissionId)
+      const next = new Set(prev)
+      if (checked) {
+        next.add(permissionId)
+        const implies = MANAGE_PERMISSION_IMPLIES[permissionId]
+        if (implies) implies.forEach((id) => next.add(id))
+      } else {
+        next.delete(permissionId)
+        Object.entries(MANAGE_PERMISSION_IMPLIES).forEach(([parent, children]) => {
+          if (children.includes(permissionId)) next.delete(parent)
+        })
+      }
+      return Array.from(next)
     })
   }
 
@@ -463,11 +535,15 @@ export default function RolesAndPermissions() {
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                 {templateSections.map((section) => (
                   <div key={section.title} className="rounded-md border p-3">
-                    <p className="mb-2 text-base font-medium">{section.title}</p>
+                    <p className="mb-2 text-base font-medium">{templateSectionTitle(section.title, t)}</p>
                     <div className={`grid gap-4 ${section.columns.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
                       {section.columns.map((col, idx) => (
                         <div key={`${section.title}-${idx}`} className="space-y-2">
-                          {col.title ? <p className="text-sm font-medium text-muted-foreground">{col.title}</p> : null}
+                          {col.title ? (
+                            <p className="text-sm font-medium text-muted-foreground">
+                              {templateColumnTitle(col.title, t)}
+                            </p>
+                          ) : null}
                           {col.items.map((item) => {
                             const backendDefined = backendRelations.has(item.relation)
                             return (
@@ -477,7 +553,7 @@ export default function RolesAndPermissions() {
                                   onCheckedChange={(checked) => togglePermission(item.id, Boolean(checked))}
                                 />
                                 <span className="leading-5">
-                                  {item.label}
+                                  {templatePermissionLabel(item, t)}
                                   {!backendDefined ? (
                                     <span className="ml-1 text-xs text-orange-500">
                                       {t("system.relationModelBackendUndefined")}

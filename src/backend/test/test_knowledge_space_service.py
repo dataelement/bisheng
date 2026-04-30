@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.common.errcode.knowledge_space import (
+    SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
     SpaceFolderNotFoundError,
     SpaceNotFoundError,
@@ -1227,6 +1228,61 @@ class TestTupleLifecycle:
             '81',
             enforce_fga_success=True,
         )
+
+    @pytest.mark.asyncio
+    async def test_add_file_rolls_back_created_record_when_upload_limit_exceeded(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        added_file = _make_file(file_id=86, knowledge_id=1, file_name='large.txt')
+        added_file.status = 5
+        added_file.file_size = 6
+
+        with patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size',
+            new_callable=AsyncMock,
+            return_value=5,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes',
+            new_callable=AsyncMock,
+            return_value=10,
+        ), patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_require_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file',
+            return_value=added_file,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples',
+            new_callable=AsyncMock,
+        ) as mock_batch_write, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ) as mock_write_owner, patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ) as mock_cleanup_tuples, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ) as mock_delete_files, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery.delay',
+        ) as mock_parse, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ) as mock_update_space:
+            with pytest.raises(SpaceFileSizeLimitError):
+                await service.add_file(1, ['/tmp/large.txt'])
+
+        mock_batch_write.assert_not_awaited()
+        mock_write_owner.assert_not_awaited()
+        mock_cleanup_tuples.assert_awaited_once_with([('knowledge_file', 86)])
+        mock_delete_files.assert_awaited_once_with([86])
+        mock_parse.assert_not_called()
+        mock_update_space.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_add_file_requires_parent_tuple_write_success(self, service):

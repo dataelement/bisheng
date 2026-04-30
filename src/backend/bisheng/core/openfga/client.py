@@ -14,6 +14,25 @@ import httpx
 from .exceptions import FGAClientError, FGAConnectionError, FGAWriteError, FGAModelError
 
 logger = logging.getLogger(__name__)
+httpx_request_loggers = (
+    logging.getLogger('httpx'),
+    logging.getLogger('httpx._client'),
+)
+
+
+class _OpenFGAHttpxLogFilter(logging.Filter):
+    """Suppress httpx default request logs for OpenFGA requests."""
+
+    def __init__(self, base_url: str):
+        super().__init__()
+        self._base_url = base_url
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not str(record.msg).startswith('HTTP Request:'):
+            return True
+        if not isinstance(record.args, tuple) or len(record.args) < 2:
+            return True
+        return not str(record.args[1]).startswith(self._base_url)
 
 
 class FGAClient:
@@ -26,9 +45,11 @@ class FGAClient:
         self._model_id = model_id
         self._legacy_model_id = legacy_model_id  # F013: dual-model gray release
         self._timeout = timeout
+        self._install_httpx_log_filter()
         self._http = httpx.AsyncClient(
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
+            event_hooks={'response': [self._log_response]},
         )
 
     @property
@@ -76,10 +97,20 @@ class FGAClient:
         }
         data = await self._post(f'/stores/{self._store_id}/batch-check', body)
         results = data.get('result', {})
-        return [
+        resolved = [
             results.get(str(i), {}).get('allowed', False)
             for i in range(len(checks))
         ]
+        logger.info(
+            '[openfga-debug] batch_check store_id=%s model_id=%s '
+            'checks=%s raw_result=%s resolved=%s',
+            self._store_id,
+            self._model_id,
+            checks,
+            results,
+            resolved,
+        )
+        return resolved
 
     async def list_objects(self, user: str, relation: str, type: str) -> list[str]:
         """List all objects of given type that user has relation on.
@@ -246,6 +277,35 @@ class FGAClient:
 
     # ── Internal helpers ─────────────────────────────────────────
 
+    def _install_httpx_log_filter(self) -> None:
+        """Replace httpx's OpenFGA request logs with this module's logger."""
+        for httpx_logger in httpx_request_loggers:
+            httpx_logger.addFilter(_OpenFGAHttpxLogFilter(self._api_url))
+
+    @staticmethod
+    async def _log_response(resp: httpx.Response) -> None:
+        """Log httpx request completion under this module logger."""
+        logger.info(
+            'HTTP Request: %s %s "%s %s %s"',
+            resp.request.method,
+            resp.request.url,
+            resp.http_version,
+            resp.status_code,
+            resp.reason_phrase,
+        )
+
+    @staticmethod
+    def _log_response_sync(resp: httpx.Response) -> None:
+        """Log sync httpx request completion under this module logger."""
+        logger.info(
+            'HTTP Request: %s %s "%s %s %s"',
+            resp.request.method,
+            resp.request.url,
+            resp.http_version,
+            resp.status_code,
+            resp.reason_phrase,
+        )
+
     async def _post(self, path: str, body: dict) -> dict:
         """POST JSON and return parsed response."""
         try:
@@ -265,6 +325,7 @@ class FGAClient:
             with httpx.Client(
                 base_url=self._api_url,
                 timeout=httpx.Timeout(self._timeout),
+                event_hooks={'response': [self._log_response_sync]},
             ) as client:
                 resp = client.post(path, json=body)
         except (httpx.ConnectError, httpx.TimeoutException) as e:

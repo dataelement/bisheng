@@ -194,6 +194,21 @@ class UserGroupService:
         return [await cls._enrich_group(g) for g in groups]
 
     @classmethod
+    async def alist_manageable_group_options(
+        cls, login_user,
+    ) -> List[Dict[str, Any]]:
+        """Return lightweight group options for selectors."""
+        groups = await cls._list_manageable_groups(login_user)
+        return [
+            {
+                'id': group.id,
+                'group_name': group.group_name,
+                'visibility': group.visibility,
+            }
+            for group in groups
+        ]
+
+    @classmethod
     async def _department_path_label(cls, user_id: int) -> str:
         """主属部门在组织树中的完整路径（用于 PRD 3.2.2 组内成员展示）。"""
         uds = await UserDepartmentDao.aget_user_departments(user_id)

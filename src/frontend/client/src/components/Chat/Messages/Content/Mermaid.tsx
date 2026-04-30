@@ -8,6 +8,30 @@ import { Button, Separator } from "~/components/ui"
 import { copyText, formatDate } from "~/utils"
 import { useLocalize } from "~/hooks"
 
+// Mermaid mindmap is sensitive to two things LLM output / our markdown
+// pre-processor commonly violate:
+//   1. Blank lines anywhere in the mindmap source — Markdown.tsx normalizes
+//      single `\n` into `\n\n` for soft breaks, but doesn't exempt fenced
+//      blocks, so `mindmap\n  root(..)` becomes `mindmap\n\n  root(..)` and
+//      the parser bails with `SPACELINE` errors.
+//   2. The root node missing indentation — mindmap uses indentation as the
+//      parent/child grammar.
+// Both fixes only run when the source is actually mindmap.
+function normalizeMindmapIndent(src: string): string {
+    const lines = src.split("\n")
+    const directiveIdx = lines.findIndex((l) => l.trim() === "mindmap")
+    if (directiveIdx === -1) return src
+    const head = lines.slice(0, directiveIdx + 1)
+    const body = lines.slice(directiveIdx + 1).filter((l) => l.trim().length > 0)
+    if (body.length === 0) return src
+    if (!body[0].startsWith(" ") && !body[0].startsWith("\t")) {
+        for (let i = 0; i < body.length; i++) {
+            body[i] = "  " + body[i]
+        }
+    }
+    return [...head, ...body].join("\n")
+}
+
 // 动态加载 mermaid
 export const loadScript = async (fileName) => {
     if (window[fileName]) {
@@ -52,7 +76,7 @@ export default function MermaidBlock({ children }: { children: string }) {
             mermaid.initialize({ startOnLoad: false, theme: "default" })
             mermaidRef.current = mermaid
             if (ref.current) {
-                ref.current.innerHTML = children
+                ref.current.innerHTML = normalizeMindmapIndent(children)
                 mermaidRef.current.run({ nodes: [ref.current] })
             }
         })
