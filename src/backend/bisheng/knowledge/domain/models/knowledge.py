@@ -21,6 +21,13 @@ class KnowledgeTypeEnum(Enum):
     PRIVATE = 2  # Workbench Personal Knowledge Base
 
 
+class KnowledgeLevelEnum(Enum):
+    LEVEL_ORG_1 = 0  # Top-level Organization
+    LEVEL_ORG_2 = 1  # Second-level Organization
+    LEVEL_ORG_3 = 2  # Third-level Organization
+    LEVEL_MEMBER = 3  # Member
+
+
 class KnowledgeState(Enum):
     UNPUBLISHED = 0
     PUBLISHED = 1  # Document Knowledge Base Success Status
@@ -57,7 +64,8 @@ class KnowledgeBase(SQLModelSerializable):
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
-
+    level: Optional[int] = Field(index=False, default=KnowledgeLevelEnum.LEVEL_MEMBER.value,
+                                 description='Knowledge Base Level, value from KnowledgeLevelEnum')
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -87,7 +95,7 @@ class KnowledgeUpdate(BaseModel):
     knowledge_id: int
     name: Optional[str] = None
     description: Optional[str] = None
-
+    level: Optional[int] = None
 
 class KnowledgeCreate(KnowledgeBase):
     is_partition: Optional[bool] = None
