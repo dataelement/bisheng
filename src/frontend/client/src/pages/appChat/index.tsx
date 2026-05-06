@@ -11,6 +11,16 @@ import { chatApiVersionState, chatIdState, chatsState, currentChatState, running
 import { AppLostMessage } from "./useWebsocket";
 
 const API_VERSION = 'v1';
+const TRAFFIC_LIMIT_ERROR_CODES = new Set([429, 503, 12045]);
+
+const getInitialChatError = (res: any) => {
+    const code = Number(res?.status_code);
+    if (TRAFFIC_LIMIT_ERROR_CODES.has(code)) {
+        return { code: String(code), data: res?.data ?? null };
+    }
+    return { code: AppLostMessage, data: null };
+};
+
 export const enum FLOW_TYPES {
     WORK_FLOW = 10,
     ASSISTANT = 5,
@@ -48,7 +58,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
         const currentData = chats[cid]
-        let error = { code: '', data: null }
+        let error: { code: string; data: any } = { code: '', data: null }
 
         setChatId(cid!) // 切换会话
 
@@ -100,7 +110,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 }
 
                 if (flowRes.status_code !== 200) {
-                    error = { code: AppLostMessage, data: null }
+                    error = getInitialChatError(flowRes)
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
                         id: lostFlow.data.flow_id,
@@ -142,7 +152,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 }
 
                 if (assistantRes.status_code !== 200) {
-                    error = { code: AppLostMessage, data: null };
+                    error = getInitialChatError(assistantRes);
                     const lostFlow = await getDeleteFlowApi(cid)
                     assistantRes.data = {
                         name: lostFlow.data.flow_name,

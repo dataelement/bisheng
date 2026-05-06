@@ -1120,6 +1120,7 @@
   "api_errors": {
     "403": "No permission to perform this action",
     "404": "Resource not found",
+    "429": "System is busy, please wait.",
     "500": "Server error",
     "503": "System is busy, please wait.",
     "10001": "SFT service not found",
@@ -1266,6 +1267,7 @@
     "12040": "web_search tool not found",
     "12041": "Session not found",
     "12042": "Agent already added",
+    "12045": "The department concurrent chat limit has been reached. Please try again later.",
     "13001": "Skill deleted",
     "13002": "Skill offline. Cannot chat",
     "13003": "Skill compile failed. Cannot chat",
