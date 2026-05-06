@@ -447,8 +447,11 @@ class AuditLogDao(AuditLogBase):
             their tenant — catches global super ops that targeted this child).
         """
         offset = max(0, (page - 1) * limit)
-        predicate = cls._visible_for_tenant(tenant_id)
         with bypass_tenant_filter():
+            # Build predicate inside the bypass block so the static guard
+            # (test_tenant_bypass_filter_guard) can see the tenant_id token —
+            # the predicate already filters by tenant_id / operator_tenant_id.
+            predicate = cls._visible_for_tenant(tenant_id)
             async with get_async_db_session() as session:
                 stmt = select(AuditLog).where(predicate)
                 count_stmt = (
