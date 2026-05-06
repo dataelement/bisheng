@@ -35,6 +35,12 @@ from sqlalchemy.sql import bindparam
 
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+from bisheng.permission.migration.batch_utils import (
+    ProgressTracker,
+    TupleDeduplicator,
+    iter_keyset_batches,
+    session_exec,
+)
 from bisheng.permission.migration.f006_constants import (
     ACCESS_TYPE_MAPPING,
     FLOW_TYPE_MAPPING,
@@ -46,12 +52,6 @@ from bisheng.permission.migration.f006_constants import (
     _CHECKPOINT_FILENAME,
 )
 from bisheng.permission.migration.f006_schemas import MigrationStats, VerifyReport
-from bisheng.permission.migration.batch_utils import (
-    ProgressTracker,
-    TupleDeduplicator,
-    iter_keyset_batches,
-    session_exec,
-)
 
 StepFn = Callable[[], Awaitable[int]]
 
@@ -469,7 +469,7 @@ class RBACToReBACMigrator:
         query_by_type = {
             'knowledge_library': 'SELECT id FROM knowledge WHERE type != 3 AND id IN :ids',
             'knowledge_space': 'SELECT id FROM knowledge WHERE type = 3 AND id IN :ids',
-            'assistant': 'SELECT id FROM flow WHERE flow_type = 5 AND id IN :ids',
+            'assistant': 'SELECT id FROM assistant WHERE id IN :ids',
             'workflow': 'SELECT id FROM flow WHERE flow_type = 10 AND id IN :ids',
             'tool': 'SELECT id FROM t_gpts_tools WHERE is_delete = 0 AND id IN :ids',
             'dashboard': 'SELECT id FROM dashboard WHERE id IN :ids',

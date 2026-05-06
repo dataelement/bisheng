@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
@@ -33,6 +34,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
     KnowledgeTagExistError, KnowledgeTagNotExistError
 )
+from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
@@ -65,6 +67,7 @@ from bisheng.knowledge.domain.services.knowledge_metadata_service import Knowled
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
+from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 
@@ -113,6 +116,29 @@ class KnowledgeService(KnowledgeUtils):
 
     async def list_metadata_fields(self, default_user, knowledge_id):
         return await self.metadata_service.list_metadata_fields(default_user, knowledge_id)
+
+    @staticmethod
+    def _run_async_for_sync(coro):
+        """Run async quota helpers from sync service entrypoints."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        result = {}
+
+        def runner():
+            try:
+                result['value'] = asyncio.run(coro)
+            except Exception as exc:  # pragma: no cover - re-raised in caller thread
+                result['error'] = exc
+
+        thread = threading.Thread(target=runner, daemon=True)
+        thread.start()
+        thread.join()
+        if 'error' in result:
+            raise result['error']
+        return result.get('value')
 
     @classmethod
     async def _get_writable_knowledge(cls, login_user: UserPayload, knowledge_id: int) -> Knowledge:
@@ -683,23 +709,41 @@ class KnowledgeService(KnowledgeUtils):
         failed_files = []
         # Process each file
         process_files = []
+        created_file_ids = []
         preview_cache_keys = []
         split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
-        for one in req_data.file_list:
-            # Upload source files, create data records
-            db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
-            # Duplicate file data using asynchronous tasks to execute
-            if db_file.status != KnowledgeFileStatus.FAILED.value:
-                # Get a preview cache of this filekey
-                cache_key = cls.get_preview_cache_key(
-                    req_data.knowledge_id, one.file_path
-                )
-                preview_cache_keys.append(cache_key)
-                process_files.append(db_file)
-            else:
-                failed_file_info = db_file.model_dump()
-                failed_file_info["file_path"] = one.file_path
-                failed_files.append(failed_file_info)
+        limit_bytes = cls._run_async_for_sync(
+            QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+        )
+        current_total_file_size = int(KnowledgeFileDao.get_user_upload_total_file_size(login_user.user_id))
+        try:
+            for one in req_data.file_list:
+                # Upload source files, create data records
+                db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
+                # Duplicate file data using asynchronous tasks to execute
+                if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, 'id', None):
+                        created_file_ids.append(db_file.id)
+                    current_total_file_size += int(db_file.file_size or 0)
+                    if limit_bytes is not None and current_total_file_size > limit_bytes:
+                        raise SpaceFileSizeLimitError()
+                    # Get a preview cache of this filekey
+                    cache_key = cls.get_preview_cache_key(
+                        req_data.knowledge_id, one.file_path
+                    )
+                    preview_cache_keys.append(cache_key)
+                    process_files.append(db_file)
+                else:
+                    failed_file_info = db_file.model_dump()
+                    failed_file_info["file_path"] = one.file_path
+                    failed_files.append(failed_file_info)
+        except Exception:
+            if created_file_ids:
+                try:
+                    KnowledgeFileDao.delete_batch(created_file_ids)
+                except Exception as cleanup_exc:
+                    logger.warning(f'Failed to cleanup files after upload quota error: {cleanup_exc}')
+            raise
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod

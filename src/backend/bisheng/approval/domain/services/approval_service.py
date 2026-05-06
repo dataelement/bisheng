@@ -121,10 +121,51 @@ class ApprovalService:
 
     @classmethod
     def _original_file_name_from_path(cls, file_path: str) -> str:
-        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-
         basename = os.path.basename(urlparse(file_path).path)
-        return KnowledgeService.get_upload_file_original_name(basename)
+        if not basename:
+            return ''
+
+        uuid_file_name = basename.split('.')[0]
+        try:
+            from bisheng.core.cache.redis_manager import get_redis_client_sync
+
+            original_file_name = get_redis_client_sync().get(f'file_name:{uuid_file_name}')
+            if isinstance(original_file_name, bytes):
+                original_file_name = original_file_name.decode()
+            if isinstance(original_file_name, str) and original_file_name:
+                return original_file_name
+        except Exception:
+            pass
+
+        if '_' in basename:
+            return basename.split('_', 1)[1]
+        return basename
+
+    @classmethod
+    def _file_size_from_path(cls, file_path: str) -> Optional[int]:
+        local_candidate = file_path.split('?', 1)[0]
+        if local_candidate and os.path.isfile(local_candidate):
+            return os.path.getsize(local_candidate)
+
+        # Fallback: file_path may be a MinIO share-link URL; try to stat it.
+        try:
+            from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+
+            parsed = urlparse(file_path)
+            path = parsed.path.lstrip('/')
+            if not path:
+                return None
+            parts = path.split('/', 1)
+            bucket = parts[0]
+            object_name = parts[1] if len(parts) > 1 else ''
+            if not bucket or not object_name:
+                return None
+
+            minio_storage = get_minio_storage_sync()
+            stat = minio_storage.minio_client_sync.stat_object(bucket, object_name)
+            return stat.size
+        except Exception:
+            return None
 
     @classmethod
     async def _build_file_payload(
@@ -135,11 +176,15 @@ class ApprovalService:
     ) -> List[Dict]:
         out: List[Dict] = []
         for file_path in file_paths:
-            out.append({
+            item = {
                 'file_path': file_path,
                 'file_name': cls._original_file_name_from_path(file_path),
                 'space_id': space_id,
-            })
+            }
+            file_size = cls._file_size_from_path(file_path)
+            if file_size is not None:
+                item['file_size'] = file_size
+            out.append(item)
         return out
 
     @classmethod
@@ -485,12 +530,18 @@ class ApprovalService:
         files = list((approval_request.payload_json or {}).get('files') or [])
         out: List[KnowledgeSpaceFileResponse] = []
         for idx, item in enumerate(files):
+            file_size = item.get('file_size', item.get('size'))
+            try:
+                file_size = int(file_size) if file_size is not None else None
+            except (TypeError, ValueError):
+                file_size = None
             out.append(KnowledgeSpaceFileResponse(
                 id=-(approval_request.id * 1000 + idx + 1),
                 knowledge_id=approval_request.space_id,
                 file_name=item.get('file_name') or '',
                 file_type=FileType.FILE.value,
                 file_source=FileSource.SPACE_UPLOAD.value,
+                file_size=file_size,
                 level=0,
                 file_level_path='',
                 status=5,
