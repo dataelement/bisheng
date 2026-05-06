@@ -27,6 +27,7 @@ pytest_plugins = ['test.fixtures.sso_sync']
 
 LOGIN_SYNC_PATH = '/api/v1/internal/sso/login-sync'
 DEPTS_SYNC_PATH = '/api/v1/departments/sync'
+GATEWAY_WECOM_ORG_SYNC_PATH = '/api/v1/internal/sso/gateway-wecom-org-sync'
 
 
 def _mount_app() -> FastAPI:
@@ -49,6 +50,7 @@ def mocked_services(monkeypatch):
     only test the HTTP / dependency plumbing."""
     import bisheng.sso_sync.api.endpoints.login_sync as login_ep
     import bisheng.sso_sync.api.endpoints.departments_sync as depts_ep
+    import bisheng.sso_sync.api.endpoints.gateway_wecom_org_sync as wecom_ep
 
     login_result = SimpleNamespace(
         user_id=7, leaf_tenant_id=15, token='jwt-token',
@@ -74,6 +76,17 @@ def mocked_services(monkeypatch):
     monkeypatch.setattr(
         depts_ep.DepartmentsSyncService, 'execute', depts_service,
     )
+    monkeypatch.setattr(
+        wecom_ep.DepartmentsSyncService, 'execute', depts_service,
+    )
+    monkeypatch.setattr(
+        wecom_ep.LoginSyncService, 'execute', login_service,
+    )
+    monkeypatch.setattr(
+        wecom_ep, 'disable_wecom_users_absent_from_import',
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(wecom_ep, 'flush_log', flush)
     monkeypatch.setattr(depts_ep, 'flush_log', flush)
 
     return SimpleNamespace(
@@ -174,6 +187,42 @@ class TestDepartmentsSyncRoute:
         mocked_services.depts.assert_not_awaited()
 
 
+class TestGatewayWecomOrgSyncRoute:
+
+    def test_missing_secondary_depts_normalized_to_empty_list(
+        self, configure_sso_secret, hmac_signer, mocked_services,
+    ):
+        """Gateway WeCom full sync is authoritative.
+
+        Older gateway builds omitted ``secondary_dept_external_ids`` for users
+        with only one department. The endpoint must normalize that omission to
+        [] so LoginSyncService reconciles and removes stale secondary rows.
+        """
+        app = _mount_app()
+        body = (
+            b'{"departments":{"upsert":[{"external_id":"D1","name":"Main"}],'
+            b'"remove":[]},"members":[{"external_user_id":"yangxin",'
+            b'"primary_dept_external_id":"D1","user_attrs":{"name":"Yang"},'
+            b'"ts":1000}]}'
+        )
+        sig = hmac_signer('POST', GATEWAY_WECOM_ORG_SYNC_PATH, body)
+        with TestClient(app) as client:
+            resp = client.post(
+                GATEWAY_WECOM_ORG_SYNC_PATH,
+                content=body,
+                headers={
+                    'X-Signature': sig,
+                    'Content-Type': 'application/json',
+                },
+            )
+
+        assert resp.status_code == 200
+        mocked_services.login.assert_awaited_once()
+        member_payload = mocked_services.login.await_args.args[0]
+        assert member_payload.secondary_dept_external_ids == []
+        assert 'secondary_dept_external_ids' in member_payload.model_fields_set
+
+
 class TestExemptPathWhitelist:
 
     def test_paths_are_in_tenant_check_exempt_list(self):
@@ -183,3 +232,4 @@ class TestExemptPathWhitelist:
         from bisheng.utils.http_middleware import TENANT_CHECK_EXEMPT_PATHS
         assert LOGIN_SYNC_PATH in TENANT_CHECK_EXEMPT_PATHS
         assert DEPTS_SYNC_PATH in TENANT_CHECK_EXEMPT_PATHS
+        assert GATEWAY_WECOM_ORG_SYNC_PATH in TENANT_CHECK_EXEMPT_PATHS
