@@ -1887,7 +1887,7 @@
     "19803": "System-level LLM configuration (workbench / knowledge / assistant / evaluation defaults) is restricted to the global super admin",
     "19804": "LLM server endpoint does not match any prefix in settings.llm.endpoint_whitelist",
     "20000": "Tenant not found",
-    "20001": "Tenant is disabled",
+    "20001": "Your tenant has been disabled. Please contact the administrator.",
     "20002": "User does not belong to this tenant",
     "20003": "Tenant code already exists",
     "20004": "Missing tenant context",
