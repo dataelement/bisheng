@@ -276,50 +276,44 @@ export function ArticleList({
     }, [channel.id, updateTabsScrollShadow]);
 
     return (
-        <div className="flex h-full w-full flex-1 flex-col overflow-x-hidden touch-mobile:h-auto touch-mobile:min-h-full touch-mobile:overflow-y-auto touch-mobile:overflow-x-hidden">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
             {/* header — 结构与知识空间页保持一致 */}
-            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-0 touch-mobile:pb-3">
+            <div className="mx-auto w-full max-w-[1000px] shrink-0 px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:px-2 touch-mobile:pt-0 touch-mobile:pb-3">
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
-                        {/* H5 第一行：固定在视口顶部，不随内容滚动且不制造横向溢出 */}
-                        <div className="hidden touch-mobile:fixed touch-mobile:left-2 touch-mobile:right-2 touch-mobile:top-0 touch-mobile:z-30 touch-mobile:block touch-mobile:bg-white touch-mobile:pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                            <div className="mx-auto w-full max-w-[1000px] px-4">
-                                <div
-                                    className={cn(
-                                        "flex h-11 min-h-11 w-full items-center",
-                                        onOpenChannelNav && onCreateChannel && "justify-between",
-                                        onOpenChannelNav && !onCreateChannel && "justify-start",
-                                        !onOpenChannelNav && onCreateChannel && "justify-end",
-                                    )}
-                                >
-                                    {onOpenChannelNav ? (
-                                        <button
-                                            type="button"
-                                            onClick={onOpenChannelNav}
-                                            aria-label={localize("com_nav_open_sidebar")}
-                                            className={mobileHeadIconBtnClassName}
-                                        >
-                                            <Menu className="size-4" strokeWidth={2} />
-                                        </button>
-                                    ) : null}
-                                    {onCreateChannel ? (
-                                        <button
-                                            type="button"
-                                            onClick={onCreateChannel}
-                                            aria-label={localize("com_subscription.create")}
-                                            className={mobileHeadIconBtnClassName}
-                                        >
-                                            <Plus className="size-4" strokeWidth={2} />
-                                        </button>
-                                    ) : null}
-                                </div>
+                        {/* H5 第一行：留在白卡片内；单列用更小左右边距，避免菜单/加号看起来挤在中间 */}
+                        <div className="w-full touch-mobile:pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                            <div
+                                className={cn(
+                                    "flex h-11 min-h-11 w-full items-center",
+                                    onOpenChannelNav && onCreateChannel && "justify-between",
+                                    onOpenChannelNav && !onCreateChannel && "justify-start",
+                                    !onOpenChannelNav && onCreateChannel && "justify-end",
+                                )}
+                            >
+                                {onOpenChannelNav ? (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenChannelNav}
+                                        aria-label={localize("com_nav_open_sidebar")}
+                                        className={mobileHeadIconBtnClassName}
+                                    >
+                                        <Menu className="size-4" strokeWidth={2} />
+                                    </button>
+                                ) : null}
+                                {onCreateChannel ? (
+                                    <button
+                                        type="button"
+                                        onClick={onCreateChannel}
+                                        aria-label={localize("com_subscription.create")}
+                                        className={mobileHeadIconBtnClassName}
+                                    >
+                                        <Plus className="size-4" strokeWidth={2} />
+                                    </button>
+                                ) : null}
                             </div>
                         </div>
-                        <div
-                            aria-hidden
-                            className="hidden touch-mobile:block touch-mobile:h-[calc(env(safe-area-inset-top,0px)+52px)]"
-                        />
-                        {/* H5 第二行：订阅 + 前往频道广场（在展开按钮下方） */}
+                        {/* H5 第二行：订阅 + 前往频道广场 */}
                         <div className="flex min-w-0 items-end gap-2">
                             <h2 className="shrink-0 text-[24px] font-semibold leading-8 text-[#335CFF]">
                                 {localize("com_subscription.subscribe")}
@@ -476,11 +470,11 @@ export function ArticleList({
 
             {/* Article list area */}
             <div
-                className="flex-1 overflow-y-auto overflow-x-hidden scroll-on-scroll touch-mobile:flex-none touch-mobile:overflow-visible touch-mobile:overflow-x-hidden"
+                className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-on-scroll"
                 onScroll={handleListScroll}
                 data-scrolling={isListScrolling ? "true" : "false"}
             >
-                <div className="mx-auto w-full min-w-0 max-w-[1000px] overflow-x-hidden px-4">
+                <div className="mx-auto w-full min-w-0 max-w-[1000px] overflow-x-hidden px-4 touch-mobile:px-2">
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
                         <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">

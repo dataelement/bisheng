@@ -33,7 +33,7 @@ import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -528,6 +528,7 @@ interface FileTableProps {
 export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
+    const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
     const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
     const localize = useLocalize();
@@ -582,7 +583,10 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         <div className="relative max-w-full min-w-0 overflow-hidden">
             {/* 横向滚动限制在容器内，不撑开整页 */}
             <div
-                ref={scrollRef}
+                ref={(el) => {
+                    scrollRef.current = el;
+                    hScrollRevealRef(el);
+                }}
                 className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-hover"
             >
                 <table

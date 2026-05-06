@@ -168,8 +168,8 @@ const Nav = ({
           onToggle={toggleNavVisible}
           isHovering={isHovering}
           setIsHovering={setIsHovering}
-          className="fixed top-1/2 z-[50]"
-          translateX={236}
+          className="fixed left-0 top-1/2 z-[50]"
+          translateX={parseInt(navWidth, 10) || 280}
         />
       )}
       {isSmallScreen && (

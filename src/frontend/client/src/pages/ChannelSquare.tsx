@@ -6,7 +6,7 @@ import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
@@ -59,6 +59,7 @@ export default function ChannelSquare({
   const [hasMorePage, setHasMorePage] = useState(true);
   const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -265,7 +266,10 @@ export default function ChannelSquare({
 
       {/* 频道列表区域 */}
       <div
-        ref={scrollRef}
+        ref={(el) => {
+          scrollRef.current = el;
+          scrollRevealRef(el);
+        }}
         className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
         onScroll={handleListScroll}
       >

@@ -152,7 +152,7 @@ export function SideNav() {
             </div>
 
             {/* App card — 应用内对话侧栏固定展示 */}
-            <div className="shrink-0 touch-mobile:px-3 touch-mobile:pt-4 touch-mobile:pb-6">
+            <div className="shrink-0 touch-mobile:px-2 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
                     style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
@@ -206,12 +206,12 @@ export function SideNav() {
             {/* Conversation list */}
             <div
                 className={cn(
-                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0',
+                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2',
                     'touch-mobile:pt-3',
                 )}
             >
                 {groups.length === 0 ? (
-                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
+                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
                         <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
@@ -220,7 +220,7 @@ export function SideNav() {
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">
                             {/* Time label */}
-                            <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
+                            <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
                                 {formatConversationTimeGroupLabel(group.label, localize)}
                             </div>
                             {/* Items */}

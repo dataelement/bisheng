@@ -392,8 +392,9 @@ export default function CitationReferencesDrawer({
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
+  // 窄屏下顶栏（MobileNav）与主内容区层叠时可能盖住 fixed 抽屉；打开参考资料时隐藏顶栏（不仅限 ≤576 全屏）
   useEffect(() => {
-    if (!isNarrowLayout || !isOpen || !isFullBleedMobile) {
+    if (!isNarrowLayout || !isOpen) {
       return;
     }
 
@@ -401,7 +402,7 @@ export default function CitationReferencesDrawer({
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [isNarrowLayout, isOpen, isFullBleedMobile, setChatMobileNavHidden]);
+  }, [isNarrowLayout, isOpen, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!isOpen && !panelOnly) {
@@ -551,19 +552,19 @@ export default function CitationReferencesDrawer({
           isMobileLikeViewport
             ? cn(
                 'px-4',
-                // 设计：左右上 16px；全屏手机在安全区下再留 16px，与对话内「查看文件」顶栏一致
+                // 竖直：侧栏/全屏均在顶栏内垂直居中；全屏保留安全区 + 顶 16px，并加底内边距平衡
                 isFullBleedMobile
-                  ? 'pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
-                  : 'pt-4',
+                  ? 'pb-3 pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
+                  : 'py-3',
               )
             : 'h-10 px-4',
         )}
       >
-        <div className="flex items-center gap-2">
-          <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h2 className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]">
             {localize('com_msg_source_reference')}
           </h2>
-          <span className="inline-flex h-4 w-4 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
             {references.length}
           </span>
         </div>
@@ -571,7 +572,7 @@ export default function CitationReferencesDrawer({
           type="button"
           onClick={() => setOpenState(false)}
           className={cn(
-            'inline-flex items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
+            'inline-flex shrink-0 items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
             isMobileLikeViewport ? 'size-8 rounded-md' : 'size-6 rounded-[6px]',
           )}
           aria-label="关闭参考资料"

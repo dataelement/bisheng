@@ -10,7 +10,7 @@ import {
     subscribeSpaceApi,
     type KnowledgeSpace,
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -53,6 +53,7 @@ export default function KnowledgeSquare({
     const [joiningId, setJoiningId] = useState<string | null>(null);
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
+    const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const searchImeComposingRef = useRef(false);
     const PAGE_SIZE = 20;
 
@@ -254,7 +255,10 @@ export default function KnowledgeSquare({
             </div>
 
             <div
-                ref={scrollRef}
+                ref={(el) => {
+                    scrollRef.current = el;
+                    scrollRevealRef(el);
+                }}
                 className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
             >
                 <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">

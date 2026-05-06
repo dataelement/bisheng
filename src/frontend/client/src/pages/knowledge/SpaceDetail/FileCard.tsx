@@ -236,7 +236,7 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none touch-mobile:rounded-[6px]",
+                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "border-primary shadow-sm"
@@ -254,10 +254,10 @@ export function FileCard({
         >
             <CardContent className={cn(
                 "flex flex-col p-0",
-                mobileListMode && "touch-mobile:flex-row touch-mobile:items-center touch-mobile:gap-2 touch-mobile:p-1"
+                mobileListMode && "max-[767px]:flex-row max-[767px]:items-center max-[767px]:gap-2 max-[767px]:p-1"
             )}>
                 {!hideSelectionCheckbox && mobileListMode && (
-                    <div className="hidden touch-mobile:flex touch-mobile:shrink-0 touch-mobile:items-center touch-mobile:justify-center touch-mobile:pl-1 touch-mobile:pr-0.5">
+                    <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
                             className={isSelected ? "border-primary" : "border-gray-400"}
                             checked={isSelected}
@@ -271,7 +271,7 @@ export function FileCard({
                 {/* 缩略图或图标区域 */}
                 <div className={cn(
                     "relative flex h-[106px] shrink-0 items-center justify-center",
-                    mobileListMode && "touch-mobile:h-12 touch-mobile:w-12 touch-mobile:rounded-[4px]",
+                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:rounded-[4px]",
                     isFolder ? "bg-[#FAFCFF]" : "bg-gray-50"
                 )}>
                     <FileIconRenderer file={file} isFolder={isFolder} />
@@ -280,7 +280,7 @@ export function FileCard({
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
-                                mobileListMode && "touch-mobile:hidden",
+                                mobileListMode && "max-[767px]:hidden",
                                 !revealCardActionsOnHoverOnly
                                     ? "opacity-100"
                                     : isSelected
@@ -408,7 +408,7 @@ export function FileCard({
                 {/* 底部内容区域 */}
                 <div className={cn(
                     "p-1",
-                    mobileListMode && "touch-mobile:min-w-0 touch-mobile:flex-1 touch-mobile:pr-1"
+                    mobileListMode && "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:pr-1"
                 )}>
                     {/* 文件名和状态 */}
                     <div className="flex items-center text-sm font-medium min-w-0">

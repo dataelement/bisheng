@@ -22,6 +22,7 @@ import { ArrowDown, Loader2 } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
+import { useScrollRevealRef } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
@@ -210,6 +211,7 @@ const AiChatInput = memo(
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
         const textareaScrollHideTimerRef = useRef<number | null>(null);
+        const selectionTagsScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
@@ -379,7 +381,10 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {hasSelectionTags && (
-                        <div className="mt-1 mb-2.5  max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                        <div
+                            ref={selectionTagsScrollRevealRef}
+                            className="mt-1 mb-2.5  max-h-[72px] overflow-y-auto scrollbar-on-hover"
+                        >
                             <div className="flex flex-wrap gap-1">
                                 {uploadingFiles.map((file) => (
                                     <UploadingFileTag key={file.id} name={file.name} />

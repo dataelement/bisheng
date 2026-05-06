@@ -168,12 +168,12 @@ export default function CitationDocumentPreviewDrawer({
   }, [canRenderPreview, isFullBleedMobile]);
 
   useEffect(() => {
-    if (!manageMobileNavVisibility || !canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
+    if (!manageMobileNavVisibility || !canRenderPreview || !isNarrowLayout) return;
     setChatMobileNavHidden(true);
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [canRenderPreview, isNarrowLayout, isFullBleedMobile, manageMobileNavVisibility, setChatMobileNavHidden]);
+  }, [canRenderPreview, isNarrowLayout, manageMobileNavVisibility, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!canRenderPreview || isFullBleedMobile) return;
@@ -250,10 +250,10 @@ export default function CitationDocumentPreviewDrawer({
       <div
         className={cn(
           'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
-          // Spec: 16px top/sides (below safe area), 24px gap to content (pb-6)
+          // Symmetric vertical padding so icon/title/actions sit centered in the bar; safe-area only on top.
           isFullBleedMobile &&
-            'px-4 pb-6 pt-[calc(env(safe-area-inset-top,0px)+16px)]',
-          !isFullBleedMobile && 'px-4 pb-6 pt-4',
+            'px-4 pb-4 pt-[calc(env(safe-area-inset-top,0px)+16px)]',
+          !isFullBleedMobile && 'px-4 py-4',
         )}
       >
         <div className="flex min-w-0 items-center gap-2">

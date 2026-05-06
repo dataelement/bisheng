@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 
 interface TagPickerProps {
     tags: string[];
@@ -18,6 +18,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
     const localize = useLocalize();
     const [activeIndex, setActiveIndex] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
+    const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
 
     // Filter tags by search text
     const filtered = tags.filter(t =>
@@ -54,7 +55,9 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
     if (filtered.length === 0) {
         return (
             <div
-                ref={containerRef}
+                ref={(el) => {
+                    containerRef.current = el;
+                }}
                 className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg p-3 z-50"
             >
                 <p className="text-sm text-[#86909c] text-center">{localize("com_knowledge.no_matched_tags")}</p>
@@ -64,7 +67,10 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
 
     return (
         <div
-            ref={containerRef}
+            ref={(el) => {
+                containerRef.current = el;
+                listScrollRevealRef(el);
+            }}
             className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scrollbar-on-hover"
         >
             <div className="p-1.5">

@@ -30,7 +30,7 @@ import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 
@@ -97,6 +97,8 @@ export function KnowledgeSpaceContent({
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
@@ -145,11 +147,14 @@ export function KnowledgeSpaceContent({
     useLayoutEffect(() => {
         if (viewMode !== "card") return;
         const el = cardGridRef.current;
+        // 无文件时 grid 未挂载，等 displayFiles 变化后 effect 会再跑
         if (!el) return;
 
-        // Prefer the scroll container width (grid's parent) to avoid 0-width reads on first paint.
-        const parent = el.parentElement as HTMLElement | null;
-        const getWidth = () => parent?.clientWidth || el.clientWidth || 0;
+        // Prefer滚动容器宽度；再观察上一层 flex 容器，避免分栏/侧栏变化时仅子节点未触发 RO 的边缘情况
+        const scrollParent = el.parentElement as HTMLElement | null;
+        const flexAncestor = scrollParent?.parentElement as HTMLElement | null;
+        const getWidth = () =>
+            scrollParent?.clientWidth || el.clientWidth || flexAncestor?.clientWidth || 0;
 
         let rafId: number | null = null;
         const apply = () => {
@@ -165,12 +170,18 @@ export function KnowledgeSpaceContent({
         apply();
         const ro = new ResizeObserver(() => apply());
         ro.observe(el);
-        if (parent) ro.observe(parent);
+        if (scrollParent) ro.observe(scrollParent);
+        if (flexAncestor) ro.observe(flexAncestor);
+
+        // 窗口缩放、部分环境下 RO 漏触发时的兜底
+        window.addEventListener("resize", apply);
+
         return () => {
             if (rafId) window.cancelAnimationFrame(rafId);
+            window.removeEventListener("resize", apply);
             ro.disconnect();
         };
-    }, [viewMode]);
+    }, [viewMode, displayFiles.length, isAiAssistantOpen]);
 
     useEffect(() => {
         setSelectedFiles(new Set());
@@ -788,7 +799,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 touch-mobile:h-auto touch-mobile:min-h-full touch-mobile:overflow-y-auto"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -804,6 +815,7 @@ export function KnowledgeSpaceContent({
                 accept={fileInputAccept}
             />
             {/* Header */}
+            <div className="shrink-0">
             <KnowledgeSpaceHeader
                 space={space}
                 currentPath={currentPath}
@@ -843,11 +855,12 @@ export function KnowledgeSpaceContent({
                 isAiAssistantOpen={isAiAssistantOpen}
                 canShareSpace={canShareSpace}
             />
+            </div>
 
-            {/* Content Container (Scrollable) */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col touch-mobile:flex-none">
+            {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div
-                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white touch-mobile:flex-none touch-mobile:overflow-visible"
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white"
                     onContextMenu={handleContentContextMenu}
                 >
                     <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
@@ -887,7 +900,7 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        <div className="flex-1 overflow-y-auto scrollbar-on-hover touch-mobile:flex-none touch-mobile:overflow-visible">
+                        <div ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-hover">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
@@ -929,8 +942,8 @@ export function KnowledgeSpaceContent({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4 touch-mobile:flex-none">
-                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-hover border-t border-[#e5e6eb] touch-mobile:flex-none touch-mobile:overflow-visible">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
+                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-hover border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
@@ -961,20 +974,18 @@ export function KnowledgeSpaceContent({
                 </div>
             </div>
 
-            {/* Reserve space for mobile fixed footer（高度与底栏+安全区一致，避免列表被裁切或露出） */}
-            {isH5 ? <div aria-hidden className="h-[calc(env(safe-area-inset-bottom,0px)+80px)]" /> : null}
-
-            {/* Footer：H5 贴底无 8px 缝，白底延至安全区，避免下方内容渗出 */}
+            {/* Footer：与上方同宽（外层 px-4）；桌面 mt-auto；手机列表区内置底栏，随面板高度固定可见 */}
             <div
                 className={cn(
-                    "mt-auto",
-                    isH5 && "fixed bottom-0 left-0 right-0 z-30 bg-white pb-[env(safe-area-inset-bottom,0px)]",
+                    "w-full min-w-0 shrink-0 max-[767px]:pb-[env(safe-area-inset-bottom,0px)]",
+                    !isH5 && "mt-auto",
                 )}
             >
                 <div
                     className={cn(
-                        "mx-auto flex w-full max-w-[1000px] flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3",
+                        "flex w-full min-w-0 flex-shrink-0 flex-wrap items-center justify-between gap-y-1 py-3",
                         isH5 && "flex-nowrap justify-end",
+                        !isH5 && "border-t border-[#e5e6eb] bg-white",
                     )}
                 >
                     {!isH5 && (

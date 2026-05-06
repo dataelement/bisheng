@@ -387,7 +387,7 @@ export function KnowledgeSpaceSidebar({
                 isHovering={isToggleHovering}
                 setIsHovering={setIsToggleHovering}
                 className={`absolute top-1/2 left-0 z-[40] ${mobileDrawerMode ? "hidden" : ""}`}
-                translateX={230}
+                translateX={240}
             />
         </div>
     );
