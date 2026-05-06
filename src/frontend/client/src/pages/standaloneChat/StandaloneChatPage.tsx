@@ -151,7 +151,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                 onToggle={toggleSidebar}
                 isHovering={isHovering}
                 setIsHovering={setIsHovering}
-                className="fixed top-1/2 z-[50]"
+                className="absolute left-2 top-1/2 z-[50]"
                 translateX={sidebarWidth - 5}
               />
             )}

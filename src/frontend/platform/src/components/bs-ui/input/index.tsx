@@ -576,20 +576,19 @@ const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
         const raw = e.target.value;
         if (raw === '') {
             setInternalValue('');
-            // setInternalError('不能为空');
+            setInternalError('');
             onChange?.(e);
             return;
         }
         if (!/^\d*$/.test(raw)) return;
         if (raw.length > 1 && raw.startsWith('0')) return;
+
+        // Always reflect typed value so display matches what the user sees.
+        // Out-of-range values surface an error but do not propagate to parent.
+        setInternalValue(raw);
         const err = validate(raw);
         setInternalError(err);
 
-        if (err) {
-            setInternalError(err);
-            return;
-        }
-        setInternalValue(raw);
         if (!err) {
             const num = parseInt(raw, 10);
             onValueChange?.(num);
