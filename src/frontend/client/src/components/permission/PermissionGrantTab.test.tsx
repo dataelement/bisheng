@@ -35,6 +35,23 @@ const mockedGetResourceGrantUserGroups = jest.mocked(getResourceGrantUserGroups)
 const mockedGetResourceGrantUsers = jest.mocked(getResourceGrantUsers);
 
 describe("PermissionGrantTab", () => {
+  beforeAll(() => {
+    class IntersectionObserverMock implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "";
+      readonly thresholds = [];
+      disconnect = jest.fn();
+      observe = jest.fn();
+      takeRecords = jest.fn(() => []);
+      unobserve = jest.fn();
+    }
+    Object.defineProperty(window, "IntersectionObserver", {
+      writable: true,
+      configurable: true,
+      value: IntersectionObserverMock,
+    });
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockedAuthorizeResource.mockResolvedValue(null);
@@ -97,6 +114,43 @@ describe("PermissionGrantTab", () => {
       "space-1",
       { signal: expect.any(AbortSignal) },
     );
+  });
+
+  it("shows inherited child departments in the selected department summary", async () => {
+    mockedGetResourceGrantDepartments.mockResolvedValue([
+      {
+        id: 7,
+        dept_id: "dept-7",
+        name: "测试部门",
+        parent_id: null,
+        member_count: 3,
+        children: [
+          {
+            id: 8,
+            dept_id: "dept-8",
+            name: "子部门",
+            parent_id: 7,
+            member_count: 1,
+            children: [],
+          },
+        ],
+      },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_department" }));
+    fireEvent.click(await screen.findByText("测试部门"));
+
+    await waitFor(() => {
+      expect(screen.getByText("测试部门、测试部门/子部门")).toBeInTheDocument();
+    });
   });
 
   it("marks already granted departments as disabled without selecting them again", async () => {
