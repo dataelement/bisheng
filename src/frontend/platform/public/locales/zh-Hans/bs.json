@@ -1244,7 +1244,9 @@
       "subscribe": "订阅",
       "subscription": "订阅",
       "knowledgeSpace": "知识空间",
-      "knowledge_space": "知识空间"
+      "knowledge_space": "知识空间",
+      "tenant": "租户管理",
+      "llm": "模型管理"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1297,7 +1299,13 @@
       "create_channel": "创建频道",
       "delete_channel": "删除频道",
       "create_knowledge_space": "创建知识空间",
-      "delete_knowledge_space": "删除知识空间"
+      "delete_knowledge_space": "删除知识空间",
+      "tenantMount": "挂载子租户",
+      "tenantUnmount": "解绑子租户",
+      "tenantDisable": "禁用子租户",
+      "llmServerCreate": "新建模型供应方",
+      "llmServerUpdate": "更新模型供应方",
+      "llmServerDelete": "删除模型供应方"
     },
     "objectTypeEnum": {
       "none": "无",
@@ -1313,7 +1321,9 @@
       "knowledge": "知识库",
       "workstation": "工作台（日常模式）",
       "channel": "频道",
-      "knowledge_space": "知识空间"
+      "knowledge_space": "知识空间",
+      "tenant": "租户",
+      "llm_server": "模型供应方"
     },
     "appUsage": "应用使用",
     "systemOperations": "系统操作",

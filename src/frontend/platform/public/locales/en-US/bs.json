@@ -1260,7 +1260,9 @@
       "subscribe": "Subscription",
       "subscription": "Subscription",
       "knowledgeSpace": "Knowledge Space",
-      "knowledge_space": "Knowledge Space"
+      "knowledge_space": "Knowledge Space",
+      "tenant": "Tenant Management",
+      "llm": "Model Management"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1313,7 +1315,13 @@
       "create_channel": "Create Channel",
       "delete_channel": "Delete Channel",
       "create_knowledge_space": "Create Knowledge Space",
-      "delete_knowledge_space": "Delete Knowledge Space"
+      "delete_knowledge_space": "Delete Knowledge Space",
+      "tenantMount": "Mount Child Tenant",
+      "tenantUnmount": "Unmount Child Tenant",
+      "tenantDisable": "Disable Child Tenant",
+      "llmServerCreate": "Create Model Provider",
+      "llmServerUpdate": "Update Model Provider",
+      "llmServerDelete": "Delete Model Provider"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1329,7 +1337,9 @@
       "knowledge": "Knowledge Base",
       "workstation": "Workbench (Daily Mode)",
       "channel": "Channel",
-      "knowledge_space": "Knowledge Space"
+      "knowledge_space": "Knowledge Space",
+      "tenant": "Tenant",
+      "llm_server": "Model Provider"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",

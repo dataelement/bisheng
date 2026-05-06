@@ -1245,7 +1245,9 @@
       "subscribe": "サブスクリプション",
       "subscription": "サブスクリプション",
       "knowledgeSpace": "ナレッジスペース",
-      "knowledge_space": "ナレッジスペース"
+      "knowledge_space": "ナレッジスペース",
+      "tenant": "テナント管理",
+      "llm": "モデル管理"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1298,7 +1300,13 @@
       "create_channel": "チャンネル作成",
       "delete_channel": "チャンネル削除",
       "create_knowledge_space": "ナレッジスペース作成",
-      "delete_knowledge_space": "ナレッジスペース削除"
+      "delete_knowledge_space": "ナレッジスペース削除",
+      "tenantMount": "子テナントをマウント",
+      "tenantUnmount": "子テナントをアンマウント",
+      "tenantDisable": "子テナントを停止",
+      "llmServerCreate": "モデルプロバイダ作成",
+      "llmServerUpdate": "モデルプロバイダ更新",
+      "llmServerDelete": "モデルプロバイダ削除"
     },
     "objectTypeEnum": {
       "none": "なし",
@@ -1314,7 +1322,9 @@
       "knowledge": "ナレッジベース",
       "workstation": "ワークステーション（日常モード）",
       "channel": "チャンネル",
-      "knowledge_space": "ナレッジスペース"
+      "knowledge_space": "ナレッジスペース",
+      "tenant": "テナント",
+      "llm_server": "モデルプロバイダ"
     },
     "appUsage": "アプリ利用状況",
     "systemOperations": "システム操作",
