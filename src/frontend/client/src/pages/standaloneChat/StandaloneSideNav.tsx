@@ -204,9 +204,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
+      <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2">
         {groups.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
+          <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
             <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
               {localize('com_app_chat_sidebar_empty')}
             </p>
@@ -214,7 +214,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
         ) : (
           groups.map((group, groupIdx) => (
             <div key={groupIdx} className="flex flex-col">
-              <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
+              <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
                 {formatConversationTimeGroupLabel(group.label, localize)}
               </div>
               <div className="flex flex-col">

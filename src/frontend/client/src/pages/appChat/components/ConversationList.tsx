@@ -24,7 +24,7 @@ export function ConversationList({ groups, activeId, onSelect, onNewChat, locali
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3">
+    <div className="flex-1 overflow-y-auto px-2">
       {groups.map((group) => (
         <div key={group.label} className="mb-2">
           <div className="px-2 mb-1 text-xs font-medium text-gray-400">

@@ -625,11 +625,12 @@ const Markdown = memo(({
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
   /**
-   * 与 tailwind `touch-mobile`（max 1023px）对齐；并排除 `(pointer: coarse)`，避免大屏触控误判成鼠标。
+   * 可精确指向且具备 hover 时用悬停打开溯源卡片、点击角标进全文；否则（触控为主）用点击切换卡片。
+   * 不按视口宽度区分，避免 PC 小窗或分屏宽度不足 1024px 时被误判为触控交互。
    */
-  const citationPreviewUsesHover =
-    useMediaQuery('(min-width: 1024px) and (hover: hover) and (pointer: fine)') &&
-    !useMediaQuery('(pointer: coarse)');
+  const citationPreviewUsesHover = useMediaQuery(
+    '(hover: hover) and (pointer: fine)',
+  );
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);

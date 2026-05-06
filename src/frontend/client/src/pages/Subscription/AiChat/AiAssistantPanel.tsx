@@ -6,7 +6,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
  *   - Channel article mode: when articleDocId is provided, uses useChannelChat
  *   - File chat mode: when fileChat is provided, uses useFileChat
  */
-import { BrushCleaningIcon, ChevronsRightIcon, X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { useState } from "react";
 import { useRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -28,6 +28,7 @@ import useChatModelMemo from "~/hooks/useChatModelMemo";
 import useFileChat from "~/hooks/useFileChat";
 import { useConfirm } from "~/Providers";
 import { ChannelClearIcon } from "~/components/icons/channels";
+import { cn } from "~/utils";
 
 interface AiAssistantPanelProps {
     onClose: () => void;
@@ -168,30 +169,51 @@ export function AiAssistantPanel({
                     </div>
                 </div>
             ) : (
-                <div className={`relative flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
-                    {isH5 && (
+                <div
+                    className={cn(
+                        'relative flex shrink-0 items-center gap-2 px-3 py-[15px]',
+                        isH5 && 'justify-between',
+                        noBorder ? '' : 'border-b border-gray-100',
+                    )}
+                >
+                    {isH5 ? (
                         <Button
                             variant="ghost"
                             className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
                             onClick={onClose}
+                            aria-label={localize('com_ui_go_back')}
                         >
                             <X className="size-4" />
                         </Button>
+                    ) : (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                        onClick={onClose}
+                                        aria-label={localize('com_ui_go_back')}
+                                    >
+                                        <ChevronLeft className="size-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    <p>{localize('com_ui_go_back')}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     )}
-                    <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 touch-desktop:pointer-events-auto touch-desktop:static touch-desktop:w-auto touch-desktop:translate-x-0 touch-desktop:text-left">
+                    <h3
+                        className={cn(
+                            'pointer-events-none min-w-0 flex-1 truncate text-sm font-medium leading-6 text-gray-900',
+                            isH5 && 'absolute left-1/2 w-[60%] -translate-x-1/2 text-center',
+                        )}
+                    >
                         {localize("com_subscription.ai_assistant")}
                     </h3>
-                    <div className="ml-auto flex items-center gap-3 pr-3">
+                    <div className="flex shrink-0 items-center gap-3">
                         {clearChatControl}
-                        {!isH5 && (
-                            <Button
-                                variant="ghost"
-                                className="text-gray-400 p-0.5 group relative w-5 h-5"
-                                onClick={onClose}
-                            >
-                                <ChevronsRightIcon className="size-4" />
-                            </Button>
-                        )}
                     </div>
                 </div>
             )}

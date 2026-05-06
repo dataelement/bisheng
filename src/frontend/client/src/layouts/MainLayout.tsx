@@ -50,7 +50,7 @@ function SidebarItem({ icon, to, active, label, showLabel = false, onNavigate }:
           className={cn(
             'flex cursor-pointer rounded-lg transition-colors',
             showLabel
-              ? 'mr-2 h-[44px] items-center justify-start gap-2 px-3 py-3 hover:bg-[#f2f3f5]'
+              ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2 hover:bg-[#f2f3f5]'
               : 'items-center justify-center p-3 hover:bg-[#e6edfc]',
             active && "bg-[#e6edfc]"
           )}
