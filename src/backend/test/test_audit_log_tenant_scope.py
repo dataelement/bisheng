@@ -423,6 +423,243 @@ class TestGetAuditTenantScopeHelper:
 # AuditLogDao.get_audit_logs — multi-filter AND interaction
 # ===========================================================================
 
+class TestAlwaysBypassesAutoTenantFilter:
+    """Regression for the v2.5.x screenshot bug: a global super admin (no
+    F019 scope) opened ``/审计`` and saw only Root rows because the DAO
+    only entered ``bypass_tenant_filter()`` when ``tenant_scope is not
+    None``. For a global super ``tenant_scope`` is ``None`` and the F013
+    auto-listener (``core/database/tenant_filter.py``) silently injected
+    ``WHERE auditlog.tenant_id = current_tenant_id`` (=1, admin's leaf),
+    hiding every child tenant's audit row.
+
+    Post-fix bypass is unconditional — the DAO is the sole source of
+    tenant scoping, and a missing scope means "no scoping" rather than
+    "fall through to the listener's pin-to-current-tenant default". These
+    tests assert that contract directly via a spy on the bypass CM, so
+    the regression cannot silently come back even on engines (like raw
+    SQLite in unit tests) where the listener is not installed.
+    """
+
+    @pytest.fixture()
+    def bypass_spy(self, monkeypatch, session):
+        """Replace ``bypass_tenant_filter`` with a recording context manager.
+
+        Mirrors the rest of ``patch_dao_session`` but records each enter so
+        tests can assert it was called regardless of ``tenant_scope``.
+        """
+        calls = []
+
+        @contextmanager
+        def _spy():
+            calls.append(True)
+            yield
+
+        @contextmanager
+        def _fake_get_sync():
+            yield session
+
+        monkeypatch.setattr(
+            'bisheng.database.models.audit_log.bypass_tenant_filter',
+            _spy,
+        )
+        monkeypatch.setattr(
+            'bisheng.database.models.audit_log.get_sync_db_session',
+            _fake_get_sync,
+        )
+        monkeypatch.setattr(
+            'bisheng.api.services.audit_log.resp_200',
+            lambda data=None: {'data': data},
+        )
+        return calls
+
+    async def test_get_audit_logs_bypasses_when_scope_is_none(
+        self, bypass_spy, session,
+    ):
+        """``tenant_scope=None`` (global super) — bypass must still fire."""
+        _insert_audit(session, action='r', tenant_id=1, operator_tenant_id=1)
+        _insert_audit(session, action='c', tenant_id=2, operator_tenant_id=2)
+
+        rows, total = await AuditLogDao.get_audit_logs([], tenant_scope=None)
+
+        assert len(bypass_spy) == 1, (
+            'bypass_tenant_filter() must wrap the query even when '
+            'tenant_scope=None; otherwise the F013 auto-listener pins '
+            "admin's view to their leaf tenant and child rows vanish."
+        )
+        # And the DAO returns rows from every tenant, not just Root.
+        assert total == 2
+        assert {r.action for r in rows} == {'r', 'c'}
+
+    async def test_get_audit_logs_bypasses_when_scope_is_set(
+        self, bypass_spy, session,
+    ):
+        """Tenant-scoped read — bypass also fires (avoids double-filter)."""
+        _insert_audit(session, action='c', tenant_id=2, operator_tenant_id=2)
+
+        rows, total = await AuditLogDao.get_audit_logs([], tenant_scope=2)
+
+        assert len(bypass_spy) == 1
+        assert total == 1
+
+    def test_get_all_operators_bypasses_when_scope_is_none(
+        self, bypass_spy, session,
+    ):
+        _insert_audit(
+            session, action='r', tenant_id=1, operator_tenant_id=1,
+            operator_id=100, operator_name='root-admin',
+        )
+        _insert_audit(
+            session, action='c', tenant_id=2, operator_tenant_id=2,
+            operator_id=200, operator_name='child-bob',
+        )
+
+        rows = AuditLogDao.get_all_operators([], tenant_scope=None)
+
+        assert len(bypass_spy) == 1
+        names = {name for _id, name in rows}
+        assert names == {'root-admin', 'child-bob'}
+
+    def test_get_all_operators_bypasses_when_scope_is_set(
+        self, bypass_spy, session,
+    ):
+        _insert_audit(
+            session, action='c', tenant_id=2, operator_tenant_id=2,
+            operator_id=200, operator_name='child-bob',
+        )
+
+        AuditLogDao.get_all_operators([], tenant_scope=2)
+
+        assert len(bypass_spy) == 1
+
+
+class TestAutoTenantFilterSimulationEndToEnd:
+    """Closest-to-production reproduction: install a per-instance SQLAlchemy
+    ``do_orm_execute`` listener that mimics the F013 auto-filter, set
+    ``current_tenant_id`` ContextVar to ROOT, and verify the post-fix DAO
+    still returns child-tenant rows for a global super (``tenant_scope=
+    None``).
+
+    Pre-fix this test would return only ``tenant_id=1`` rows because the
+    DAO's ``nullcontext()`` did not bypass the simulated listener.
+    """
+
+    @pytest.fixture()
+    def listener_env(self, monkeypatch, session):
+        """Per-instance fake F013 listener + DAO session monkeypatch.
+
+        Returns a ``(session, seed)`` tuple. ``seed`` runs ``_insert_audit``
+        calls inside the real ``bypass_tenant_filter`` so the inserts'
+        post-commit ``session.refresh()`` SELECT isn't pinned by the
+        listener (which would otherwise hide rows whose ``tenant_id``
+        doesn't equal ``current_tenant_id``).
+        """
+        from sqlalchemy import event
+        from bisheng.core.context.tenant import (
+            bypass_tenant_filter as real_bypass,
+            current_tenant_id,
+            get_current_tenant_id,
+            is_tenant_filter_bypassed,
+        )
+
+        @event.listens_for(session, 'do_orm_execute')
+        def _fake_listener(state):
+            if is_tenant_filter_bypassed():
+                return
+            if not state.is_select:
+                return
+            tid = get_current_tenant_id()
+            if tid is None:
+                return
+            try:
+                state.statement = state.statement.where(
+                    AuditLog.__table__.c.tenant_id == tid
+                )
+            except Exception:
+                return
+
+        # Set ROOT as the admin's leaf tenant to mimic production.
+        token = current_tenant_id.set(1)
+
+        @contextmanager
+        def _fake_get_sync():
+            yield session
+
+        monkeypatch.setattr(
+            'bisheng.database.models.audit_log.get_sync_db_session',
+            _fake_get_sync,
+        )
+        monkeypatch.setattr(
+            'bisheng.api.services.audit_log.resp_200',
+            lambda data=None: {'data': data},
+        )
+
+        def seed(*entries):
+            with real_bypass():
+                for kwargs in entries:
+                    _insert_audit(session, **kwargs)
+
+        try:
+            yield session, seed
+        finally:
+            current_tenant_id.reset(token)
+
+    async def test_admin_global_view_sees_child_rows_through_listener(
+        self, listener_env,
+    ):
+        _, seed = listener_env
+        seed(
+            dict(action='r', tenant_id=1, operator_tenant_id=1),
+            dict(action='c', tenant_id=2, operator_tenant_id=2),
+            dict(action='c2', tenant_id=3, operator_tenant_id=3),
+        )
+
+        rows, total = await AuditLogDao.get_audit_logs([], tenant_scope=None)
+
+        actions = {r.action for r in rows}
+        assert total == 3, (
+            'global super (tenant_scope=None) must see every tenant; '
+            'pre-fix the auto-listener pinned to current_tenant_id=1 and '
+            'child tenants 2/3 were silently dropped.'
+        )
+        assert actions == {'r', 'c', 'c2'}
+
+    async def test_listener_still_pins_when_bypass_disabled_baseline(
+        self, listener_env,
+    ):
+        """Sanity: confirm the simulated listener actually filters when
+        bypass is NOT entered. If this assertion ever fails, the listener
+        fixture above is broken and the post-fix test is untrustworthy.
+        """
+        session, seed = listener_env
+        seed(
+            dict(action='r', tenant_id=1, operator_tenant_id=1),
+            dict(action='c', tenant_id=2, operator_tenant_id=2),
+        )
+
+        rows = session.exec(select(AuditLog)).all()
+        actions = {r.action for r in rows}
+
+        assert actions == {'r'}, (
+            'baseline: without bypass the listener pins to current_tenant_id=1'
+        )
+
+    async def test_admin_global_operators_sees_child_operators_through_listener(
+        self, listener_env,
+    ):
+        _, seed = listener_env
+        seed(
+            dict(action='r', tenant_id=1, operator_tenant_id=1,
+                 operator_id=100, operator_name='root-admin'),
+            dict(action='c', tenant_id=2, operator_tenant_id=2,
+                 operator_id=200, operator_name='child-bob'),
+        )
+
+        rows = AuditLogDao.get_all_operators([], tenant_scope=None)
+        names = {name for _id, name in rows}
+
+        assert names == {'root-admin', 'child-bob'}
+
+
 class TestAuditLogsCombinedFilters:
     """``tenant_scope`` must AND with the existing operator/system/event/time
     filters, never widen visibility.
