@@ -1,4 +1,3 @@
-from contextlib import nullcontext
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
@@ -179,10 +178,20 @@ class AuditLogDao(AuditLogBase):
         """
         Filter logs by user group.
 
-        ``tenant_scope`` (v2.5.0 audit isolation): when set, only return rows
-        visible to the given tenant per ``_visible_for_tenant``. Wraps the
-        session in ``bypass_tenant_filter()`` so the auto IN-list filter
-        does not duplicate / conflict with the explicit OR predicate.
+        ``tenant_scope`` (v2.5.0 audit isolation):
+        - ``None``  → cross-tenant view (global super admin without F019
+          admin-scope) — must see every tenant's rows.
+        - ``X``     → tenant-scoped view (Child Admin / dept admin / log-menu
+          role / super with admin-scope=X) — only rows visible to X per
+          ``_visible_for_tenant``.
+
+        Always wraps the session in ``bypass_tenant_filter()``: the DAO is
+        the sole source of tenant scoping here. Without bypass, the F013
+        auto-listener would inject ``WHERE tenant_id = current_tenant_id``
+        which (a) hides every child tenant's row from a global super whose
+        leaf is Root (the original screenshot bug), and (b) double-filters
+        on top of the explicit ``_visible_for_tenant`` OR predicate when a
+        scope is set.
         """
         statement = select(AuditLog)
         count_statement = select(func.count(AuditLog.id))
@@ -214,8 +223,7 @@ class AuditLogDao(AuditLogBase):
             count_statement = count_statement.where(tenant_predicate)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit).order_by(AuditLog.create_time.desc())
-        ctx = bypass_tenant_filter() if tenant_scope is not None else nullcontext()
-        with ctx, get_sync_db_session() as session:
+        with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
@@ -234,10 +242,17 @@ class AuditLogDao(AuditLogBase):
     def get_all_operators(cls, group_ids: List[int], tenant_scope: Optional[int] = None):
         """List distinct operators across audit log rows.
 
-        ``tenant_scope`` (v2.5.0 audit isolation): when set, only operators
-        from rows visible to the given tenant per ``_visible_for_tenant``.
-        Without this the dropdown leaks Root operator names into Child
-        Admin views.
+        ``tenant_scope`` (v2.5.0 audit isolation):
+        - ``None``  → global super admin (no F019 scope) — return operators
+          from every tenant.
+        - ``X``     → only operators from rows visible to tenant X per
+          ``_visible_for_tenant``. Without this the dropdown leaks Root
+          operator names into Child Admin views.
+
+        Always wraps in ``bypass_tenant_filter()`` for the same reason as
+        ``get_audit_logs``: the DAO owns tenant scoping; the auto-listener
+        would otherwise pin results to ``current_tenant_id`` and hide
+        cross-tenant operators from a global super.
         """
         statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
         if group_ids:
@@ -248,8 +263,7 @@ class AuditLogDao(AuditLogBase):
         if tenant_scope is not None:
             statement = statement.where(cls._visible_for_tenant(tenant_scope))
 
-        ctx = bypass_tenant_filter() if tenant_scope is not None else nullcontext()
-        with ctx, get_sync_db_session() as session:
+        with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all()
 
     # -----------------------------------------------------------------------
