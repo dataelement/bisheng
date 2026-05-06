@@ -352,6 +352,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # Insert into Database
         db_knowledge.user_id = login_user.user_id
+        db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
         # qa knowledge will be init index when add question

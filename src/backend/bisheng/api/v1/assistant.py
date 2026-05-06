@@ -67,7 +67,11 @@ async def create_assistant(*,
     # get login user
     req_data = req.model_dump()
     share_to_children = req_data.pop('share_to_children', None)  # F017: not a column on Assistant
-    assistant = Assistant(**req_data, user_id=login_user.user_id)
+    assistant = Assistant(
+        **req_data,
+        user_id=login_user.user_id,
+        tenant_id=login_user.tenant_id,
+    )
     res = await AssistantService.create_assistant(
         request, login_user, assistant, share_to_children=share_to_children,
     )

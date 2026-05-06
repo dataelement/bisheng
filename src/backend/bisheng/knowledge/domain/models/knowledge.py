@@ -107,8 +107,31 @@ class KnowledgeUpdate(BaseModel):
     description: Optional[str] = None
 
 
-class KnowledgeCreate(KnowledgeBase):
+class KnowledgeCreate(BaseModel):
+    user_id: Optional[int] = Field(default=None, index=True)
+    name: str = Field(index=True, min_length=1, max_length=200,
+                      description='Knowledge Base Name')
+    type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
+                      description='Knowledge Base Type, value from KnowledgeTypeEnum')
+    description: Optional[str] = Field(default=None, index=True)
+    model: Optional[str] = Field(default=None, index=False)
+    collection_name: Optional[str] = Field(default=None, index=False)
+    index_name: Optional[str] = Field(default=None, index=False)
+    state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
+                                 description='value from KnowledgeState')
+    is_released: bool = Field(default=False, description='is released to knowledge space square')
+    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
+    is_shared: bool = Field(default=False)
+    metadata_fields: Optional[List[Dict]] = Field(default=None,
+                                                  description="Metadata Field Configuration for Knowledge Base")
     is_partition: Optional[bool] = None
+
+    @field_validator('model', mode='before')
+    @classmethod
+    def convert_model(cls, v: Any) -> str:
+        if isinstance(v, int):
+            v = str(v)
+        return v
 
 
 class KnowledgeDao(KnowledgeBase):
