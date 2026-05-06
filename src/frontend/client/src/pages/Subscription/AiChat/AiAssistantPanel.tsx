@@ -150,7 +150,11 @@ export function AiAssistantPanel({
                 )}
             >
                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-gray-900">
-                    {localize("com_subscription.ai_assistant")}
+                    {localize(
+                        fileChat
+                            ? "com_knowledge.ai_assistant"
+                            : "com_subscription.ai_assistant",
+                    )}
                 </h3>
                 <div className="min-w-0 flex-1" aria-hidden />
                 <div className="flex shrink-0 items-center gap-2">
@@ -161,15 +165,16 @@ export function AiAssistantPanel({
                                 <Button
                                     variant="ghost"
                                     type="button"
-                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    size="icon"
+                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
                                     onClick={onClose}
-                                    aria-label={localize('com_knowledge.collapse_drawer')}
+                                    aria-label={localize("com_ui_collapse")}
                                 >
-                                    <ChevronsRight className="size-4" strokeWidth={2} aria-hidden />
+                                    <ChevronsRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">
-                                <p>{localize('com_knowledge.collapse_drawer')}</p>
+                                <p>{localize("com_ui_collapse")}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>

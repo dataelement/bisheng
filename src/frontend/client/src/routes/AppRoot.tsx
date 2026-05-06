@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { ChevronLeft, Menu } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { useUnactivate } from 'react-activation';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
@@ -188,31 +188,19 @@ export default function AppRoot() {
                         />
                     )}
 
-                    {/* Floating actions - visible when sidebar is collapsed */}
-                    <div
-                        className={cn(
-                            'absolute left-3 top-3 z-[40] flex items-center gap-[8px] transition-all duration-300',
-                            sidebarVisible || (isAppSurface && isAppChatCompact)
-                                ? 'pointer-events-none hidden opacity-0'
-                                : 'opacity-100',
-                        )}
-                    >
-                        {isTabletOrMobile && (
+                    {/* 宽屏侧栏收起：仅保留返回（菜单已进 MobileNav）。勿用 flex+hidden 叠类名，避免 twMerge 后仍显示 absolute 钮叠在顶栏上 */}
+                    {!sidebarVisible && !(isAppSurface && isAppChatCompact) && (
+                        <div className="absolute left-3 top-3 z-[40] flex items-center gap-2 transition-all duration-300">
                             <button
-                                onClick={toggleSidebar}
-                                className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
-                                aria-label="Open sidebar"
+                                type="button"
+                                onClick={handleGoBack}
+                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] shadow-sm transition-colors hover:bg-gray-50"
+                                aria-label={localize('com_ui_go_back')}
                             >
-                                <Menu size={16} className="text-[#212121]" />
+                                <ChevronLeft size={16} className="text-[#212121]" />
                             </button>
-                        )}
-                        <button
-                            onClick={handleGoBack}
-                            className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
-                        >
-                            <ChevronLeft size={16} className="text-[#212121]" />
-                        </button>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Chat panel (routed) */}
                     <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -225,6 +213,7 @@ export default function AppRoot() {
                                     persistNavVisibleInLocalStorage={false}
                                     navigateToNewChatPath={false}
                                     onNewChat={handleCreateNewAppChat}
+                                    appSurfaceBackAction={handleGoBack}
                                 />
                             </div>
                         )}

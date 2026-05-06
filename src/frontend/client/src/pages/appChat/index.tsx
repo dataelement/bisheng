@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useRecoilState, useRecoilValue } from "recoil";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
 import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
 import { checkPermission } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
+import store from "~/store";
 import ChatView from "./ChatView";
+import { appConversationsState } from "./store/appSidebarAtoms";
 import { chatApiVersionState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
 import { AppLostMessage } from "./useWebsocket";
 
@@ -45,9 +48,49 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
     const [__, setRunningState] = useRecoilState(runningState)
     const [_, setChatId] = useRecoilState(chatIdState)
     const chatState = useRecoilValue(currentChatState)
+    const conversations = useRecoilValue(appConversationsState);
+    const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
+    const localize = useLocalize();
     const build = useBuild()
     const navigate = useNavigate()
     const { showToast } = useToastContext()
+
+    const flow = chatState?.flow;
+    const headerTitleForMobile = useMemo(() => {
+        if (!cid) return localize("com_ui_new_chat");
+        const activeConversation = conversations.find((item) => item.id === cid);
+        return (
+            [activeConversation?.title, flow?.name]
+                .map((item) => String(item || "").trim())
+                .find(Boolean) || localize("com_ui_new_chat")
+        );
+    }, [cid, conversations, flow?.name, localize]);
+
+    const hideShareForMobile = flow?.can_share !== true;
+
+    // flow 尚未写入 Recoil 时 ChatView 不会挂载，但 AppRoot 的 MobileNav 仍需要标题（与桌面 HeaderTitle 同源字段）
+    useEffect(() => {
+        if (!cid || !fid || !type) return;
+        setChatMobileHeader({
+            title: headerTitleForMobile,
+            conversationId: cid,
+            flowId: flow?.id || String(fid),
+            flowType: Number(flow?.flow_type ?? type) || 15,
+            readOnly: !!readOnly,
+            hideShare: hideShareForMobile,
+        });
+        return () => setChatMobileHeader(null);
+    }, [
+        cid,
+        fid,
+        type,
+        flow?.id,
+        flow?.flow_type,
+        headerTitleForMobile,
+        readOnly,
+        hideShareForMobile,
+        setChatMobileHeader,
+    ]);
 
     // console.log('[chatState] :>> ', chatState);
     // console.log('[runningState] :>> ', __);

@@ -164,15 +164,15 @@ export function KnowledgeAiPanel({
                                     variant="ghost"
                                     type="button"
                                     size="icon"
-                                    className="h-7 w-7 text-[#86909c] hover:text-[#4e5969]"
+                                    className="h-7 w-7 shrink-0 text-[#86909c] hover:text-[#4e5969]"
                                     onClick={onClose}
-                                    aria-label={localize("com_knowledge.collapse_drawer")}
+                                    aria-label={localize("com_ui_collapse")}
                                 >
-                                    <ChevronsRight className="size-4" strokeWidth={2} aria-hidden />
+                                    <ChevronsRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>{localize("com_knowledge.collapse_drawer")}</p>
+                                <p>{localize("com_ui_collapse")}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -203,7 +203,7 @@ export function KnowledgeAiPanel({
                         hideHeaderTitle
                         flatMode
                         knowledgeChatLayout
-                        contentWidthClassName={isH5 ? "max-w-none px-4" : undefined}
+                        contentWidthClassName="max-w-none px-4"
                         emptyStateHint={folderQaHint}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
