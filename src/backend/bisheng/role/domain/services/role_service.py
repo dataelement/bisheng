@@ -89,6 +89,12 @@ class RoleService:
             quota_config=req.quota_config,
             remark=req.remark,
             create_user=login_user.user_id,
+            # Explicitly bind to caller's tenant: ``Role.tenant_id`` defaults to 1
+            # at the model level, which prevents the ``before_flush`` auto-fill
+            # from overriding it (it only fills when the value is None/0). Without
+            # this, child-tenant admins would create roles owned by Root and the
+            # tenant-scoped list query couldn't see them.
+            tenant_id=login_user.tenant_id,
         )
         try:
             return await RoleDao.ainsert_role(role)
@@ -131,6 +137,9 @@ class RoleService:
             quota_config=req.quota_config,
             remark=req.remark,
             create_user=login_user.user_id,
+            # See comment in ``create_role``: must override the model default of 1
+            # so child-tenant admins don't end up creating Root-owned roles.
+            tenant_id=login_user.tenant_id,
         )
 
         async with get_async_db_session() as session:
