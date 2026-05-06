@@ -67,6 +67,42 @@ async def test_aget_assignable_roles_catalog_returns_empty_when_all_inaccessible
 
 
 @pytest.mark.asyncio
+async def test_department_in_admin_writable_scope_allows_tenant_admin():
+    """Child Admin (tenant-admin) must be allowed to repoint a user's primary
+    dept inside their tenant subtree.
+
+    Pre-fix this only consulted FGA dept-admin paths so a Child Admin who only
+    held tenant#admin (no per-dept admin tuple) was incorrectly rejected when
+    saving a primary-dept change inside their subtree, mirroring the same
+    cross-tenant-edit issue as the catalog filter bug.
+    """
+    target = SimpleNamespace(id=42, status='active', path='/1/22/42/')
+
+    with patch.object(
+        m, '_can_access_dept', new_callable=AsyncMock, return_value=True,
+    ):
+        ok = await m.DepartmentService._department_in_admin_writable_scope(
+            _user(), target,
+        )
+    assert ok is True
+
+
+@pytest.mark.asyncio
+async def test_department_in_admin_writable_scope_rejects_inactive_dept():
+    """Archived/non-active depts are still rejected even for sys admins."""
+    target = SimpleNamespace(id=42, status='archived', path='/1/42/')
+
+    with patch.object(
+        m, '_can_access_dept', new_callable=AsyncMock, return_value=True,
+    ) as can_access:
+        ok = await m.DepartmentService._department_in_admin_writable_scope(
+            _user(), target,
+        )
+    assert ok is False
+    can_access.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
     """End-to-end: a sub-tenant admin opens the edit dialog for a member who
     has an affiliate row in a foreign subtree. Pre-fix this raised 21009;

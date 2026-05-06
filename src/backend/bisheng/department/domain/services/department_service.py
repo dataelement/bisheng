@@ -1572,17 +1572,15 @@ class DepartmentService:
     async def _department_in_admin_writable_scope(
         cls, login_user, dept: Department,
     ) -> bool:
-        """主部门可选范围：超管任意 active 部门；部门管理员为 FGA 管辖子树内部门。"""
-        if not dept or getattr(dept, 'status', '') != 'active':
+        """主部门可选范围：超管 / 部门管理员 / 子租户管理员（Child Admin）。
+
+        Mirrors ``_check_permission``'s three-tier scope so a Child Admin can
+        repoint a user's primary department anywhere inside their tenant
+        mount-subtree, not only inside FGA dept-admin paths.
+        """
+        if not dept or getattr(dept, 'status', '') != 'active' or dept.id is None:
             return False
-        if _is_admin(login_user):
-            return True
-        admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
-        if not admin_depts:
-            return False
-        paths = [d.path for d in admin_depts if getattr(d, 'path', None)]
-        dp = dept.path or ''
-        return any(dp.startswith(p) for p in paths)
+        return await _can_access_dept(login_user, int(dept.id))
 
     @classmethod
     async def _apply_local_primary_department_change(
