@@ -1,9 +1,8 @@
-"""FileEncodingTransformer — generates a standardized file encoding for
-shougang deployments. Inserted into the common transformer chain after
-AbstractTransformer so the file's abstract is available for LLM classification.
+"""FileEncodingTransformer generates a standardized file encoding for
+shougang deployments.
 
-Encoding format: PREFIX-DOCTYPE-DOMAIN-YYYYMM-NNNNN
-Example: GF-ZD-SC-202604-00001
+Encoding format: PREFIX-DOCTYPE-DOMAIN-YYYYMMNNNNNNNN
+Example: GF-STD-SC-20260500000001
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ from typing import Any, Sequence
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 
 # Single dedicated async runner shared by ALL FileEncodingTransformer
 # instances across all celery worker threads. Reasoning:
@@ -86,20 +85,30 @@ CLASSIFY_PROMPT = """# 角色
 
 然后按以下格式输出文件编码:
 文档类型编码-业务域编码
-例如: ZD-SC
+例如: STD-SC
 
 # 编码规则
 ## 一、文档类型(必须且只能从以下枚举中选择一个)
-- 制度 = ZD
-- 办法 = BF
-- 法律 = FL
-- 法规 = FG
-- 技术通知单 = JSTZ
-- 会议纪要 = HYJY
-- 安全案例 = AQAL
-- 预案 = YA
-- 合同 = HT
-- 技术协议 = JSXY
+- 政策制度 = POL
+  - 适用于国家/行业法规、集团红头文件、管理政策、企业文化纲领等文件。
+- 标准规范 = STD
+  - 适用于国际标准、国家标准、行业标准、企业技术标准、产品标准、操作规程、安全规程、设计规范等文件。
+- 流程方法 = PRO
+  - 适用于管理流程、业务流程、工艺流程图、分析方法、实验方法、项目管理方法论等文件。
+- 技术诀窍 = SPC
+  - 适用于最佳操作法、工艺优化参数、故障处理经验、设备调试心得、节能降耗小改小革等核心隐性知识文件。
+- 报告总结 = REP
+  - 适用于科研报告、质量分析报告、事故分析报告、项目总结、对标报告、市场分析报告等文件。
+- 设计资产 = DGN
+  - 适用于工程设计图纸、工艺布局图、设备三维模型、PLC 程序、仿真模型等文件。
+- 案例库 = CAS
+  - 适用于典型生产事故案例、设备故障案例、质量问题案例、工程项目案例、成功谈判/合作案例等文件。
+- 知识产权 = PAT
+  - 适用于专利文书、技术秘密认定文件、软件著作权、商标等文件。
+- 培训资源 = TRN
+  - 适用于培训课程、课件、教学视频、操作仿真软件、入职学习地图、技能认证题库等文件。
+- 行业情报 = NEW
+  - 适用于竞争对手动态、新技术跟踪、市场趋势分析、原材料价格情报、政策解读等文件。
 
 ## 二、业务域(必须且只能从以下枚举中选择一个)
 - 生产 = SC
@@ -127,14 +136,14 @@ CLASSIFY_PROMPT = """# 角色
 - 只输出最终编码
 - 不要输出解释
 - 不要输出多余文字
-- 输出格式必须严格为: XX-YY"""
+- 输出格式必须严格为: 文档类型编码-业务域编码, 例如: STD-SC"""
 
 VALID_PATTERN = re.compile(
-    r'^(ZD|BF|FL|FG|JSTZ|HYJY|AQAL|YA|HT|JSXY)-'
+    r'^(POL|STD|PRO|SPC|REP|DGN|CAS|PAT|TRN|NEW)-'
     r'(SC|TZ|YF|CG|YX|CW|SB|AQ|HB|ZL|RL|XX|NY|GL)$'
 )
-FALLBACK = "ZD-SC"
-SEQ_CAP = 99999
+FALLBACK = "STD-SC"
+SEQ_CAP = 99999999
 
 
 class FileEncodingTransformer(BaseDocumentTransformer):
@@ -182,7 +191,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             )
             logger.info(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                f"seq={seq:05d} type_business={type_business_code} "
+                f"seq={seq:08d} type_business={type_business_code} "
                 f"encoding={self.knowledge_file.file_encoding}"
             )
         except Exception as e:
@@ -264,8 +273,15 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                 select(func.count()).select_from(KnowledgeFile).where(
                     KnowledgeFile.create_time >= start,
                     KnowledgeFile.create_time < end,
-                    KnowledgeFile.create_time <= self.knowledge_file.create_time,
+                    KnowledgeFile.knowledge_id == self.knowledge_file.knowledge_id,
                     KnowledgeFile.file_type == 1,
+                    or_(
+                        KnowledgeFile.create_time < self.knowledge_file.create_time,
+                        and_(
+                            KnowledgeFile.create_time == self.knowledge_file.create_time,
+                            KnowledgeFile.id <= self.knowledge_file.id,
+                        ),
+                    ),
                 )
             )
         return self._cap_seq(count or 0)
@@ -282,4 +298,4 @@ class FileEncodingTransformer(BaseDocumentTransformer):
     def _compose_encoding(prefix: str, type_business: str,
                           create_time: datetime, seq: int) -> str:
         ym = create_time.strftime("%Y%m")
-        return f"{prefix}-{type_business}-{ym}-{seq:05d}"
+        return f"{prefix}-{type_business}-{ym}{seq:08d}"

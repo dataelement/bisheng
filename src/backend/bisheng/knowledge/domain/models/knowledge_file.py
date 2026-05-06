@@ -78,7 +78,7 @@ class KnowledgeFileBase(SQLModelSerializable):
         default=None,
         max_length=64,
         sa_column=Column(String(64), nullable=True),
-        description='File encoding for shougang deployment, e.g. "GF-ZD-SC-202604-00001". '
+        description='File encoding for shougang deployment, e.g. "GF-STD-SC-20260500000001". '
                     'NULL when shougang is disabled or encoding generation has not run yet.',
     )
     updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
@@ -447,11 +447,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
         """
         Based on Knowledge BaseIDand status list query file
-        
+
         Args:
             knowledge_id: The knowledge base uponID
             status_list: List of status values
-            
+
         Returns:
             List[KnowledgeFile]: Matching Files List
         """
