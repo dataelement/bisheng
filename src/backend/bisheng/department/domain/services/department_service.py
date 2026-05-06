@@ -277,6 +277,20 @@ async def _get_dept_and_check_permission(session, dept_id: str, login_user) -> D
     return dept
 
 
+async def _can_access_dept(login_user, dept_internal_id: int) -> bool:
+    """Non-throwing variant of ``_check_permission`` for soft scope filtering.
+
+    Used by member-edit flows to skip target-user departments that fall outside
+    the operator's admin scope (e.g. an affiliate row in another tenant subtree)
+    instead of failing the whole request with 21009.
+    """
+    try:
+        await _check_permission(login_user, dept_internal_id=int(dept_internal_id))
+        return True
+    except DepartmentPermissionDeniedError:
+        return False
+
+
 async def _ensure_department_can_archive(session, dept: Department) -> None:
     """Validate archive preconditions before mutating department state."""
     children = (await session.exec(
@@ -1391,13 +1405,22 @@ class DepartmentService:
 
         scope_by_dept_id: dict[str, set[int]] = {}
         all_scope_ids: set[int] = set()
+        accessible_depts: List[Department] = []
         for dept in depts:
-            await _check_permission(login_user, dept_internal_id=int(dept.id))
+            # Soft-skip departments outside the operator's scope; member-edit
+            # callers may pass the target user's full dept set (incl. foreign
+            # affiliates) and we want to degrade gracefully instead of 21009.
+            if not await _can_access_dept(login_user, int(dept.id)):
+                continue
+            accessible_depts.append(dept)
             scope_ids = set(cls._department_scope_chain_ids(dept))
             if not scope_ids and dept.id is not None:
                 scope_ids = {int(dept.id)}
             scope_by_dept_id[dept.dept_id] = scope_ids
             all_scope_ids.update(scope_ids)
+        depts = accessible_depts
+        if not depts:
+            return {}
 
         dept_scope = or_(
             Role.department_id.is_(None),
@@ -1784,6 +1807,15 @@ class DepartmentService:
         all_uds = await UserDepartmentDao.aget_user_departments(user_id)
         dept_int_ids = list({ud.department_id for ud in all_uds})
         depts = await DepartmentDao.aget_by_ids(dept_int_ids)
+        # Drop departments outside the operator's admin scope so a tenant /
+        # department admin can still edit the parts they manage even when the
+        # target user has affiliate rows in foreign subtrees. ``ctx_dept`` is
+        # already permission-checked above and stays in the visible set.
+        accessible_depts = []
+        for d in depts:
+            if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id)):
+                accessible_depts.append(d)
+        depts = accessible_depts
         dept_by_id = {d.id: d for d in depts}
 
         if mem.is_primary == 0:
@@ -1948,6 +1980,14 @@ class DepartmentService:
             if not primary_ud:
                 raise DepartmentInvalidRolesError()
             depts = await DepartmentDao.aget_by_ids([d.department_id for d in all_uds])
+            # Mirror aget_member_edit_form: hide affiliate rows outside the
+            # operator's scope so a sub-tenant admin can save without 21009 on
+            # foreign affiliates. Primary dept equals ctx_dept here (mem.is_primary
+            # == 1) and is always accessible.
+            depts = [
+                d for d in depts
+                if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id))
+            ]
             dept_by_id = {d.id: d for d in depts}
             pdept = dept_by_id.get(primary_ud.department_id)
             if not pdept:
