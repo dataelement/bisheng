@@ -7,7 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.database.models.role_access import AccessType
+from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 
 
 def _install_service_stubs() -> None:
@@ -160,6 +162,126 @@ def _load_service_module():
 
 def _load_service_class():
     return _load_service_module().KnowledgeService
+
+
+def _make_file_process_req(knowledge_id=1, file_paths=None):
+    file_paths = file_paths or ['/tmp/doc.txt']
+
+    class _Req:
+        def __init__(self):
+            self.knowledge_id = knowledge_id
+            self.file_list = [
+                SimpleNamespace(file_path=file_path, excel_rule=None)
+                for file_path in file_paths
+            ]
+            self.callback_url = None
+
+        def model_dump(self, include=None):
+            return {'knowledge_id': self.knowledge_id}
+
+    return _Req()
+
+
+def test_save_knowledge_file_rejects_upload_batch_over_role_space_file_quota():
+    service_module = _load_service_module()
+    KnowledgeService = service_module.KnowledgeService
+    knowledge = SimpleNamespace(id=1, user_id=9)
+    login_user = SimpleNamespace(user_id=7, user_name='alice', tenant_id=1, is_admin=lambda: False)
+    added_file = SimpleNamespace(
+        id=81,
+        status=KnowledgeFileStatus.WAITING.value,
+        file_size=6,
+        model_dump=lambda: {'id': 81, 'file_size': 6},
+    )
+
+    with patch.object(
+        service_module.KnowledgeDao,
+        'query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_sync',
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.QuotaService.get_knowledge_space_upload_limit_bytes',
+        new_callable=AsyncMock,
+        return_value=10,
+    ), patch.object(
+        service_module.KnowledgeFileDao,
+        'get_user_upload_total_file_size',
+        return_value=5,
+    ), patch.object(
+        service_module.FileProcessBase,
+        'model_fields',
+        {},
+        create=True,
+    ), patch.object(
+        KnowledgeService,
+        'process_one_file',
+        return_value=added_file,
+    ), patch.object(
+        service_module.KnowledgeFileDao,
+        'delete_batch',
+    ) as mock_delete:
+        with pytest.raises(SpaceFileSizeLimitError):
+            KnowledgeService.save_knowledge_file(login_user, _make_file_process_req())
+
+    mock_delete.assert_called_once_with([81])
+
+
+def test_save_knowledge_file_allows_upload_batch_within_role_space_file_quota():
+    service_module = _load_service_module()
+    KnowledgeService = service_module.KnowledgeService
+    knowledge = SimpleNamespace(id=1, user_id=9)
+    login_user = SimpleNamespace(user_id=7, user_name='alice', tenant_id=1, is_admin=lambda: False)
+    added_file = SimpleNamespace(
+        id=82,
+        status=KnowledgeFileStatus.WAITING.value,
+        file_size=4,
+        model_dump=lambda: {'id': 82, 'file_size': 4},
+    )
+
+    with patch.object(
+        service_module.KnowledgeDao,
+        'query_by_id',
+        return_value=knowledge,
+    ), patch.object(
+        KnowledgeService.permission_service,
+        'ensure_knowledge_write_sync',
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_service.QuotaService.get_knowledge_space_upload_limit_bytes',
+        new_callable=AsyncMock,
+        return_value=10,
+    ), patch.object(
+        service_module.KnowledgeFileDao,
+        'get_user_upload_total_file_size',
+        return_value=5,
+    ), patch.object(
+        service_module.FileProcessBase,
+        'model_fields',
+        {},
+        create=True,
+    ), patch.object(
+        KnowledgeService,
+        'process_one_file',
+        return_value=added_file,
+    ), patch.object(
+        KnowledgeService,
+        'get_preview_cache_key',
+        return_value='preview-key',
+        create=True,
+    ), patch.object(
+        service_module.KnowledgeFileDao,
+        'delete_batch',
+    ) as mock_delete:
+        _, failed_files, process_files, preview_cache_keys = KnowledgeService.save_knowledge_file(
+            login_user,
+            _make_file_process_req(),
+        )
+
+    assert failed_files == []
+    assert process_files == [added_file]
+    assert preview_cache_keys == ['preview-key']
+    mock_delete.assert_not_called()
 
 
 @pytest.mark.asyncio
