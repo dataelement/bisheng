@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from sqlalchemy import text
 
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 # Pre-mock must run before bisheng imports
 from test.fixtures.mock_services import premock_import_chain
 
@@ -22,14 +23,11 @@ premock_import_chain()
 
 from bisheng.permission.migration.migrate_rbac_to_rebac import (
     RBACToReBACMigrator,
-    MigrationStats,
-    VerifyReport,
     ACCESS_TYPE_MAPPING,
     FLOW_TYPE_MAPPING,
     GROUP_RESOURCE_TYPE_MAPPING,
     RELATION_PRIORITY,
     SCM_ROLE_MAPPING,
-    SCM_TYPE_MAPPING,
     _BATCH_SIZE,
 )
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
@@ -77,6 +75,7 @@ def patch_db(async_db_session, monkeypatch, bypass_tenant):
 
     Also enters bypass_tenant context so SQLite works without tenant filter.
     """
+
     @asynccontextmanager
     async def _mock_get_session():
         yield async_db_session
@@ -292,19 +291,21 @@ class TestResolveParent:
     """Test _resolve_parent utility."""
 
     def test_empty_path_root(self):
-        assert RBACToReBACMigrator._resolve_parent(1, 10, '') == ('knowledge_library', '10')
+        assert RBACToReBACMigrator._resolve_parent(1, 10, KnowledgeTypeEnum.SPACE.value, '') == ('knowledge_space',
+                                                                                                 '10')
 
     def test_none_path_root(self):
-        assert RBACToReBACMigrator._resolve_parent(1, 10, None) == ('knowledge_library', '10')
+        assert RBACToReBACMigrator._resolve_parent(1, 10, KnowledgeTypeEnum.SPACE.value, None) == ('knowledge_space',
+                                                                                                   '10')
 
     def test_single_segment(self):
-        assert RBACToReBACMigrator._resolve_parent(1, 10, '/42') == ('folder', '42')
+        assert RBACToReBACMigrator._resolve_parent(1, 10, KnowledgeTypeEnum.SPACE.value, '/42') == ('folder', '42')
 
     def test_deep_path(self):
-        assert RBACToReBACMigrator._resolve_parent(1, 10, '/42/78') == ('folder', '78')
+        assert RBACToReBACMigrator._resolve_parent(1, 10, KnowledgeTypeEnum.SPACE.value, '/42/78') == ('folder', '78')
 
     def test_invalid_segment(self):
-        t, i = RBACToReBACMigrator._resolve_parent(1, 10, '/abc')
+        t, i = RBACToReBACMigrator._resolve_parent(1, 10, KnowledgeTypeEnum.SPACE.value, '/abc')
         assert t is None and i is None
 
 
@@ -339,9 +340,9 @@ class TestStep1SuperAdmin:
         """AdminRole users should produce (system:global, super_admin, user:{id}) tuples."""
         session = patch_db
         await insert_rows(session, 'userrole', [
-            {'user_id': 1, 'role_id': 1},   # admin
-            {'user_id': 2, 'role_id': 1},   # admin
-            {'user_id': 3, 'role_id': 2},   # regular — should NOT produce super_admin
+            {'user_id': 1, 'role_id': 1},  # admin
+            {'user_id': 2, 'role_id': 1},  # admin
+            {'user_id': 3, 'role_id': 2},  # regular — should NOT produce super_admin
         ])
 
         count = await migrator_dry.step1_super_admin()
@@ -500,9 +501,9 @@ class TestStep3RoleAccess:
             {'id': 'wf-1', 'user_id': 1, 'flow_type': 10},
         ])
         await insert_rows(session, 'roleaccess', [
-            {'role_id': 5, 'third_id': '101', 'type': 1},     # KNOWLEDGE → knowledge_library, viewer
-            {'role_id': 5, 'third_id': 'ast-1', 'type': 6},   # ASSISTANT_WRITE → assistant, editor
-            {'role_id': 5, 'third_id': 'wf-1', 'type': 9},    # WORKFLOW → workflow, viewer
+            {'role_id': 5, 'third_id': '101', 'type': 1},  # KNOWLEDGE → knowledge_library, viewer
+            {'role_id': 5, 'third_id': 'ast-1', 'type': 6},  # ASSISTANT_WRITE → assistant, editor
+            {'role_id': 5, 'third_id': 'wf-1', 'type': 9},  # WORKFLOW → workflow, viewer
         ])
         count = await migrator_dry.step3_role_access()
         assert count == 3
@@ -539,8 +540,8 @@ class TestStep3RoleAccess:
             {'id': 301, 'user_id': 1, 'name': 'kb-301', 'type': 0},
         ])
         await insert_rows(session, 'roleaccess', [
-            {'role_id': 3, 'third_id': '301', 'type': 1},   # viewer
-            {'role_id': 3, 'third_id': '301', 'type': 3},   # editor
+            {'role_id': 3, 'third_id': '301', 'type': 1},  # viewer
+            {'role_id': 3, 'third_id': '301', 'type': 3},  # editor
         ])
         count = await migrator_dry.step3_role_access()
         assert count == 1
@@ -562,8 +563,8 @@ class TestStep3RoleAccess:
             {'id': 301, 'user_id': 1, 'name': 'kb-301', 'type': 0},
         ])
         await insert_rows(session, 'roleaccess', [
-            {'role_id': 3, 'third_id': '301', 'type': 1},   # viewer
-            {'role_id': 3, 'third_id': '301', 'type': 3},   # editor
+            {'role_id': 3, 'third_id': '301', 'type': 1},  # viewer
+            {'role_id': 3, 'third_id': '301', 'type': 3},  # editor
         ])
 
         count = await migrator_write.step3_role_access()
@@ -725,8 +726,8 @@ class TestStep5ResourceOwners:
         await insert_rows(session, 'flow', [
             {'id': 'f1', 'user_id': 1, 'flow_type': 5},
             {'id': 'f2', 'user_id': 2, 'flow_type': 10},
-            {'id': 'f3', 'user_id': 3, 'flow_type': 15},   # skip
-            {'id': 'f4', 'user_id': 4, 'flow_type': 20},   # skip
+            {'id': 'f3', 'user_id': 3, 'flow_type': 15},  # skip
+            {'id': 'f4', 'user_id': 4, 'flow_type': 20},  # skip
         ])
         count = await migrator_dry.step5_resource_owners()
         assert migrator_dry._global_seen[('user:1', 'assistant:f1')] == 'owner'
@@ -739,10 +740,10 @@ class TestStep5ResourceOwners:
         """Non-space records migrate to knowledge_library; SPACE stays knowledge_space."""
         session = patch_db
         await insert_rows(session, 'knowledge', [
-            {'user_id': 1, 'name': 'k1', 'type': 0},   # NORMAL
-            {'user_id': 2, 'name': 'k2', 'type': 1},   # QA
-            {'user_id': 3, 'name': 'k3', 'type': 2},   # legacy non-space type
-            {'user_id': 4, 'name': 'k4', 'type': 3},   # SPACE
+            {'user_id': 1, 'name': 'k1', 'type': 0},  # NORMAL
+            {'user_id': 2, 'name': 'k2', 'type': 1},  # QA
+            {'user_id': 3, 'name': 'k3', 'type': 2},  # legacy non-space type
+            {'user_id': 4, 'name': 'k4', 'type': 3},  # SPACE
         ])
         count = await migrator_dry.step5_resource_owners()
         assert migrator_dry._global_seen[('user:1', 'knowledge_library:1')] == 'owner'
@@ -904,10 +905,10 @@ async def _seed_comprehensive_data(session):
     """Insert a comprehensive set of test data for full-pipeline tests."""
     # Users with roles
     await insert_rows(session, 'userrole', [
-        {'user_id': 1, 'role_id': 1},   # admin
-        {'user_id': 2, 'role_id': 3},   # regular role 3
-        {'user_id': 3, 'role_id': 3},   # regular role 3
-        {'user_id': 4, 'role_id': 4},   # regular role 4
+        {'user_id': 1, 'role_id': 1},  # admin
+        {'user_id': 2, 'role_id': 3},  # regular role 3
+        {'user_id': 3, 'role_id': 3},  # regular role 3
+        {'user_id': 4, 'role_id': 4},  # regular role 4
     ])
     # User groups
     await insert_rows(session, 'usergroup', [
@@ -916,10 +917,10 @@ async def _seed_comprehensive_data(session):
     ])
     # Role access (non-WEB_MENU)
     await insert_rows(session, 'roleaccess', [
-        {'role_id': 3, 'third_id': '1', 'type': 1},       # viewer
-        {'role_id': 3, 'third_id': '1', 'type': 3},       # editor (dedup with above)
-        {'role_id': 4, 'third_id': 'wf-1', 'type': 9},    # viewer
-        {'role_id': 3, 'third_id': 'menu1', 'type': 99},   # WEB_MENU — skip
+        {'role_id': 3, 'third_id': '1', 'type': 1},  # viewer
+        {'role_id': 3, 'third_id': '1', 'type': 3},  # editor (dedup with above)
+        {'role_id': 4, 'third_id': 'wf-1', 'type': 9},  # viewer
+        {'role_id': 3, 'third_id': 'menu1', 'type': 99},  # WEB_MENU — skip
     ])
     # Space/channel members
     await insert_rows(session, 'space_channel_member', [
@@ -936,7 +937,7 @@ async def _seed_comprehensive_data(session):
     await insert_rows(session, 'flow', [
         {'id': 'ast-1', 'user_id': 2, 'flow_type': 5},
         {'id': 'wf-1', 'user_id': 3, 'flow_type': 10},
-        {'id': 'ws-1', 'user_id': 4, 'flow_type': 15},   # skip
+        {'id': 'ws-1', 'user_id': 4, 'flow_type': 15},  # skip
     ])
     # Knowledge
     await insert_rows(session, 'knowledge', [
@@ -946,7 +947,7 @@ async def _seed_comprehensive_data(session):
     # Tools
     await insert_rows(session, 't_gpts_tools', [
         {'user_id': 3, 'name': 'tool1', 'is_delete': 0},
-        {'user_id': 4, 'name': 'tool2', 'is_delete': 1},   # skip
+        {'user_id': 4, 'name': 'tool2', 'is_delete': 1},  # skip
     ])
     # Channel
     await insert_rows(session, 'channel', [
@@ -981,10 +982,10 @@ class TestFullDryRun:
         with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
             stats = await migrator_dry.run()
 
-        assert stats.step1_super_admin == 1     # user 1 is admin
-        assert stats.step2_user_group == 2      # 2 user_group records
-        assert stats.step3_role_access >= 1     # at least 1 after dedup
-        assert stats.step4_space_channel == 3   # 3 ACTIVE members
+        assert stats.step1_super_admin == 1  # user 1 is admin
+        assert stats.step2_user_group == 2  # 2 user_group records
+        assert stats.step3_role_access >= 1  # at least 1 after dedup
+        assert stats.step4_space_channel == 3  # 3 ACTIVE members
         assert stats.step5_resource_owners >= 1
         assert stats.step6_folder_hierarchy == 2  # 1 folder + 1 file
         assert stats.step7_department_membership == 2
@@ -1068,7 +1069,7 @@ class TestCheckpointResume:
         with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
             stats = await m.run()
         assert stats.step1_super_admin == 0  # skipped
-        assert stats.step2_user_group == 0   # skipped
+        assert stats.step2_user_group == 0  # skipped
         assert stats.step3_role_access >= 0  # executed
         assert stats.step6_folder_hierarchy >= 0  # executed
 
@@ -1086,7 +1087,7 @@ class TestCheckpointResume:
         with patch('bisheng.core.openfga.manager.get_fga_client', return_value=mock_fga):
             stats = await m.run()
         assert stats.step1_super_admin > 0  # executed despite checkpoint
-        assert stats.step2_user_group > 0   # executed despite checkpoint
+        assert stats.step2_user_group > 0  # executed despite checkpoint
         assert stats.step3_role_access >= 0
 
     @pytest.mark.asyncio
