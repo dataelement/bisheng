@@ -91,12 +91,36 @@ class Flow(FlowBase, table=True):
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
 
-class FlowCreate(FlowBase):
+class FlowCreate(SQLModelSerializable):
+    name: str = Field(index=True)
+    user_id: Optional[int] = Field(default=None, index=True)
+    description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
+    data: Optional[Dict] = Field(default=None)
+    logo: Optional[str] = Field(default=None, index=False)
+    status: Optional[int] = Field(index=False, default=1)
+    flow_type: Optional[int] = Field(index=False, default=FlowType.WORKFLOW.value)
+    is_shared: bool = Field(default=False)
+    guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     flow_id: Optional[str] = None
     # F017: whether the new workflow should be shared with all active Child
     # Tenants. ``None`` → fall back to ``Root.share_default_to_children``.
     # Ignored when creator's leaf tenant is not Root.
     share_to_children: Optional[bool] = None
+
+    @field_validator('data', mode='before')
+    @classmethod
+    def validate_json(cls, v):
+        if not v:
+            return v
+        if not isinstance(v, dict):
+            raise ValueError('Flow must be a valid JSON')
+
+        if 'nodes' not in v.keys():
+            raise ValueError('Flow must have nodes')
+        if 'edges' not in v.keys():
+            raise ValueError('Flow must have edges')
+
+        return v
 
 
 class FlowRead(FlowBase):
