@@ -43,7 +43,6 @@ from bisheng.permission.migration.batch_utils import (
 )
 from bisheng.permission.migration.f006_constants import (
     ACCESS_TYPE_MAPPING,
-    FLOW_TYPE_MAPPING,
     GROUP_RESOURCE_TYPE_MAPPING,
     RELATION_PRIORITY,
     SCM_ROLE_MAPPING,
@@ -583,38 +582,22 @@ class RBACToReBACMigrator:
                 True,
                 0,
             ),
+            (
+                'SELECT id, id, user_id FROM flow WHERE flow_type = 10 AND id > :last_id ORDER BY id LIMIT :limit',
+                'workflow',
+                True,
+                0
+            ),
+            (
+                'SELECT id, id, user_id FROM assistant WHERE is_delete = 0 AND id > :last_id ORDER BY id LIMIT :limit ',
+                'assistant',
+                True,
+                0
+            )
         ]
 
         total = 0
         by_type: dict[str, int] = {}
-
-        # Flow needs special handling: flow_type → object_type mapping
-        async with get_async_db_session() as session:
-            with bypass_tenant_filter():
-                async for rows in iter_keyset_batches(
-                    session,
-                    lambda last_id: (
-                            sa_text('SELECT id, id, user_id, flow_type FROM flow '
-                                    'WHERE flow_type IN (5, 10) AND id > :last_id '
-                                    'ORDER BY id LIMIT :limit'),
-                            {'last_id': str(last_id) if last_id else ''},
-                    ),
-                    batch_size=self.batch_size,
-                    start_cursor='',
-                    progress=self.progress,
-                    progress_desc='step5 flow owners',
-                ):
-                    ops: list[TupleOperation] = []
-                    for _, fid, uid, ft in rows:
-                        obj_type = FLOW_TYPE_MAPPING.get(ft)
-                        if obj_type:
-                            ops.append(TupleOperation(
-                                action='write', user=f'user:{uid}',
-                                relation='owner', object=f'{obj_type}:{fid}',
-                            ))
-                            by_type[obj_type] = by_type.get(obj_type, 0) + 1
-                    self._collect(ops)
-                    total += await self._flush()
 
         # Generic owner queries
         for query, obj_type, skip_on_error, start_cursor in owner_queries:
