@@ -548,6 +548,9 @@ const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
     disabled,
     ...props
 }, ref) => {
+    // Strip maxLength so out-of-range numeric input is allowed; range
+    // violations surface as inline error text instead of hard truncation.
+    const { maxLength: _ignoredMaxLength, ...inputProps } = props;
     const defaultStr = defaultValue.toString();
     const [internalValue, setInternalValue] = React.useState<string>(() => {
         if (value !== undefined && value !== null) return String(value);
@@ -633,7 +636,7 @@ const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
                     "flex h-7 w-full rounded-md border border-input bg-search-input px-2 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:text-muted-foreground read-only:cursor-default read-only:text-muted-foreground read-only:dark:text-muted-foreground",
                     inputClassName
                 )}
-                {...props}
+                {...inputProps}
             />
             {displayError && (
                 <p className="text-xs text-red-500 mt-1">{displayError}</p>

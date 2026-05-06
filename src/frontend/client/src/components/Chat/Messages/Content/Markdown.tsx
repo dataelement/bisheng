@@ -588,6 +588,8 @@ const Citation = ({
           side="top"
           align="start"
           sideOffset={8}
+          avoidCollisions
+          collisionPadding={16}
           onMouseEnter={() => {
             if (!citationPreviewUsesHover) return;
             handleOpenChange(true);
