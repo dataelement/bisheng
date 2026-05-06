@@ -121,10 +121,25 @@ class ApprovalService:
 
     @classmethod
     def _original_file_name_from_path(cls, file_path: str) -> str:
-        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-
         basename = os.path.basename(urlparse(file_path).path)
-        return KnowledgeService.get_upload_file_original_name(basename)
+        if not basename:
+            return ''
+
+        uuid_file_name = basename.split('.')[0]
+        try:
+            from bisheng.core.cache.redis_manager import get_redis_client_sync
+
+            original_file_name = get_redis_client_sync().get(f'file_name:{uuid_file_name}')
+            if isinstance(original_file_name, bytes):
+                original_file_name = original_file_name.decode()
+            if isinstance(original_file_name, str) and original_file_name:
+                return original_file_name
+        except Exception:
+            pass
+
+        if '_' in basename:
+            return basename.split('_', 1)[1]
+        return basename
 
     @classmethod
     def _file_size_from_path(cls, file_path: str) -> Optional[int]:
