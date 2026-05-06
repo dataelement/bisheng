@@ -13,7 +13,7 @@ import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
@@ -152,7 +152,9 @@ export default function AiChatMessages({
     const isNarrowViewport = usePrefersMobileLayout();
     const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
     const queryClient = useQueryClient();
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const messagesScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const emptyScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     // Track whether user has manually scrolled up
@@ -243,6 +245,7 @@ export default function AiChatMessages({
     if (!hasMessages && !isLoading) {
         return (
             <div
+                ref={emptyScrollRevealRef}
                 className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-hover"
                 style={{
                     transitionProperty: 'background-color',
@@ -302,7 +305,10 @@ export default function AiChatMessages({
                 />
             )}
             <div
-                ref={scrollRef}
+                ref={(el) => {
+                    scrollRef.current = el;
+                    messagesScrollRevealRef(el);
+                }}
                 className={cn(
                     "min-h-0 flex-1 overflow-y-auto scrollbar-on-hover",
                     hideHeaderTitle

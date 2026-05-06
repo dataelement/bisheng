@@ -20,7 +20,7 @@ import {
 } from "~/api/knowledge";
 import { checkPermission } from "~/api/permission";
 import { cn } from "~/utils";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -40,6 +40,7 @@ export function KnowledgeSpacePreviewDrawer({
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const spacePreviewScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showToast } = useToastContext();
     const MAX_JOINED_SPACES = 50;
 
@@ -473,6 +474,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
+                            ref={spacePreviewScrollRevealRef}
                             className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;

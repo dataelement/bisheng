@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { usePrefersMobileLayout } from '~/hooks';
+import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -300,6 +300,7 @@ export default function MainLayout() {
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
   const isMobile = usePrefersMobileLayout();
+  const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
   const isAppsArea = pathname.includes('/apps');
   /** 探索广场：横幅内已有返回，隐藏主布局左上角汉堡，避免重复一行 */
@@ -314,6 +315,9 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
+  /** 订阅 / 应用中心：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  const innerScrollShell =
+    isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
@@ -436,11 +440,16 @@ export default function MainLayout() {
           saveScroll={true}
         >
           <div
+            ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
               'rounded-xl bg-white shadow-xl',
               isMobile
-                ? 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
-                : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
+                ? innerScrollShell
+                  ? 'flex h-[calc(100dvh-16px)] min-h-0 w-full flex-col overflow-hidden'
+                  : 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                : innerScrollShell
+                  ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
+                  : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
             )}
           >
             {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
@@ -465,7 +474,13 @@ export default function MainLayout() {
                 </div>
               </div>
             ) : null}
-            {outlet}
+            {innerScrollShell ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {outlet}
+              </div>
+            ) : (
+              outlet
+            )}
           </div>
         </KeepAlive>
       </main>

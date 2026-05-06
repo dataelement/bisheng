@@ -27,7 +27,7 @@ import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, useMediaQuery, useScrollRevealRef } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 
@@ -184,6 +184,7 @@ const KnowledgeListPanel = ({
   onLoadMore: () => void;
   emptyText: string;
 }) => {
+  const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
@@ -207,6 +208,7 @@ const KnowledgeListPanel = ({
 
       {/* 滚动列表 */}
       <div
+        ref={listScrollRevealRef}
         className="overflow-y-auto flex flex-col gap-0.5 scrollbar-on-hover min-h-0 flex-1"
         onScroll={handleScroll}
       >

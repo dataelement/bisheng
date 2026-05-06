@@ -3134,3 +3134,62 @@ button.scroll-convo {
 .dark .scrollbar-on-hover:hover::-webkit-scrollbar-thumb:active {
   background-color: rgba(203, 213, 225, 0.6);
 }
+
+/* 鼠标环境：未悬停时不占滚动条槽位，避免「无溢出或空闲」仍显示轨道（与 touch-mobile 子页面滚动策略叠加时更明显） */
+@media (hover: hover) and (pointer: fine) {
+  .scrollbar-on-hover {
+    scrollbar-width: none;
+  }
+  .scrollbar-on-hover::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .scrollbar-on-hover:hover {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+  }
+  .scrollbar-on-hover:hover::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .dark .scrollbar-on-hover:hover {
+    scrollbar-color: rgba(203, 213, 225, 0.25) transparent;
+  }
+}
+
+/* 触控 / 粗指针：不用悬停出现滚动条；由滚动触发（配合 useScrollRevealRef 写入 data-scrolling） */
+@media not ((hover: hover) and (pointer: fine)) {
+  .scrollbar-on-hover {
+    scrollbar-width: none;
+  }
+  .scrollbar-on-hover::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .scrollbar-on-hover::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+  .scrollbar-on-hover:hover {
+    scrollbar-color: transparent transparent;
+  }
+  .scrollbar-on-hover:hover::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .scrollbar-on-hover:hover::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+  .scrollbar-on-hover[data-scrolling='true'] {
+    scrollbar-width: thin;
+  }
+  .scrollbar-on-hover[data-scrolling='true']::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+  .scrollbar-on-hover[data-scrolling='true']::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+  .dark .scrollbar-on-hover[data-scrolling='true']::-webkit-scrollbar-thumb {
+    background-color: hsla(0, 0%, 100%, 0.1);
+  }
+}

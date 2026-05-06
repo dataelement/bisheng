@@ -80,7 +80,10 @@ export function ChannelLayout({
     }, []);
 
     return (
-        <div ref={containerRef} className="relative flex h-full w-full overflow-hidden bg-white">
+        <div
+            ref={containerRef}
+            className="relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden bg-white"
+        >
             {/* Transparent overlay during drag — prevents children from stealing mouse events */}
             {isResizing && !isH5 && (
                 <div className="fixed inset-0 z-50 cursor-col-resize" />
@@ -93,8 +96,8 @@ export function ChannelLayout({
                         : undefined
                 }
                 className={cn(
-                    "h-full shrink-0",
-                    isH5 ? "w-full min-w-0 flex-1" : selectedArticle ? "" : "w-full",
+                    "flex min-h-0 h-full min-w-0 flex-col overflow-hidden",
+                    isH5 ? "w-full flex-1" : selectedArticle ? "shrink-0" : "w-full flex-1",
                 )}
             >
                 <ArticleList
