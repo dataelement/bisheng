@@ -63,8 +63,8 @@ class OrgSyncConfig(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(Integer, primary_key=True, autoincrement=True),
     )
-    tenant_id: int = Field(
-        default=1,
+    tenant_id: Optional[int] = Field(
+        default=None,
         sa_column=Column(
             Integer, nullable=False,
             server_default=text('1'), index=True,
@@ -178,8 +178,8 @@ class OrgSyncLog(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
     )
-    tenant_id: int = Field(
-        default=1,
+    tenant_id: Optional[int] = Field(
+        default=None,
         sa_column=Column(
             Integer, nullable=False,
             server_default=text('1'), index=True,

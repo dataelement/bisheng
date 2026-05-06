@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import field_validator
-from sqlalchemy import Boolean, Column, DateTime, String, and_, false, func, or_, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, false, func, or_, text
 from sqlmodel import JSON, Field, select, update, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -50,7 +50,11 @@ class UserLinkType(Enum):
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
     user_id: Optional[int] = Field(default=None, index=True)
-    tenant_id: int = Field(default=1, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(default=None, index=False)

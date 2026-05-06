@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON, Boolean, String, collate
+from sqlalchemy import JSON, Boolean, Integer, String, collate
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -54,7 +54,11 @@ class MetadataFieldType(str, Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
-    tenant_id: int = Field(default=1, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     name: str = Field(index=True, min_length=1, max_length=200,
                       description='Knowledge Base Name')
     type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
