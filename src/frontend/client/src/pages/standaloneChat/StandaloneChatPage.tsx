@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { useAuthContext, usePrefersMobileLayout } from '~/hooks';
+import { useAuthContext, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { AuthContext } from '~/hooks/AuthContext';
 import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
@@ -76,7 +76,8 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
   const [isHovering, setIsHovering] = useState(false);
   const isTabletOrMobile = usePrefersMobileLayout();
-  const sidebarWidth = isTabletOrMobile ? 240 : 280;
+  const isChatShellCompact = useMediaQuery('(max-width: 1023px)');
+  const sidebarWidth = 240;
 
   const apiVersion = mode === 'guest' ? 'v2' : 'v1';
   const numericFlowType = FLOW_TYPE_MAP[flowType];
@@ -136,7 +137,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
               <div
                 className={cn(
                   'transition-all duration-300 overflow-hidden flex-shrink-0',
-                  sidebarVisible ? 'w-[280px]' : 'w-0',
+                  sidebarVisible ? 'w-[240px]' : 'w-0',
                 )}
               >
                 <StandaloneSideNav sidebar={sidebar} />
@@ -144,7 +145,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
             )}
 
             {/* Toggle button (desktop) */}
-            {!isTabletOrMobile && (
+            {!isTabletOrMobile && !isChatShellCompact && (
               <NavToggle
                 navVisible={sidebarVisible}
                 onToggle={toggleSidebar}
@@ -162,15 +163,17 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                 'p-0',
               )}
             >
-              {isTabletOrMobile && (
-                <MobileNav
-                  variant="chat"
-                  navVisible={sidebarVisible}
-                  setNavVisible={setSidebarVisible}
-                  persistNavVisibleInLocalStorage={false}
-                  navigateToNewChatPath={false}
-                  onNewChat={createNewChat}
-                />
+              {isChatShellCompact && (
+                <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
+                  <MobileNav
+                    variant="chat"
+                    navVisible={sidebarVisible}
+                    setNavVisible={setSidebarVisible}
+                    persistNavVisibleInLocalStorage={false}
+                    navigateToNewChatPath={false}
+                    onNewChat={createNewChat}
+                  />
+                </div>
               )}
               <div
                 className={cn(

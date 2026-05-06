@@ -8,7 +8,7 @@
  * - History sidebar toggle
  * - Tag filter support via KnowledgeAiInput
  */
-import { ChevronLeft, ChevronsRight, HistoryIcon } from "lucide-react";
+import { ChevronsRight, HistoryIcon } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "~/components";
@@ -109,44 +109,12 @@ export function KnowledgeAiPanel({
                 "relative flex h-full min-h-0 w-full flex-1 flex-col bg-white"
             }
         >
-            {/* Header：PC 标题居左、中间留白、右侧历史/新会话/收起；H5 全屏仍为左返回 + 居中标题 */}
-            <div
-                className={cn(
-                    "relative flex shrink-0 items-center px-4 py-3",
-                    isH5 ? "justify-between" : "gap-2 border-b border-[#f2f3f5]",
-                )}
-            >
-                {isH5 ? (
-                    <>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA]"
-                                        onClick={onClose}
-                                    >
-                                        <ChevronLeft className="size-4" strokeWidth={2} aria-hidden />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_knowledge.close")}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-[#1d2129]">
-                            {localize("com_knowledge.ai_assistant")}
-                        </h3>
-                    </>
-                ) : (
-                    <>
-                        <h3 className="min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-[#1d2129]">
-                            {localize("com_knowledge.ai_assistant")}
-                        </h3>
-                        <div className="min-w-0 flex-1" aria-hidden />
-                    </>
-                )}
+            {/* Header：标题居左、中间留白、右侧历史/新会话/收起（与文件预览 AiAssistantPanel 一致，不用左侧「返回」） */}
+            <div className="relative flex shrink-0 items-center gap-2 border-b border-[#f2f3f5] px-4 py-3">
+                <h3 className="min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-[#1d2129]">
+                    {localize("com_knowledge.ai_assistant")}
+                </h3>
+                <div className="min-w-0 flex-1" aria-hidden />
 
                 <div className="relative z-10 flex shrink-0 items-center gap-1">
                     <TooltipProvider>
@@ -189,27 +157,25 @@ export function KnowledgeAiPanel({
                         </Tooltip>
                     </TooltipProvider>
 
-                    {!isH5 ? (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        size="icon"
-                                        className="h-7 w-7 text-[#86909c] hover:text-[#4e5969]"
-                                        onClick={onClose}
-                                        aria-label={localize("com_knowledge.collapse_drawer")}
-                                    >
-                                        <ChevronsRight className="size-4" strokeWidth={2} aria-hidden />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_knowledge.collapse_drawer")}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    ) : null}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    type="button"
+                                    size="icon"
+                                    className="h-7 w-7 text-[#86909c] hover:text-[#4e5969]"
+                                    onClick={onClose}
+                                    aria-label={localize("com_knowledge.collapse_drawer")}
+                                >
+                                    <ChevronsRight className="size-4" strokeWidth={2} aria-hidden />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>{localize("com_knowledge.collapse_drawer")}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
             </div>
 

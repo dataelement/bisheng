@@ -168,12 +168,12 @@ export default function CitationDocumentPreviewDrawer({
   }, [canRenderPreview, isFullBleedMobile]);
 
   useEffect(() => {
-    if (!manageMobileNavVisibility || !canRenderPreview || !isNarrowLayout) return;
+    if (!manageMobileNavVisibility || !canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
     setChatMobileNavHidden(true);
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [canRenderPreview, isNarrowLayout, manageMobileNavVisibility, setChatMobileNavHidden]);
+  }, [canRenderPreview, isFullBleedMobile, isNarrowLayout, manageMobileNavVisibility, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!canRenderPreview || isFullBleedMobile) return;
