@@ -10,12 +10,12 @@ import { cn } from "~/utils";
 import store from "~/store";
 
 const BUTTON_STYLES = {
-    base: "group flex w-fit items-center justify-center py-2 text-sm leading-[18px] animate-thinking-appear",
+    base: "group mb-2 flex w-fit max-w-full items-center justify-center py-2 text-sm leading-[18px] animate-thinking-appear",
     icon: "icon-sm ml-1.5 transform-gpu text-text-primary transition-transform duration-200",
 } as const;
 
 const CONTENT_STYLES = {
-    wrapper: "relative pt-3 pl-3 text-text-secondary",
+    wrapper: "relative mt-2 pt-3 pl-3 text-text-secondary",
     border:
         "absolute left-1.5 h-[calc(100%)] border-l border-border-medium dark:border-border-heavy",
     text: "whitespace-pre-wrap leading-[26px] text-sm",

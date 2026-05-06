@@ -69,17 +69,15 @@ export default function Root() {
                     <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
                     <div className="relative flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
                       {showMobileNav && isSmallScreen && !mobileNavHidden ? (
-                        <>
-                          <div className="fixed inset-x-0 top-0 z-[60] px-2">
-                            <MobileNav
-                              variant="chat"
-                              navVisible={navVisible}
-                              setNavVisible={setNavVisible}
-                              persistNavVisibleInLocalStorage={false}
-                            />
-                          </div>
-                          <div aria-hidden className="h-[calc(env(safe-area-inset-top,0px)+52px)] shrink-0" />
-                        </>
+                        // 勿用 fixed 贴视口：会盖住 MainLayout 白卡 rounded-xl 上沿与两侧灰底留白（与知识库 H5、StandaloneChat 一致）
+                        <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
+                          <MobileNav
+                            variant="chat"
+                            navVisible={navVisible}
+                            setNavVisible={setNavVisible}
+                            persistNavVisibleInLocalStorage={false}
+                          />
+                        </div>
                       ) : null}
                       <div
                         className={cn(

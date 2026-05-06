@@ -22,6 +22,7 @@ interface SubjectSearchDepartmentProps {
   resourceId: string;
   includeChildren: boolean;
   onIncludeChildrenChange: (v: boolean) => void;
+  onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
 }
 
@@ -33,28 +34,29 @@ function collectExplicitDepartmentSelections(
   const out: SelectedSubject[] = [];
   const visited = new Set<number>();
 
-  const walk = (items: DepartmentNode[], ancestorSelected: boolean) => {
+  const walk = (items: DepartmentNode[], prefix: string[], ancestorSelected: boolean) => {
     for (const node of items) {
       const explicitSelection = selectedDepartmentsById.get(node.id);
       const isSelected = ancestorSelected || Boolean(explicitSelection);
+      const pathSegments = [...prefix, node.name];
       if (isSelected && !visited.has(node.id)) {
         visited.add(node.id);
         out.push({
           type: "department",
           id: node.id,
-          name: node.name,
+          name: pathSegments.join("/"),
           include_children: false,
         });
       }
 
       const nextAncestorSelected = ancestorSelected || Boolean(explicitSelection?.include_children);
       if (node.children?.length) {
-        walk(node.children, nextAncestorSelected);
+        walk(node.children, pathSegments, nextAncestorSelected);
       }
     }
   };
 
-  walk(nodes, inherited);
+  walk(nodes, [], inherited);
   return out;
 }
 
@@ -65,6 +67,7 @@ export function SubjectSearchDepartment({
   resourceId,
   includeChildren,
   onIncludeChildrenChange,
+  onSelectionSummaryChange,
   disabledIds = [],
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
@@ -99,6 +102,12 @@ export function SubjectSearchDepartment({
       ),
     [value]
   );
+
+  useEffect(() => {
+    onSelectionSummaryChange?.(
+      collectExplicitDepartmentSelections(tree, selectedDepartmentsById)
+    );
+  }, [onSelectionSummaryChange, selectedDepartmentsById, tree]);
 
   const toggle = (node: DepartmentNode) => {
     if (disabledIdSet.has(node.id)) return;

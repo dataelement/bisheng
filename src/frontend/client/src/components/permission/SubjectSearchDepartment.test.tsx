@@ -118,10 +118,50 @@ describe("SubjectSearchDepartment", () => {
       {
         type: "department",
         id: 2,
-        name: "子部门",
+        name: "全集团/子部门",
         include_children: false,
       },
     ]);
+  });
+
+  it("reports selected descendant names for include-children department summaries", async () => {
+    const onSelectionSummaryChange = jest.fn();
+
+    render(
+      <SubjectSearchDepartment
+        value={[
+          {
+            type: "department",
+            id: 1,
+            name: "全集团",
+            include_children: true,
+          },
+        ]}
+        onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        onSelectionSummaryChange={onSelectionSummaryChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onSelectionSummaryChange).toHaveBeenLastCalledWith([
+        {
+          type: "department",
+          id: 1,
+          name: "全集团",
+          include_children: false,
+        },
+        {
+          type: "department",
+          id: 2,
+          name: "全集团/子部门",
+          include_children: false,
+        },
+      ]);
+    });
   });
 
   it("shows already granted departments as disabled without selecting them", async () => {

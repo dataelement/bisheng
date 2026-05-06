@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { useAuthContext, useLocalize } from "~/hooks";
-import usePrefersMobileLayout from "~/hooks/usePrefersMobileLayout";
-import store from "~/store";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
 import { ChatEmptyState } from "./components/ChatEmptyState";
@@ -30,8 +28,6 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     const running = useRecoilValue(currentRunningState);
     const conversations = useRecoilValue(appConversationsState);
     const [, setConversations] = useRecoilState(appConversationsState);
-    const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
-    const isTabletOrMobile = usePrefersMobileLayout();
 
     // Lightweight createNewChat — avoids importing useAppSidebar which would
     // spin up a second auto-fetch/auto-select effect and overwrite placeholders.
@@ -66,17 +62,6 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     /** 与侧栏「分享应用」一致：仅 can_share === true 时展示对话顶栏分享入口 */
     const hideShare = data?.can_share !== true;
 
-    useEffect(() => {
-        setChatMobileHeader({
-            title: headerTitle,
-            conversationId: cid || '',
-            flowId: data?.id || '',
-            flowType: data?.flow_type || 15,
-            readOnly: !!readOnly,
-            hideShare,
-        });
-        return () => setChatMobileHeader(null);
-    }, [setChatMobileHeader, headerTitle, cid, data?.id, data?.flow_type, readOnly, hideShare]);
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
         conversations.length === 0 &&

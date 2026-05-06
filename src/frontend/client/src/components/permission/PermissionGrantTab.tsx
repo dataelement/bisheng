@@ -72,6 +72,7 @@ export function PermissionGrantTab({
   const [models, setModels] = useState<RelationModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("viewer");
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(true);
+  const [selectedDepartmentSummary, setSelectedDepartmentSummary] = useState<SelectedSubject[]>([]);
   const [grantedSubjectIds, setGrantedSubjectIds] = useState<Record<SubjectType, number[]>>(
     EMPTY_GRANTED_SUBJECT_IDS
   );
@@ -141,6 +142,7 @@ export function PermissionGrantTab({
     if (fixedSubjectType) {
       setSubjectType(fixedSubjectType);
       setSelected([]);
+      setSelectedDepartmentSummary([]);
     }
   }, [fixedSubjectType]);
 
@@ -200,6 +202,7 @@ export function PermissionGrantTab({
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type);
     setSelected([]);
+    setSelectedDepartmentSummary([]);
   };
 
   const handleSubmit = async () => {
@@ -222,6 +225,7 @@ export function PermissionGrantTab({
         status: "success",
       });
       setSelected([]);
+      setSelectedDepartmentSummary([]);
       onSuccess();
     } catch {
       showToast({
@@ -244,7 +248,11 @@ export function PermissionGrantTab({
 
   const showDepartmentIncludeChildrenControl =
     subjectType === "department" && !hideDepartmentIncludeChildrenControl;
-  const selectedSummaryText = selected.map((subject) => subject.name).join("、");
+  const selectedSummaryText = (
+    subjectType === "department" && selectedDepartmentSummary.length > 0
+      ? selectedDepartmentSummary
+      : selected
+  ).map((subject) => subject.name).join("、");
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -300,6 +308,7 @@ export function PermissionGrantTab({
             resourceId={resourceId}
             includeChildren={includeChildren}
             onIncludeChildrenChange={handleIncludeChildrenChange}
+            onSelectionSummaryChange={setSelectedDepartmentSummary}
             disabledIds={grantedSubjectIds.department}
           />
         )}

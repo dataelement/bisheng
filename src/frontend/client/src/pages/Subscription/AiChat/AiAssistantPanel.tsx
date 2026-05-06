@@ -1,4 +1,4 @@
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
  * Supports three modes:
@@ -6,7 +6,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
  *   - Channel article mode: when articleDocId is provided, uses useChannelChat
  *   - File chat mode: when fileChat is provided, uses useFileChat
  */
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronsRight } from "lucide-react";
 import { useState } from "react";
 import { useRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -40,10 +40,6 @@ interface AiAssistantPanelProps {
     articleDocId?: string;
     /** Knowledge space file chat — when provided, switches to file chat mode */
     fileChat?: { spaceId: string; fileId: string };
-    /**
-     * H5 文章详情叠层：外层已有返回与标题，内层只保留清空等工具，避免双标题栏。
-     */
-    compactMobileChrome?: boolean;
 }
 
 /**
@@ -56,10 +52,8 @@ export function AiAssistantPanel({
     noBorder,
     articleDocId,
     fileChat,
-    compactMobileChrome = false,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
-    const isH5 = usePrefersMobileLayout();
 
     // Determine chat mode: fileChat > channel > workstation
     const isFileChatMode = !!fileChat;
@@ -127,8 +121,6 @@ export function AiAssistantPanel({
         if (ok) clearConversation();
     };
 
-    const showCompactMobileHeader = compactMobileChrome && isH5;
-
     const clearChatControl = (
         <TooltipProvider>
             <Tooltip>
@@ -150,73 +142,44 @@ export function AiAssistantPanel({
 
     return (
         <div className="flex flex-col h-full bg-white relative">
-            {/* Header */}
-            {showCompactMobileHeader ? (
-                <div className="relative flex h-11 shrink-0 items-center justify-between px-2">
-                    <Button
-                        variant="ghost"
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
-                        onClick={onClose}
-                        aria-label={localize("com_ui_go_back")}
-                    >
-                        <span className="text-[14px] leading-none font-semibold text-[#4E5969]">←</span>
-                    </Button>
-                    <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900">
-                        {localize("com_subscription.ai_assistant")}
-                    </h3>
-                    <div className="flex shrink-0 items-center">
-                        {clearChatControl}
-                    </div>
-                </div>
-            ) : (
-                <div
-                    className={cn(
-                        'relative flex shrink-0 items-center gap-2 px-3 py-[15px]',
-                        isH5 && 'justify-between',
-                        noBorder ? '' : 'border-b border-gray-100',
+            {/* Header：标题左、中间空、右侧清空 + 收起（与知识空间 KnowledgeAiPanel 一致） */}
+            <div
+                className={cn(
+                    'relative flex shrink-0 items-center gap-2 px-3 py-[15px]',
+                    noBorder ? '' : 'border-b border-gray-100',
+                )}
+            >
+                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-gray-900">
+                    {localize(
+                        fileChat
+                            ? "com_knowledge.ai_assistant"
+                            : "com_subscription.ai_assistant",
                     )}
-                >
-                    {isH5 ? (
-                        <Button
-                            variant="ghost"
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
-                            onClick={onClose}
-                            aria-label={localize('com_ui_go_back')}
-                        >
-                            <X className="size-4" />
-                        </Button>
-                    ) : (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
-                                        onClick={onClose}
-                                        aria-label={localize('com_ui_go_back')}
-                                    >
-                                        <ChevronLeft className="size-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom">
-                                    <p>{localize('com_ui_go_back')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    )}
-                    <h3
-                        className={cn(
-                            'pointer-events-none min-w-0 flex-1 truncate text-sm font-medium leading-6 text-gray-900',
-                            isH5 && 'absolute left-1/2 w-[60%] -translate-x-1/2 text-center',
-                        )}
-                    >
-                        {localize("com_subscription.ai_assistant")}
-                    </h3>
-                    <div className="flex shrink-0 items-center gap-3">
-                        {clearChatControl}
-                    </div>
+                </h3>
+                <div className="min-w-0 flex-1" aria-hidden />
+                <div className="flex shrink-0 items-center gap-2">
+                    {clearChatControl}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    type="button"
+                                    size="icon"
+                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
+                                    onClick={onClose}
+                                    aria-label={localize("com_ui_collapse")}
+                                >
+                                    <ChevronsRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                <p>{localize("com_ui_collapse")}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
-            )}
+            </div>
 
             {/* Messages Area */}
             <AiChatMessages

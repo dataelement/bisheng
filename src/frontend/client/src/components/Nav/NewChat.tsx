@@ -9,7 +9,7 @@ import type { TConversation, TMessage } from '~/types/chat';
 import { Constants, QueryKeys } from '~/types/chat';
 import { useLocalize, useNewConvo } from '~/hooks';
 import store from '~/store';
-import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
+import { cn, getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
 import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
 import { Button } from '../ui';
 
@@ -100,7 +100,12 @@ export default function NewChat({
   };
 
   return (
-    <div className="sticky left-0 right-0 top-0 z-50 bg-white">
+    <div
+      className={cn(
+        'sticky left-0 right-0 top-0 bg-white',
+        isSmallScreen ? 'z-50' : 'z-10',
+      )}
+    >
       <div className="" style={{ transform: 'none' }}>
         {isSmallScreen ? (
           <MobileSidebarHeaderTabs
@@ -113,7 +118,7 @@ export default function NewChat({
             }}
           />
         ) : (
-          <div className="py-5">
+          <div>
             <div className="border-b border-[#e5e6eb] pb-4">
               <div className="flex items-center text-[16px] font-medium">
                 <span className="leading-6 text-[#212121]">{localize('com_nav_home')}</span>

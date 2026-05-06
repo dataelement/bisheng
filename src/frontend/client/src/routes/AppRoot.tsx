@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { ChevronLeft, Menu } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { useUnactivate } from 'react-activation';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
-import { useAuthContext, useLocalize, usePrefersMobileLayout } from '~/hooks';
+import { useAuthContext, useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { SideNav } from '~/pages/appChat/SideNav';
 import {
     copyAppChatReturnTo,
@@ -36,8 +36,13 @@ export default function AppRoot() {
     const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
     const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
     const isTabletOrMobile = usePrefersMobileLayout();
-    const sidebarWidth = isTabletOrMobile ? 240 : 280;
+    /** 与 tailwind touch-mobile 一致：768–1023 仍用合并顶栏，避免仅 isTabletOrMobile 时出现 absolute 悬浮菜单 + 内层标题双行 */
+    /** ≤1023：合并顶栏 + 禁止左上角 absolute 悬浮钮（与 tailwind touch-mobile 一致） */
+    const isAppChatCompact = useMediaQuery('(max-width: 1023px)');
+    const sidebarWidth = 240;
     const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
+    /** AppRoot 仅挂在 /app/*；含 `/app/:fid/:type` 入口，不能用仅三段的 isAppConversationRoute 控制顶栏 */
+    const isAppSurface = location.pathname.includes('/app/');
     const scrollLockPrevRef = useRef<{ body: string; html: string } | null>(null);
 
     type AppSurfaceLocationState = { appSurfaceReturn?: string };
@@ -149,7 +154,7 @@ export default function AppRoot() {
                         <div
                             className={cn(
                                 'transition-all duration-300 overflow-hidden flex-shrink-0',
-                                sidebarVisible ? 'w-[280px]' : 'w-0',
+                                sidebarVisible ? 'w-[240px]' : 'w-0',
                             )}
                         >
                             <SideNav />
@@ -172,7 +177,7 @@ export default function AppRoot() {
                     )}
 
                     {/* Floating toggle button - lives outside the clipped sidebar */}
-                    {!isTabletOrMobile && (
+                    {!isTabletOrMobile && !(isAppSurface && isAppChatCompact) && (
                         <NavToggle
                             navVisible={sidebarVisible}
                             onToggle={toggleSidebar}
@@ -183,43 +188,34 @@ export default function AppRoot() {
                         />
                     )}
 
-                    {/* Floating actions - visible when sidebar is collapsed */}
-                    <div
-                        className={cn(
-                            'absolute left-3 top-3 z-[40] flex items-center gap-[8px] transition-all duration-300',
-                            sidebarVisible || (isTabletOrMobile && isAppConversationRoute)
-                                ? 'opacity-0 pointer-events-none'
-                                : 'opacity-100',
-                        )}
-                    >
-                        {isTabletOrMobile && (
+                    {/* 宽屏侧栏收起：仅保留返回（菜单已进 MobileNav）。勿用 flex+hidden 叠类名，避免 twMerge 后仍显示 absolute 钮叠在顶栏上 */}
+                    {!sidebarVisible && !(isAppSurface && isAppChatCompact) && (
+                        <div className="absolute left-3 top-3 z-[40] flex items-center gap-2 transition-all duration-300">
                             <button
-                                onClick={toggleSidebar}
-                                className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
-                                aria-label="Open sidebar"
+                                type="button"
+                                onClick={handleGoBack}
+                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] shadow-sm transition-colors hover:bg-gray-50"
+                                aria-label={localize('com_ui_go_back')}
                             >
-                                <Menu size={16} className="text-[#212121]" />
+                                <ChevronLeft size={16} className="text-[#212121]" />
                             </button>
-                        )}
-                        <button
-                            onClick={handleGoBack}
-                            className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-white border border-[#ebecf0] hover:bg-gray-50 transition-colors shadow-sm"
-                        >
-                            <ChevronLeft size={16} className="text-[#212121]" />
-                        </button>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Chat panel (routed) */}
                     <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
-                        {isTabletOrMobile && isAppConversationRoute && !mobileNavHidden && (
-                            <MobileNav
-                                variant="chat"
-                                navVisible={sidebarVisible}
-                                setNavVisible={setSidebarVisible}
-                                persistNavVisibleInLocalStorage={false}
-                                navigateToNewChatPath={false}
-                                onNewChat={handleCreateNewAppChat}
-                            />
+                        {isAppSurface && isAppChatCompact && !mobileNavHidden && (
+                            <div className="shrink-0 overflow-hidden rounded-t-[12px] bg-white">
+                                <MobileNav
+                                    variant="chat"
+                                    navVisible={sidebarVisible}
+                                    setNavVisible={setSidebarVisible}
+                                    persistNavVisibleInLocalStorage={false}
+                                    navigateToNewChatPath={false}
+                                    onNewChat={handleCreateNewAppChat}
+                                    appSurfaceBackAction={handleGoBack}
+                                />
+                            </div>
                         )}
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
                             <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />

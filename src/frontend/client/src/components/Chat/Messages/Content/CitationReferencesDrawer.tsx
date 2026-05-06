@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Download, Loader2, X } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
@@ -238,6 +239,11 @@ export default function CitationReferencesDrawer({
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
   const autoResolveAttemptRef = useRef<Set<string>>(new Set());
+  const [citationOverlayPortalReady, setCitationOverlayPortalReady] = useState(false);
+
+  useEffect(() => {
+    setCitationOverlayPortalReady(true);
+  }, []);
 
   const references = useMemo(
     () => (referenceItems && referenceItems.length > 0
@@ -392,9 +398,9 @@ export default function CitationReferencesDrawer({
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
-  // 窄屏下顶栏（MobileNav）与主内容区层叠时可能盖住 fixed 抽屉；打开参考资料时隐藏顶栏（不仅限 ≤576 全屏）
+  // 仅全屏参考资料（≤576）隐藏 MobileNav；平板窄屏保留顶栏标题，抽屉 z-[120] 已高于 MobileNav z-[60]
   useEffect(() => {
-    if (!isNarrowLayout || !isOpen) {
+    if (!isNarrowLayout || !isOpen || !isFullBleedMobile) {
       return;
     }
 
@@ -402,7 +408,7 @@ export default function CitationReferencesDrawer({
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [isNarrowLayout, isOpen, setChatMobileNavHidden]);
+  }, [isFullBleedMobile, isNarrowLayout, isOpen, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!isOpen && !panelOnly) {
@@ -746,26 +752,33 @@ export default function CitationReferencesDrawer({
         </button>
       </div>
 
-      {!isDesktopInlinePanel && isOpen && (
-        isFullBleedMobile ? (
-          <aside
-            className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
-            aria-label="参考资料"
-          >
-            {panelContent}
-          </aside>
-        ) : (
-          <aside
-            ref={drawerRef}
-            className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
-            aria-label="参考资料"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {panelContent}
-          </aside>
-        )
-      )}
+      {citationOverlayPortalReady &&
+        !isDesktopInlinePanel &&
+        isOpen &&
+        createPortal(
+          isFullBleedMobile ? (
+            <aside
+              className="fixed inset-0 z-[130] flex min-h-0 flex-col overflow-hidden overscroll-contain bg-white [height:100dvh]"
+              aria-label="参考资料"
+            >
+              {panelContent}
+            </aside>
+          ) : (
+            <aside
+              ref={drawerRef}
+              className={cn(
+                'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
+                'rounded-tl-xl',
+              )}
+              aria-label="参考资料"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {panelContent}
+            </aside>
+          ),
+          document.body,
+        )}
       {!isDesktopInlinePanel && (
         <CitationDocumentPreviewDrawer
           preview={documentPreview}

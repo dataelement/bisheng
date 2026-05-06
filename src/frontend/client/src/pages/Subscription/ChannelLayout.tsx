@@ -172,7 +172,6 @@ export function ChannelLayout({
                                 aria-label={localize("com_subscription.ai_assistant")}
                             >
                                 <AiAssistantPanel
-                                    compactMobileChrome
                                     features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
                                     articleDocId={selectedArticle.id}
                                     onClose={() => setH5AiAssistantOpen(false)}

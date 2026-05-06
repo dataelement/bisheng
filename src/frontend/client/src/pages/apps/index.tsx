@@ -131,7 +131,7 @@ export default function AppCenter() {
             {isH5Layout ? (
                 <>
                     {/* H5：一行 — 应用中心 | 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
-                    <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0 self-stretch">
+                    <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
                         <h1 className="font-['PingFang_SC'] font-semibold leading-[28px] text-[#335cff] text-[20px] shrink-0">
                             应用中心
                         </h1>
@@ -143,19 +143,19 @@ export default function AppCenter() {
                         </p>
                         {exploreLink}
                     </header>
-                    <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0 self-stretch">
+                    <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0">
                         <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                     </div>
                 </>
             ) : (
                 <>
-                    <header className="flex items-center leading-8 max-w-[1000px] w-full shrink-0 self-stretch relative">
+                    <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
                         <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
                             应用中心
                         </h1>
                     </header>
 
-                    <div className="flex max-w-[1000px] w-full min-w-0 shrink-0 self-stretch items-center gap-4 sm:gap-6 mt-4 mb-4">
+                    <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
                             <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
                                 <p
@@ -176,7 +176,7 @@ export default function AppCenter() {
 
             {/* 内容区域：flex-1 内滚动，PC 窄屏与移动端一致用 scroll-on-scroll */}
             <main
-                className="flex min-h-0 w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px] self-stretch overflow-x-hidden overflow-y-auto scroll-on-scroll relative"
+                className="relative flex min-h-0 w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px] overflow-x-hidden overflow-y-auto scroll-on-scroll"
                 onScroll={handleMainScroll}
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >
