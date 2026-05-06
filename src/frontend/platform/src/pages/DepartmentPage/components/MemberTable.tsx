@@ -283,14 +283,13 @@ export function MemberTable({
         )
       )
       captureAndAlertRequestErrorHoc(
-        disableUserApi(m.user_id, enabled ? 0 : 1)
-      ).then((res) => {
-        if (res === null) {
-          loadMembers()
-        } else {
+        disableUserApi(m.user_id, enabled ? 0 : 1).then(() => {
           toast({ title: t("prompt"), variant: "success" })
           onChanged()
-        }
+        })
+      ).then((res) => {
+        // HoC returns false on error — revert optimistic toggle by reloading.
+        if (res === false) loadMembers()
       })
     },
     [isArchived, loadMembers, onChanged, t]
