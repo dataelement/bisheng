@@ -34,6 +34,7 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.sql import bindparam
 
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.permission.migration.batch_utils import (
     ProgressTracker,
@@ -648,9 +649,10 @@ class RBACToReBACMigrator:
                 async for files in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                            sa_text('SELECT id, id, knowledge_id, file_type, file_level_path '
-                                    'FROM knowledgefile WHERE id > :last_id '
-                                    'ORDER BY id LIMIT :limit'),
+                            sa_text('SELECT kf.id, kf.knowledge_id, kb.type, kf.file_type, kf.file_level_path '
+                                    'FROM knowledgefile as kf join knowledge as kb on kf.knowledge_id=kb.id '
+                                    'AND kf.id > :last_id '
+                                    'ORDER BY kf.id LIMIT :limit'),
                             {'last_id': last_id},
                     ),
                     batch_size=self.batch_size,
@@ -658,8 +660,8 @@ class RBACToReBACMigrator:
                     progress_desc='step6 knowledgefile',
                 ):
                     ops = []
-                    for _, fid, kid, ftype, fpath in files:
-                        parent_type, parent_id = self._resolve_parent(fid, kid, fpath)
+                    for fid, kid, ktype, ftype, fpath in files:
+                        parent_type, parent_id = self._resolve_parent(fid, kid, ktype, fpath)
                         if parent_type is None:
                             continue
                         child_type = 'folder' if ftype == 0 else 'knowledge_file'
@@ -1112,15 +1114,16 @@ class RBACToReBACMigrator:
 
     @staticmethod
     def _resolve_parent(
-        file_id, knowledge_id, file_level_path,
+        file_id, knowledge_id, knowledge_type, file_level_path,
     ) -> tuple[Optional[str], Optional[str]]:
         """Derive parent (type, id) from file_level_path materialized path."""
         path = file_level_path or ''
         segments = [s for s in path.split('/') if s]
         if not segments:
-            return ('knowledge_library', str(knowledge_id))
+            return ('knowledge_space' if knowledge_type == KnowledgeTypeEnum.SPACE.value else 'knowledge_library',
+                    str(knowledge_id))
         last = segments[-1]
         if not last.isdigit():
             logger.warning(f'Invalid path segment "{last}" for file {file_id}, skipping')
-            return (None, None)
-        return ('folder', last)
+            return None, None
+        return 'folder', last

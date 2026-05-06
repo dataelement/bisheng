@@ -41,7 +41,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
   const flowData = chatState?.flow ?? currentApp;
 
   return (
-    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden px-3 pb-2 pt-3 text-[#212121]">
+    <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden py-5 px-3 text-[#212121]">
       <div className="hidden shrink-0 items-center justify-between max-[768px]:flex">
         {bsConfig?.sidebarIcon?.image ? (
           <img
