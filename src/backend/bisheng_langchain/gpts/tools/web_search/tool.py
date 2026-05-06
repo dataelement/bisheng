@@ -21,6 +21,18 @@ class SearchTool(ABC):
         self.args = args
         self.kwargs = kwargs
 
+    @staticmethod
+    def _get_optional_str(kwargs: Dict[str, Any], *keys: str) -> str | None:
+        """Return the first non-empty string value from the provided keys."""
+        for key in keys:
+            value = kwargs.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return None
+
     def _requests(self, url: str, method: str, **kwargs):
         """Base requests method to handle GET and POST requests."""
         if method == 'GET':
@@ -118,7 +130,7 @@ class BingSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
-        self.base_url = kwargs.get('base_url')
+        self.base_url = self._get_optional_str(kwargs, 'base_url')
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
         bingtool = BingSearchResults(api_wrapper=BingSearchAPIWrapper(bing_subscription_key=self.api_key,
@@ -145,7 +157,7 @@ class BoChaSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
-        self.base_url = 'https://api.bochaai.com/v1/web-search'
+        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://api.bochaai.com/v1/web-search'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
@@ -174,7 +186,7 @@ class JinaDeepSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
-        self.base_url = 'https://deepsearch.jina.ai/v1/chat/completions'
+        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://deepsearch.jina.ai/v1/chat/completions'
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
@@ -217,7 +229,7 @@ class SerpSearch(SearchTool):
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
         self.engine = kwargs.get('engine')
-        self.base_url = 'https://serpapi.com/search.json'
+        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://serpapi.com/search.json'
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(self.base_url, method='GET', params={'q': query, 'api_key': self.api_key,
@@ -242,7 +254,7 @@ class TavilySearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
-        self.base_url = 'https://api.tavily.com/search'
+        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://api.tavily.com/search'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
@@ -269,7 +281,8 @@ class CloudswaySearch(SearchTool):
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
         self.endpoint = kwargs.get('endpoint')
-        self.base_url = f'https://searchapi.cloudsway.net/search/{self.endpoint}/smart'
+        custom_base_url = self._get_optional_str(kwargs, 'base_url')
+        self.base_url = custom_base_url or f'https://searchapi.cloudsway.net/search/{self.endpoint}/smart'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
@@ -295,7 +308,10 @@ class CloudswaySearch(SearchTool):
 class SearXNGSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.base_url = kwargs.get('server_url').rstrip('/')
+        server_url = self._get_optional_str(kwargs, 'server_url', 'base_url')
+        if not server_url:
+            raise ValueError("SearXNG search requires 'server_url' or 'base_url'.")
+        self.base_url = server_url.rstrip('/')
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(f'{self.base_url}/search', method='GET',
