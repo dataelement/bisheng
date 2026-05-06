@@ -146,14 +146,14 @@ export function PermissionGrantTab({
     if (!modelSource.fallbackToDefault && modelSource.relationModels?.length) {
       return modelSource.relationModels.map((model) => ({
         id: model.id,
-        name: model.is_system ? t(`level.${model.relation}`) : model.name,
+        name: model.is_system ? t(`level.${model.relation}`, { defaultValue: model.relation }) : model.name,
         relation: model.relation as RelationLevel,
       }))
     }
 
     return DEFAULT_MODELS.map((model) => ({
       ...model,
-      name: t(`level.${model.relation}`),
+      name: t(`level.${model.relation}`, { defaultValue: model.relation }),
     }))
   }, [modelSource, t])
 

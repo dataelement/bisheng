@@ -356,18 +356,18 @@ const useSopTools = (tools) => {
             tools.forEach(toolGroup => {
                 const isPreset = toolGroup.is_preset === 1;
                 toolGroup.children.length && tree.push({
-                    label: isPreset ? t(`categories.${toolGroup.name}.name`) : toolGroup.name,
+                    label: isPreset ? t(`categories.${toolGroup.name}.name`, { defaultValue: toolGroup.name }) : toolGroup.name,
                     value: toolGroup.id,
-                    desc: isPreset ? t(`categories.${toolGroup.name}.desc`) : toolGroup.description,
+                    desc: isPreset ? t(`categories.${toolGroup.name}.desc`, { defaultValue: toolGroup.description || '' }) : toolGroup.description,
                     children: (toolGroup.children || []).map(child => {
-                        const name = isPreset ? t(`tools.${child.tool_key}.name`) : child.name;
+                        const name = isPreset ? t(`tools.${child.tool_key}.name`, { defaultValue: child.name }) : child.name;
                         const value = `${child.tool_key}`
                         nameToValueRef.current[name] = value;
                         valueToNameRef.current[value] = name;
                         return {
                             label: name,
                             value: child.tool_key,
-                            desc: isPreset ? t(`tools.${child.tool_key}.desc`) : child.desc,
+                            desc: isPreset ? t(`tools.${child.tool_key}.desc`, { defaultValue: child.desc || '' }) : child.desc,
                             children: []
                         }
                     })

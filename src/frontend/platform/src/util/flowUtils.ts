@@ -25,9 +25,10 @@ export function initNode(node, nds, t) {
     const { id } = node;
     if (node.type === "tool") {
         if (node.is_preset) {
-            // 国际化工具节点
-            node.name = t(`tools.${node.tool_key}.name`, { ns: 'tool' })
-            node.description = t(`tools.${node.tool_key}.desc`, { ns: 'tool' })
+            // 国际化工具节点；defaultValue fallback 保留原始 name/description，
+            // 避免新增的 preset 工具未补 i18n 时显示 'tools.xxx.name' 字面 key。
+            node.name = t(`tools.${node.tool_key}.name`, { ns: 'tool', defaultValue: node.name || node.tool_key })
+            node.description = t(`tools.${node.tool_key}.desc`, { ns: 'tool', defaultValue: node.description || '' })
             return node;
         }
         return node;
@@ -66,9 +67,9 @@ export function initNode(node, nds, t) {
         });
     });
 
-    const newName = autoNodeName(nds, t(`node.${node.type}.name`))
+    const newName = autoNodeName(nds, t(`node.${node.type}.name`, { defaultValue: node.type }))
     node.name = newName
-    node.description = t(`node.${node.type}.description`)
+    node.description = t(`node.${node.type}.description`, { defaultValue: '' })
     return node;
 }
 
