@@ -114,6 +114,15 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                                 file.name.toLowerCase().includes(keyword)
                             );
                         }
+                        // Apply the same status filtering logic as the backend API
+                        if (statusFilter.length > 0) {
+                            approvalFiles = approvalFiles.filter(
+                                (file) => file.status !== undefined && statusFilter.includes(file.status)
+                            );
+                        } else if (isMember) {
+                            // Match the default API behavior for members: exclude FAILED
+                            approvalFiles = approvalFiles.filter((file) => file.status !== FileStatus.FAILED);
+                        }
                         const existingIds = new Set(res.data.map((file) => file.id));
                         const uniqueApprovalFiles = approvalFiles.filter((file) => !existingIds.has(file.id));
                         mergedData = [...uniqueApprovalFiles, ...res.data];
