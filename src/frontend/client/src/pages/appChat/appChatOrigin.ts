@@ -88,6 +88,30 @@ export function copyAppChatReturnTo(fromConversationId: string, toConversationId
 }
 
 /**
+ * Where to navigate when leaving app chat (sidebar / shell back).
+ * Do not use history.back(): each conversation switch pushes `/app/:cid/...`,
+ * so the browser "back" would only open the previous chat.
+ */
+export function resolveAppChatExitNavigateTarget(
+    conversationId: string | undefined,
+    location: { state?: unknown; search: string },
+): AppChatReturnTo | '/apps' {
+    if (conversationId) {
+        const stored = readAppChatReturnTo(conversationId);
+        if (stored) return stored;
+    }
+    const fromState = normalizeAppChatReturn(
+        (location.state as { appSurfaceReturn?: string } | null | undefined)?.appSurfaceReturn,
+    );
+    if (fromState) return fromState;
+    const fromQuery = normalizeAppChatReturn(
+        new URLSearchParams(location.search || '').get('returnTo'),
+    );
+    if (fromQuery) return fromQuery;
+    return '/apps';
+}
+
+/**
  * Derive origin from the first-load URL (?from=…) or navigate `state.appSurfaceReturn`
  * (used by AppChatEntry before query params are stripped).
  */
