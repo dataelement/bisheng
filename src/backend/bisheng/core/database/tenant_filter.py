@@ -126,6 +126,16 @@ def register_tenant_filter_events() -> None:
                 current_val = getattr(obj, 'tenant_id', None)
                 if current_val is None or current_val == 0:
                     obj.tenant_id = tid
+                elif current_val != tid:
+                    # Defense-in-depth: write proceeds with the explicit
+                    # value (could be admin cross-tenant write, or a leaked
+                    # default like the v2.5 default=1 bug). Log so anomalies
+                    # surface during canary rollout.
+                    logger.warning(
+                        'tenant_id mismatch on write: table=%s pk=%s '
+                        'ctx_tid=%s obj_tid=%s (write proceeded as-is)',
+                        table_name, getattr(obj, 'id', None), tid, current_val,
+                    )
 
     _initialized = True
     logger.info(

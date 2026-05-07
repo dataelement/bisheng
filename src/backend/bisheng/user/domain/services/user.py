@@ -430,6 +430,32 @@ class UserService:
                 db_user.user_id, exc,
             )
 
+        # Block login when the resolved leaf tenant is disabled/archived.
+        # Without this gate the JWT is issued and the very next request gets
+        # 403'd by the tenant-status middleware — users see "logged in then
+        # immediately kicked out" instead of a clear error on the login form.
+        # DB.status is authoritative; Redis blacklist is a defensive cross-check.
+        if settings.multi_tenant.enabled and tenant_id and tenant_id > 0:
+            from bisheng.database.models.tenant import TenantDao
+            from bisheng.common.errcode.tenant import TenantDisabledError
+            from bisheng.core.context.tenant import bypass_tenant_filter
+            with bypass_tenant_filter():
+                tenant_obj = await TenantDao.aget_by_id(tenant_id)
+            if not tenant_obj or tenant_obj.status != 'active':
+                raise TenantDisabledError()
+            try:
+                from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
+                redis_client = await get_redis_client()
+                if await redis_client.aget(DISABLED_TENANT_KEY.format(tenant_id)):
+                    raise TenantDisabledError()
+            except TenantDisabledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    'tenant blacklist check skipped for tenant %s: %s',
+                    tenant_id, exc,
+                )
+
         # Fetch fresh token_version (sync_user may have just bumped it) and
         # embed in the JWT payload so the middleware can reject stale tokens.
         fresh_token_version = 0

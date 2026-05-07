@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import Integer, String
-from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
+from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -156,7 +156,42 @@ class AuditLog(AuditLogBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, index=True, description="primary keyuuidFormat")
 
 
+# v2.5.1 product decision (2026-05-06): the legacy "系统操作" page surfaces
+# only a curated subset of structured actions to operators. Other v2 actions
+# (admin.scope_switch, resource.*, user.*, dept.*, llm.server.toggle_share,
+# llm.model.*) keep writing for compliance/forensics but stay hidden from
+# the UI list and filter dropdowns. Update this tuple in lockstep with the
+# frontend `getActionsApi` / `getActionsByModuleApi` whitelist.
+_UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
+    'tenant.mount',
+    'tenant.unmount',
+    'tenant.disable',
+    'llm.server.create',
+    'llm.server.update',
+    'llm.server.delete',
+)
+
+# Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
+# emits these synthetic module values for v2 namespaces (legacy modules like
+# `chat`, `build`, ... still match the literal `system_id` column).
+_V2_NAMESPACE_TO_ACTION_PREFIX: Dict[str, str] = {
+    'tenant': 'tenant.',
+    'llm': 'llm.server.',
+}
+
+
 class AuditLogDao(AuditLogBase):
+
+    @classmethod
+    def _ui_visible_predicate(cls):
+        """Whitelist for the legacy audit page: keep all legacy rows
+        (``system_id`` filled by ``insert_audit_logs`` paths) plus the six
+        v2 actions explicitly surfaced to operators.
+        """
+        return or_(
+            AuditLog.system_id.is_not(None),
+            col(AuditLog.action).in_(_UI_VISIBLE_V2_ACTIONS),
+        )
 
     @classmethod
     def _visible_for_tenant(cls, tenant_id: int):
@@ -195,6 +230,13 @@ class AuditLogDao(AuditLogBase):
         """
         statement = select(AuditLog)
         count_statement = select(func.count(AuditLog.id))
+
+        # UI whitelist — legacy rows + 6 surfaced v2 actions. Applied first
+        # so pagination math reflects what the operator can actually see.
+        ui_predicate = cls._ui_visible_predicate()
+        statement = statement.where(ui_predicate)
+        count_statement = count_statement.where(ui_predicate)
+
         if group_ids:
             group_filters = []
             for one in group_ids:
@@ -212,11 +254,24 @@ class AuditLogDao(AuditLogBase):
             statement = statement.where(AuditLog.create_time <= end_time)
             count_statement = count_statement.where(AuditLog.create_time <= end_time)
         if system_id:
-            statement = statement.where(AuditLog.system_id == system_id)
-            count_statement = count_statement.where(AuditLog.system_id == system_id)
+            # Synthetic v2 namespace from the frontend dropdown maps to an
+            # ``action`` prefix; legacy module values match ``system_id``.
+            prefix = _V2_NAMESPACE_TO_ACTION_PREFIX.get(system_id)
+            if prefix:
+                module_predicate = col(AuditLog.action).like(f'{prefix}%')
+            else:
+                module_predicate = AuditLog.system_id == system_id
+            statement = statement.where(module_predicate)
+            count_statement = count_statement.where(module_predicate)
         if event_type:
-            statement = statement.where(AuditLog.event_type == event_type)
-            count_statement = count_statement.where(AuditLog.event_type == event_type)
+            # v2 action strings always contain a dot (``tenant.mount`` etc.);
+            # legacy event_type values are plain snake_case (``create_chat``).
+            if '.' in event_type:
+                action_predicate = AuditLog.action == event_type
+            else:
+                action_predicate = AuditLog.event_type == event_type
+            statement = statement.where(action_predicate)
+            count_statement = count_statement.where(action_predicate)
         if tenant_scope is not None:
             tenant_predicate = cls._visible_for_tenant(tenant_scope)
             statement = statement.where(tenant_predicate)
@@ -255,6 +310,9 @@ class AuditLogDao(AuditLogBase):
         cross-tenant operators from a global super.
         """
         statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
+        # Mirror the list endpoint's UI whitelist so the operator dropdown
+        # does not advertise users who only ever produced hidden v2 rows.
+        statement = statement.where(cls._ui_visible_predicate())
         if group_ids:
             group_filters = []
             for one in group_ids:
@@ -285,6 +343,7 @@ class AuditLogDao(AuditLogBase):
         reason: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
+        operator_name: Optional[str] = None,
     ) -> AuditLog:
         """Structured audit_log insert (v2.5.1 schema).
 
@@ -293,10 +352,37 @@ class AuditLogDao(AuditLogBase):
           - global super (no F019 scope)   → ROOT_TENANT_ID (=1)
           - global super (F019 scope=X)    → X (current management view)
           - system trigger (operator_id=0) → ROOT_TENANT_ID
+
+        ``operator_name`` is auto-resolved when not supplied: ``'system'``
+        for ``operator_id == 0`` (system trigger), otherwise looked up via
+        ``UserDao.aget_user``. Without this fallback every v2 row's
+        ``operator_name`` would be NULL — the legacy "系统操作" page reads
+        that column for the user-name cell, so callers used to leave it
+        blank in the UI. The lookup is best-effort: a miss leaves the
+        column NULL and logs a warning rather than failing the insert.
         """
+        if operator_name is None:
+            if operator_id == 0:
+                operator_name = 'system'
+            else:
+                # Lazy import: UserDao lives in a higher-level package and a
+                # top-level import would cycle through user → role → audit.
+                from bisheng.user.domain.models.user import UserDao  # noqa: PLC0415
+                try:
+                    user = await UserDao.aget_user(operator_id)
+                    if user is not None:
+                        operator_name = user.user_name
+                except Exception as e:  # noqa: BLE001 — never block the insert
+                    from loguru import logger  # noqa: PLC0415
+                    logger.warning(
+                        'audit_log operator_name lookup failed for operator_id=%s action=%s: %s',
+                        operator_id, action, e,
+                    )
+
         entry = AuditLog(
             tenant_id=tenant_id,
             operator_id=operator_id,
+            operator_name=operator_name,
             operator_tenant_id=operator_tenant_id,
             action=action,
             target_type=target_type,
@@ -361,8 +447,11 @@ class AuditLogDao(AuditLogBase):
             their tenant — catches global super ops that targeted this child).
         """
         offset = max(0, (page - 1) * limit)
-        predicate = cls._visible_for_tenant(tenant_id)
         with bypass_tenant_filter():
+            # Build predicate inside the bypass block so the static guard
+            # (test_tenant_bypass_filter_guard) can see the tenant_id token —
+            # the predicate already filters by tenant_id / operator_tenant_id.
+            predicate = cls._visible_for_tenant(tenant_id)
             async with get_async_db_session() as session:
                 stmt = select(AuditLog).where(predicate)
                 count_stmt = (

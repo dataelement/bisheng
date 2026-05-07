@@ -578,7 +578,7 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
+          className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer select-none items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
         >
           <span className="flex h-[18px] items-center">{children}</span>
         </button>
@@ -588,6 +588,8 @@ const Citation = ({
           side="top"
           align="start"
           sideOffset={8}
+          avoidCollisions
+          collisionPadding={16}
           onMouseEnter={() => {
             if (!citationPreviewUsesHover) return;
             handleOpenChange(true);

@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from sqlalchemy import JSON, Column, DateTime, String, Text, or_, text
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, or_, text
 from sqlmodel import Field, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -35,7 +35,11 @@ class ApprovalReviewModeEnum(str, Enum):
 
 
 class ApprovalRequestBase(SQLModelSerializable):
-    tenant_id: int = Field(default=1, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     request_type: str = Field(
         default=ApprovalRequestTypeEnum.DEPARTMENT_KNOWLEDGE_SPACE_FILE_UPLOAD.value,
         sa_column=Column(String(64), nullable=False, index=True),

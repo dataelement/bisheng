@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, UniqueConstraint, text
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -11,7 +11,11 @@ from bisheng.core.database import get_async_db_session
 
 
 class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
-    tenant_id: int = Field(default=1, index=True, description='Tenant ID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     department_id: int = Field(
         sa_column=Column(
             ForeignKey('department.id', ondelete='CASCADE'),

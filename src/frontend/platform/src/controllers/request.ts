@@ -26,7 +26,10 @@ customAxios.interceptors.request.use(function (config) {
 function decodeEnvelopeMessage(envelope: any) {
     const statusCode = envelope?.status_code
     const statusMessage = String(envelope?.status_message || "")
-    const i18Msg = i18next.t(`errors.${statusCode}`, envelope?.data)
+    // Without defaultValue, an unregistered status_code renders as the literal
+    // key string "errors.<num>". Fall back to status_message so the user at
+    // least sees the backend's raw text instead of a debug-looking key.
+    const i18Msg = i18next.t(`errors.${statusCode}`, { ...(envelope?.data || {}), defaultValue: statusMessage })
 
     const statusMessageKeyMap: Record<string, string> = {
         "person id is required": "errors.21013",

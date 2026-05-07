@@ -1260,7 +1260,9 @@
       "subscribe": "Subscription",
       "subscription": "Subscription",
       "knowledgeSpace": "Knowledge Space",
-      "knowledge_space": "Knowledge Space"
+      "knowledge_space": "Knowledge Space",
+      "tenant": "Tenant Management",
+      "llm": "Model Management"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1313,7 +1315,13 @@
       "create_channel": "Create Channel",
       "delete_channel": "Delete Channel",
       "create_knowledge_space": "Create Knowledge Space",
-      "delete_knowledge_space": "Delete Knowledge Space"
+      "delete_knowledge_space": "Delete Knowledge Space",
+      "tenantMount": "Mount Child Tenant",
+      "tenantUnmount": "Unmount Child Tenant",
+      "tenantDisable": "Disable Child Tenant",
+      "llmServerCreate": "Create Model Provider",
+      "llmServerUpdate": "Update Model Provider",
+      "llmServerDelete": "Delete Model Provider"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1329,7 +1337,9 @@
       "knowledge": "Knowledge Base",
       "workstation": "Workbench (Daily Mode)",
       "channel": "Channel",
-      "knowledge_space": "Knowledge Space"
+      "knowledge_space": "Knowledge Space",
+      "tenant": "Tenant",
+      "llm_server": "Model Provider"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",
@@ -1887,7 +1897,7 @@
     "19803": "System-level LLM configuration (workbench / knowledge / assistant / evaluation defaults) is restricted to the global super admin",
     "19804": "LLM server endpoint does not match any prefix in settings.llm.endpoint_whitelist",
     "20000": "Tenant not found",
-    "20001": "Tenant is disabled",
+    "20001": "Your tenant has been disabled. Please contact the administrator.",
     "20002": "User does not belong to this tenant",
     "20003": "Tenant code already exists",
     "20004": "Missing tenant context",

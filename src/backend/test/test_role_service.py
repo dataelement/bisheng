@@ -94,6 +94,7 @@ class TestCreateRole:
             quota_config={'channel': 10},
             remark=None,
             create_user=mock_tenant_admin.user_id,
+            tenant_id=mock_tenant_admin.tenant_id,
         )
 
     @pytest.mark.asyncio
@@ -126,6 +127,7 @@ class TestCreateRole:
             quota_config=None,
             remark=None,
             create_user=mock_admin_user.user_id,
+            tenant_id=mock_admin_user.tenant_id,
         )
 
     @pytest.mark.asyncio
@@ -200,6 +202,42 @@ class TestCreateRole:
 
         with pytest.raises(RolePermissionDeniedError):
             await RoleService.create_role(req, mock_normal_user)
+
+    @pytest.mark.asyncio
+    async def test_child_tenant_admin_role_carries_child_tenant_id(self):
+        """Regression: child-tenant admin's role must persist with their tenant_id.
+
+        Without explicitly passing ``tenant_id`` into the ``Role(...)`` constructor,
+        the model default of 1 (Root) survived because the ``before_flush`` hook
+        only auto-fills when the value is None/0 — so child-tenant admins created
+        roles owned by Root and the tenant-scoped list query returned empty.
+        """
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        child_admin = MagicMock()
+        child_admin.user_id = 42
+        child_admin.is_admin.return_value = False
+        child_admin.tenant_id = 7
+
+        req = RoleCreateRequest(role_name='Child Role')
+
+        with patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_ensure_create_scope', new_callable=AsyncMock), \
+             patch('bisheng.role.domain.services.role_service.Role') as mock_role_cls, \
+             patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao:
+            created_role = MagicMock()
+            created_role.id = 99
+            created_role.tenant_id = 7
+            mock_role_cls.return_value = created_role
+            mock_dao.aget_role_by_name = AsyncMock(return_value=None)
+            mock_dao.ainsert_role = AsyncMock(return_value=created_role)
+
+            await RoleService.create_role(req, child_admin)
+
+        kwargs = mock_role_cls.call_args.kwargs
+        assert kwargs['tenant_id'] == 7
+        assert kwargs['role_type'] == 'tenant'
 
     @pytest.mark.asyncio
     async def test_dept_admin_cannot_create_unscoped_role(self, mock_dept_admin):

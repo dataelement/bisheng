@@ -195,6 +195,10 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     # F017: capture share intent before model_validate drops unknown fields
     share_to_children = flow.share_to_children
     db_flow = Flow.model_validate(flow)
+    # Defense-in-depth: Flow.tenant_id default is None and the framework's
+    # before_flush hook (bisheng.core.database.tenant_filter) auto-fills it
+    # from current_tenant_id. Keeping this explicit assignment so future
+    # callers without an HTTP middleware (CLI, scripts) still set it right.
     db_flow.tenant_id = login_user.tenant_id
     db_flow.create_time = None
     db_flow.update_time = None

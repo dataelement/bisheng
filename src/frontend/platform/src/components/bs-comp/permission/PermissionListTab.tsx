@@ -164,7 +164,7 @@ export function PermissionListTab({
 
     return grantableModels.map((model) => ({
       id: model.id,
-      name: model.is_system ? t(`level.${model.relation}`) : model.name,
+      name: model.is_system ? t(`level.${model.relation}`, { defaultValue: model.relation }) : model.name,
       relation: model.relation as RelationLevel,
     }))
   }, [grantableModels, t, useDefaultModels])
@@ -348,7 +348,7 @@ export function PermissionListTab({
     return (
       displayModels.find((item) => item.id === currentModelId)?.name ||
       entry.model_name ||
-      t(`level.${entry.relation}`)
+      t(`level.${entry.relation}`, { defaultValue: entry.relation })
     )
   }
 

@@ -68,8 +68,8 @@ class Department(SQLModelSerializable, table=True):
             comment='Parent department ID, NULL=root',
         ),
     )
-    tenant_id: int = Field(
-        default=1,
+    tenant_id: Optional[int] = Field(
+        default=None,
         sa_column=Column(
             Integer, nullable=False,
             server_default=text('1'), index=True,

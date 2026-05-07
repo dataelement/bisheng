@@ -183,7 +183,7 @@ export default function AppRoot() {
                             onToggle={toggleSidebar}
                             isHovering={isHovering}
                             setIsHovering={setIsHovering}
-                            className="fixed top-1/2 z-[50]"
+                            className="absolute left-0 top-1/2 z-[50]"
                             translateX={sidebarWidth - 5}
                         />
                     )}
