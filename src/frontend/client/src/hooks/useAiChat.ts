@@ -104,7 +104,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // Returns ChatMessage[] with category + structured fields (reasoning,
         // tool_calls, steps, thinking_segments) already expanded; legacy
         // regenerate siblings are pre-collapsed server-side.
-        getAgentMessages(conversationId)
+        getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
                 setMessages(msgs);
                 setIsLoading(false);
@@ -114,7 +114,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 setIsLoading(false);
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
-    }, [conversationId]);
+    }, [conversationId, shareToken]);
 
     // v2.5 Module B: agent flow renders a flat list keyed by category;
     // messagesTree + buildMessageTree were only needed by the legacy
