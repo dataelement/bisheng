@@ -137,6 +137,10 @@ class TenantService:
         login_user,
     ) -> dict:
         """List tenants with pagination. System admin only."""
+        import asyncio
+
+        from bisheng.role.domain.services.quota_service import QuotaService
+
         tenants, total = await TenantDao.alist_tenants(
             keyword=keyword, status=status, page=page, page_size=page_size,
         )
@@ -144,8 +148,9 @@ class TenantService:
         # matches the dialog list source exactly. v2.5.0 ``aadd_users``
         # residue rows in UserTenant no longer surface as phantom members.
         tenant_ids = [t.id for t in tenants]
-        user_counts = await UserDepartmentDao.acount_users_by_tenant_subtree_batch(
-            tenant_ids,
+        user_counts, usage_map = await asyncio.gather(
+            UserDepartmentDao.acount_users_by_tenant_subtree_batch(tenant_ids),
+            QuotaService.get_storage_used_gb_batch(tenant_ids),
         )
 
         # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
@@ -164,7 +169,7 @@ class TenantService:
                 logo=t.logo,
                 status=t.status,
                 user_count=user_counts.get(t.id, 0),
-                storage_used_gb=None,
+                storage_used_gb=round(usage_map.get(t.id, 0.0), 2),
                 storage_quota_gb=_get_storage_quota(t),
                 create_time=t.create_time,
             ))
@@ -173,6 +178,8 @@ class TenantService:
     @classmethod
     async def aget_tenant(cls, tenant_id: int, login_user) -> dict:
         """Get tenant detail including admin users."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+
         with bypass_tenant_filter():
             tenant = await TenantDao.aget_by_id(tenant_id)
         if not tenant:
@@ -180,6 +187,7 @@ class TenantService:
 
         user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         admin_users = await cls._get_tenant_admin_users(tenant_id)
+        usage_map = await QuotaService.get_storage_used_gb_batch([tenant_id])
 
         from bisheng.tenant.domain.services.tenant_mount_service import (
             display_tenant_code,
@@ -191,7 +199,7 @@ class TenantService:
             logo=tenant.logo,
             status=tenant.status,
             user_count=user_count,
-            storage_used_gb=None,
+            storage_used_gb=round(usage_map.get(tenant_id, 0.0), 2),
             storage_quota_gb=_get_storage_quota(tenant),
             create_time=tenant.create_time,
             root_dept_id=tenant.root_dept_id,

@@ -462,6 +462,58 @@ class QuotaService:
         return int(round(g * (1024 ** 3)))
 
     @classmethod
+    async def get_tenant_storage_used_bytes(cls, tenant_id: Optional[int]) -> int:
+        """Tenant-level storage used in bytes (root aggregates children, leaf strict).
+
+        Shares the SQL template ``storage_gb`` with the quota interceptor so
+        listing UI and write-path checks stay in lock-step. No admin
+        short-circuit — super admin writes also count toward the target tenant.
+        """
+        if tenant_id is None:
+            return 0
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.database.models.tenant import TenantDao
+        with bypass_tenant_filter():
+            tenant = await TenantDao.aget_by_id(tenant_id)
+        if not tenant:
+            return 0
+        used_gb = (
+            await cls._aggregate_root_usage(tenant_id, 'storage_gb')
+            if tenant.parent_tenant_id is None
+            else await cls._count_usage_strict(tenant_id, 'storage_gb')
+        )
+        return int(round(float(used_gb) * (1024 ** 3)))
+
+    @classmethod
+    async def get_tenant_storage_remaining_bytes(
+        cls, tenant_id: Optional[int],
+    ) -> Optional[int]:
+        """Tenant-chain storage remaining in bytes for the write path.
+
+        Reuses ``_apply_tenant_chain_cap`` so that Root + leaf caps and the
+        ``storage_gb`` alias are honoured. Behaviour:
+
+        * Chain blocker (any node already exhausted) → raises
+          ``TenantStorageQuotaExceededError(19403)`` directly. Callers do not
+          need to re-check ``used >= limit``.
+        * Effective ``-1`` (no cap on the chain) → returns ``None``.
+        * Otherwise → returns remaining bytes (effective_gb × 1024³).
+
+        No admin short-circuit on purpose: tenant storage policy applies to
+        everyone, including global super admins writing into a child tenant.
+        """
+        if tenant_id is None:
+            return None
+        effective, blocker = await cls._apply_tenant_chain_cap(
+            -1, tenant_id, 'storage_gb',
+        )
+        if blocker is not None:
+            raise cls._make_storage_quota_error(blocker, 'storage_gb')
+        if effective == -1:
+            return None
+        return int(round(float(effective) * (1024 ** 3)))
+
+    @classmethod
     async def get_knowledge_space_upload_limit_bytes(cls, login_user) -> Optional[int]:
         """Total upload cap in bytes for knowledge-space files (role max × tenant chain).
 
@@ -590,11 +642,69 @@ class QuotaService:
         return root_self + sum(child_counts)
 
     @classmethod
+    async def get_storage_used_gb_batch(
+        cls, tenant_ids: list[int],
+    ) -> dict[int, float]:
+        """Batch tenant storage_gb usage for the tenant management UI.
+
+        Root rows aggregate self + Σ active children (INV-T9); leaf rows use
+        strict-equality count (INV-T6). Both paths share the SQL template
+        ``storage_gb`` (status IN (1,2)) so the displayed value matches what
+        the quota interceptor enforces on writes.
+
+        Returns ``{tid: gb_float}`` with 0.0 for tenants that have no usage.
+        Tenant ids that do not exist are omitted from the map.
+        """
+        if not tenant_ids:
+            return {}
+        from bisheng.database.models.tenant import TenantDao
+        tenants = await TenantDao.aget_by_ids(tenant_ids)
+        if not tenants:
+            return {}
+
+        async def _one(t) -> tuple[int, float]:
+            is_root = t.parent_tenant_id is None
+            used = (
+                await cls._aggregate_root_usage(t.id, 'storage_gb') if is_root
+                else await cls._count_usage_strict(t.id, 'storage_gb')
+            )
+            return t.id, float(used)
+
+        rows = await asyncio.gather(*(_one(t) for t in tenants))
+        return dict(rows)
+
+    # GB-valued quotas: -1 (unlimited) or 0.1~999 with at most 1 decimal place.
+    # ``storage_gb`` (tenant-level) and ``knowledge_space_file`` (role-level)
+    # share the same value shape so the management UI can use one input control.
+    _GB_FLOAT_QUOTA_KEYS = frozenset({'storage_gb', 'knowledge_space_file'})
+
+    @staticmethod
+    def _validate_gb_float_quota(key: str, value) -> None:
+        """GB float quota: -1 (unlimited) or 0.1~999 with at most 1 decimal."""
+        if value == -1:
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise QuotaConfigInvalidError(
+                msg=f'quota_config[{key}] must be -1 or a number, got {type(value).__name__}',
+            )
+        num = float(value)
+        r = round(num, 1)
+        if abs(r - num) > 1e-6:
+            raise QuotaConfigInvalidError(
+                msg=f'quota_config[{key}] allows at most one decimal place, got {value!r}',
+            )
+        if r < 0.1 or r > 999:
+            raise QuotaConfigInvalidError(
+                msg=f'quota_config[{key}] must be -1 or between 0.1 and 999 (GB), got {value}',
+            )
+
+    @classmethod
     def validate_quota_config(cls, quota_config: Optional[dict]) -> None:
         """Validate quota_config values (AC-10c).
 
         Valid keys: those in VALID_QUOTA_KEYS.
-        Valid values: -1 (unlimited), 0 (prohibited), positive integer.
+        Valid values: depend on key — GB-valued keys allow ``-1`` or 0.1~999
+        with one decimal place; the rest accept ``-1``, ``0``, or positive int.
         Raises QuotaConfigInvalidError on invalid keys or values.
         """
         if not quota_config:
@@ -612,23 +722,8 @@ class QuotaService:
                 raise QuotaConfigInvalidError(
                     msg=f'quota_config[{key}] must be boolean or 0/1, got {value!r}',
                 )
-            if key == 'knowledge_space_file':
-                if value == -1:
-                    continue
-                if isinstance(value, bool) or not isinstance(value, (int, float)):
-                    raise QuotaConfigInvalidError(
-                        msg=f'quota_config[{key}] must be -1 or a number, got {type(value).__name__}',
-                    )
-                num = float(value)
-                r = round(num, 1)
-                if abs(r - num) > 1e-6:
-                    raise QuotaConfigInvalidError(
-                        msg=f'quota_config[{key}] allows at most one decimal place, got {value!r}',
-                    )
-                if r < 0.1 or r > 999:
-                    raise QuotaConfigInvalidError(
-                        msg=f'quota_config[{key}] must be -1 or between 0.1 and 999 (GB), got {value}',
-                    )
+            if key in cls._GB_FLOAT_QUOTA_KEYS:
+                cls._validate_gb_float_quota(key, value)
                 continue
             if isinstance(value, bool) or not isinstance(value, int):
                 raise QuotaConfigInvalidError(

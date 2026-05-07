@@ -191,6 +191,18 @@ class TenantDao:
             return result.first()
 
     @classmethod
+    async def aget_by_ids(cls, tenant_ids: List[int]) -> List[Tenant]:
+        """Batch fetch tenants by ids. Empty input returns empty list."""
+        if not tenant_ids:
+            return []
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(Tenant).where(Tenant.id.in_(tenant_ids))
+                )
+                return list(result.all())
+
+    @classmethod
     def get_by_code(cls, tenant_code: str) -> Optional[Tenant]:
         with get_sync_db_session() as session:
             return session.exec(
