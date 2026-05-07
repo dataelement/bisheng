@@ -373,6 +373,7 @@ class TestValidateQuotaConfig:
         QuotaService.validate_quota_config({'knowledge_space_file': 0.1})
         QuotaService.validate_quota_config({'knowledge_space_file': 1.5})
         QuotaService.validate_quota_config({'knowledge_space_file': 999})
+        QuotaService.validate_quota_config({'knowledge_space_file': 99999})
         QuotaService.validate_quota_config({'knowledge_space_file': -1})
 
     def test_knowledge_space_file_invalid_range_or_precision(self):
@@ -384,18 +385,20 @@ class TestValidateQuotaConfig:
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'knowledge_space_file': 0.05})
         with pytest.raises(QuotaConfigInvalidError):
-            QuotaService.validate_quota_config({'knowledge_space_file': 1000})
+            QuotaService.validate_quota_config({'knowledge_space_file': 100000})
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'knowledge_space_file': 1.55})
 
     def test_storage_gb_one_decimal_accepted(self):
-        """storage_gb mirrors knowledge_space_file: -1 or 0.1~999 with 1 decimal."""
+        """storage_gb mirrors knowledge_space_file: -1 or 0.1~99999 with 1 decimal."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
         QuotaService.validate_quota_config({'storage_gb': 0.1})
         QuotaService.validate_quota_config({'storage_gb': 1.5})
         QuotaService.validate_quota_config({'storage_gb': 100})
         QuotaService.validate_quota_config({'storage_gb': 999})
+        QuotaService.validate_quota_config({'storage_gb': 1000})
+        QuotaService.validate_quota_config({'storage_gb': 99999})
         QuotaService.validate_quota_config({'storage_gb': -1})
 
     def test_storage_gb_invalid_range_or_precision(self):
@@ -408,9 +411,9 @@ class TestValidateQuotaConfig:
         # below 0.1 GB
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'storage_gb': 0.05})
-        # above 999 GB
+        # above 99999 GB
         with pytest.raises(QuotaConfigInvalidError):
-            QuotaService.validate_quota_config({'storage_gb': 1000})
+            QuotaService.validate_quota_config({'storage_gb': 100000})
         # more than 1 decimal place
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'storage_gb': 1.55})

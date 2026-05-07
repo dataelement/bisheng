@@ -13,7 +13,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-// GB float quota: -1 (unlimited), or 0.1 ~ 999 with at most 1 decimal place.
+// GB float quota: -1 (unlimited), or 0.1 ~ 99999 with at most 1 decimal place.
 // Mirrors the backend QuotaService._validate_gb_float_quota rules so the
 // dialog rejects bad input client-side before triggering a 24005 round-trip.
 function validateGbFloat(raw: string, t: (k: string) => string): string {
@@ -21,7 +21,7 @@ function validateGbFloat(raw: string, t: (k: string) => string): string {
   const num = Number(raw);
   if (!Number.isFinite(num)) return t("tenant.quotaInvalidNumber");
   if (num < 0.1) return t("tenant.quotaTooSmall");
-  if (num > 999) return t("tenant.quotaTooLarge");
+  if (num > 99999) return t("tenant.quotaTooLarge");
   // Reject more than one decimal place; tolerate floating-point noise (e.g. 1.1*10).
   if (Math.abs(Math.round(num * 10) - num * 10) > 1e-6) {
     return t("tenant.quotaPrecision");
@@ -127,7 +127,7 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
                       value={inputs[key] ?? ""}
                       onChange={(e) => handleChange(key, e.target.value)}
                       min={0.1}
-                      max={999}
+                      max={99999}
                       step={0.1}
                       placeholder={t("tenant.quotaPlaceholder")}
                     />

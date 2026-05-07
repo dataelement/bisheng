@@ -693,9 +693,9 @@ class QuotaService:
             raise QuotaConfigInvalidError(
                 msg=f'quota_config[{key}] allows at most one decimal place, got {value!r}',
             )
-        if r < 0.1 or r > 999:
+        if r < 0.1 or r > 99999:
             raise QuotaConfigInvalidError(
-                msg=f'quota_config[{key}] must be -1 or between 0.1 and 999 (GB), got {value}',
+                msg=f'quota_config[{key}] must be -1 or between 0.1 and 99999 (GB), got {value}',
             )
 
     @classmethod
