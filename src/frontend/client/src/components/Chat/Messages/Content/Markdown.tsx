@@ -903,10 +903,10 @@ const Markdown = memo(({
                       if (webContent?.[legacyIndex - 1]) {
                         nodes.push(
                           <Citation
-                            key={`legacy-${matchIndex}`}
+                            key={`legacy-${legacyIndexValue}-${matchIndex}`}
                             webContent={webContent}
                             loadCitationDetail={loadCitationDetail}
-                            popoverKey={`legacy-${matchIndex}`}
+                            popoverKey={`legacy-${legacyIndexValue}-${matchIndex}`}
                             activePopoverKey={activeCitationPopoverKey}
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}
@@ -941,11 +941,11 @@ const Markdown = memo(({
                         if (citationData) {
                           nodes.push(
                             <Citation
-                              key={`rag-legacy-${matchIndex}`}
+                              key={`rag-legacy-${citationData.ref}-${matchIndex}`}
                               data={citationData}
                               initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
                               loadCitationDetail={loadCitationDetail}
-                              popoverKey={`rag-legacy-${matchIndex}`}
+                              popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}`}
                               activePopoverKey={activeCitationPopoverKey}
                               onActivePopoverKeyChange={setActiveCitationPopoverKey}
                               onClosePopover={handleCloseCitationPopover}
@@ -962,11 +962,11 @@ const Markdown = memo(({
                       if (citationData) {
                         nodes.push(
                           <Citation
-                            key={`private-${matchIndex}`}
+                            key={`private-${privateRef}-${matchIndex}`}
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
                             loadCitationDetail={loadCitationDetail}
-                            popoverKey={`private-${matchIndex}`}
+                            popoverKey={`private-${privateRef}-${matchIndex}`}
                             activePopoverKey={activeCitationPopoverKey}
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}

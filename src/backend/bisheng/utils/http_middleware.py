@@ -33,6 +33,10 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # v2.5.1 F015: HMAC-signed relink + resolve-conflict endpoints.
     '/api/v1/internal/departments/relink',
     '/api/v1/internal/departments/relink/resolve-conflict',
+    # Share-link reads are anonymous by design (recipients open the URL
+    # without logging in). The token itself authorizes access; downstream
+    # DAOs must run under bypass since the recipient has no tenant context.
+    '/api/v1/share-link',
     '/health',
     '/docs',
     '/openapi.json',
