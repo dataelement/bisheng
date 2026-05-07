@@ -693,13 +693,23 @@ class TenantService:
 
     @classmethod
     async def _get_tenant_admin_users(cls, tenant_id: int) -> List[dict]:
-        """Get admin users for a tenant by checking each user's admin relation."""
+        """Get admin users for a tenant via a single FGA batch_check.
+
+        Sequential per-user PermissionService.check (the pre-fix shape)
+        hung the edit-tenant dialog on Root: each check went through the
+        full permission pipeline (~2.5–3s) and 100 UserTenant rows pushed
+        the response past the 120s frontend timeout. batch_check folds
+        them into one FGA round-trip while preserving the semantic — the
+        authorization model still resolves super_admin → admin, so Root
+        super_admins continue to surface as Root admins.
+        """
         users, _ = await UserTenantDao.aget_tenant_users(tenant_id, page=1, page_size=100)
-        admin_users = []
-        for user in users:
-            if await cls._is_tenant_admin(user['user_id'], tenant_id):
-                admin_users.append(user)
-        return admin_users
+        if not users:
+            return []
+        flags = await cls._batch_check_tenant_admin(
+            [u['user_id'] for u in users], tenant_id,
+        )
+        return [u for u, ok in zip(users, flags) if ok]
 
     @classmethod
     async def _is_tenant_admin(cls, user_id: int, tenant_id: int) -> bool:
@@ -714,17 +724,58 @@ class TenantService:
             return False
 
     @classmethod
-    async def _count_tenant_admins(cls, tenant_id: int) -> int:
-        """Count admins by checking each tenant user's admin relation.
+    async def _batch_check_tenant_admin(
+        cls, user_ids: List[int], tenant_id: int,
+    ) -> List[bool]:
+        """Resolve admin flags for ``user_ids`` on ``tenant_id`` in one FGA call.
 
-        Falls back to counting all users when FGA is unavailable (fail-open),
-        which blocks removal since count will be >= 1.
+        Returns a list aligned with ``user_ids``. On any failure (FGA
+        unavailable, batch_check error) returns all-False so callers can
+        apply their own fail-closed policy.
+        """
+        if not user_ids:
+            return []
+        try:
+            from bisheng.core.openfga.manager import (
+                aget_fga_client,
+                get_fga_client,
+            )
+
+            fga = await aget_fga_client()
+            if fga is None:
+                fga = get_fga_client()
+            if fga is None:
+                return [False] * len(user_ids)
+            checks = [
+                {
+                    'user': f'user:{uid}',
+                    'relation': 'admin',
+                    'object': f'tenant:{tenant_id}',
+                }
+                for uid in user_ids
+            ]
+            return await fga.batch_check(checks)
+        except Exception as e:
+            logger.warning(
+                'batch_check tenant admins failed (tenant_id=%s): %s',
+                tenant_id, e,
+            )
+            return [False] * len(user_ids)
+
+    @classmethod
+    async def _count_tenant_admins(cls, tenant_id: int) -> int:
+        """Count admins via a single FGA batch_check.
+
+        Falls back to counting all users when FGA is unavailable (fail-closed
+        against last-admin removal: count will be >= 1).
         """
         users, _ = await UserTenantDao.aget_tenant_users(
             tenant_id, page=1, page_size=100,
         )
-        count = 0
-        for user in users:
-            if await cls._is_tenant_admin(user['user_id'], tenant_id):
-                count += 1
+        if not users:
+            return 0
+        flags = await cls._batch_check_tenant_admin(
+            [u['user_id'] for u in users], tenant_id,
+        )
+        count = sum(1 for f in flags if f)
         return count if count > 0 else len(users)  # Fail-closed: if no FGA, assume all are admins
