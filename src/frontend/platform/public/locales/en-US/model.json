@@ -96,7 +96,13 @@
     "gpuUtilization": "GPU Utilization",
     "notBeEmpty": "cannot be empty",
     "voiceType": "Voice Type",
-    "voiceTypeRequired": "Voice type is required"
+    "voiceTypeRequired": "Voice type is required",
+    "systemConfigTenantBanner": "Configuring tenant \"{{tenantName}}\". Unconfigured items inherit from Root (when Root sharing is on).",
+    "systemConfigRootBanner": "Configuring Root (global default). Unconfigured child tenants inherit this configuration.",
+    "systemConfigRootReadOnlyBanner": "Root config · read-only. Switch to your tenant view to configure your own defaults.",
+    "systemConfigInheritedBadge": "Inherited from Root",
+    "systemConfigFallbackBlockedBanner": "Root sharing is off. Ask the super admin to enable sharing or configure this tenant directly.",
+    "systemConfigForbiddenWriteRoot": "Forbidden: cannot modify Root default configuration."
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",
@@ -152,12 +158,6 @@
     "confirmDeletePublishedModel": "Model is published. Confirm to delete {{name}}?",
     "confirmStopTraining": "Confirm to stop training?",
     "evaluationReport": "Evaluation Report",
-    "trainingLogs": "Training Logs",
-    "systemConfigTenantBanner": "Configuring tenant \"{{tenantName}}\". Unconfigured items inherit from Root (when Root sharing is on).",
-    "systemConfigRootBanner": "Configuring Root (global default). Unconfigured child tenants inherit this configuration.",
-    "systemConfigRootReadOnlyBanner": "Root config · read-only. Switch to your tenant view to configure your own defaults.",
-    "systemConfigInheritedBadge": "Inherited from Root",
-    "systemConfigFallbackBlockedBanner": "Root sharing is off. Ask the super admin to enable sharing or configure this tenant directly.",
-    "systemConfigForbiddenWriteRoot": "Forbidden: cannot modify Root default configuration."
+    "trainingLogs": "Training Logs"
   }
 }
