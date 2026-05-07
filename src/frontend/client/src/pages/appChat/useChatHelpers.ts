@@ -271,7 +271,9 @@ export default function useChatHelpers() {
                         const updatedMessages = [...messages]
                         updatedMessages[currentMessageIndex] = {
                             ...currentMsg,
-                            id: data.type === "end" ? data.message_id : currentMsg.id,
+                            // On end, prefer the real DB message_id; if the backend omits it,
+                            // fall back to the existing temp id rather than wiping it to undefined.
+                            id: data.type === "end" ? (data.message_id || currentMsg.id) : currentMsg.id,
                             message: data.type === "end" ? data.message.msg : currentMsg.message + data.message.msg,
                             reasoning_log: reasoning_content
                                 ? currentMsg.reasoning_log + reasoning_content

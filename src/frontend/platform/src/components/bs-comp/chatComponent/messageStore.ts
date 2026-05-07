@@ -243,10 +243,15 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             })
             cover = false
         }
+        // wsdata.messageId only carries the real DB id on the end branch (set by
+        // the ChatInput end handler). When present it MUST overwrite any temp id
+        // assigned during streaming — otherwise like/telemetry calls keep using
+        // the temp id and the backend silently drops the audit record.
+        const realMessageId = !isRunLog && wsdata.messageId
         const newCurrentMessage = {
             ...currentMessage,
             ...wsdata,
-            id: currentMessage.id || (isRunLog ? wsdata.extra : wsdata.messageId), // 每条消息必唯一
+            id: realMessageId || currentMessage.id || (isRunLog ? wsdata.extra : undefined),
             message,
             reasoning_log,
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
@@ -255,10 +260,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             source: wsdata.source,
             citations: normalizeCitationItems(wsdata) || currentMessage.citations || null
         }
-        // 无id补上（如文件解析完成消息，后端无返回messageid）
+        // Fallback: assign a recognisable temp id so React keys stay unique while
+        // streaming, without polluting downstream calls that need a real DB id.
         if (!newCurrentMessage.id) {
-            newCurrentMessage.id = Math.random() * 1000000
-            // console.log('msg:', newCurrentMessage);
+            newCurrentMessage.id = 'tmp-' + Math.random().toString(36).slice(2, 10)
         }
 
         messages[currentMessageIndex] = newCurrentMessage
