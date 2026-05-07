@@ -308,6 +308,25 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }
 
         }
+        // Safety net: when the backend emits a real DB message_id (typically on
+        // end / end_cover for `answer`), force-stamp it onto the latest non-runLog
+        // bot message that still carries a temp id. This guards against the
+        // cover/pop branches above swallowing the id.
+        const dbId = wsdata?.messageId
+        if (dbId && !isRunLog) {
+            for (let i = messages.length - 1; i >= 0; i--) {
+                const m = messages[i]
+                if (m?.isSend) break
+                if (runLogsTypes.includes(m.category)) continue
+                const idStr = String(m.id ?? '')
+                const idMissingOrTemp =
+                    !m.id || idStr.startsWith('tmp-') || idStr.startsWith('u-')
+                if (idMissingOrTemp) {
+                    m.id = dbId
+                }
+                break
+            }
+        }
         set((state) => ({ messages: [...messages] }))
     },
     changeChatId(chatId) {
