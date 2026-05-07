@@ -74,12 +74,18 @@ class WSModel(BaseModel):
     id: str
     name: Optional[str] = None
     displayName: Optional[str] = None
+    visual: Optional[bool] = False
 
 
 class WorkbenchModelConfig(BaseModel):
     """
     Inspiration Model Configuration
     """
+    # Daily-chat selectable model list. Migrated from WorkstationConfig.models.
+    models: Optional[List[WSModel]] = Field(
+        default=None,
+        description='Daily-chat selectable model list',
+    )
     # Task execution model
     task_model: Optional[WSModel] = Field(default=None, description='Task execution model')
     # RetrieveembeddingModels

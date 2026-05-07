@@ -656,7 +656,7 @@ class LLMService:
                 await cls.set_default_model(one)
             # The new model, or the model name or type has changed
             if (one.id not in old_model_dict or old_model_dict[one.id].model_name != one.model_name
-                    or old_model_dict[one.id].model_type != one.model_type):
+                or old_model_dict[one.id].model_type != one.model_type):
                 await cls.test_model_status(one, login_user)
         return new_server_info
 
@@ -1059,8 +1059,8 @@ class LLMService:
         if config_obj.embedding_model:
             # Determine consistency
             if (config_obj.embedding_model.id and config_old_obj.embedding_model is None or
-                    config_obj.embedding_model.id != (config_old_obj.embedding_model.id
-                                                      if config_old_obj.embedding_model else None)):
+                config_obj.embedding_model.id != (config_old_obj.embedding_model.id
+                if config_old_obj.embedding_model else None)):
                 embeddings = await cls.get_bisheng_embedding(model_id=config_obj.embedding_model.id,
                                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
                                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
