@@ -97,9 +97,8 @@
     "freeMemory": "空きメモリ",
     "gpuUtilization": "GPU利用率",
     "notBeEmpty": "空にできません",
-    "systemConfigTenantBanner": "テナント「{{tenantName}}」を設定中。未設定項目は（共有が有効な場合）Root から継承されます。",
-    "systemConfigRootBanner": "Root（グローバルデフォルト）を設定中。設定していない子テナントはこの設定を継承します。",
-    "systemConfigRootReadOnlyBanner": "Root 設定 · 読み取り専用。自テナント表示に切り替えて独自のデフォルトを設定してください。",
+    "systemConfigCurrentTenant": "{{tenantName}} を設定中",
+    "systemConfigReadOnlySuffix": "（読み取り専用）",
     "systemConfigInheritedBadge": "Root から継承",
     "systemConfigFallbackBlockedBanner": "Root 共有が無効です。スーパー管理者に共有を有効化してもらうか、このテナントで個別に設定してください。",
     "systemConfigForbiddenWriteRoot": "権限不足：Root デフォルト設定は変更できません。"

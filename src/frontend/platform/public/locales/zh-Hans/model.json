@@ -97,9 +97,8 @@
     "freeMemory": "空余显存",
     "gpuUtilization": "GPU利用率",
     "notBeEmpty": "不能为空",
-    "systemConfigTenantBanner": "正在配置租户「{{tenantName}}」。未配置项将从 Root 继承（若 Root 开启共享）。",
-    "systemConfigRootBanner": "正在配置 Root（全局默认）。所有未自主配置的子租户将继承此项。",
-    "systemConfigRootReadOnlyBanner": "Root 共享 · 只读。请切换到本租户视图以配置自有默认。",
+    "systemConfigCurrentTenant": "正在配置 {{tenantName}}",
+    "systemConfigReadOnlySuffix": "（只读）",
     "systemConfigInheritedBadge": "继承自 Root",
     "systemConfigFallbackBlockedBanner": "Root 已关闭共享。请联系超管开启共享或在此为本租户独立配置。",
     "systemConfigForbiddenWriteRoot": "权限不足：无法修改 Root 默认配置。"
