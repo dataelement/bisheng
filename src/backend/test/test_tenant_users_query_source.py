@@ -51,6 +51,7 @@ class _TestUser(SQLModel, table=True):
 
     user_id: Optional[int] = Field(default=None, primary_key=True)
     user_name: Optional[str] = Field(default=None, sa_column=Column(String(255)))
+    external_id: Optional[str] = Field(default=None, sa_column=Column(String(128)))
     avatar: Optional[str] = Field(default=None, sa_column=Column(String(512)))
     password: str = Field(default='hashed', sa_column=Column(String(255), nullable=False))
 
@@ -125,6 +126,7 @@ _DDL = [
     CREATE TABLE IF NOT EXISTS user (
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_name VARCHAR(255) UNIQUE,
+        external_id VARCHAR(128),
         password VARCHAR(255) NOT NULL DEFAULT 'hashed',
         avatar VARCHAR(512),
         "delete" INTEGER DEFAULT 0,

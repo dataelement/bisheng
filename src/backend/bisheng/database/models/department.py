@@ -1421,6 +1421,7 @@ class UserDepartmentDao:
                 select(
                     User.user_id,
                     User.user_name,
+                    User.external_id,
                     User.avatar,
                     UserTenant.last_access_time.label('join_time'),
                 )
@@ -1449,6 +1450,7 @@ class UserDepartmentDao:
                 {
                     'user_id': row.user_id,
                     'user_name': row.user_name,
+                    'external_id': row.external_id,
                     'avatar': row.avatar,
                     'join_time': row.join_time,
                 }
