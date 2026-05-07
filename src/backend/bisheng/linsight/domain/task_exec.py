@@ -3,6 +3,7 @@ import os
 import shutil
 import traceback
 from contextlib import asynccontextmanager
+from contextvars import Token
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
 
@@ -14,6 +15,7 @@ from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImp
 from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
+from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -108,7 +110,9 @@ class LinsightWorkflowTask:
         self.session_version_id = session_version_id
         trace_id_var.set(self.session_version_id)
         logger.info(f"Start the task: session_version_id={self.session_version_id}")
+        tenant_context_token: Optional[Token] = None
         try:
+            tenant_context_token = await self._restore_tenant_context(session_version_id)
 
             async with self._managed_execution() as session_model:
                 await self._execute_workflow(session_model)
@@ -123,6 +127,26 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.error(f"Unknown error: session_version_id={self.session_version_id}, error={e}")
             await self._handle_execution_error(e)
+        finally:
+            if tenant_context_token is not None:
+                current_tenant_id.reset(tenant_context_token)
+
+    async def _restore_tenant_context(self, session_version_id: str) -> Token:
+        """Restore tenant ContextVar for standalone Linsight worker tasks."""
+        try:
+            with bypass_tenant_filter():
+                session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+        except Exception as e:
+            raise TaskExecutionError(f"Failed to restore tenant context: {e}") from e
+
+        if not session_model:
+            raise TaskExecutionError(f"Session version not found: {session_version_id}")
+
+        tenant_id = session_model.tenant_id
+        if tenant_id is None:
+            raise TaskExecutionError(f"Session version {session_version_id} is missing tenant_id")
+
+        return set_current_tenant_id(int(tenant_id))
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """Execute the core logic of the workflow"""
