@@ -161,7 +161,7 @@ async def get_all_llm(
 
 @router.post('')
 async def add_llm_server(request: Request,
-                         login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+                         login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                          server: LLMServerCreateReq = Body(..., description="Service Provider All Data")):
     ret = await LLMService.add_llm_server(request, login_user, server)
     return resp_200(data=ret)
@@ -169,7 +169,7 @@ async def add_llm_server(request: Request,
 
 @router.delete('')
 async def delete_llm_server(request: Request,
-                            login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+                            login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                             server_id: int = Body(..., embed=True, description="Service Provider UniqueID")):
     await LLMService.delete_llm_server(request, login_user, server_id)
     return resp_200()
@@ -177,7 +177,7 @@ async def delete_llm_server(request: Request,
 
 @router.put('')
 async def update_llm_server(request: Request,
-                            login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+                            login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                             server: LLMServerCreateReq = Body(..., description="Service Provider All Data")):
     ret = await LLMService.update_llm_server(request, login_user, server)
     return resp_200(data=ret)
@@ -185,7 +185,7 @@ async def update_llm_server(request: Request,
 
 @router.get('/info')
 async def get_one_llm(request: Request,
-                      login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+                      login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                       server_id: int = Query(..., description="Service Provider UniqueID")):
     ret = await LLMService.get_one_llm(server_id, operator=login_user)
     return resp_200(data=ret)
@@ -193,7 +193,7 @@ async def get_one_llm(request: Request,
 
 @router.post('/online')
 async def update_model_online(request: Request,
-                              login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+                              login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                               model_id: int = Body(..., embed=True, description="Model UniqueID"),
                               online: bool = Body(..., embed=True, description="Online or not")):
     ret = await LLMService.update_model_online(model_id, online)
@@ -216,7 +216,7 @@ async def get_workbench_llm(
 @router.post('/workbench', summary="Update workbench related model configurations", response_model=UnifiedResponseModel)
 async def update_workbench_llm(
         background_tasks: BackgroundTasks,
-        login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
         config_obj: WorkbenchModelConfig = Body(..., description="Model Configuration Object")):
     """Update Idea-Related Model Configurations."""
     target = _resolve_write_target(login_user)
@@ -259,7 +259,7 @@ async def get_knowledge_llm(
 @router.post('/knowledge')
 async def update_knowledge_llm(
         request: Request,
-        login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
         data: KnowledgeLLMConfig = Body(..., description="Knowledge Base Default Model Configuration")):
     """ Update default model configuration for knowledge base """
     target = _resolve_write_target(login_user)
@@ -285,7 +285,7 @@ async def get_assistant_llm(
 @router.post('/assistant')
 async def update_assistant_llm(
         request: Request,
-        login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
         data: AssistantLLMConfig = Body(..., description="Assistant Default Model Configuration")):
     """ Update assistant related model configurations """
     target = _resolve_write_target(login_user)
@@ -311,7 +311,7 @@ async def get_evaluation_llm(
 @router.post('/evaluation')
 async def update_evaluation_llm(
         request: Request,
-        login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
         data: EvaluationLLMConfig = Body(..., description="Evaluate default model configuration")):
     """ Update review related model configurations """
     target = _resolve_write_target(login_user)
@@ -337,7 +337,7 @@ async def get_workflow_llm(
 @router.post('/workflow')
 async def update_workflow_llm(
         request: Request,
-        login_user: UserPayload = Depends(UserPayload.get_model_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
         data: EvaluationLLMConfig = Body(..., description="Workflow default model configuration")):
     """ Update workflow-related model configurations """
     target = _resolve_write_target(login_user)
