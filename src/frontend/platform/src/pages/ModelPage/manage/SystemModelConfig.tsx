@@ -20,17 +20,20 @@ const ROOT_TENANT_ID = 1;
 export default function SystemModelConfig({ data, defaultTab, onBack }: { data: any; defaultTab?: string; onBack: () => void }) {
     const { t } = useTranslation('model')
     const { user } = useContext(userContext) as any
+    const isGlobalSuper = isGlobalSuperUser(user)
     // useAdminScope's GET /admin/tenant-scope returns HTTP 403 + 19701 for
-    // non-super callers (INV-T14). Only enable the fetch for the global
-    // super admin; Child Admins keep the empty default scope, which the
-    // ScopeBanner / childTenant memo below handle correctly.
-    const { scope } = useAdminScope({ enabled: isGlobalSuperUser(user) })
+    // non-super callers (INV-T14). GET /tenants is also super-only
+    // (get_admin_user). Both are only needed by ScopeBanner / childTenant
+    // when a super admin switches management view; Child Admins never see
+    // a scope switcher and only ever look at their own tenant. Gate both
+    // calls so Child Admins do not trip the request.ts 403→/403 redirect.
+    const { scope } = useAdminScope({ enabled: isGlobalSuper })
     const [tenants, setTenants] = useState<Tenant[]>([])
 
-    // Refetch tenants once on mount; ScopeBar already does the same fetch
-    // independently — caching across components would require a shared
-    // react-query key, an OK trade-off for this dialog's small footprint.
     useEffect(() => {
+        if (!isGlobalSuper) {
+            return
+        }
         let cancelled = false
         getTenantsApi({ page: 1, page_size: 100, status: 'active' })
             .then((res) => {
@@ -40,7 +43,7 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
                 if (!cancelled) setTenants([])
             })
         return () => { cancelled = true }
-    }, [])
+    }, [isGlobalSuper])
 
     const rootTenant = useMemo(
         () => tenants.find((row) => row.id === ROOT_TENANT_ID) || null,
@@ -50,8 +53,6 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
         if (scope.scope_tenant_id === null || scope.scope_tenant_id === ROOT_TENANT_ID) return null
         return tenants.find((row) => row.id === scope.scope_tenant_id) || null
     }, [scope.scope_tenant_id, tenants])
-
-    const isGlobalSuper = isGlobalSuperUser(user)
 
     const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
         let llmOptions = []
