@@ -1356,6 +1356,7 @@
     "upload_browser_hint": "このクライアントには時間制限がある可能性があります。ブラウザからアップロードしてみてください。",
     "file_size": "ファイルサイズ",
     "file_upload_failed": "ファイル {{0}} のアップロードに失敗しました",
+    "file_upload_failed_with_reason": "ファイル {{0}} のアップロードに失敗しました：{{1}}",
     "folder": "フォルダ",
     "folder_name_empty": "フォルダー名を入力してください",
     "format_list": "pdf（スキャンを含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、dps、et",
