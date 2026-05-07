@@ -59,6 +59,8 @@ export function AiAssistantPanel({
     const isFileChatMode = !!fileChat;
     const isChannelMode = !isFileChatMode && !!articleDocId;
     const isSimpleMode = isFileChatMode || isChannelMode;
+    const allowModelSelect = !isFileChatMode;
+    const allowAdvancedSelectors = !isSimpleMode;
 
     // All three hooks always called (React hooks rules); only the active one runs
     const workstationChat = useAiChat(isSimpleMode ? "new" : conversationId);
@@ -203,28 +205,28 @@ export function AiAssistantPanel({
                 <AiChatInput
                     size="mini"
                     features={features}
-                    disabled={isSimpleMode ? false : !bsConfig?.models?.length}
+                    disabled={allowModelSelect ? !bsConfig?.models?.length : false}
                     placeholder={localize("com_subscription.input_question_placeholder")}
                     isStreaming={isStreaming}
                     onScrollToBottom={() => { }}
-                    modelOptions={isSimpleMode ? undefined : bsConfig?.models}
-                    modelValue={isSimpleMode ? undefined : chatModel.id}
-                    onModelChange={isSimpleMode ? undefined : (val) => {
+                    modelOptions={allowModelSelect ? bsConfig?.models : undefined}
+                    modelValue={allowModelSelect ? chatModel.id : undefined}
+                    onModelChange={allowModelSelect ? (val) => {
                         const model = bsConfig?.models?.find((m) => m.id === val);
                         setChatModel({
                             id: Number(val),
                             name: model?.displayName || "",
                         });
-                    }}
+                    } : undefined}
                     onSend={handleSend}
                     onStop={stopGenerating}
                     value={inputText}
                     onChange={setInputText}
-                    bsConfig={isSimpleMode ? undefined : bsConfig}
-                    selectedOrgKbs={isSimpleMode ? [] : selectedOrgKbs}
-                    onSelectedOrgKbsChange={isSimpleMode ? undefined : setSelectedOrgKbs}
-                    searchType={isSimpleMode ? undefined : searchType}
-                    onSearchTypeChange={isSimpleMode ? undefined : setSearchType}
+                    bsConfig={allowAdvancedSelectors ? bsConfig : undefined}
+                    selectedOrgKbs={allowAdvancedSelectors ? selectedOrgKbs : []}
+                    onSelectedOrgKbsChange={allowAdvancedSelectors ? setSelectedOrgKbs : undefined}
+                    searchType={allowAdvancedSelectors ? searchType : undefined}
+                    onSearchTypeChange={allowAdvancedSelectors ? setSearchType : undefined}
                 />
             </div>
         </div>
