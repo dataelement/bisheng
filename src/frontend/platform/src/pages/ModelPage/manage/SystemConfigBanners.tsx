@@ -24,10 +24,10 @@ export interface ScopeBannerProps {
 }
 
 /**
- * Top-of-dialog banner showing whose configuration is being edited.
- * Single message format ("正在配置 {tenantName}"); a "(read-only)"
- * suffix appears when a non-super user is viewing the Root scope (the
- * scope they have no permission to edit).
+ * Top-of-dialog banner explaining who the configuration is being applied to.
+ * Renders one of three messages, all parameterized on the tenant's display
+ * name (so deployments where Root is named e.g. "默认租户" don't show a
+ * hard-coded "Root").
  */
 export function ScopeBanner({
     isGlobalSuper,
@@ -37,26 +37,30 @@ export function ScopeBanner({
 }: ScopeBannerProps): JSX.Element | null {
     const { t } = useTranslation('model');
     const isRootScope = scopeTenantId === null || scopeTenantId === ROOT_TENANT_ID;
+    // Resolve the display name for whichever tenant the banner is about.
+    // The fallback chain (name → code → "Root") avoids a blank substitution
+    // on the rare deployments where the Root tenant has no display name set.
+    const rootName = rootTenant?.tenant_name || rootTenant?.tenant_code || 'Root';
 
-    const tenantName = isRootScope
-        ? (rootTenant?.tenant_name || rootTenant?.tenant_code || 'Root')
-        : (childTenant?.tenant_name || childTenant?.tenant_code || '');
-
-    // Skip rendering until we have a name to show — avoids a brief flash of
-    // an empty banner while the tenant list is loading.
-    if (!tenantName) return null;
-
-    const isReadOnly = !isGlobalSuper && isRootScope;
-    const tone = isReadOnly
-        ? "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
-        : isRootScope
-            ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100"
-            : "bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100";
-
+    if (isGlobalSuper && isRootScope) {
+        return (
+            <div className="mb-4 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-sm text-blue-900 dark:text-blue-100">
+                {t('model.systemConfigRootBanner', { tenantName: rootName })}
+            </div>
+        );
+    }
+    if (!isRootScope) {
+        const tenantName = childTenant?.tenant_name || childTenant?.tenant_code || '';
+        return (
+            <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
+                {t('model.systemConfigTenantBanner', { tenantName, rootName })}
+            </div>
+        );
+    }
+    // !isGlobalSuper && isRootScope: Child user viewing Root — read-only.
     return (
-        <div className={`mb-4 p-3 rounded-md border text-sm ${tone}`}>
-            {t('model.systemConfigCurrentTenant', { tenantName })}
-            {isReadOnly && t('model.systemConfigReadOnlySuffix')}
+        <div className="mb-4 p-3 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
+            {t('model.systemConfigRootReadOnlyBanner', { tenantName: rootName })}
         </div>
     );
 }
