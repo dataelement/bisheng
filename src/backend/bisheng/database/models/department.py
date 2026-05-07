@@ -1396,6 +1396,149 @@ class UserDepartmentDao:
                 for row in rows
             ], total
 
+    # -----------------------------------------------------------------------
+    # F024 phase-2 follow-up: tenant user_count must use the same "primary
+    # dept in tenant subtree" source as the user list, so the management UI
+    # never shows a non-zero count whose detail dialog is empty (phantom
+    # UserTenant residues from v2.5.0 ``aadd_users``). Replaces
+    # ``TenantDao.acount_tenant_users``/``..._batch`` for display purposes.
+    # -----------------------------------------------------------------------
+    @classmethod
+    async def _aresolve_subtree_root_paths(
+        cls, session, tenant_ids: List[int],
+    ) -> dict:
+        """Resolve ``tenant_id -> Department.path`` for the given tenants.
+
+        Tenants without ``root_dept_id`` (legacy v2.5.0 / early v2.5.1) are
+        omitted from the result so callers can fall back to the flat-model
+        ``Department.tenant_id == tenant_id`` semantic.
+        """
+        from bisheng.database.models.tenant import Tenant
+        if not tenant_ids:
+            return {}
+        rows = (
+            await session.exec(
+                select(Tenant.id, Tenant.root_dept_id).where(
+                    Tenant.id.in_(tenant_ids),
+                )
+            )
+        ).all()
+        root_dept_to_tenant: dict = {}
+        for row in rows:
+            tid = row[0] if isinstance(row, (list, tuple)) else row.id
+            rdid = (
+                row[1] if isinstance(row, (list, tuple))
+                else row.root_dept_id
+            )
+            if rdid is not None:
+                root_dept_to_tenant.setdefault(rdid, []).append(tid)
+        if not root_dept_to_tenant:
+            return {}
+        path_rows = (
+            await session.exec(
+                select(Department.id, Department.path).where(
+                    Department.id.in_(list(root_dept_to_tenant.keys())),
+                )
+            )
+        ).all()
+        result: dict = {}
+        for row in path_rows:
+            dept_id = row[0] if isinstance(row, (list, tuple)) else row.id
+            path = row[1] if isinstance(row, (list, tuple)) else row.path
+            for tid in root_dept_to_tenant.get(dept_id, []):
+                if path:
+                    result[tid] = path
+        return result
+
+    @classmethod
+    async def acount_users_by_tenant_subtree(cls, tenant_id: int) -> int:
+        """Count users whose primary department is mounted under the tenant.
+
+        Companion of ``aget_users_by_tenant_subtree``. Use this when only
+        the count is needed (tenant list / detail / quota usage), so the
+        UI count column matches the dialog list source exactly.
+        """
+        from bisheng.user.domain.models.user import User
+
+        async with get_async_db_session() as session:
+            paths = await cls._aresolve_subtree_root_paths(
+                session, [tenant_id],
+            )
+            root_path = paths.get(tenant_id)
+            if root_path:
+                subtree_filter = Department.path.like(f'{root_path}%')
+            else:
+                subtree_filter = Department.tenant_id == tenant_id
+            stmt = (
+                select(func.count(func.distinct(User.user_id)))
+                .select_from(User)
+                .join(
+                    UserDepartment,
+                    UserDepartment.user_id == User.user_id,
+                )
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+            )
+            total = (await session.exec(stmt)).one()
+            if isinstance(total, tuple):
+                total = total[0]
+            return int(total or 0)
+
+    @classmethod
+    async def acount_users_by_tenant_subtree_batch(
+        cls, tenant_ids: List[int],
+    ) -> dict:
+        """Batch counterpart of ``acount_users_by_tenant_subtree``.
+
+        Returns ``{tenant_id: count}``. Tenants with zero matches are
+        omitted (callers default missing entries to 0). The query opens a
+        single session, resolves all ``root_path`` prefixes up front, then
+        issues one aggregate query per tenant — N is bounded by the
+        list page size (≤100), so per-tenant round-trips are acceptable
+        and avoid string-SQL UNION fan-out.
+        """
+        from bisheng.user.domain.models.user import User
+
+        if not tenant_ids:
+            return {}
+        async with get_async_db_session() as session:
+            paths = await cls._aresolve_subtree_root_paths(session, tenant_ids)
+            counts: dict = {}
+            for tid in tenant_ids:
+                root_path = paths.get(tid)
+                if root_path:
+                    subtree_filter = Department.path.like(f'{root_path}%')
+                else:
+                    subtree_filter = Department.tenant_id == tid
+                stmt = (
+                    select(func.count(func.distinct(User.user_id)))
+                    .select_from(User)
+                    .join(
+                        UserDepartment,
+                        UserDepartment.user_id == User.user_id,
+                    )
+                    .join(
+                        Department,
+                        Department.id == UserDepartment.department_id,
+                    )
+                    .where(
+                        UserDepartment.is_primary == 1,
+                        subtree_filter,
+                    )
+                )
+                total = (await session.exec(stmt)).one()
+                if isinstance(total, tuple):
+                    total = total[0]
+                if total:
+                    counts[tid] = int(total)
+            return counts
+
 
 # Register ``department_admin_grant`` on SQLModel metadata for migrations / create_all.
 import bisheng.database.models.department_admin_grant  # noqa: F401, E402
