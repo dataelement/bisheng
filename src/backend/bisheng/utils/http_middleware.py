@@ -287,43 +287,59 @@ class CustomMiddleware(BaseHTTPMiddleware):
 
         req_path = request.url.path
         is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
-        if token and not is_exempt:
-            denial = await _apply_token_version_and_visible(
-                request, token, decoded_subject=decoded_subject,
-            )
-            if denial is not None:
-                return denial
 
-        # Tenant status checks (F010)
-        if not is_exempt and token:
-            # tenant_id=0 means pending tenant selection — block non-exempt paths
-            if tenant_id == 0:
-                return JSONResponse(
-                    status_code=403,
-                    content={'status_code': 20004, 'status_message': 'Missing tenant context', 'data': None},
+        # Exempt paths run before tenant context is established (login,
+        # register, SSO/LDAP callbacks, captcha, env, internal sync hooks).
+        # hotfix-3 made ~30 additional tables tenant-aware, and any DAO
+        # query touching them on these paths trips NoTenantContextError.
+        # Threading ``bypass_tenant_filter()`` through every handler chain
+        # is brittle (撞一次修一次); flip the contextvar once here so the
+        # whole exempt-path call tree runs under bypass. Non-exempt paths
+        # keep strict tenant filtering.
+        from bisheng.core.context.tenant import _bypass_tenant_filter
+        bypass_token = _bypass_tenant_filter.set(True) if is_exempt else None
+
+        try:
+            if token and not is_exempt:
+                denial = await _apply_token_version_and_visible(
+                    request, token, decoded_subject=decoded_subject,
                 )
-            # Check if tenant is disabled via Redis blacklist
-            if tenant_id and tenant_id > 0:
-                try:
-                    from bisheng.core.cache.redis_manager import get_redis_client
-                    redis_client = await get_redis_client()
-                    from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
-                    if await redis_client.aget(DISABLED_TENANT_KEY.format(tenant_id)):
-                        return JSONResponse(
-                            status_code=403,
-                            content={'status_code': 20001, 'status_message': 'Tenant is disabled', 'data': None},
-                        )
-                except Exception:
-                    pass  # Redis unavailable — fail-open for middleware
+                if denial is not None:
+                    return denial
 
-        logger.info(f"| {ip} | {request.method} {path}")
-        start_time = time()
-        response = await call_next(request)
-        process_time = round(time() - start_time, 4)
-        response.headers["X-Process-Time"] = str(process_time)
-        response.headers["X-Trace-ID"] = trace_id
-        logger.info(f"| {ip} | {request.method} {path} | process_time={process_time}s")
-        return response
+            # Tenant status checks (F010)
+            if not is_exempt and token:
+                # tenant_id=0 means pending tenant selection — block non-exempt paths
+                if tenant_id == 0:
+                    return JSONResponse(
+                        status_code=403,
+                        content={'status_code': 20004, 'status_message': 'Missing tenant context', 'data': None},
+                    )
+                # Check if tenant is disabled via Redis blacklist
+                if tenant_id and tenant_id > 0:
+                    try:
+                        from bisheng.core.cache.redis_manager import get_redis_client
+                        redis_client = await get_redis_client()
+                        from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
+                        if await redis_client.aget(DISABLED_TENANT_KEY.format(tenant_id)):
+                            return JSONResponse(
+                                status_code=403,
+                                content={'status_code': 20001, 'status_message': 'Tenant is disabled', 'data': None},
+                            )
+                    except Exception:
+                        pass  # Redis unavailable — fail-open for middleware
+
+            logger.info(f"| {ip} | {request.method} {path}")
+            start_time = time()
+            response = await call_next(request)
+            process_time = round(time() - start_time, 4)
+            response.headers["X-Process-Time"] = str(process_time)
+            response.headers["X-Trace-ID"] = trace_id
+            logger.info(f"| {ip} | {request.method} {path} | process_time={process_time}s")
+            return response
+        finally:
+            if bypass_token is not None:
+                _bypass_tenant_filter.reset(bypass_token)
 
 
 class WebSocketLoggingMiddleware:
