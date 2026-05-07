@@ -1127,6 +1127,9 @@ class TestMoveDepartmentSubtreeSync:
             'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
             new_callable=AsyncMock,
         ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
+            new_callable=AsyncMock, return_value=None,
+        ), patch(
             'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
             sync_mock,
         ):
@@ -1172,6 +1175,9 @@ class TestMoveDepartmentSubtreeSync:
             'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
             new_callable=AsyncMock,
         ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
+            new_callable=AsyncMock, return_value=None,
+        ), patch(
             'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
             sync_mock,
         ):
@@ -1209,6 +1215,9 @@ class TestMoveDepartmentSubtreeSync:
             'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
             new_callable=AsyncMock,
         ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
+            new_callable=AsyncMock, return_value=None,
+        ), patch(
             'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
             sync_mock,
         ):
@@ -1221,3 +1230,54 @@ class TestMoveDepartmentSubtreeSync:
 
         assert result is dept
         sync_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_move_rejects_nested_mount(self):
+        """INV-T1: moving a subtree that contains a mount under a destination
+        already inside another mount subtree must raise 22001 — symmetrical
+        with the creation-time check in TenantMountService.mount_child.
+        """
+        from bisheng.common.errcode.tenant_tree import (
+            TenantTreeNestingForbiddenError,
+        )
+        from bisheng.department.domain.services.department_service import (
+            DepartmentService,
+        )
+        from bisheng.department.domain.schemas.department_schema import (
+            DepartmentMoveRequest,
+        )
+
+        session, fake_session, dept = self._move_test_setup()
+
+        async def _check_perm(_session, _dept_id, _login_user):
+            return dept
+
+        login_user = _MockLoginUser(user_id=1, tenant_id=1)
+
+        async def _reject(*_args, **_kwargs):
+            raise TenantTreeNestingForbiddenError()
+
+        sync_mock = AsyncMock()
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            fake_session,
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new=_check_perm,
+        ), patch(
+            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
+            new=_reject,
+        ), patch(
+            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
+            sync_mock,
+        ):
+            with pytest.raises(TenantTreeNestingForbiddenError):
+                await DepartmentService.amove_department(
+                    dept_id='7',
+                    data=DepartmentMoveRequest(new_parent_id=9),
+                    login_user=login_user,
+                )
+
+        # Reject is pre-write — sync hook must NOT fire.
+        sync_mock.assert_not_awaited()
