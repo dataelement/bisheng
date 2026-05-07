@@ -1,4 +1,5 @@
 import type { ChatCitation } from '~/api/chatApi';
+import { getFilePathApi } from '~/api/chat/data-service';
 
 export type CitationDisplayData = {
   label: number;
@@ -280,12 +281,50 @@ export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   return payload?.downloadUrl || '';
 }
 
+function getCitationKnowledgeFileId(detail?: ChatCitation | null): number | null {
+  const documentId = detail?.sourcePayload?.documentId;
+  if (typeof documentId === 'number' && Number.isFinite(documentId)) return documentId;
+  if (typeof documentId === 'string' && documentId.trim() !== '' && Number.isFinite(Number(documentId))) {
+    return Number(documentId);
+  }
+  return null;
+}
+
 export function getCitationDocumentUrl(detail?: ChatCitation | null) {
+  // For knowledge-base citations with a documentId, prefer the freshly signed
+  // preview URL fetched via /api/v1/knowledge/file_share (handled by
+  // resolveCitationDocumentUrl). Returning '' here forces callers to take the
+  // async path so the cached/stale downloadUrl on sourcePayload isn't used.
+  if (getCitationKnowledgeFileId(detail) != null) return '';
   return getCitationDocumentPreviewUrl(detail);
 }
 
+let inflightFileShareCache: Record<string, Promise<string>> = {};
+
 export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
-  return getCitationDocumentUrl(detail);
+  const fileId = getCitationKnowledgeFileId(detail);
+  if (fileId != null) {
+    const cacheKey = String(fileId);
+    if (!inflightFileShareCache[cacheKey]) {
+      inflightFileShareCache[cacheKey] = (async () => {
+        try {
+          const res: any = await getFilePathApi(cacheKey);
+          const data = res?.data ?? res;
+          return data?.preview_url || data?.original_url || '';
+        } catch {
+          return '';
+        } finally {
+          // Drop after settle so a later open re-fetches a fresh signed URL
+          // (signed URLs expire and we don't want to pin a dead one).
+          setTimeout(() => { delete inflightFileShareCache[cacheKey]; }, 0);
+        }
+      })();
+    }
+    const url = await inflightFileShareCache[cacheKey];
+    if (url) return url;
+  }
+  // Legacy fallback for non-knowledge or older payloads without documentId.
+  return getCitationDocumentPreviewUrl(detail);
 }
 
 export function toAbsolutePreviewUrl(url?: string | null) {

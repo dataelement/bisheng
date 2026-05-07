@@ -557,12 +557,12 @@ export default function CitationReferencesDrawer({
           'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
           isMobileLikeViewport
             ? cn(
-                'px-4',
-                // 竖直：侧栏/全屏均在顶栏内垂直居中；全屏保留安全区 + 顶 16px，并加底内边距平衡
-                isFullBleedMobile
-                  ? 'pb-3 pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
-                  : 'py-3',
-              )
+              'px-4',
+              // 竖直：侧栏/全屏均在顶栏内垂直居中；全屏保留安全区 + 顶 16px，并加底内边距平衡
+              isFullBleedMobile
+                ? 'pb-3 pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
+                : 'py-3',
+            )
             : 'h-10 px-4',
         )}
       >
