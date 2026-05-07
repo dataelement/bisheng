@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, text, delete, INT
+from sqlalchemy import Column, DateTime, Integer, text, delete, INT
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -22,6 +22,11 @@ class UserRoleBase(SQLModelSerializable):
         foreign_key="role.id",
         primary_key=True,
         ondelete="CASCADE"
+    )
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
     )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

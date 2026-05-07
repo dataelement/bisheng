@@ -94,6 +94,15 @@ SPECS: List[FixSpec] = [
     FixSpec('department_knowledge_space', user_id_col='created_by'),
     FixSpec('org_sync_config', user_id_col='create_user'),
     FixSpec('org_sync_log', user_id_col='trigger_user'),
+    # v2.5.1 hotfix-2 (2026-05-07): 5 tables whose model previously did not
+    # declare a tenant_id field — DB had the column with DEFAULT 1, ORM
+    # silently let MySQL default it. Run *after* the parent tables above so
+    # join_via specs see the corrected parent tenant_id.
+    FixSpec('knowledgefile', user_id_col='user_id'),
+    FixSpec('qaknowledge', user_id_col='user_id'),
+    FixSpec('flowversion', join_via_table='flow', join_via_fk='flow_id'),
+    FixSpec('roleaccess', join_via_table='role', join_via_fk='role_id'),
+    FixSpec('userrole', join_via_table='role', join_via_fk='role_id'),
 ]
 
 
