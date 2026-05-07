@@ -1378,7 +1378,7 @@ class UserDepartmentDao:
                 stmt = stmt.where(User.user_name.like(like_pattern))
             stmt = (
                 stmt.order_by(
-                    UserTenant.last_access_time.desc().nullslast(),
+                    UserTenant.last_access_time.desc(),
                     User.user_id,
                 )
                 .offset((page - 1) * page_size)
