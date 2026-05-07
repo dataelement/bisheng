@@ -251,6 +251,166 @@ async def test_bisheng_base_async_resolves_root_shared_pair():
 # --- cache key namespacing --------------------------------------------------
 
 
+# --- avalidate_system_model_refs --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_validate_drops_none_and_empty_without_db():
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+    ) as mock_get:
+        await avalidate_system_model_refs([None, 0, '', None], target_tenant_id=1)
+    mock_get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_validate_accepts_models_in_target_tenant():
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    rows = [MagicMock(id=42, tenant_id=5), MagicMock(id=43, tenant_id=5)]
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=rows),
+    ):
+        await avalidate_system_model_refs([42, 43], target_tenant_id=5)
+
+
+@pytest.mark.asyncio
+async def test_validate_accepts_root_when_target_is_child():
+    """The exact whitelist that justifies the share_fallback's read path —
+    a Child setter is allowed to reference a Root-owned model so children
+    can pin a shared default."""
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    row = MagicMock(id=42, tenant_id=ROOT_TENANT_ID)
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[row]),
+    ):
+        await avalidate_system_model_refs([42], target_tenant_id=5)
+
+
+@pytest.mark.asyncio
+async def test_validate_rejects_root_setter_referencing_child_model():
+    """The exact bug we just hit: ``tenant_system_model_config`` for Root
+    pointing at a Child-owned model. Validator must fail-closed so this
+    can't be reintroduced after the data repair."""
+    from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    row = MagicMock(id=5, tenant_id=3)  # Child 3 owns this gpt-4o
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[row]),
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await avalidate_system_model_refs([5], target_tenant_id=ROOT_TENANT_ID)
+        # http_exception encodes the errcode as the HTTPException status_code.
+        assert exc_info.value.status_code == LLMModelNotAccessibleError.Code
+
+
+@pytest.mark.asyncio
+async def test_validate_rejects_child_setter_referencing_other_child_model():
+    """Child A may not pin a model owned by Child B — the share_default_to_
+    children policy is Root → all-Children only, not lateral."""
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    row = MagicMock(id=42, tenant_id=4)
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[row]),
+    ):
+        with pytest.raises(Exception):
+            await avalidate_system_model_refs([42], target_tenant_id=5)
+
+
+@pytest.mark.asyncio
+async def test_validate_rejects_when_model_id_not_found():
+    """A non-existent model_id is not silently accepted — that would let an
+    UI-edited payload sneak past with no row to inspect later."""
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[]),
+    ):
+        with pytest.raises(Exception):
+            await avalidate_system_model_refs([999], target_tenant_id=1)
+
+
+@pytest.mark.asyncio
+async def test_validate_accepts_string_model_ids_from_ws_model():
+    """WorkbenchModelConfig stores model ids as ``str`` in nested WSModel —
+    coerce to int silently and validate normally."""
+    from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+
+    row = MagicMock(id=7, tenant_id=ROOT_TENANT_ID)
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[row]),
+    ):
+        await avalidate_system_model_refs(['7', None, ''], target_tenant_id=ROOT_TENANT_ID)
+
+
+# --- LLMService.update_*_llm setter integration -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_knowledge_llm_calls_validator_with_all_model_ids():
+    """update_knowledge_llm must hand every model_id field to the validator
+    before writing — guards the regression that root admin saved
+    source/extract_title/qa_similar pointing at a child-owned model."""
+    from bisheng.llm.domain.schemas import KnowledgeLLMConfig
+    from bisheng.llm.domain.services.llm import LLMService
+
+    payload = KnowledgeLLMConfig(
+        embedding_model_id=4, source_model_id=7,
+        extract_title_model_id=7, qa_similar_model_id=7,
+    )
+    with patch(
+        'bisheng.llm.domain.services.llm.avalidate_system_model_refs',
+        new=AsyncMock(),
+    ) as mock_validate, patch(
+        'bisheng.llm.domain.services.llm.LLMService._base_update_llm_config',
+        new=AsyncMock(return_value=payload.model_dump()),
+    ):
+        await LLMService.update_knowledge_llm(payload, tenant_id=1)
+
+    args, kwargs = mock_validate.call_args
+    passed_ids = list(args[0])
+    assert set(passed_ids) == {4, 7}
+    assert (kwargs.get('target_tenant_id') if 'target_tenant_id' in kwargs else args[1]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_evaluation_llm_blocks_cross_tenant_write_end_to_end():
+    """End-to-end: feeding update_evaluation_llm a Child-owned model_id
+    while writing under Root must surface as LLMModelNotAccessibleError —
+    no DB write happens. This is the exact preventative for the dirty
+    config that triggered the upload failure."""
+    from bisheng.llm.domain.schemas import EvaluationLLMConfig
+    from bisheng.llm.domain.services.llm import LLMService
+
+    child_owned_row = MagicMock(id=5, tenant_id=3)
+    with patch(
+        'bisheng.llm.domain.share_fallback.LLMDao.aget_model_by_ids',
+        new=AsyncMock(return_value=[child_owned_row]),
+    ), patch(
+        'bisheng.llm.domain.services.llm.LLMService._base_update_llm_config',
+        new=AsyncMock(),
+    ) as mock_persist:
+        with pytest.raises(Exception):
+            await LLMService.update_evaluation_llm(
+                EvaluationLLMConfig(model_id=5), tenant_id=ROOT_TENANT_ID,
+            )
+        mock_persist.assert_not_called()
+
+
+# --- cache key namespacing --------------------------------------------------
+
+
 def test_cache_key_is_namespaced_by_tenant_scope():
     """Regression guard: prior to the fix the cache key was
     ``llm:model:<id>`` so a Root admin's read could be served back to a

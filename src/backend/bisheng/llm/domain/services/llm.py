@@ -37,6 +37,7 @@ from bisheng.llm.domain.models import LLMDao, LLMServer, LLMModel
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
 from bisheng.llm.domain.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
+from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -779,6 +780,12 @@ class LLMService:
         cls, data: KnowledgeLLMConfig, tenant_id: Optional[int] = None,
     ) -> KnowledgeLLMConfig:
         """ Update default model configuration for knowledge base """
+        target = _resolve_tenant_id(tenant_id)
+        await avalidate_system_model_refs(
+            [data.embedding_model_id, data.source_model_id,
+             data.extract_title_model_id, data.qa_similar_model_id],
+            target,
+        )
         await cls._base_update_llm_config(
             data=data.model_dump(), key=ConfigKeyEnum.KNOWLEDGE_LLM,
             tenant_id=tenant_id,
@@ -811,6 +818,11 @@ class LLMService:
         cls, data: AssistantLLMConfig, tenant_id: Optional[int] = None,
     ) -> AssistantLLMConfig:
         """ Update default model configurations related to the assistant """
+        target = _resolve_tenant_id(tenant_id)
+        ids = [item.model_id for item in (data.llm_list or [])]
+        if data.auto_llm:
+            ids.append(data.auto_llm.model_id)
+        await avalidate_system_model_refs(ids, target)
         await cls._base_update_llm_config(
             data=data.model_dump(), key=ConfigKeyEnum.ASSISTANT_LLM,
             tenant_id=tenant_id,
@@ -938,6 +950,8 @@ class LLMService:
         cls, data: EvaluationLLMConfig, tenant_id: Optional[int] = None,
     ) -> EvaluationLLMConfig:
         """ Update default model configuration for review feature """
+        target = _resolve_tenant_id(tenant_id)
+        await avalidate_system_model_refs([data.model_id], target)
         await cls._base_update_llm_config(
             data=data.model_dump(), key=ConfigKeyEnum.EVALUATION_LLM,
             tenant_id=tenant_id,
@@ -949,6 +963,8 @@ class LLMService:
         cls, data: EvaluationLLMConfig, tenant_id: Optional[int] = None,
     ) -> EvaluationLLMConfig:
         """ Update workflow Default Model Configuration for """
+        target = _resolve_tenant_id(tenant_id)
+        await avalidate_system_model_refs([data.model_id], target)
         await cls._base_update_llm_config(
             data=data.model_dump(), key=ConfigKeyEnum.WORKFLOW_LLM,
             tenant_id=tenant_id,
@@ -1024,6 +1040,14 @@ class LLMService:
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 
         target = _resolve_tenant_id(tenant_id)
+        await avalidate_system_model_refs(
+            [(ws.id if ws else None) for ws in (
+                config_obj.task_model, config_obj.embedding_model,
+                config_obj.asr_model, config_obj.tts_model,
+                config_obj.chat_title_llm,
+            )],
+            target,
+        )
         old_value, _, _ = await TenantSystemModelConfigDao.aresolve(
             tenant_id=target, key=ConfigKeyEnum.LINSIGHT_LLM.value,
         )
