@@ -35,6 +35,21 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
     const fileInputRef = useRef(null);
     const fileSizeLimit = size * 1024 * 1024; // File size limit in bytes
+    const defaultParsingStatus = uploadMode === 'linsight' ? 'running' : 'completed';
+    const isLinsightParsing = (file) => {
+        return uploadMode === 'linsight'
+            && file?.parsingStatus
+            && !['completed', 'failed'].includes(file.parsingStatus);
+    };
+    const getUploadedFileIds = () => filesRef.current.filter(f => f.id).map(f => ({
+        file_id: f.fileId || f.id,
+        filepath: f.filePath,
+        type: f.type,
+        name: f.name,
+        filename: f.name,
+        file_name: f.name,
+        parsing_status: f.parsingStatus || defaultParsingStatus,
+    }));
 
     const handleFileChange = (selectedFiles) => {
         const validFiles = [];
@@ -109,13 +124,15 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     return updatedFiles;
                 });
             }, uploadMode).then(response => {
+                const responseData = response?.data ?? response;
                 // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
                 // for any caller/endpoint that still uses the snake-case form.
-                const filePath = response.data.filepath ?? response.data.file_path;
-                const fileId = response.data.file_id; // Server-returned file_id
+                const filePath = responseData.filepath ?? responseData.file_path;
+                const fileId = responseData.file_id; // Server-returned file_id
+                const parsingStatus = responseData.parsing_status ?? defaultParsingStatus;
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
-                        return { ...f, isUploading: false, filePath, fileId, progress: 100 }; // Set progress to 100 when uploaded
+                        return { ...f, isUploading: false, filePath, fileId, parsingStatus, progress: 100 }; // Set progress to 100 when uploaded
                     }
                     return f;
                 });
@@ -125,7 +142,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // Once all files are uploaded, trigger onChange with the file IDs
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+                    const uploadedFileIds = getUploadedFileIds();
                     onChange(uploadedFileIds); // Pass the file IDs to onChange
                 }
             }).catch((e) => {
@@ -135,7 +152,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // If no files remain, trigger onChange immediately
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+                    const uploadedFileIds = getUploadedFileIds();
                     onChange(uploadedFileIds);
                 }
             });
@@ -144,7 +161,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         // Wait for all files to finish uploading
         Promise.all(uploadPromises).then(() => {
             // Once all files are uploaded, trigger onChange with the file IDs
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+            const uploadedFileIds = getUploadedFileIds();
             onChange(uploadedFileIds); // Pass the file IDs to onChange
         });
     };
@@ -156,6 +173,30 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         },
         removeByName: (fileName) => {
             handleFileRemove(fileName);
+        },
+        updateParsingStatus: (statusMap) => {
+            setFiles((prevFiles) => {
+                const updatedFiles = prevFiles.reduce((result, file) => {
+                    const fileId = file.fileId || file.file_id;
+                    const status = statusMap?.get?.(fileId);
+
+                    if (!status) {
+                        result.push(file);
+                        return result;
+                    }
+
+                    if (status === 'failed') {
+                        return result;
+                    }
+
+                    result.push({ ...file, parsingStatus: status, isUploading: false });
+                    return result;
+                }, []);
+
+                filesRef.current = updatedFiles;
+                onFilesStateChange?.(updatedFiles);
+                return updatedFiles;
+            });
         },
         openPicker: () => {
             if (disabled) return;
@@ -180,7 +221,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
+            const uploadedFileIds = getUploadedFileIds();
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };
@@ -194,7 +235,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                         key={index}
                         className="group inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50"
                     >
-                        {file.isUploading ? (
+                        {file.isUploading || isLinsightParsing(file) ? (
                             <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
                         ) : (
                             <LegacyFileIcon className="mr-1 size-4 shrink-0 text-[#999]" type={getFileTypebyFileName(file.name)} />
