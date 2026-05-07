@@ -50,6 +50,24 @@ export function normalizeCitationMarkers(content: string) {
   });
 }
 
+/**
+ * Remove citation marker groups (...) from a string. Used when
+ * exporting message text to plain contexts like clipboard copy where the
+ * private-use markers have no rendered counterpart and would surface as
+ * unreadable noise.
+ */
+export function stripCitationMarkers(content: string) {
+  if (!content) return content;
+  return content
+    // Strip well-formed groups first (non-greedy across separators).
+    .replace(/[\s\S]*?/g, '')
+    // Also handle the escaped form ("...") that may slip through
+    // when a message hasn't been passed through normalizeCitationMarkers.
+    .replace(/\\u[eE]200[\s\S]*?\\u[eE]202/g, '')
+    // Drop any orphan markers (e.g. a streaming-truncated group).
+    .replace(/[]/g, '');
+}
+
 function padTimeUnit(value: number) {
   return String(value).padStart(2, '0');
 }
