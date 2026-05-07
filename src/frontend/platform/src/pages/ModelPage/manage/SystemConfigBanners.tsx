@@ -39,7 +39,7 @@ export function ScopeBanner({
     if (isGlobalSuper && isRootScope) {
         return (
             <div className="mb-4 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-sm text-blue-900 dark:text-blue-100">
-                {t('model.systemConfig.rootBanner')}
+                {t('model.systemConfigRootBanner')}
             </div>
         );
     }
@@ -47,14 +47,14 @@ export function ScopeBanner({
         const tenantName = childTenant?.tenant_name || childTenant?.tenant_code || '';
         return (
             <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
-                {t('model.systemConfig.tenantBanner', { tenantName })}
+                {t('model.systemConfigTenantBanner', { tenantName })}
             </div>
         );
     }
     // !isGlobalSuper && isRootScope: Child user viewing Root — read-only.
     return (
         <div className="mb-4 p-3 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
-            {t('model.systemConfig.rootReadOnlyBanner')}
+            {t('model.systemConfigRootReadOnlyBanner')}
         </div>
     );
 }
@@ -69,7 +69,7 @@ export function FallbackBlockedBanner({ visible }: { visible: boolean }): JSX.El
     if (!visible) return null;
     return (
         <div className="mb-3 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 text-sm text-yellow-900 dark:text-yellow-100">
-            {t('model.systemConfig.fallbackBlockedBanner')}
+            {t('model.systemConfigFallbackBlockedBanner')}
         </div>
     );
 }
@@ -84,7 +84,7 @@ export function InheritedBadge({ visible }: { visible: boolean }): JSX.Element |
     if (!visible) return null;
     return (
         <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-            {t('model.systemConfig.inheritedBadge')}
+            {t('model.systemConfigInheritedBadge')}
         </span>
     );
 }
