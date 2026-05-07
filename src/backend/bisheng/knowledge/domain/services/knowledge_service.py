@@ -67,6 +67,9 @@ from bisheng.knowledge.domain.services.knowledge_metadata_service import Knowled
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
+from bisheng.llm.domain.share_fallback import (
+    get_model_by_id_with_share_fallback,
+)
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
@@ -335,7 +338,10 @@ class KnowledgeService(KnowledgeUtils):
             embedding_model_id = int(str(db_knowledge.model).strip())
         except (TypeError, ValueError):
             raise KnowledgeNoEmbeddingError.http_exception()
-        embed_info = LLMDao.get_model_by_id(embedding_model_id)
+        # System-default embedding may live on Root and be shared down via
+        # tenant_system_model_config — read with the share fallback so child
+        # tenants don't trip the tenant filter on Root-owned rows.
+        embed_info = get_model_by_id_with_share_fallback(embedding_model_id)
         if not embed_info:
             raise KnowledgeNoEmbeddingError.http_exception()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:

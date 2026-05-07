@@ -1846,10 +1846,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type = 'folder'
             parent_resource_id = parent_id
 
-        # Upload cap: 实际上传人 login_user 的角色配额（多角色取 max），再与租户链取 min；超管不限
-        limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
-        logger.debug(f'space_file_upload_limit_bytes={limit_bytes} user_id={self.login_user.user_id}')
-        current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+        # User-role cap (multi-role max GB; admin returns None = unlimited).
+        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        logger.debug(
+            f'space_file_upload_limit_bytes={role_user_limit_bytes} '
+            f'user_id={self.login_user.user_id}'
+        )
+        current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+
+        # Tenant-level cap: applies to the *target tenant* of the destination
+        # knowledge space, regardless of the writer's role/admin status.
+        # Raises 19403 here if the tenant chain is already exhausted.
+        target_tid = db_knowledge.tenant_id
+        tenant_remaining_bytes = await QuotaService.get_tenant_storage_remaining_bytes(target_tid)
+        if tenant_remaining_bytes is not None:
+            tenant_used_at_start_bytes = await QuotaService.get_tenant_storage_used_bytes(target_tid)
+            tenant_cap_bytes = tenant_used_at_start_bytes + tenant_remaining_bytes
+            current_tenant_total_bytes = tenant_used_at_start_bytes
+        else:
+            tenant_cap_bytes = None
+            current_tenant_total_bytes = 0
 
         folder_id2name = {}
 
@@ -1909,15 +1925,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
-                    current_total_file_size += db_file.file_size
+                    current_user_total += db_file.file_size
+                    current_tenant_total_bytes += db_file.file_size
                 else:
                     failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
                     failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
                     failed_file.file_level_path = file_level_path
                     failed_files.append(failed_file)
-                if limit_bytes is not None:
-                    if current_total_file_size > limit_bytes:
-                        raise SpaceFileSizeLimitError()
+                # Tenant-level cap: applies to admins as well; the write triggered by
+                # this upload would push the target tenant over its storage_gb cap.
+                if tenant_cap_bytes is not None and current_tenant_total_bytes > tenant_cap_bytes:
+                    blocker = (
+                        target_tid,
+                        'tenant_limit',
+                        round(current_tenant_total_bytes / (1024 ** 3), 2),
+                        round(tenant_cap_bytes / (1024 ** 3), 2),
+                        '',
+                    )
+                    raise QuotaService._make_storage_quota_error(blocker, 'storage_gb')
+                # User-role cap (preserved). Admins skip this branch because
+                # role_user_limit_bytes is None for them.
+                if role_user_limit_bytes is not None and current_user_total > role_user_limit_bytes:
+                    raise SpaceFileSizeLimitError()
             for created_file in created_files:
                 await self._initialize_child_resource_permissions(
                     'knowledge_file',

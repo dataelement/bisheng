@@ -115,6 +115,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>{t("system.username")}</TableHead>
+                <TableHead>{t("tenant.userIdColumn")}</TableHead>
                 <TableHead>{t("tenant.lastAccess")}</TableHead>
                 <TableHead className="text-right">
                   {t("tenant.actions")}
@@ -146,6 +147,9 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                           </span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.external_id ?? user.user_id}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {user.join_time

@@ -34,6 +34,9 @@ from bisheng.linsight.domain.schemas.linsight_schema import SopRecordRead
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
+from bisheng.llm.domain.share_fallback import (
+    get_model_by_id_with_share_fallback,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
@@ -345,8 +348,10 @@ class SOPManageService:
         except AttributeError:
             return NoEmbeddingModelError.return_resp()
 
-        # CorrectionembeddingModels
-        embed_info = LLMDao.get_model_by_id(int(emb_model_id))
+        # Correction embedding Models. The id was resolved via the Root
+        # workbench config above, so the row may belong to Root — read with
+        # the share fallback to bypass the child-scope tenant filter.
+        embed_info = get_model_by_id_with_share_fallback(int(emb_model_id))
         if not embed_info:
             return EmbeddingModelNotExistError.return_resp()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:

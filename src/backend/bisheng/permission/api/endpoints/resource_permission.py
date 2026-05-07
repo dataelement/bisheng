@@ -999,7 +999,7 @@ async def authorize_resource(
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
-        return PermissionDeniedError.return_resp()
+        return PermissionDeniedError.return_resp('部门或用户组无法成为所有者')
 
     from bisheng.permission.domain.services.permission_service import PermissionService
 

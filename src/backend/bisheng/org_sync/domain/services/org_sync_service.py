@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Optional
 
 from loguru import logger
+from sqlalchemy import func
 
 from bisheng.common.errcode.org_sync import (
     OrgSyncAlreadyRunningError,
@@ -204,7 +205,7 @@ class OrgSyncService:
                 log.member_disabled = stats['member_disabled']
                 log.member_reactivated = stats['member_reactivated']
                 log.error_details = errors or None
-                log.end_time = datetime.now()
+                log.end_time = func.now()
                 try:
                     await OrgSyncLogDao.aupdate(log)
                 except Exception:
@@ -212,7 +213,7 @@ class OrgSyncService:
 
             # Step 15: Update config
             try:
-                config.last_sync_at = datetime.now()
+                config.last_sync_at = func.now()
                 config.last_sync_result = log.status if log else 'failed'
                 await OrgSyncConfigDao.aupdate(config)
             except Exception:
