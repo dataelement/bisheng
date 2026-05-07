@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, delete, text
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -15,6 +15,11 @@ class ModelDeployBase(SQLModelSerializable):
     config: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
     status: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

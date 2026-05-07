@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
+from sqlalchemy import Integer
 from sqlmodel import Field, Column, text, DateTime, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -19,6 +20,11 @@ class InviteCodeBase(SQLModelSerializable):
     used: Optional[int] = Field(default=0, description='Used times')
     bind_user: Optional[int] = Field(default=0, index=True, description='Linked UsersID')
     created_id: Optional[int] = Field(default=None, index=True, description='creatorID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

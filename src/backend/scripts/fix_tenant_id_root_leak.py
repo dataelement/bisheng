@@ -103,6 +103,38 @@ SPECS: List[FixSpec] = [
     FixSpec('flowversion', join_via_table='flow', join_via_fk='flow_id'),
     FixSpec('roleaccess', join_via_table='role', join_via_fk='role_id'),
     FixSpec('userrole', join_via_table='role', join_via_fk='role_id'),
+    # v2.5.1 hotfix-3 (2026-05-07): remaining 30 tables whose ORM was
+    # missing the tenant_id field. Listed in dependency order so join_via
+    # specs see corrected parents first. Tables intentionally skipped:
+    #   - share_link: create_user_id is CHAR(36) (not the int user.user_id)
+    #   - channel_info_source: admin-shared, no creator column
+    #   - sftmodel / server / modeldeploy: admin-managed, no owner
+    #   - presettrain: user_id stored as str, manual reconciliation
+    FixSpec('linsight_session_version', user_id_col='user_id'),
+    FixSpec('linsight_execute_task', join_via_table='linsight_session_version',
+            join_via_fk='session_version_id'),
+    FixSpec('usergroup', join_via_table='group', join_via_fk='group_id'),
+    FixSpec('groupresource', join_via_table='group', join_via_fk='group_id'),
+    FixSpec('assistantlink', join_via_table='assistant', join_via_fk='assistant_id'),
+    FixSpec('tag', user_id_col='user_id'),
+    FixSpec('taglink', user_id_col='user_id'),
+    FixSpec('evaluation', user_id_col='user_id'),
+    FixSpec('invitecode', user_id_col='created_id'),
+    FixSpec('t_variable_value', join_via_table='flow', join_via_fk='flow_id'),
+    FixSpec('t_report', join_via_table='flow', join_via_fk='flow_id'),
+    FixSpec('template', join_via_table='flow', join_via_fk='flow_id'),
+    FixSpec('markappuser', user_id_col='create_id'),
+    FixSpec('markrecord', user_id_col='create_id'),
+    FixSpec('marktask', user_id_col='create_id'),
+    FixSpec('t_gpts_tools', user_id_col='user_id'),
+    FixSpec('t_gpts_tools_type', user_id_col='user_id'),
+    FixSpec('inbox_message', user_id_col='sender'),
+    FixSpec('inbox_message_read', user_id_col='user_id'),
+    FixSpec('channel', user_id_col='user_id'),
+    FixSpec('channel_article_read', user_id_col='user_id'),
+    FixSpec('linsight_sop', user_id_col='user_id'),
+    FixSpec('linsight_sop_record', user_id_col='user_id'),
+    FixSpec('finetune', user_id_col='user_id'),
 ]
 
 

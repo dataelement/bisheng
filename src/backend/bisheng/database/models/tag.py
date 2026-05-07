@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
 from sqlmodel import Field, select, delete, and_, func, text, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -24,6 +24,11 @@ class TagBase(SQLModelSerializable):
     business_type: str = Field(default=TagBusinessTypeEnum.APPLICATION, description="Business Type")
     business_id: Optional[str] = Field(default=None, sa_column=Column(String(36)), description="Business ID")
     user_id: int = Field(default=0, description='Create UserID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -42,6 +47,11 @@ class TagLinkBase(SQLModelSerializable):
     resource_id: str = Field(description="Resource UniqueID")
     resource_type: int = Field(description="Resource Type")  # Usegroup_resource.ResourceTypeEnumEnumeration
     user_id: int = Field(default=0, description='Create UserID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

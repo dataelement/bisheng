@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import Integer, func
 from sqlmodel import Column, DateTime, Field, select, text, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -17,6 +17,11 @@ class PresetTrainBase(SQLModelSerializable):
     user_id: str = Field(default='', index=True, description='creatorID')
     user_name: str = Field(default='', index=True, description='creatorName')
     type: int = Field(default=0, index=True, description='0 Doc. 1 QA')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
