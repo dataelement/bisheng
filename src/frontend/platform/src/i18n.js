@@ -5,15 +5,26 @@ import {
 } from "react-i18next";
 import json from "../package.json";
 
-// Obtain user language preferences, supporting full language codes (e.g., zh-Hans, en-US) 
+// Honor APP_CONFIG.disableJa (config.js): hide ja from auto-detection and
+// strip any stale ja value out of localStorage so other paths don't re-apply.
+export const JA_DISABLED = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);
+
+// Obtain user language preferences, supporting full language codes (e.g., zh-Hans, en-US)
 const getBrowserLanguage = () => {
     const savedLanguage = localStorage.getItem('i18nextLng');
-    if (savedLanguage) return savedLanguage === 'zh' ? 'zh-Hans' : savedLanguage;
+    if (savedLanguage) {
+        const normalized = savedLanguage === 'zh' ? 'zh-Hans' : savedLanguage;
+        if (JA_DISABLED && normalized === 'ja') {
+            localStorage.removeItem('i18nextLng');
+        } else {
+            return normalized;
+        }
+    }
 
     const browserLang = navigator.language || navigator.userLanguage || 'en-US';
-    // Map browser language codes to the languages we support 
+    // Map browser language codes to the languages we support
     if (browserLang.startsWith('zh')) return 'zh-Hans';
-    if (browserLang.startsWith('ja')) return 'ja';
+    if (browserLang.startsWith('ja') && !JA_DISABLED) return 'ja';
     return 'en-US';
 };
 
