@@ -283,7 +283,15 @@ export function MemberTable({
       )
       captureAndAlertRequestErrorHoc(
         disableUserApi(m.user_id, enabled ? 0 : 1).then(() => {
-          toast({ title: t("prompt"), variant: "success" })
+          toast({
+            title: t("prompt"),
+            description: t(
+              enabled
+                ? "bs:department.accountEnabledToast"
+                : "bs:department.accountDisabledToast",
+            ),
+            variant: "success",
+          })
           onChanged()
         })
       ).then((res) => {

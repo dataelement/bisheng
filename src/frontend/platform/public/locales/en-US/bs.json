@@ -2146,6 +2146,8 @@
   "department.inheritedAdminSource": "Inherited from {{department}}",
   "department.enabled": "Enabled",
   "department.disabled": "Disabled",
+  "department.accountEnabledToast": "Account enabled",
+  "department.accountDisabledToast": "Account disabled",
   "department.all": "All",
   "menu.department": "Organization",
   "department.assignRolesEmptyHint": "No assignable roles found. Please create a visible role in Role Management first.",
