@@ -58,12 +58,22 @@ export default function Share() {
             case 'workbench_chat':
                 return <ChatView id={shareInfo.resource_id} shareToken={shareToken} />;
             default:
-                return <AppChat
-                    chatId={shareInfo.resource_id}
-                    flowId={shareInfo.meta_data.flowId}
-                    shareToken={shareToken}
-                    flowType={Apptypes[type]}
-                />
+                // Same wrapper trick as the Sop branch: parent uses
+                // items-start so AppChat's root (which has h-full but no
+                // w-full) collapses to content width and the inner
+                // mx-auto/max-w-[800px] then "centers" inside that
+                // shrunken column — visually left-stuck. Wrap to fill so
+                // the inner mx-auto centers against the full viewport.
+                return (
+                    <div className="h-full w-full">
+                        <AppChat
+                            chatId={shareInfo.resource_id}
+                            flowId={shareInfo.meta_data.flowId}
+                            shareToken={shareToken}
+                            flowType={Apptypes[type]}
+                        />
+                    </div>
+                )
         }
     })();
 
