@@ -718,6 +718,7 @@ class DepartmentDao:
         ``is_deleted=1``), clears the flag and restores ``status='active'``
         so the department becomes visible again.
         """
+
         def final_path(parent_path: str, dept_id: int) -> str:
             base = (parent_path or '').strip()
             if base and not base.endswith('/'):
@@ -980,7 +981,7 @@ class UserDepartmentDao:
 
         Each row is a UserDepartment joined with user info.
         """
-        from bisheng.database.models.user import User
+        from bisheng.user.domain.models.user import User
 
         with get_sync_db_session() as session:
             base = (
@@ -1014,7 +1015,7 @@ class UserDepartmentDao:
         cls, department_id: int, page: int = 1, limit: int = 20,
         keyword: str = '',
     ) -> Tuple[List, int]:
-        from bisheng.database.models.user import User
+        from bisheng.user.domain.models.user import User
 
         async with get_async_db_session() as session:
             base = (
