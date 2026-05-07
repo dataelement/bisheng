@@ -40,7 +40,6 @@ import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal"
-import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import type { DepartmentAdmin, DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
 import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
 import { Loader2 } from "lucide-react"
@@ -650,7 +649,10 @@ export function MemberTable({
                 <TableCell {...mrc.getTdProps(5)}>
                   <Switch
                     checked={m.enabled}
-                    disabled={isArchived || isSyncedSource(m.source)}
+                    disabled={
+                      isArchived
+                      || (!m.enabled && !!m.disable_source && user?.role !== "admin")
+                    }
                     onCheckedChange={(checked) =>
                       handleToggleEnabled(m, Boolean(checked))
                     }
