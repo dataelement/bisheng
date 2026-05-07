@@ -587,7 +587,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     scrollRef.current = el;
                     hScrollRevealRef(el);
                 }}
-                className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-hover"
+                className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-scroll"
             >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"

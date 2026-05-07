@@ -246,7 +246,7 @@ export default function AiChatMessages({
         return (
             <div
                 ref={emptyScrollRevealRef}
-                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-hover"
+                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
@@ -310,7 +310,7 @@ export default function AiChatMessages({
                     messagesScrollRevealRef(el);
                 }}
                 className={cn(
-                    "min-h-0 flex-1 overflow-y-auto scrollbar-on-hover",
+                    "min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
                     hideHeaderTitle
                         ? "pt-2"
                         : isNarrowViewport
