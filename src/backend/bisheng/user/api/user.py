@@ -20,10 +20,12 @@ from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.user import (UserNotPasswordError, UserValidateError, UserPasswordError, UserForbiddenError)
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import DefaultGroup, GroupDao
+from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
@@ -92,7 +94,19 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         guard = await UserService._reject_login_if_user_has_no_usable_access(user_exist)
         if guard is not None:
             return guard
-        access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
+        # Resolve the user's active leaf tenant so the JWT carries the right
+        # tenant_id. Without this, ``create_access_token`` falls back to
+        # ``DEFAULT_TENANT_ID`` (root) — every Child Admin coming through SSO
+        # would be tagged as root in ``current_tenant_id``, causing tenant-aware
+        # writes (e.g. ``LLMServerDao.ainsert_server_with_models``) to land in
+        # tenant 1 instead of their own leaf tenant.
+        active_user_tenant = await UserTenantDao.aget_active_user_tenant(user_exist.user_id)
+        leaf_tenant_id = (
+            active_user_tenant.tenant_id if active_user_tenant is not None else DEFAULT_TENANT_ID
+        )
+        access_token = LoginUser.create_access_token(
+            user_exist, auth_jwt=auth_jwt, tenant_id=leaf_tenant_id,
+        )
 
         # Set the logged in user's currentcookie, .jwtValid for an additional hour
         redis_client = await get_redis_client()
