@@ -5,7 +5,7 @@ from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
+from sqlalchemy import JSON, Column, DateTime, Integer, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -83,6 +83,11 @@ class KnowledgeFileBase(SQLModelSerializable):
     )
     updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
     updater_name: Optional[str] = Field(default=None, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -100,6 +105,11 @@ class QAKnowledgeBase(SQLModelSerializable):
                                   description='1: Activate0: Close, the user manually closes;2: Sedang diproses3Failed to insert')
     extra_meta: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

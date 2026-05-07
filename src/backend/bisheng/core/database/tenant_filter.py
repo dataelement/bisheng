@@ -31,6 +31,85 @@ _initialized: bool = False
 # Tables that have a tenant_id column but use it as a FK, not as isolation field.
 _EXCLUDED_TABLES: Set[str] = {'user_tenant'}
 
+# ORM modules that must be imported before _discover_tenant_aware_tables runs.
+# Without this, models that nothing in the FastAPI router chain happens to
+# import stay invisible to SQLModel.metadata, and their tables silently slip
+# past both before_flush auto-fill and do_orm_execute filtering — which is
+# exactly how knowledgefile / flowversion / roleaccess / userrole / ...
+# kept writing child-tenant resources to root in v2.5.
+_TENANT_AWARE_MODEL_MODULES = (
+    # Already on the main router import chain — listed for completeness so
+    # _force_import_all_models() guarantees them even if a future refactor
+    # severs an indirect import edge.
+    'bisheng.database.models.flow',
+    'bisheng.database.models.assistant',
+    'bisheng.database.models.role',
+    'bisheng.database.models.group',
+    'bisheng.database.models.audit_log',
+    'bisheng.database.models.department',
+    'bisheng.database.models.message',
+    'bisheng.database.models.session',
+    'bisheng.knowledge.domain.models.knowledge',
+    'bisheng.knowledge.domain.models.department_knowledge_space',
+    'bisheng.llm.domain.models.llm_server',
+    'bisheng.llm.domain.models.llm_call_log',
+    'bisheng.llm.domain.models.llm_token_log',
+    'bisheng.org_sync.domain.models.org_sync',
+    'bisheng.approval.domain.models.approval_request',
+    # Previously *not* on any auto-imported chain — silent tenant-id leaks.
+    'bisheng.database.models.failed_tuple',
+    'bisheng.database.models.flow_version',
+    'bisheng.database.models.role_access',
+    'bisheng.database.models.user_group',
+    'bisheng.database.models.group_resource',
+    'bisheng.database.models.tag',
+    'bisheng.database.models.template',
+    'bisheng.database.models.evaluation',
+    'bisheng.database.models.invite_code',
+    'bisheng.database.models.variable_value',
+    'bisheng.database.models.report',
+    'bisheng.database.models.mark_app_user',
+    'bisheng.database.models.mark_record',
+    'bisheng.database.models.mark_task',
+    'bisheng.user.domain.models.user_role',
+    'bisheng.knowledge.domain.models.knowledge_file',
+    'bisheng.tool.domain.models.gpts_tools',
+    'bisheng.share_link.domain.models.share_link',
+    'bisheng.message.domain.models.inbox_message',
+    'bisheng.message.domain.models.inbox_message_read',
+    'bisheng.channel.domain.models.channel',
+    'bisheng.channel.domain.models.article_read_record',
+    'bisheng.channel.domain.models.channel_info_source',
+    'bisheng.linsight.domain.models.linsight_execute_task',
+    'bisheng.linsight.domain.models.linsight_session_version',
+    'bisheng.linsight.domain.models.linsight_sop',
+    'bisheng.finetune.domain.models.sft_model',
+    'bisheng.finetune.domain.models.server',
+    'bisheng.finetune.domain.models.preset_train',
+    'bisheng.finetune.domain.models.model_deploy',
+    'bisheng.finetune.domain.models.finetune',
+)
+
+
+def _force_import_all_models() -> None:
+    """Force-import every tenant-aware ORM module so SQLModel.metadata
+    fully populates before _discover_tenant_aware_tables() runs.
+
+    Failures are warned but not raised — a missing optional module must
+    not break the whole tenant filter registration.
+    """
+    import importlib
+    for module_name in _TENANT_AWARE_MODEL_MODULES:
+        try:
+            importlib.import_module(module_name)
+        except Exception as exc:  # noqa: BLE001 - log every failure
+            logger.warning(
+                'Failed to import tenant-aware model module %s: %s. '
+                'Tables defined in that module will silently bypass tenant '
+                'filtering until the import is fixed.',
+                module_name, exc,
+            )
+
 
 def _discover_tenant_aware_tables() -> Set[str]:
     """Discover tables that have a ``tenant_id`` column from SQLModel metadata.
@@ -58,6 +137,7 @@ def register_tenant_filter_events() -> None:
     if _initialized:
         return
 
+    _force_import_all_models()
     _tenant_aware_tables = _discover_tenant_aware_tables()
     if not _tenant_aware_tables:
         logger.warning('No tenant-aware tables found. Tenant filtering will be inactive.')
