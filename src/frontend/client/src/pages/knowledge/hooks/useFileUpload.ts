@@ -36,10 +36,13 @@ const PENDING_REGISTERED_FILE_STATUSES = new Set<FileStatus>([
 ]);
 
 export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): DuplicateFileEntry[] {
+    // Backend marks duplicates by setting `old_file_level_path` to a string (possibly empty
+    // when the existing file lives at the space root). Real parse failures leave the field
+    // unset (None → undefined). Use type check, not truthiness, to keep root-level duplicates.
     return registeredFiles
         .filter((file) => (
             file.status === FileStatus.FAILED &&
-            Boolean(file.oldFileLevelPath?.trim()) &&
+            typeof file.oldFileLevelPath === "string" &&
             Boolean((file as any)._raw)
         ))
         .map((file) => ({
