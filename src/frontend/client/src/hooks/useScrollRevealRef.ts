@@ -1,9 +1,11 @@
 import { useCallback, useRef } from 'react';
 
 /**
- * Ref callback for elements with `scrollbar-on-hover`: on coarse pointer / touch viewports,
- * CSS shows the scrollbar only while `[data-scrolling='true']` (see style.css).
- * Mouse + fine pointer keeps hover-based scrollbar behavior.
+ * Ref callback that writes `data-scrolling='true'` to the element while it's actively
+ * scrolling, then removes it after `hideAfterMs`. Pairs with two CSS utilities in style.css:
+ *  - `scrollbar-on-scroll`: thumb visible only while scrolling (all pointer types).
+ *  - `scrollbar-on-hover`: thumb visible on hover (mouse) / scroll (touch) — uses the
+ *    attribute on touch only.
  */
 export function useScrollRevealRef<T extends HTMLElement>(hideAfterMs = 700) {
   const cleanupRef = useRef<(() => void) | undefined>(undefined);

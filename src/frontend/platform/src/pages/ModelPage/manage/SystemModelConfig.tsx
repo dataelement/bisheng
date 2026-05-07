@@ -20,7 +20,11 @@ const ROOT_TENANT_ID = 1;
 export default function SystemModelConfig({ data, defaultTab, onBack }: { data: any; defaultTab?: string; onBack: () => void }) {
     const { t } = useTranslation('model')
     const { user } = useContext(userContext) as any
-    const { scope } = useAdminScope()
+    // useAdminScope's GET /admin/tenant-scope returns HTTP 403 + 19701 for
+    // non-super callers (INV-T14). Only enable the fetch for the global
+    // super admin; Child Admins keep the empty default scope, which the
+    // ScopeBanner / childTenant memo below handle correctly.
+    const { scope } = useAdminScope({ enabled: isGlobalSuperUser(user) })
     const [tenants, setTenants] = useState<Tenant[]>([])
 
     // Refetch tenants once on mount; ScopeBar already does the same fetch

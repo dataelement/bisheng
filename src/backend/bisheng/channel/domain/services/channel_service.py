@@ -1342,7 +1342,7 @@ class ChannelService:
             )
 
         if sub_rule_groups:
-            effective_rule_groups = sub_rule_groups
+            effective_rule_groups = [*main_rule_groups, *sub_rule_groups]
         else:
             effective_rule_groups = main_rule_groups
 

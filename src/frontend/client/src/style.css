@@ -1487,24 +1487,27 @@ button {
 
 /* Show scrollbar only while actively scrolling (used by NotificationsDialog) */
 .scroll-on-scroll {
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: thin; /* Firefox: always thin so toggling never reflows */
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  transition: scrollbar-color 0.3s ease;
 }
 .scroll-on-scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-.scroll-on-scroll::-webkit-scrollbar-thumb {
-  background-color: transparent;
-}
-.scroll-on-scroll[data-scrolling='true'] {
-  scrollbar-width: thin; /* Firefox */
-}
-.scroll-on-scroll[data-scrolling='true']::-webkit-scrollbar {
   width: 0.5rem;
   height: 0.5rem;
 }
+.scroll-on-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  transition: background-color 0.3s ease;
+}
+.scroll-on-scroll[data-scrolling='true'] {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
 .scroll-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.1);
+}
+.dark .scroll-on-scroll[data-scrolling='true'] {
+  scrollbar-color: hsla(0, 0%, 100%, 0.1) transparent;
 }
 .dark .scroll-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb {
   background-color: hsla(0, 0%, 100%, 0.1);
@@ -3135,26 +3138,59 @@ button.scroll-convo {
   background-color: rgba(203, 213, 225, 0.6);
 }
 
-/* 鼠标环境：未悬停时不占滚动条槽位，避免「无溢出或空闲」仍显示轨道（与 touch-mobile 子页面滚动策略叠加时更明显） */
+/* 鼠标环境：始终预留 8px 滚动条槽位，hover 仅切换 thumb 颜色，避免出现/消失滚动条时内容横向抖动。
+   scrollbar-gutter: stable 进一步覆盖「内容由不溢出变溢出」也会抖的情况。 */
 @media (hover: hover) and (pointer: fine) {
   .scrollbar-on-hover {
-    scrollbar-width: none;
+    scrollbar-gutter: stable;
   }
-  .scrollbar-on-hover::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-  }
-  .scrollbar-on-hover:hover {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
-  }
-  .scrollbar-on-hover:hover::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  .dark .scrollbar-on-hover:hover {
-    scrollbar-color: rgba(203, 213, 225, 0.25) transparent;
-  }
+}
+
+/* Show scrollbar only while actively scrolling (data-scrolling='true' written by useScrollRevealRef).
+   Same constant-gutter strategy as scrollbar-on-hover — only the trigger differs (scroll instead of hover). */
+.scrollbar-on-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  transition: scrollbar-color 0.3s ease;
+}
+.scrollbar-on-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-on-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-on-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.3s ease;
+}
+.scrollbar-on-scroll[data-scrolling='true'] {
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+}
+.scrollbar-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.4);
+}
+.scrollbar-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.65);
+}
+.scrollbar-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb:active {
+  background-color: rgba(100, 116, 139, 0.8);
+}
+.dark .scrollbar-on-scroll[data-scrolling='true'] {
+  scrollbar-color: rgba(203, 213, 225, 0.25) transparent;
+}
+.dark .scrollbar-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(203, 213, 225, 0.25);
+}
+.dark .scrollbar-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(203, 213, 225, 0.45);
+}
+.dark .scrollbar-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb:active {
+  background-color: rgba(203, 213, 225, 0.6);
 }
 
 /* 触控 / 粗指针：不用悬停出现滚动条；由滚动触发（配合 useScrollRevealRef 写入 data-scrolling） */

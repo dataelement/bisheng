@@ -900,7 +900,7 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        <div ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-hover">
+                        <div ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
@@ -943,7 +943,7 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-hover border-t border-[#e5e6eb]">
+                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}

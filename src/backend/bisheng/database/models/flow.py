@@ -15,8 +15,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant
-from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
-from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
 
 
@@ -347,17 +346,34 @@ class FlowDao(FlowBase):
                                      keyword: str = None,
                                      flow_ids: List[str] = None,
                                      flow_type: int = FlowType.WORKFLOW.value) -> List[Flow]:
-        user_role = UserRoleDao.get_user_roles(user_id)
-        flow_id_extra = []
-        if user_role:
-            role_ids = [role.role_id for role in user_role]
-            if 1 in role_ids:
-                # admin
-                flow_id_extra = 'admin'
-            else:
-                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.WORKFLOW)
-                if role_access:
-                    flow_id_extra = [access.third_id for access in role_access]
+        """List online flows the user can read.
+
+        F008 follow-up: delegates to ReBAC via PermissionService instead of
+        the legacy role_access table. Admin still receives the magic
+        ``flow_id_extra='admin'`` sentinel that disables ID filtering inside
+        FlowDao.get_flows. Owners + dept-admin scope are picked up by
+        list_accessible_ids' implicit scope expansion.
+        """
+        from bisheng.permission.domain.services.owner_service import _run_async_safe
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.user.domain.services.auth import LoginUser
+
+        login_user = LoginUser.init_login_user_sync(
+            user_id=user_id,
+            user_name='',
+        )
+        accessible_ids = _run_async_safe(
+            PermissionService.list_accessible_ids(
+                user_id=user_id,
+                relation='can_read',
+                object_type='workflow',
+                login_user=login_user,
+            ),
+        )
+        if accessible_ids is None:
+            flow_id_extra = 'admin'
+        else:
+            flow_id_extra = list(accessible_ids)
         return FlowDao.get_flows(user_id,
                                  flow_id_extra,
                                  keyword,

@@ -209,7 +209,7 @@ const KnowledgeListPanel = ({
       {/* 滚动列表 */}
       <div
         ref={listScrollRevealRef}
-        className="overflow-y-auto flex flex-col gap-0.5 scrollbar-on-hover min-h-0 flex-1"
+        className="overflow-y-auto flex flex-col gap-0.5 scrollbar-on-scroll min-h-0 flex-1"
         onScroll={handleScroll}
       >
         {items.map((item) => {

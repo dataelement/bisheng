@@ -449,7 +449,7 @@ export default function MainLayout() {
                   : 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
                 : innerScrollShell
                   ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
-                  : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
+                  : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-scroll',
             )}
           >
             {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
