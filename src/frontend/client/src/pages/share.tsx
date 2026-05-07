@@ -48,7 +48,13 @@ export default function Share() {
     const content = (() => {
         switch (type) {
             case 'linsight_session':
-                return <Sop id={shareInfo.resource_id} vid={vid} shareToken={shareToken} />
+                // Parent uses items-start (no cross-axis stretch); Sop's root
+                // lacks w-full so it collapses to content width. Wrap to fill.
+                return (
+                    <div className="h-full w-full">
+                        <Sop id={shareInfo.resource_id} vid={vid} shareToken={shareToken} />
+                    </div>
+                )
             case 'workbench_chat':
                 return <ChatView id={shareInfo.resource_id} shareToken={shareToken} />;
             default:

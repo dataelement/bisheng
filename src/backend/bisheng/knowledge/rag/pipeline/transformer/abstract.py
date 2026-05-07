@@ -47,7 +47,11 @@ class AbstractTransformer(BaseDocumentTransformer):
 
     @cached_property
     def llm_config(self):
-        return KnowledgeUtils.get_knowledge_abstract_llm(self.invoke_user_id)
+        # Resolve the system-config row against the Knowledge file's owner
+        # tenant (F022 INV-T18). KnowledgeFile.tenant_id is the Flow- or
+        # KB-owner; falling back to None defers to ContextVar / Root.
+        tenant_id = getattr(self.knowledge_file, 'tenant_id', None) if self.knowledge_file else None
+        return KnowledgeUtils.get_knowledge_abstract_llm(self.invoke_user_id, tenant_id=tenant_id)
 
     def transform_documents(
             self, documents: Sequence[Document], **kwargs: Any

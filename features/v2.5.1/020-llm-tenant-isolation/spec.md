@@ -50,7 +50,7 @@
 | AC-08 | Child Admin（叶子=Child 5） | `PUT /api/v1/llm/{root_shared_id}` 修改 Root 共享模型 | HTTP 403 + 错误码 `19801` `llm_model_shared_readonly` |
 | AC-09 | Child Admin（叶子=Child 5） | `DELETE /api/v1/llm/{root_shared_id}` 删除 Root 共享模型 | HTTP 403 + 错误码 `19801` |
 | AC-10 | Child Admin（叶子=Child 5） | `PUT /api/v1/llm/{child_7_own_id}` 修改 Child 7 的模型 | HTTP 404（不在可见集合）或 403（依赖 DAO 前置过滤） |
-| AC-11 | Child Admin（叶子=Child 5） | `PUT /api/v1/llm/workbench` 等系统级配置端点 | HTTP 403 + 错误码 `19803` `llm_system_config_forbidden`（系统级 workbench/knowledge/assistant/evaluation/workflow 模型配置仍保留为全局超管独有）|
+| AC-11 | Child Admin（叶子=Child 5） | `PUT /api/v1/llm/workbench` 等系统级配置端点 | **F022 修订**：Child Admin 操作的是**自己 Child 的配置行**，返 200；只有跨 tenant 写入（`target_tenant_id ∉ user.manageable_tenant_ids`）才返 403 + 错误码 `19803`。详见 `features/v2.5.1/022-llm-system-config-tenant-isolation/spec.md` §2.2 AC-10/AC-11。|
 | AC-12 | Child Admin | 所有 LLM CRUD 操作 | 强制写 `audit_log`，action=`llm.server.{create,update,delete}` / `llm.model.{...}`，payload 含 endpoint URL、`api_key_hash`（不记录明文）、operator_id、operator_tenant_id |
 
 ### 2.3 全局超管 + admin-scope（F019 集成）
@@ -105,7 +105,7 @@
 | AD-04 | Child Admin 对 Root 共享模型 | A: 可编辑 / B: 只读 | B（决策 2 锁定 Root 统一管控） |
 | AD-05 | endpoint 白名单 | A: 必须启用 / B: 可选 config | B（默认宽松，合规客户按需启用） |
 | AD-06 | 跨 Tenant 模型引用失败 | A: 级联清理外键 / B: 保留 id + 运行时报错 | B（对齐 INV-T4，便于管理员排查）|
-| AD-07 | 系统级 `/llm/workbench` 等配置 | A: 降级 Child Admin 可改 / B: 保留全局超管独有 | B（工作台默认模型等是集团级决策，避免 Child 误改影响全局）|
+| AD-07 | 系统级 `/llm/workbench` 等配置 | A: 降级 Child Admin 可改 / B: 保留全局超管独有 | ~~B~~ → **F022 修订为按租户隔离**：5 类系统级配置（knowledge_llm / assistant_llm / evaluation_llm / workflow_llm / linsight_llm）改为存于 `tenant_system_model_config` 表，每个 Child 自有一行；Root 共享通过 `Tenant.share_default_to_children` 兜底。原"避免 Child 误改影响全局"担心在按租户隔离后不复存在。详见 F022 spec §AD-01。|
 | AD-08 | 名称唯一约束 | A: 全局唯一 / B: Tenant 内唯一 | B（允许不同 Child 重名，符合子公司独立命名习惯）|
 
 ---
@@ -355,7 +355,7 @@ def upgrade():
 |--------|------|------|
 | `19801` | `llm_model_shared_readonly` — Child Admin 尝试修改 Root 共享模型 | 403 |
 | `19802` | `llm_model_not_accessible` — 目标 model 不在当前可见集合（包括跨 Tenant 引用失败） | 404 |
-| `19803` | `llm_system_config_forbidden` — Child Admin 尝试修改系统级 workbench/knowledge 配置 | 403 |
+| `19803` | `llm_system_config_forbidden` — **F022 修订**：跨 tenant 写入（`target_tenant_id ∉ caller's manageable_tenant_ids`）。原"Child Admin 尝试修改系统级配置"语义已被 F022 收窄到"跨 tenant"。 | 403 |
 | `19804` | `llm_endpoint_not_whitelisted` — Child Admin 注册的 endpoint 不在 config 白名单 | 400 |
 
 ---

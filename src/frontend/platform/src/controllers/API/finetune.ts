@@ -164,8 +164,34 @@ export const getLLmServerDetail = async (server_id: string): Promise<any> => {
     return await axios.get(`/api/v1/llm/info?server_id=${server_id}`)
 }
 
-// 获取知识库模型配置
+/**
+ * F022: GET /api/v1/llm/{type} response shape.
+ *
+ * The backend wraps the typed config (KnowledgeLLMConfig / WorkbenchModelConfig
+ * / ...) in an envelope so the frontend can render the inherited Badge and
+ * fallback_blocked Banner introduced by tenant-scoped system configuration.
+ */
+export interface SystemModelConfigEnvelope<T = any> {
+    data: T;
+    inherited_from_root: boolean;
+    fallback_blocked: boolean;
+}
+
+const isEnvelope = (value: any): boolean =>
+    !!value && typeof value === 'object' && 'data' in value && 'inherited_from_root' in value;
+
+// Legacy callers (e.g. flowUtils workflow default model picker) expect the
+// typed config directly. Defensively unwrap the envelope so they keep
+// working after the F022 backend ships, and gracefully fall through during
+// rolling deploys where the backend may still return the legacy shape.
+const unwrap = (value: any) => isEnvelope(value) ? value.data : value;
+
+// 获取知识库模型配置 (legacy, returns typed config)
 export const getKnowledgeModelConfig = async (): Promise<any> => {
+    return unwrap(await axios.get(`/api/v1/llm/knowledge`))
+}
+// F022: envelope variant — returns inherited_from_root / fallback_blocked metadata.
+export const getKnowledgeModelEnvelope = async (): Promise<SystemModelConfigEnvelope> => {
     return await axios.get(`/api/v1/llm/knowledge`)
 }
 
@@ -173,16 +199,22 @@ export const getKnowledgeModelConfig = async (): Promise<any> => {
 export const updateKnowledgeModelConfig = async (data: any): Promise<any> => {
     return await axios.post(`/api/v1/llm/knowledge`, data)
 }
-// 获取灵思模型配置
+// 获取灵思模型配置 (legacy)
 export const getLinsightModelConfig = async (): Promise<any> => {
+    return unwrap(await axios.get(`/api/v1/llm/workbench`))
+}
+export const getLinsightModelEnvelope = async (): Promise<SystemModelConfigEnvelope> => {
     return await axios.get(`/api/v1/llm/workbench`)
 }
 // 更新灵思模型配置
 export const updateLinsightModelConfig = async (data: any): Promise<any> => {
     return await axios.post(`/api/v1/llm/workbench`, data)
 }
-// 获取助手模型配置
+// 获取助手模型配置 (legacy)
 export const getAssistantModelConfig = async (): Promise<any> => {
+    return unwrap(await axios.get(`/api/v1/llm/assistant`))
+}
+export const getAssistantModelEnvelope = async (): Promise<SystemModelConfigEnvelope> => {
     return await axios.get(`/api/v1/llm/assistant`)
 }
 
@@ -191,8 +223,11 @@ export const updateAssistantModelConfig = async (data: any): Promise<any> => {
     return await axios.post(`/api/v1/llm/assistant`, data)
 }
 
-// 获取评测模型配置
+// 获取评测模型配置 (legacy)
 export const getEvaluationModelConfig = async (): Promise<any> => {
+    return unwrap(await axios.get(`/api/v1/llm/evaluation`))
+}
+export const getEvaluationModelEnvelope = async (): Promise<SystemModelConfigEnvelope> => {
     return await axios.get(`/api/v1/llm/evaluation`)
 }
 
@@ -209,9 +244,12 @@ export async function setLlmDefaultModel(data: { model_id: string }): Promise<an
 }
 
 /**
- * llm 助手节点默认模型
+ * llm 助手节点默认模型 (legacy)
  */
 export async function getLlmDefaultModel(): Promise<any> {
+    return unwrap(await axios.get(`/api/v1/llm/workflow`))
+}
+export async function getLlmDefaultModelEnvelope(): Promise<SystemModelConfigEnvelope> {
     return await axios.get(`/api/v1/llm/workflow`)
 }
 

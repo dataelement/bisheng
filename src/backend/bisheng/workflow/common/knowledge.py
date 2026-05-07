@@ -334,7 +334,7 @@ class RagUtils(BaseNode):
             self._multi_es_retriever = None
             self._multi_milvus_retriever = None
             return
-        embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
+        embeddings = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
         if not embeddings:
             raise Exception('No knowledge base defaults configuredembeddingModels')
 

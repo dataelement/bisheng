@@ -198,7 +198,13 @@ class FlowService(BaseService):
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             raise NotFoundError()
-        if not await ApplicationPermissionService.has_any_permission_async(
+        # A valid share-token whose resource_id matches this flow grants
+        # view access to recipients who lack a direct app permission grant.
+        # Mirrors the fallback used by /workstation/messages/{id}/agent.
+        has_share_grant = (
+            share_link is not None and str(share_link.resource_id) == str(flow_id)
+        )
+        if not has_share_grant and not await ApplicationPermissionService.has_any_permission_async(
             login_user,
             'workflow',
             str(flow_info.id),

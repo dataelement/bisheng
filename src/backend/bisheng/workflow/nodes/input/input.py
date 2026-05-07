@@ -263,7 +263,7 @@ class InputNode(BaseNode):
 
     def init_vector_clients(self):
         if self._vector_client is None:
-            embedding = LLMService.get_knowledge_default_embedding(self.user_id)
+            embedding = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
             if not embedding:
                 raise Exception('No default configured embedding Models')
             milvus_collection_name = self.get_milvus_collection_name(getattr(embedding, 'model_id'))

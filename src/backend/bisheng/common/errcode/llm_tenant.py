@@ -23,10 +23,13 @@ class LLMModelNotAccessibleError(BaseErrorCode):
 
 
 class LLMSystemConfigForbiddenError(BaseErrorCode):
+    # F022 revises the trigger: from "Child Admin writes any system config"
+    # (F020 era) to "any caller writes a target tenant outside its
+    # manageable_tenant_ids set". The numeric code is preserved.
     Code: int = 19803
     Msg: str = (
-        'System-level LLM configuration (workbench / knowledge / assistant '
-        '/ evaluation defaults) is restricted to the global super admin'
+        "Cross-tenant write forbidden: target tenant_id is not in "
+        "caller's manageable set"
     )
 
 

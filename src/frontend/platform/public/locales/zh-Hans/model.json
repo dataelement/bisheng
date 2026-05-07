@@ -152,6 +152,14 @@
     "confirmDeletePublishedModel": "该模型已发布，确认要删除模型 {{name}} 吗？",
     "confirmStopTraining": "确认停止该训练?",
     "evaluationReport": "评估报告",
-    "trainingLogs": "训练日志"
+    "trainingLogs": "训练日志",
+    "systemConfig": {
+      "tenantBanner": "正在配置租户「{{tenantName}}」。未配置项将从 Root 继承（若 Root 开启共享）。",
+      "rootBanner": "正在配置 Root（全局默认）。所有未自主配置的子租户将继承此项。",
+      "rootReadOnlyBanner": "Root 共享 · 只读。请切换到本租户视图以配置自有默认。",
+      "inheritedBadge": "继承自 Root",
+      "fallbackBlockedBanner": "Root 已关闭共享。请联系超管开启共享或在此为本租户独立配置。",
+      "forbiddenWriteRoot": "权限不足：无法修改 Root 默认配置。"
+    }
   }
 }

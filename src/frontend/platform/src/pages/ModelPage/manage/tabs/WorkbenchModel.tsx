@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getLinsightModelConfig, updateLinsightModelConfig } from "@/controllers/API/finetune";
+import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
+import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -188,8 +189,16 @@ export default function WorkbenchModel({ onBack }) {
     );
     // console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
     console.log('TTS Model Options structure:', JSON.stringify(embeddings, null, 2));
+    const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
+    const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+            <FallbackBlockedBanner visible={fallbackBlocked} />
+            {inheritedFromRoot && (
+                <div className="-mb-2 text-xs text-muted-foreground flex items-center">
+                    <InheritedBadge visible={true} />
+                </div>
+            )}
             <ModelSelect
                 close
                 label={t('model.workVectorModel')}
@@ -276,10 +285,13 @@ export default function WorkbenchModel({ onBack }) {
 
 export function useLinsightConfig() {
     return useQuery({
-        queryKey: ["linsightModelConfig"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelConfig()),
-        select: (data) => {
-            const safeConfig = data || {
+        queryKey: ["linsightModelEnvelope"],
+        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()),
+        select: (env) => {
+            // F022: backend returns {data, inherited_from_root, fallback_blocked}.
+            // Hand the destructured shape back so the component can render the
+            // Badge / Banner without re-fetching.
+            const cfg = env?.data || {
                 task_model: null,
                 embedding_model: null,
                 abstract_prompt: defalutPrompt,
@@ -289,7 +301,11 @@ export function useLinsightConfig() {
                 knowledge_space_llm: null,
                 chat_title_llm: null,
             };
-            return safeConfig;
+            return {
+                ...cfg,
+                inherited_from_root: !!env?.inherited_from_root,
+                fallback_blocked: !!env?.fallback_blocked,
+            };
         },
         retry: 1,
     });

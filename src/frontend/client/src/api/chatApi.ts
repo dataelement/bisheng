@@ -208,12 +208,16 @@ export async function getMessages(
  * server shape.
  */
 export async function getAgentMessages(
-    conversationId: string
+    conversationId: string,
+    shareToken?: string,
 ): Promise<ChatMessage[]> {
     if (!conversationId || conversationId === "new") {
         return [];
     }
-    const res = await http.get(API.agentMessages(conversationId));
+    // Mirror getMessages: anonymous share-page reads must carry share-token so
+    // the backend's tenant/auth middleware lets the request through.
+    const headers = shareToken ? { 'share-token': shareToken } : undefined;
+    const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
     const rows: any[] = res?.data ?? res ?? [];
     return rows.map(mapAgentResponseItem);
 }
