@@ -311,9 +311,29 @@ export default function useChatHelpers() {
         skillStreamMsg: (chatid: string, data: any) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
-                    return SkillMethod.updateStreamMessage(data, chatid, messages,
+                    const next = SkillMethod.updateStreamMessage(data, chatid, messages,
                         data.type === 'end_cover' && data.category === 'anwser'
                     )
+                    // Safety net: when the backend emits a real DB message_id (typically on
+                    // end / end_cover for `answer`), force-stamp it onto the latest non-runLog
+                    // bot message that still carries a temp id. This guards against the
+                    // cover/pop branches inside updateStreamMessage swallowing the id.
+                    const dbId = data?.message_id
+                    if (dbId && !['tool', 'flow', 'knowledge'].includes(data.category)) {
+                        for (let i = next.length - 1; i >= 0; i--) {
+                            const m = next[i]
+                            if (!m?.is_bot) break
+                            if (['tool', 'flow', 'knowledge'].includes(m.category)) continue
+                            const idStr = String(m.id ?? '')
+                            const idMissingOrTemp =
+                                !m.id || idStr.startsWith('tmp-') || idStr.startsWith('u-')
+                            if (idMissingOrTemp) {
+                                m.id = dbId
+                            }
+                            break
+                        }
+                    }
+                    return next
                 })
             )
         },
