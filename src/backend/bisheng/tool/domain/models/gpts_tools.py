@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Boolean, Column, DateTime, String, text, func
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, text, func
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, or_, select, Text, update, col
 
@@ -26,6 +26,11 @@ class GptsToolsBase(SQLModelSerializable):
     api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON),
                                              description='Used to storeapiParameter and other information')
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -57,6 +62,11 @@ class GptsToolsTypeBase(SQLModelSerializable):
             Boolean, nullable=False, server_default=text('0'),
             comment='F017: Root tool type shared to all children (mirrors FGA shared_with tuples)',
         ),
+    )
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
     )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

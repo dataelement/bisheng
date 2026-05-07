@@ -446,7 +446,24 @@ class TenantService:
 
     @classmethod
     async def aadd_users(cls, tenant_id: int, data: TenantUserAdd, login_user) -> dict:
-        """Add users to a tenant. Optionally grant admin role."""
+        """**DEPRECATED in v2.5.1 (F024)**: tenant membership is derived from
+        the user's primary department. The public ``POST /tenants/{id}/users``
+        endpoint returns 410 Gone; this implementation is retained only for
+        internal scripts that need to write passive ``UserTenant`` rows
+        during migration. Will be removed in v2.6.0."""
+        import warnings
+        warnings.warn(
+            'TenantService.aadd_users is deprecated since v2.5.1 (F024); '
+            'change the user\'s primary department to alter tenant membership.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning(
+            'F024 deprecated: TenantService.aadd_users called for tenant_id=%d '
+            'with %d uids; this path bypasses leaf-tenant derivation and will '
+            'be removed in v2.6.0',
+            tenant_id, len(data.user_ids or []),
+        )
         with bypass_tenant_filter():
             tenant = await TenantDao.aget_by_id(tenant_id)
         if not tenant:
@@ -473,7 +490,22 @@ class TenantService:
 
     @classmethod
     async def aremove_user(cls, tenant_id: int, user_id: int, login_user) -> None:
-        """Remove a user from a tenant. Prevents removing the last admin."""
+        """**DEPRECATED in v2.5.1 (F024)**: see ``aadd_users``. Public
+        ``DELETE /tenants/{id}/users/{user_id}`` endpoint returns 410 Gone;
+        this implementation retained for internal use only."""
+        import warnings
+        warnings.warn(
+            'TenantService.aremove_user is deprecated since v2.5.1 (F024); '
+            'change the user\'s primary department to alter tenant membership.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning(
+            'F024 deprecated: TenantService.aremove_user called for '
+            'tenant_id=%d user_id=%d; this path bypasses leaf-tenant '
+            'derivation and will be removed in v2.6.0',
+            tenant_id, user_id,
+        )
         ut = await UserTenantDao.aget_user_tenant(user_id, tenant_id)
         if not ut:
             return
@@ -501,8 +533,16 @@ class TenantService:
         cls, tenant_id: int, page: int, page_size: int,
         keyword: Optional[str], login_user,
     ) -> dict:
-        """Get paginated users in a tenant."""
-        users, total = await UserTenantDao.aget_tenant_users(
+        """Get paginated users in a tenant.
+
+        F024: data source switched from ``UserTenantDao.aget_tenant_users``
+        (queries UserTenant rows) to ``UserDepartmentDao.aget_users_by_tenant_subtree``
+        (queries primary-dept-in-tenant-subtree). Aligns with
+        ``TenantResolver`` so v2.5.0 ``aadd_users`` residue rows do not
+        surface as phantom members. Return shape unchanged.
+        """
+        from bisheng.database.models.department import UserDepartmentDao
+        users, total = await UserDepartmentDao.aget_users_by_tenant_subtree(
             tenant_id=tenant_id, page=page, page_size=page_size, keyword=keyword,
         )
         return {'data': users, 'total': total}

@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Optional, Dict
 
 from sqlalchemy import Enum as SQLEnum, DateTime, text, JSON
-from sqlalchemy import CHAR, Column
+from sqlalchemy import CHAR, Column, Integer
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -64,6 +64,12 @@ class ShareLink(SQLModelSerializable, table=True):
     expire_time: int = Field(default=0, description='Expiration time, in seconds,0Indicates never expires')
 
     create_user_id: str = Field(..., sa_column=Column(CHAR(36)), description='Create UserID')
+
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

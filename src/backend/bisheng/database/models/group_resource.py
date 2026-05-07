@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, Integer, text, delete
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -24,6 +24,11 @@ class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False, description='Resource categories for knowledge, assistant, tools, workflow, dashboard and workstation')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

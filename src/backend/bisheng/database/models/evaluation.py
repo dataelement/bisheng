@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
+from sqlalchemy import Column, DateTime, Integer, Text, text, func, and_, JSON
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -37,6 +37,11 @@ class EvaluationBase(SQLModelSerializable):
                                                description='Final Assessment Score')
     description: str = Field(default='', sa_column=Column(Text), description='Error description information')
     is_delete: int = Field(default=0, description='whether delete')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None,
                                             sa_column=Column(DateTime, nullable=False,
                                                              server_default=text('CURRENT_TIMESTAMP')))

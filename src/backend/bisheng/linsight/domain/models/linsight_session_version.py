@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Dict, Optional
 
-from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR, func
+from sqlalchemy import Column, Integer, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR, func
 from sqlmodel import Field, select, col, update
 
 from bisheng.core.database import get_async_db_session
@@ -61,6 +61,11 @@ class LinsightSessionVersionBase(SQLModelSerializable):
 
     # Version
     version: datetime = Field(default_factory=datetime.now, description='Session Version Created Time', sa_type=DateTime)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
 
 class LinsightSessionVersion(LinsightSessionVersionBase, table=True):

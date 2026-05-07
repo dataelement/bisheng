@@ -60,6 +60,11 @@ class AssistantLinkBase(SQLModelSerializable):
     tool_id: Optional[int] = Field(default=0, index=True, description='ToolsID')
     flow_id: Optional[str] = Field(default='', index=True, description='SkillID')
     knowledge_id: Optional[int] = Field(default=0, index=True, description='The knowledge base uponID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

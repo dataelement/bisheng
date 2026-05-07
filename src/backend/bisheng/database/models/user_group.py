@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import Column, DateTime, delete, func, text, INT
+from sqlalchemy import Column, DateTime, Integer, delete, func, text, INT
 from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -22,6 +22,11 @@ class UserGroupBase(SQLModelSerializable):
     )
     is_group_admin: bool = Field(default=False, index=False, description='Is Group Admin')  # Admin does not belong to this user group
     remark: Optional[str] = Field(default=None, index=False)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

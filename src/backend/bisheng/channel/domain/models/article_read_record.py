@@ -1,5 +1,7 @@
 import uuid
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel
 from sqlalchemy import CHAR, Column, VARCHAR, DateTime, text, Integer, Index
 from sqlmodel import Field
@@ -22,6 +24,12 @@ class ArticleReadRecord(SQLModelSerializable, table=True):
     article_id: str = Field(..., description='Article ID (from ES)', sa_column=Column(VARCHAR(255), nullable=False))
     user_id: int = Field(..., description='User ID', sa_column=Column(Integer, nullable=False))
     source_id: str = Field(None, description='Information Source ID', sa_column=Column(VARCHAR(255), nullable=True))
+
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
     create_time: datetime = Field(default_factory=datetime.now, description='Read Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

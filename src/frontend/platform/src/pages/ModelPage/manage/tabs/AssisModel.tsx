@@ -13,6 +13,7 @@ import uniqBy from "lodash-es/uniqBy";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "react-query";
 import { ModelSelect } from "./KnowledgeModel";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
@@ -110,6 +111,7 @@ const defaultValue = {
 export default function AssisModel({ llmOptions, onBack }) {
     const [form, setForm] = useState({ ...defaultValue });
     const { t } = useTranslation('model')
+    const queryClient = useQueryClient()
 
     const [loading, setLoading] = useState(true)
     useEffect(() => {
@@ -186,6 +188,11 @@ export default function AssisModel({ llmOptions, onBack }) {
 
         captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {
             message({ variant: 'success', description: t('model.saveSuccess') })
+            // The root QueryClient sets refetchOnMount: false globally, so
+            // invalidateQueries only marks the entry stale and the workbench
+            // dropdown still serves cached data on next mount. removeQueries
+            // drops the cache entirely, forcing a fresh fetch on next read.
+            queryClient.removeQueries('QueryAssistantModelsKey')
         }));
     };
 
