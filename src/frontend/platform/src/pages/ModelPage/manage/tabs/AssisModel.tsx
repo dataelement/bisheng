@@ -7,7 +7,9 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group";
-import { getAssistantModelConfig, updateAssistantModelConfig } from "@/controllers/API/finetune";
+import { getAssistantModelEnvelope, updateAssistantModelConfig } from "@/controllers/API/finetune";
+import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
+import { useSystemConfigEnvelope } from "../useSystemConfigEnvelope";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import uniqBy from "lodash-es/uniqBy";
 import { Plus } from "lucide-react";
@@ -113,19 +115,19 @@ export default function AssisModel({ llmOptions, onBack }) {
     const { t } = useTranslation('model')
     const queryClient = useQueryClient()
 
-    const [loading, setLoading] = useState(true)
+    const { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited: markEdited } =
+        useSystemConfigEnvelope<any>(getAssistantModelEnvelope)
+
     useEffect(() => {
-        setLoading(true)
-        getAssistantModelConfig().then(({ llm_list, auto_llm }) => {
-            setForm({
-                llm_list,
-                auto_llm: auto_llm || { ...defaultValue.auto_llm }
-            })
-            setLoading(false)
+        if (!config) return
+        setForm({
+            llm_list: config.llm_list || defaultValue.llm_list,
+            auto_llm: config.auto_llm || { ...defaultValue.auto_llm }
         })
-    }, []);
+    }, [config]);
 
     const updateField = (index, field, value) => {
+        markEdited();
         const updatedList = form.llm_list.map((item, i) => {
             if (i === index) {
                 return { ...item, [field]: value };
@@ -139,6 +141,7 @@ export default function AssisModel({ llmOptions, onBack }) {
     };
 
     const updateAutoLLMField = (field, value) => {
+        markEdited();
         setForm({ ...form, auto_llm: { ...form.auto_llm, [field]: value } });
     };
 
@@ -202,8 +205,12 @@ export default function AssisModel({ llmOptions, onBack }) {
 
     return (
         <div className="w-[70vw] mx-auto pt-2">
+            <FallbackBlockedBanner visible={fallbackBlocked} />
             <div className="mb-6">
-                <span className="pl-1">{t('model.assistantInferenceModel')}</span>
+                <span className="pl-1">
+                    {t('model.assistantInferenceModel')}
+                    <InheritedBadge visible={inheritedFromRoot} />
+                </span>
                 <div className="mt-2 border p-4 rounded-md bg-muted">
                     <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 68px 90px 40px" }}>
                         <Label className="bisheng-label">{t('model.model')}<span className="text-red-500 text-xs">*</span></Label>

@@ -131,7 +131,10 @@ class LinsightWorkflowTask:
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
         # Initialization Execution Component
-        self.llm = await self._get_llm(invoke_user_id=session_model.user_id)
+        self.llm = await self._get_llm(
+            invoke_user_id=session_model.user_id,
+            tenant_id=session_model.tenant_id,
+        )
         tools = await self._generate_tools(session_model)
         try:
             # Build Tool List
@@ -185,10 +188,14 @@ class LinsightWorkflowTask:
 
     # ==================== Component Initialization ====================
 
-    async def _get_llm(self, invoke_user_id: int) -> BaseChatModel:
+    async def _get_llm(self, invoke_user_id: int, tenant_id: Optional[int] = None) -> BaseChatModel:
         """DapatkanLLMInstances"""
         try:
-            workbench_conf = await LLMService.get_workbench_llm()
+            # F022 INV-T18: in Celery worker context the admin-scope
+            # ContextVar is unset; we thread the LinsightSessionVersion
+            # owner tenant through the public callers of _get_llm and
+            # _create_agent.
+            workbench_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
             linsight_conf = settings.get_linsight_conf()
             return await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
                                                              model_id=workbench_conf.task_model.id,
@@ -255,7 +262,7 @@ class LinsightWorkflowTask:
 
     async def _create_agent(self, session_model: LinsightSessionVersion, tools: List) -> LinsightAgent:
 
-        workbench_conf = await LLMService.get_workbench_llm()
+        workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
         linsight_conf = settings.get_linsight_conf()
         exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_model.id)
 

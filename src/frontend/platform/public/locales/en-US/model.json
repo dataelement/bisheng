@@ -152,6 +152,14 @@
     "confirmDeletePublishedModel": "Model is published. Confirm to delete {{name}}?",
     "confirmStopTraining": "Confirm to stop training?",
     "evaluationReport": "Evaluation Report",
-    "trainingLogs": "Training Logs"
+    "trainingLogs": "Training Logs",
+    "systemConfig": {
+      "tenantBanner": "Configuring tenant \"{{tenantName}}\". Unconfigured items inherit from Root (when Root sharing is on).",
+      "rootBanner": "Configuring Root (global default). Unconfigured child tenants inherit this configuration.",
+      "rootReadOnlyBanner": "Root config · read-only. Switch to your tenant view to configure your own defaults.",
+      "inheritedBadge": "Inherited from Root",
+      "fallbackBlockedBanner": "Root sharing is off. Ask the super admin to enable sharing or configure this tenant directly.",
+      "forbiddenWriteRoot": "Forbidden: cannot modify Root default configuration."
+    }
   }
 }

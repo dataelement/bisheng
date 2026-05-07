@@ -35,6 +35,11 @@ class BaseNode(ABC):
         self.workflow_id = workflow_id
         self.workflow_name = kwargs.get('workflow_name')
         self.graph_state = graph_state
+        # Owner tenant of the Flow — set by GraphEngine from FlowDao at
+        # task entry; downstream nodes pass this to LLMService.get_*_llm
+        # so the F022 system-config row resolves against the Flow's tenant
+        # rather than the (often unset) Celery worker ContextVar (INV-T18).
+        self.tenant_id: Optional[int] = kwargs.get('tenant_id')
 
         # Data of all nodes
         self.node_data = node_data
