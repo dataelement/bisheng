@@ -24,12 +24,25 @@ i18n.use(Backend)
     .use(initReactI18next)
     .init({
         partialBundledLanguages: true,
-        ns: ['bs', 'flow', 'permission', 'orgSync'],
+        // 'model' must be eager-loaded: SystemConfigBanners renders early in
+        // the model-management page tree and its t() calls fire before any
+        // lazy-load could resolve. With lazy load + i18next's default merge
+        // (don't-overwrite) addResourceBundle, a stale model.json snapshot
+        // already in the store will starve any newly-deployed key (the
+        // historical bug that made systemConfig* keys render as raw strings).
+        ns: ['bs', 'flow', 'permission', 'orgSync', 'model'],
         defaultNS: 'bs',
         lng: userLanguage,
         fallbackLng: 'en-US',
+        load: 'currentOnly',
         backend: {
-            loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + json.version
+            loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + json.version,
+            // Disable any per-key cross-request memoization in the backend
+            // adapter so each fresh deploy actually overrides the in-memory
+            // resource bundle for the language.
+            requestOptions: {
+                cache: 'no-cache',
+            },
         },
         interpolation: {
             escapeValue: false, // react already safes from xss

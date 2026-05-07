@@ -116,8 +116,14 @@ class AssistantService(BaseService, AssistantUtils):
         assistant = await AssistantDao.aget_one_assistant(assistant_id)
         if not assistant or assistant.is_delete:
             raise AssistantNotExistsError()
+        # A valid share-token whose resource_id matches this assistant grants
+        # view access to recipients who lack a direct app permission grant.
+        # Mirrors the fallback used by /workstation/messages/{id}/agent.
+        has_share_grant = (
+            share_link is not None and str(share_link.resource_id) == str(assistant_id)
+        )
         # Check if you have permission to access the information
-        if not await ApplicationPermissionService.has_any_permission_async(
+        if not has_share_grant and not await ApplicationPermissionService.has_any_permission_async(
             login_user,
             'assistant',
             str(assistant.id),

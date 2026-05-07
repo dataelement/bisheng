@@ -599,6 +599,65 @@ class DepartmentDao:
             return result.first()
 
     @classmethod
+    async def aassert_reparent_legal(
+        cls, dept_id: int, new_parent_id: Optional[int],
+    ) -> None:
+        """INV-T1 (2-layer tenant lock) gate for every reparent path.
+
+        Mount creation enforces this at ``TenantMountService.mount_child``;
+        the symmetric case is "reparent moves a mounted subtree under
+        another mount point". This helper is the single chokepoint that
+        F002 (manual move), F014 (SSO upsert), and F009 (org-sync move)
+        all call before changing ``parent_id``. Adding a new reparent
+        path? Call this first, or you reintroduce the dept-tree nesting
+        bug fixed in 2.5.1.
+
+        No-op when ``new_parent_id`` is None (top-level — outer mount
+        impossible) or when the moved subtree contains no mount (inner
+        mount irrelevant).
+        """
+        # Local import: errcode module pulls FastAPI's HTTPException, which
+        # would create a heavy cycle if pulled in at module import time.
+        from bisheng.common.errcode.tenant_tree import (
+            TenantTreeNestingForbiddenError,
+        )
+
+        if new_parent_id is None:
+            return
+        inner = await cls.aget_descendant_mount(dept_id)
+        if inner is None:
+            return
+        outer = await cls.aget_ancestors_with_mount(new_parent_id)
+        if outer is None:
+            return
+        raise TenantTreeNestingForbiddenError()
+
+    @classmethod
+    async def aget_descendant_mount(
+        cls, dept_id: int,
+    ) -> Optional['Department']:
+        """Return one descendant (or self) of ``dept_id`` that carries
+        ``is_tenant_root=1``, or None.
+
+        Used by reparent paths (F002 move, F014 SSO upsert) to enforce
+        INV-T1's 2-layer lock symmetrically: ``aget_ancestors_with_mount``
+        catches "new parent already inside a mount subtree", this helper
+        catches "moved subtree itself contains a mount". When both fire,
+        the move would produce nested mounts and must be rejected.
+        """
+        dept = await cls.aget_by_id(dept_id)
+        if dept is None or not dept.path:
+            return None
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.path.like(f'{dept.path}%'),
+                    Department.is_tenant_root == 1,
+                ).limit(1)
+            )
+            return result.first()
+
+    @classmethod
     async def aset_mount(
         cls, dept_id: int, tenant_id: int,
     ) -> None:

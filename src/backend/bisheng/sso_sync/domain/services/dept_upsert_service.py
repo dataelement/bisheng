@@ -124,6 +124,16 @@ class DeptUpsertService:
             base = parent_path if parent_path.endswith('/') else parent_path + '/'
             computed_path = base
 
+        # INV-T1 (2-layer lock) — symmetrical with F002 amove_department.
+        # Mount state itself is bisheng-internal (PRD §5.2.5) and SSO never
+        # toggles it, but we still reject upstream reparents that would
+        # land a mounted subtree under another mount.
+        if (
+            existing is not None
+            and (existing.parent_id or 0) != (parent_id or 0)
+        ):
+            await DepartmentDao.aassert_reparent_legal(existing.id, parent_id)
+
         return await DepartmentDao.aupsert_by_external_id(
             source=source,
             external_id=item.external_id,

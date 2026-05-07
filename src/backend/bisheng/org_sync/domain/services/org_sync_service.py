@@ -362,6 +362,13 @@ class OrgSyncService:
         if new_parent_id is None or new_parent_id == old_parent_id:
             return
 
+        # INV-T1 (2-layer lock): same gate as F002 amove + F014 SSO upsert —
+        # legacy v2.4 org-sync must not reparent a mounted subtree under
+        # another mount, otherwise we silently produce nested
+        # ``is_tenant_root=1`` rows. Per-op exception isolation in the
+        # caller turns this into a recorded sync error, not a batch abort.
+        await DepartmentDao.aassert_reparent_legal(op.local.id, new_parent_id)
+
         # Update parent_id
         op.local.parent_id = new_parent_id
 

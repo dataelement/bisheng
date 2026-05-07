@@ -714,6 +714,11 @@ class DepartmentService:
             if new_parent.path.startswith(dept.path):
                 raise DepartmentCircularMoveError()
 
+            # INV-T1 (2-layer lock): reject moves that would land a mounted
+            # subtree under another mount point. Single chokepoint shared
+            # with F014 SSO upsert and F009 org-sync move.
+            await DepartmentDao.aassert_reparent_legal(dept.id, new_parent.id)
+
             old_parent_id = dept.parent_id
             old_path = dept.path
             new_path = f'{new_parent.path}{dept.id}/'
