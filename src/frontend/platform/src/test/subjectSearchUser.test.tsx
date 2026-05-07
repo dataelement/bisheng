@@ -72,7 +72,7 @@ describe("SubjectSearchUser", () => {
     expect(mockedGetGroupUsersApi).toHaveBeenCalledWith(101);
   });
 
-  it("uses full-scope grant candidates for knowledge-space permission grants", async () => {
+  it("uses resource grant candidates for knowledge-space permission grants", async () => {
     mockedGetResourceGrantUsersApi.mockResolvedValue([
       { user_id: 11, user_name: "Carol", primary_department_path: "总部/产品部" },
     ] as any);
