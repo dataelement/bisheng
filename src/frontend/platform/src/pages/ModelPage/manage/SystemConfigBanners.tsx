@@ -57,10 +57,16 @@ export function ScopeBanner({
             </div>
         );
     }
-    // !isGlobalSuper && isRootScope: Child user viewing Root — read-only.
+    // !isGlobalSuper: Child Admin (or dept admin) on their own tenant. They
+    // do not see a scope switcher (super-only), but write target resolves
+    // to their leaf tenant via `_resolve_write_target` + JWT, and
+    // `_assert_can_write_system_config` admits them via tenant#admin —
+    // i.e. they CAN edit. Mirror the amber "editing my tenant" framing
+    // that super sees in the !isRootScope branch above; do not tell them
+    // to "switch view" since that UI does not exist for them.
     return (
-        <div className="mb-4 p-3 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
-            {t('model.systemConfigRootReadOnlyBanner', { tenantName: rootName })}
+        <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
+            {t('model.systemConfigChildOwnBanner', { rootName })}
         </div>
     );
 }
