@@ -9,7 +9,6 @@ from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
@@ -481,13 +480,17 @@ class TestPermissionApiIntegration:
             'model_name': '所有者',
         }]
 
-    def test_knowledge_space_grant_subject_users_endpoint_returns_full_scope_candidates(self):
+    def test_knowledge_space_grant_subject_users_endpoint_returns_tenant_scoped_candidates(self):
         app = _make_app(_ViewerUser)
 
         with patch(
             'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
+            new_callable=AsyncMock,
+            return_value=3,
         ), patch(
             'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users',
             new_callable=AsyncMock,
@@ -506,15 +509,19 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 200
         assert body['data'][0]['user_name'] == 'Alice'
-        mock_list_users.assert_awaited_once_with(keyword='Ali', page=1, page_size=1000)
+        mock_list_users.assert_awaited_once_with(tenant_id=3, keyword='Ali', page=1, page_size=1000)
 
-    def test_knowledge_space_grant_subject_departments_endpoint_returns_full_tree(self):
+    def test_knowledge_space_grant_subject_departments_endpoint_returns_tenant_tree(self):
         app = _make_app(_ViewerUser)
 
         with patch(
             'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
+            new_callable=AsyncMock,
+            return_value=3,
         ), patch(
             'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_departments',
             new_callable=AsyncMock,
@@ -539,10 +546,9 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 200
         assert body['data'][0]['name'] == '研发部'
-        mock_list_departments.assert_awaited_once()
+        mock_list_departments.assert_awaited_once_with(tenant_id=3)
 
-    @pytest.mark.asyncio
-    async def test_grant_subject_departments_helper_returns_member_counts(self):
+    def test_grant_subject_departments_helper_returns_member_counts(self):
         from bisheng.permission.api.endpoints import resource_permission
 
         departments = [
@@ -569,12 +575,27 @@ class TestPermissionApiIntegration:
         ]
 
         class FakeResult:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def first(self):
+                return self._rows[0] if self._rows else None
+
             def all(self):
-                return [(10, 3), (11, 1)]
+                return self._rows
 
         class FakeSession:
+            calls = 0
+
             async def exec(self, _statement):
-                return FakeResult()
+                FakeSession.calls += 1
+                if FakeSession.calls == 1:
+                    return FakeResult([SimpleNamespace(id=3, status='active', root_dept_id=10)])
+                if FakeSession.calls == 2:
+                    return FakeResult([departments[0]])
+                if FakeSession.calls == 3:
+                    return FakeResult(departments)
+                return FakeResult([(10, 3), (11, 1)])
 
         class FakeSessionContext:
             async def __aenter__(self):
@@ -583,15 +604,17 @@ class TestPermissionApiIntegration:
             async def __aexit__(self, exc_type, exc, tb):
                 return False
 
-        with patch(
-            'bisheng.database.models.department.DepartmentDao.aget_all_active',
-            new_callable=AsyncMock,
-            return_value=departments,
-        ), patch(
-            'bisheng.core.database.get_async_db_session',
-            return_value=FakeSessionContext(),
-        ):
-            tree = await resource_permission._list_knowledge_space_grant_departments()
+        async def run_case():
+            FakeSession.calls = 0
+            with patch(
+                'bisheng.core.database.get_async_db_session',
+                return_value=FakeSessionContext(),
+            ):
+                return await resource_permission._list_knowledge_space_grant_departments(tenant_id=3)
+
+        import anyio
+
+        tree = anyio.run(run_case, backend='asyncio')
 
         assert tree[0]['member_count'] == 3
         assert tree[0]['children'][0]['member_count'] == 1
@@ -604,6 +627,10 @@ class TestPermissionApiIntegration:
             new_callable=AsyncMock,
             return_value=True,
         ) as mock_has_access, patch(
+            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
+            new_callable=AsyncMock,
+            return_value=3,
+        ), patch(
             'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_departments',
             new_callable=AsyncMock,
             return_value=[{
@@ -628,15 +655,19 @@ class TestPermissionApiIntegration:
         assert body['status_code'] == 200
         assert body['data'][0]['name'] == '研发部'
         mock_has_access.assert_awaited_once()
-        mock_list_departments.assert_awaited_once()
+        mock_list_departments.assert_awaited_once_with(tenant_id=3)
 
-    def test_knowledge_space_grant_subject_user_groups_endpoint_returns_full_scope_groups(self):
+    def test_knowledge_space_grant_subject_user_groups_endpoint_returns_tenant_scoped_groups(self):
         app = _make_app(_ViewerUser)
 
         with patch(
             'bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access',
             new_callable=AsyncMock,
             return_value=True,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id',
+            new_callable=AsyncMock,
+            return_value=3,
         ), patch(
             'bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_user_groups',
             new_callable=AsyncMock,
@@ -654,7 +685,9 @@ class TestPermissionApiIntegration:
 
         assert body['status_code'] == 200
         assert body['data'][0]['group_name'] == '产品组'
-        mock_list_groups.assert_awaited_once_with(keyword='产品')
+        mock_list_groups.assert_awaited_once()
+        assert mock_list_groups.await_args.kwargs['tenant_id'] == 3
+        assert mock_list_groups.await_args.kwargs['keyword'] == '产品'
 
     def test_permissions_list_reads_workflow_permissions_after_fine_grained_allow(self):
         app = _make_app(_ViewerUser)

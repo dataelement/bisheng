@@ -544,15 +544,40 @@ def _permission_subject_key(item: ResourcePermissionItem) -> tuple[str, int, str
 
 async def _list_knowledge_space_grant_users(
     *,
+    tenant_id: int,
     keyword: str,
     page: int,
     page_size: int,
 ) -> list[dict]:
-    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-    from bisheng.user.domain.models.user import UserDao
+    from sqlmodel import select
 
-    users = await UserDao.afilter_users([], keyword=keyword, page=page, limit=page_size)
-    active_users = [user for user in users if getattr(user, 'delete', 0) == 0]
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.tenant import Tenant, UserTenant
+    from bisheng.user.domain.models.user import User
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            stmt = (
+                select(User)
+                .join(UserTenant, UserTenant.user_id == User.user_id)
+                .join(Tenant, Tenant.id == UserTenant.tenant_id)
+                .where(
+                    UserTenant.tenant_id == tenant_id,
+                    UserTenant.status == 'active',
+                    Tenant.status == 'active',
+                    User.delete == 0,
+                )
+                .order_by(User.user_id.desc())
+            )
+            if keyword:
+                stmt = stmt.where(User.user_name.like(f'%{keyword}%'))
+            if page and page_size:
+                stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+            result = await session.exec(stmt)
+            active_users = list(result.all())
+
     if not active_users:
         return []
 
@@ -565,11 +590,7 @@ async def _list_knowledge_space_grant_users(
         row for row in dept_rows
         if int(getattr(row, 'is_primary', 0) or 0) == 1
     ]
-    dept_ids = list({
-        int(row.department_id) for row in primary_rows
-        if getattr(row, 'department_id', None) is not None
-    })
-    departments = await DepartmentDao.aget_by_ids(dept_ids)
+    departments = await DepartmentDao.aget_active_by_tenant(tenant_id)
     dept_map = {
         int(dept.id): dept for dept in departments
         if getattr(dept, 'id', None) is not None
@@ -610,14 +631,67 @@ async def _list_knowledge_space_grant_users(
     ]
 
 
-async def _list_knowledge_space_grant_departments() -> list[dict]:
+async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dict]:
     from sqlalchemy import func
     from sqlmodel import select
 
+    from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import DepartmentDao, UserDepartment
+    from bisheng.database.models.department import Department, UserDepartment
+    from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
 
-    departments = await DepartmentDao.aget_all_active()
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            tenant = (
+                await session.exec(
+                    select(Tenant).where(
+                        Tenant.id == tenant_id,
+                        Tenant.status == 'active',
+                    )
+                )
+            ).first()
+            if tenant is None:
+                return []
+
+            root_dept = None
+            if getattr(tenant, 'root_dept_id', None):
+                root_dept = (
+                    await session.exec(
+                        select(Department).where(
+                            Department.id == int(tenant.root_dept_id),
+                            Department.status == 'active',
+                        )
+                    )
+                ).first()
+
+            if root_dept is not None:
+                stmt = select(Department).where(
+                    Department.path.like(f'{root_dept.path}%'),
+                    Department.status == 'active',
+                )
+                if tenant_id == ROOT_TENANT_ID:
+                    child_roots = (
+                        await session.exec(
+                            select(Department.path).where(
+                                Department.is_tenant_root == 1,
+                                Department.mounted_tenant_id.is_not(None),
+                                Department.mounted_tenant_id != ROOT_TENANT_ID,
+                                Department.status == 'active',
+                            )
+                        )
+                    ).all()
+                    for child_path in child_roots:
+                        stmt = stmt.where(~Department.path.like(f'{child_path}%'))
+            else:
+                stmt = select(Department).where(
+                    Department.tenant_id == tenant_id,
+                    Department.status == 'active',
+                )
+
+            result = await session.exec(
+                stmt.order_by(Department.sort_order, Department.id)
+            )
+            departments = list(result.all())
     if not departments:
         return []
 
@@ -626,19 +700,20 @@ async def _list_knowledge_space_grant_departments() -> list[dict]:
         for dept in departments
         if getattr(dept, 'id', None) is not None
     ]
-    async with get_async_db_session() as session:
-        count_result = await session.exec(
-            select(
-                UserDepartment.department_id,
-                func.count(UserDepartment.id),
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            count_result = await session.exec(
+                select(
+                    UserDepartment.department_id,
+                    func.count(UserDepartment.id),
+                )
+                .where(UserDepartment.department_id.in_(dept_ids))
+                .group_by(UserDepartment.department_id)
             )
-            .where(UserDepartment.department_id.in_(dept_ids))
-            .group_by(UserDepartment.department_id)
-        )
-        count_map = {
-            int(dept_id): int(count)
-            for dept_id, count in count_result.all()
-        }
+            count_map = {
+                int(dept_id): int(count)
+                for dept_id, count in count_result.all()
+            }
 
     nodes = {
         int(dept.id): {
@@ -676,11 +751,33 @@ async def _list_knowledge_space_grant_departments() -> list[dict]:
 
 async def _list_knowledge_space_grant_user_groups(
     *,
+    tenant_id: int,
     keyword: str,
 ) -> list[dict]:
-    from bisheng.database.models.group import GroupDao
+    from sqlmodel import col, select
 
-    groups, _ = await GroupDao.aget_all_groups(page=1, limit=2000, keyword=keyword)
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.group import LEGACY_HIDDEN_USER_GROUP_NAMES, Group
+    from bisheng.database.models.tenant import Tenant
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            stmt = (
+                select(Group)
+                .join(Tenant, Tenant.id == Group.tenant_id)
+                .where(
+                    Group.tenant_id == tenant_id,
+                    Tenant.status == 'active',
+                    col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
+                )
+                .order_by(Group.update_time.desc())
+                .limit(2000)
+            )
+            if keyword:
+                stmt = stmt.where(Group.group_name.like(f'%{keyword}%'))
+            result = await session.exec(stmt)
+            groups = list(result.all())
     return [
         {
             'id': int(group.id),
@@ -689,6 +786,28 @@ async def _list_knowledge_space_grant_user_groups(
         for group in groups
         if getattr(group, 'id', None) is not None
     ]
+
+
+async def _resolve_grant_subject_tenant_id(
+    *,
+    resource_type: str,
+    resource_id: str,
+    login_user: UserPayload,
+) -> int | None:
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.database.models.tenant import TenantDao
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    tenant_id = await PermissionService._resolve_resource_tenant(resource_type, resource_id)
+    if tenant_id is None:
+        tenant_id = get_current_tenant_id() or getattr(login_user, 'tenant_id', None)
+    if tenant_id is None:
+        return None
+
+    tenant = await TenantDao.aget_by_id(int(tenant_id))
+    if tenant is None or getattr(tenant, 'status', None) != 'active':
+        return None
+    return int(tenant_id)
 
 
 def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
@@ -1065,7 +1184,15 @@ async def get_grant_subject_users(
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return resp_200([])
     return resp_200(await _list_knowledge_space_grant_users(
+        tenant_id=tenant_id,
         keyword=keyword,
         page=page,
         page_size=page_size,
@@ -1086,7 +1213,14 @@ async def get_grant_subject_departments(
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
-    return resp_200(await _list_knowledge_space_grant_departments())
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return resp_200([])
+    return resp_200(await _list_knowledge_space_grant_departments(tenant_id=tenant_id))
 
 
 @router.get('/resources/{resource_type}/{resource_id}/grant-subjects/user-groups')
@@ -1104,7 +1238,14 @@ async def get_grant_subject_user_groups(
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
-    return resp_200(await _list_knowledge_space_grant_user_groups(keyword=keyword))
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return resp_200([])
+    return resp_200(await _list_knowledge_space_grant_user_groups(tenant_id=tenant_id, keyword=keyword))
 
 
 @router.get('/resources/{resource_type}/{resource_id}/permissions')
