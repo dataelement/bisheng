@@ -409,3 +409,99 @@ async def test_fallback_when_tenant_has_no_root_dept_id(session, patched_dao):
 
     assert total == 1
     assert rows[0]['user_id'] == 701
+
+
+# ── F024 phase-2: count parity tests ──────────────────────────────────────
+# The tenant list "user_count" column must match the dialog list source. We
+# verify ``acount_users_by_tenant_subtree`` (single + batch) and the legacy
+# list DAO's ``total`` agree under all the scenarios above so phantom rows
+# never re-surface.
+
+
+@pytest.mark.asyncio
+async def test_count_subtree_matches_list_total(session, patched_dao):
+    """count == aget_users_by_tenant_subtree.total for the same tenant."""
+    await _setup_two_tenant_world(session)
+    await _insert_user(session, uid=801, name='ivan')
+    await _insert_user_dept(session, uid=801, dept_id=20, is_primary=1)
+    await _insert_user(session, uid=802, name='judy')
+    await _insert_user_dept(session, uid=802, dept_id=30, is_primary=1)
+    await session.commit()
+
+    from bisheng.database.models.department import UserDepartmentDao
+    _, list_total = await UserDepartmentDao.aget_users_by_tenant_subtree(
+        tenant_id=5, page=1, page_size=20,
+    )
+    count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id=5)
+    assert count == list_total == 2
+
+
+@pytest.mark.asyncio
+async def test_count_subtree_excludes_phantom_user_tenant(session, patched_dao):
+    """Phantom-only tenants must report user_count=0 — the precise bug F035 fixes."""
+    await _setup_two_tenant_world(session)
+    # Phantom: user's primary dept is in the sibling subtree, but a stale
+    # is_active=1 UserTenant row points at tenant 5.
+    await _insert_user(session, uid=901, name='kate')
+    await _insert_user_dept(session, uid=901, dept_id=40, is_primary=1)
+    await _insert_user_tenant(session, uid=901, tid=5, is_active=1)
+    await session.commit()
+
+    from bisheng.database.models.department import UserDepartmentDao
+    count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id=5)
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_count_subtree_batch_matches_singles(session, patched_dao):
+    """Batch result must equal the per-tenant single-count for every id."""
+    await _setup_two_tenant_world(session)
+    # Tenant 5: one user; Tenant 1: one user via dept 40.
+    await _insert_user(session, uid=1001, name='leo')
+    await _insert_user_dept(session, uid=1001, dept_id=20, is_primary=1)
+    await _insert_user(session, uid=1002, name='mia')
+    await _insert_user_dept(session, uid=1002, dept_id=40, is_primary=1)
+    await session.commit()
+
+    from bisheng.database.models.department import UserDepartmentDao
+    batch = await UserDepartmentDao.acount_users_by_tenant_subtree_batch(
+        [1, 5, 9999],
+    )
+    single_1 = await UserDepartmentDao.acount_users_by_tenant_subtree(1)
+    single_5 = await UserDepartmentDao.acount_users_by_tenant_subtree(5)
+    # Tenant 1's subtree includes its descendants — both deps live under /10/.
+    assert batch.get(1, 0) == single_1
+    assert batch.get(5, 0) == single_5
+    # Unknown tenant id → omitted (default 0).
+    assert 9999 not in batch
+
+
+@pytest.mark.asyncio
+async def test_count_subtree_fallback_no_root_dept_id(session, patched_dao):
+    """Same fallback semantic as the list DAO — uses Department.tenant_id."""
+    await _insert_tenant(session, tid=8, code='legacy2', root_dept_id=None)
+    await _insert_dept(session, did=80, dept_id='BS@legacy2_root', path='/80/',
+                       tenant_id=8)
+    await _insert_user(session, uid=1101, name='nora')
+    await _insert_user_dept(session, uid=1101, dept_id=80, is_primary=1)
+    await session.commit()
+
+    from bisheng.database.models.department import UserDepartmentDao
+    count = await UserDepartmentDao.acount_users_by_tenant_subtree(8)
+    batch = await UserDepartmentDao.acount_users_by_tenant_subtree_batch([8])
+    assert count == 1
+    assert batch.get(8) == 1
+
+
+@pytest.mark.asyncio
+async def test_count_subtree_secondary_membership_excluded(session, patched_dao):
+    """is_primary=0 ties must not bump the count (parity with list DAO)."""
+    await _setup_two_tenant_world(session)
+    await _insert_user(session, uid=1201, name='oscar')
+    await _insert_user_dept(session, uid=1201, dept_id=40, is_primary=1)
+    await _insert_user_dept(session, uid=1201, dept_id=30, is_primary=0)
+    await session.commit()
+
+    from bisheng.database.models.department import UserDepartmentDao
+    count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id=5)
+    assert count == 0

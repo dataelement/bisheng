@@ -22,6 +22,7 @@ from bisheng.common.errcode.tenant_tree import (
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.department import UserDepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao, UserTenantDao
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.schemas.tenant_schema import (
@@ -139,9 +140,13 @@ class TenantService:
         tenants, total = await TenantDao.alist_tenants(
             keyword=keyword, status=status, page=page, page_size=page_size,
         )
-        # Batch count users to avoid N+1 queries
+        # F024 phase-2: count via primary-dept-in-subtree so the column
+        # matches the dialog list source exactly. v2.5.0 ``aadd_users``
+        # residue rows in UserTenant no longer surface as phantom members.
         tenant_ids = [t.id for t in tenants]
-        user_counts = await TenantDao.acount_tenant_users_batch(tenant_ids)
+        user_counts = await UserDepartmentDao.acount_users_by_tenant_subtree_batch(
+            tenant_ids,
+        )
 
         # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
         # operators see the original code in the tenant list. The stored value
@@ -173,7 +178,7 @@ class TenantService:
         if not tenant:
             raise TenantNotFoundError()
 
-        user_count = await TenantDao.acount_tenant_users(tenant_id)
+        user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         admin_users = await cls._get_tenant_admin_users(tenant_id)
 
         from bisheng.tenant.domain.services.tenant_mount_service import (
@@ -300,7 +305,10 @@ class TenantService:
     async def adelete_tenant(cls, tenant_id: int, login_user) -> None:
         """Delete a tenant. Requires zero active users."""
         _guard_default_tenant(tenant_id)
-        user_count = await TenantDao.acount_tenant_users(tenant_id)
+        # F024 phase-2: gate the delete on the same "primary dept in subtree"
+        # source the UI shows, so admins are never blocked by phantom
+        # UserTenant residue rows they cannot see.
+        user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         if user_count > 0:
             raise TenantHasUsersError()
 
@@ -347,7 +355,7 @@ class TenantService:
             raise TenantNotFoundError()
 
         usage = {}
-        user_count = await TenantDao.acount_tenant_users(tenant_id)
+        user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         usage['user_count'] = user_count
 
         return TenantQuotaResponse(
