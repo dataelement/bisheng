@@ -254,7 +254,7 @@ export function CreateKnowledgeSpaceDrawer({
                             {/* 简介 */}
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
-                                    {localize("description")}
+                                    {localize("com_subscription.description")}
                                 </Label>
                                 <div>
                                     <Textarea
@@ -329,7 +329,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         },
                                         {
                                             value: "public",
-                                            label: localize("publice"),
+                                            label: localize("com_subscription.public"),
                                             desc: localize("com_subscription.anyone_can_subscribe") || localize("com_knowledge.direct_subscribe_desc")
                                         }
                                     ].map((opt) => (
@@ -412,7 +412,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 onClick={handleConfirm}
                             >
                                 {submitting
-                                    ? (mode === "edit" ? localize("saving") : localize("creating"))
+                                    ? (mode === "edit" ? localize("com_subscription.saving") : localize("com_subscription.creating"))
                                     : (mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create"))}
                             </Button>
                         </div>

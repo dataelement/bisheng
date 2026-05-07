@@ -23,7 +23,7 @@ class NodeManager:
     def __init__(self, redis_client, node_id):
         # generate unique node ID
         self.node_id = node_id
-        self.redis = redis_client
+        self.redis: RedisClient = redis_client
         self.heartbeat_key = f"linsight:node:heartbeat:{self.node_id}"
         # Heartbeat interval (seconds)
         self.interval = 5
@@ -57,14 +57,14 @@ class NodeManager:
     async def release_task_ownership(self, session_version_id):
         """Release task ownership"""
         key = f"linsight:task:owner:{session_version_id}"
-        await self.redis.delete(key)
+        await self.redis.adelete(key)
 
     async def is_node_alive(self, target_node_id):
         """Check if a target node is alive based on its heartbeat"""
         if not target_node_id:
             return False
         key = f"linsight:node:heartbeat:{target_node_id}"
-        exists = await self.redis.exists(key)
+        exists = await self.redis.aexists(key)
         return exists > 0
 
 
