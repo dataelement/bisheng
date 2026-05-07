@@ -215,7 +215,12 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     async def _classify_with_llm(self) -> str:
         try:
-            llm_conf = await LLMService.get_workbench_llm()
+            # F022 INV-T18: classify against the KnowledgeFile's owner tenant
+            # so the workbench config row resolves to that tenant's row (or
+            # Root via share fallback) rather than the worker's empty
+            # ContextVar.
+            tenant_id = getattr(self.knowledge_file, 'tenant_id', None)
+            llm_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
             if (not llm_conf
                     or not llm_conf.chat_title_llm
                     or not llm_conf.chat_title_llm.id):

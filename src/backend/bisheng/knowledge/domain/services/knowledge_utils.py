@@ -180,10 +180,11 @@ class KnowledgeUtils(BaseService):
         return None
 
     @classmethod
-    def get_knowledge_abstract_llm(cls, invoke_user_id: int) \
-            -> Tuple[Optional[BaseChatModel], Optional[KnowledgeLLMConfig]]:
+    def get_knowledge_abstract_llm(
+        cls, invoke_user_id: int, tenant_id: Optional[int] = None,
+    ) -> Tuple[Optional[BaseChatModel], Optional[KnowledgeLLMConfig]]:
         """Get a summary of the knowledge basechunkright of privacy llmObjects"""
-        knowledge_llm = LLMService.get_knowledge_llm()
+        knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
         if not knowledge_llm.extract_title_model_id:
             # No related configurations
             return None, None

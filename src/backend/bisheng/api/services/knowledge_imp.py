@@ -204,42 +204,6 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     return True
 
 
-def decide_knowledge_llm(invoke_user_id: int) -> Any:
-    """Get a summary of the knowledge basechunkright of privacy llmObjects"""
-    # DapatkanllmConfigure
-    knowledge_llm = LLMService.get_knowledge_llm()
-    if not knowledge_llm.extract_title_model_id:
-        # No related configurations
-        return None
-
-    # DapatkanllmObjects
-    return LLMService.get_bisheng_llm_sync(
-        model_id=knowledge_llm.extract_title_model_id,
-
-        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
-        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
-        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
-        user_id=invoke_user_id)
-
-
-async def async_decide_knowledge_llm(invoke_user_id: int) -> Any:
-    """Get a summary of the knowledge basechunkright of privacy llmObjects"""
-    # DapatkanllmConfigure
-    knowledge_llm = await LLMService.aget_knowledge_llm()
-    if not knowledge_llm.extract_title_model_id:
-        # No related configurations
-        return None
-
-    # DapatkanllmObjects
-    return await LLMService.get_bisheng_llm(
-        model_id=knowledge_llm.extract_title_model_id,
-
-        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
-        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
-        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
-        user_id=invoke_user_id)
-
-
 def addEmbedding(
         knowledge_id: int,
         knowledge_files: List[KnowledgeFile],
@@ -671,7 +635,8 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     return True
 
 
-def recommend_question(invoke_user_id: int, question: str, answer: str, number: int = 3) -> List[str]:
+def recommend_question(invoke_user_id: int, question: str, answer: str, number: int = 3,
+                       tenant_id: Optional[int] = None) -> List[str]:
     from langchain.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
 
@@ -700,7 +665,7 @@ def recommend_question(invoke_user_id: int, question: str, answer: str, number: 
 
         You generated{number}similar questions:
     """
-    llm = LLMService.get_knowledge_similar_llm(invoke_user_id)
+    llm = LLMService.get_knowledge_similar_llm(invoke_user_id, tenant_id=tenant_id)
     if not llm:
         raise KnowledgeSimilarError.http_exception()
 

@@ -40,6 +40,11 @@ from bisheng.workflow.common.workflow import WorkflowStatus
 class RedisCallback(BaseCallback):
 
     def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int, **kwargs):
+        # F022 INV-T18: Owner tenant of the Flow (set by the celery task entry
+        # via tasks.py from FlowDao.get_flow_by_id) — used by sync helpers
+        # such as generate_session_title that resolve workbench config in a
+        # worker context with no admin-scope ContextVar.
+        self.tenant_id = kwargs.pop('tenant_id', None)
         super(RedisCallback, self).__init__()
         # Unique for asynchronous tasksID
         self.unique_id = unique_id
@@ -556,7 +561,7 @@ class RedisCallback(BaseCallback):
         if input_message:
             question = input_message[0].message
 
-        llm_conf = LLMService.get_workbench_llm_sync()
+        llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id)
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             return
         llm = LLMService.get_bisheng_llm_sync(

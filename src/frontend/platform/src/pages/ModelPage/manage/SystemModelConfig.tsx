@@ -1,23 +1,61 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import { userContext } from "@/contexts/userContext";
+import { getTenantsApi } from "@/controllers/API/tenant";
+import { useAdminScope } from "@/hooks/useAdminScope";
+import { Tenant } from "@/types/api/tenant";
 import { ArrowLeft } from "lucide-react";
-import { useMemo } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isGlobalSuperUser } from "./permissions";
+import { ScopeBanner } from "./SystemConfigBanners";
 import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
 import KnowledgeModle from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import WorkbenchModel from "./tabs/WorkbenchModel";
 
+const ROOT_TENANT_ID = 1;
+
 export default function SystemModelConfig({ data, defaultTab, onBack }: { data: any; defaultTab?: string; onBack: () => void }) {
     const { t } = useTranslation('model')
+    const { user } = useContext(userContext) as any
+    const { scope } = useAdminScope()
+    const [tenants, setTenants] = useState<Tenant[]>([])
+
+    // Refetch tenants once on mount; ScopeBar already does the same fetch
+    // independently — caching across components would require a shared
+    // react-query key, an OK trade-off for this dialog's small footprint.
+    useEffect(() => {
+        let cancelled = false
+        getTenantsApi({ page: 1, page_size: 100, status: 'active' })
+            .then((res) => {
+                if (!cancelled) setTenants(res?.data || [])
+            })
+            .catch(() => {
+                if (!cancelled) setTenants([])
+            })
+        return () => { cancelled = true }
+    }, [])
+
+    const rootTenant = useMemo(
+        () => tenants.find((row) => row.id === ROOT_TENANT_ID) || null,
+        [tenants],
+    )
+    const childTenant = useMemo(() => {
+        if (scope.scope_tenant_id === null || scope.scope_tenant_id === ROOT_TENANT_ID) return null
+        return tenants.find((row) => row.id === scope.scope_tenant_id) || null
+    }, [scope.scope_tenant_id, tenants])
+
+    const isGlobalSuper = isGlobalSuperUser(user)
+
     const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
         let llmOptions = []
         let embeddings = []
         let asrModel = []
         let ttsModel = []
         const rerank = []
-        data.forEach(server => {     
+        data.forEach(server => {
             const serverEmbItem = { value: server.id, label: server.name, children: [] }
             const serverLlmItem = { value: server.id, label: server.name, children: [] }
             const serverAsrItem = { value: server.id, label: server.name, children: [] }
@@ -25,8 +63,6 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
             const rerankItem = { value: server.id, label: server.name, children: [] }
 
             server.models.forEach(model => {
-             
-                
                 const item = {
                     value: model.id,
                     label: model.model_name
@@ -66,6 +102,12 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
                 <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4">
+                <ScopeBanner
+                    isGlobalSuper={isGlobalSuper}
+                    scopeTenantId={scope.scope_tenant_id ?? null}
+                    rootTenant={rootTenant}
+                    childTenant={childTenant}
+                />
                 <Tabs defaultValue={defaultTab || "workbench"} className="flex flex-col">
                     <TabsList className="w-[550px] m-auto">
                         <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>

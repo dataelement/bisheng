@@ -51,7 +51,12 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
 
 
 def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
-    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id, source=source)
+    # F022 INV-T18: resolve Flow.tenant_id once; reuse for both Workflow
+    # node tenant threading and RedisCallback's sync workbench reads.
+    workflow_info = FlowDao.get_flow_by_id(workflow_id)
+    flow_tenant_id = getattr(workflow_info, 'tenant_id', None)
+    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id,
+                                   source=source, tenant_id=flow_tenant_id)
     try:
         # update workflow status
         redis_callback.set_workflow_status(WorkflowStatus.RUNNING.value)
@@ -62,13 +67,13 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
 
         # init workflow
         workflow_conf = settings.get_workflow_conf()
-        workflow_info = FlowDao.get_flow_by_id(workflow_id)
         workflow_name = workflow_info.name if workflow_info else workflow_id
         workflow = Workflow(workflow_id, workflow_name,
                             user_id, workflow_data, False,
                             workflow_conf.max_steps,
                             workflow_conf.timeout,
-                            redis_callback)
+                            redis_callback,
+                            tenant_id=flow_tenant_id)
         redis_callback.workflow = workflow
         status, reason = workflow.run()
         _judge_workflow_status(redis_callback, workflow)
