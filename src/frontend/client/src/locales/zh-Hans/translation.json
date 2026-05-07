@@ -1359,6 +1359,7 @@
     "upload_browser_hint": "可能该客户端有时间限制，可尝试通过浏览器上传。",
     "file_size": "文件大小",
     "file_upload_failed": "文件 {{0}} 上传失败",
+    "file_upload_failed_with_reason": "文件 {{0}} 上传失败：{{1}}",
     "folder": "文件夹",
     "folder_name_empty": "文件夹名称不能为空",
     "format_list": "pdf(含扫描件)、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、dps、et",

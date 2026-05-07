@@ -2,7 +2,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.utils import util as common_util
 from bisheng.share_link.api.schemas.share_link_schema import GenerateShareLinkRequest
-from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.share_link.domain.models.share_link import ShareLink, ShareLinkStatusEnum
 from bisheng.share_link.domain.repositories.interfaces.share_link_repository import ShareLinkRepository
 
 
@@ -38,6 +38,14 @@ class ShareLinkService:
         share_link = await self.share_link_repository.find_one(share_token=share_token)
 
         if not share_link:
+            raise NotFoundError()
+
+        # Treat non-ACTIVE links (revoked/expired by future tooling) as if the
+        # record didn't exist so callers downstream uniformly fall back to the
+        # standard permission check. ``expire_time`` is intentionally not
+        # enforced here — its semantics are not yet pinned down and the
+        # frontend never sets a non-zero value.
+        if share_link.status != ShareLinkStatusEnum.ACTIVE:
             raise NotFoundError()
 
         return share_link

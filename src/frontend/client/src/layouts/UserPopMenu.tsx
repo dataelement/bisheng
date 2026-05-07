@@ -196,14 +196,16 @@ function UserPopMenuDrawer() {
                                     <span className="flex-1">English</span>
                                     {langcode === "en" && <Check className="size-4 text-blue-600" />}
                                 </button>
-                                <button
-                                    type="button"
-                                    className="flex w-full items-center rounded-lg py-2 pl-2 pr-3 text-left text-sm hover:bg-gray-50"
-                                    onClick={() => changeLang("ja")}
-                                >
-                                    <span className="flex-1">日本語</span>
-                                    {langcode === "ja" && <Check className="size-4 text-blue-600" />}
-                                </button>
+                                {!window.APP_CONFIG?.disableJa && (
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center rounded-lg py-2 pl-2 pr-3 text-left text-sm hover:bg-gray-50"
+                                        onClick={() => changeLang("ja")}
+                                    >
+                                        <span className="flex-1">日本語</span>
+                                        {langcode === "ja" && <Check className="size-4 text-blue-600" />}
+                                    </button>
+                                )}
                             </div>
                         ) : null}
                     </div>
@@ -416,10 +418,12 @@ function UserPopMenuRail() {
                                     <span className="flex-1 text-sm">English</span>
                                     {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
-                                    <span className="flex-1 text-sm">日本語</span>
-                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
-                                </DropdownMenuItem>
+                                {!window.APP_CONFIG?.disableJa && (
+                                    <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
+                                        <span className="flex-1 text-sm">日本語</span>
+                                        {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
+                                    </DropdownMenuItem>
+                                )}
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
 

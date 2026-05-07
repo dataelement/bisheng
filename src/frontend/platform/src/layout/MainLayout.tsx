@@ -287,11 +287,20 @@ export default function MainLayout() {
 };
 
 const useLanguage = (user: User) => {
-    const [language, setLanguage] = useState('zh-Hans')
+    // APP_CONFIG.disableJa (config.js) hides Japanese from the switcher.
+    const jaDisabled = !!(window as any).APP_CONFIG?.disableJa
+    const options: Record<string, string> = jaDisabled
+        ? { "zh-Hans": '中文', "en-US": 'English' }
+        : { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' }
+    // Source of truth for the displayed label is whatever i18next resolved
+    // during init (which already honors disableJa).
+    const initialLanguage = options[i18next.language] ? i18next.language : 'zh-Hans'
+    const [language, setLanguage] = useState(initialLanguage)
     useEffect(() => {
         const lang = user.user_id ? localStorage.getItem('i18nextLng') : null
         if (lang) {
-            setLanguage(lang === 'zh' ? 'zh-Hans' : lang)
+            const normalized = lang === 'zh' ? 'zh-Hans' : lang
+            setLanguage(options[normalized] ? normalized : initialLanguage)
         }
     }, [user])
 
@@ -306,8 +315,8 @@ const useLanguage = (user: User) => {
     }
     return {
         language,
-        languageNames: { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' },
-        options: { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' },
+        languageNames: options,
+        options,
         changLanguage,
         t
     }
