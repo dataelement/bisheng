@@ -192,11 +192,11 @@ export function getCitationClassName(type?: string) {
   switch (type?.toLowerCase()) {
     case 'web':
     case 'websearch':
-      return 'bg-[#F7F3FF] text-[#7224D9]';
+      return 'bg-[#F7F3FF] text-[#7224D9] transition-colors duration-150 hover:bg-[#EDE4FF] data-[state=open]:bg-[#EDE4FF]';
     case 'knowledgesearch':
-      return 'bg-[#F5F8FF] text-[#024DE3]';
+      return 'bg-[#F5F8FF] text-[#024DE3] transition-colors duration-150 hover:bg-[#D6EBFF] data-[state=open]:bg-[#D6EBFF]';
     default:
-      return 'bg-[#F5F8FF] text-[#024DE3]';
+      return 'bg-[#F5F8FF] text-[#024DE3] transition-colors duration-150 hover:bg-[#D6EBFF] data-[state=open]:bg-[#D6EBFF]';
   }
 }
 
