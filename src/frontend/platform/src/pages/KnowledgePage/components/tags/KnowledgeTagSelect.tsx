@@ -21,6 +21,7 @@ interface KnowledgeTagSelectProps {
     children: React.ReactNode;
     onUpdate: () => void;
     isEditable?: boolean;
+    mode?: 'auto' | 'single' | 'batch';
 }
 
 const TAG_NAME_MAX_LENGTH = 100;
@@ -32,7 +33,8 @@ export default function KnowledgeTagSelect({
     initialTags = [],
     children,
     onUpdate,
-    isEditable = true
+    isEditable = true,
+    mode = 'auto'
 }: KnowledgeTagSelectProps) {
     const { toast } = useToast();
     const { t } = useTranslation('knowledge');
@@ -43,7 +45,7 @@ export default function KnowledgeTagSelect({
     const [loading, setLoading] = useState(false);
     const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
 
-    const isBatch = fileIds.length > 1;
+    const isBatch = mode === 'batch' || (mode === 'auto' && fileIds.length > 1);
     const numericKnowledgeId = Number(knowledgeId);
 
     const syncSelectedTags = () => {
