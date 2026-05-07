@@ -259,6 +259,13 @@ class TenantDao:
                 if status:
                     stmt = stmt.where(Tenant.status == status)
                     count_stmt = count_stmt.where(Tenant.status == status)
+                else:
+                    # archived is a terminal state used purely for audit; it must
+                    # not surface in the regular tenant management list. Callers
+                    # that need archived rows (audit views, tests) can pass
+                    # ``status='archived'`` explicitly.
+                    stmt = stmt.where(Tenant.status != 'archived')
+                    count_stmt = count_stmt.where(Tenant.status != 'archived')
 
                 result = await session.exec(count_stmt)
                 total = result.one()
