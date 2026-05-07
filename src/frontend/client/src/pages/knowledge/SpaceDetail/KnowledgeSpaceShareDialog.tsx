@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SpaceRole } from "~/api/knowledge";
+import { SpaceLevel, SpaceRole } from "~/api/knowledge";
 import { KnowledgeSpaceMemberManagementPanel } from "~/components/KnowledgeSpaceMemberManagementPanel";
 import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
 import { PermissionListTab } from "~/components/permission/PermissionListTab";
@@ -25,6 +25,25 @@ import type { RelationModel, ResourceType } from "~/api/permission";
 const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
 const PERMISSION_TAB = "permission";
+const SUBJECT_TABS: Array<{
+    value: "user" | "department" | "user_group";
+    labelKey: string;
+}> = [
+    { value: "user", labelKey: "com_permission.subject_user" },
+    { value: "department", labelKey: "com_permission.subject_department" },
+    { value: "user_group", labelKey: "com_permission.subject_user_group" },
+];
+
+function getAllowedSubjectTabs(resourceType: ResourceType, spaceLevel?: SpaceLevel) {
+    if (resourceType !== "knowledge_space") return SUBJECT_TABS;
+    if (spaceLevel === SpaceLevel.DEPARTMENT) {
+        return SUBJECT_TABS.filter((tab) => tab.value !== "user_group");
+    }
+    if (spaceLevel === SpaceLevel.TEAM) {
+        return SUBJECT_TABS.filter((tab) => tab.value !== "department");
+    }
+    return SUBJECT_TABS;
+}
 
 interface KnowledgeSpaceShareDialogProps {
     open: boolean;
@@ -36,6 +55,7 @@ interface KnowledgeSpaceShareDialogProps {
     showShareTab: boolean;
     showMembersTab?: boolean;
     showPermissionTab: boolean;
+    spaceLevel?: SpaceLevel;
 }
 
 export function KnowledgeSpaceShareDialog({
@@ -48,6 +68,7 @@ export function KnowledgeSpaceShareDialog({
     showShareTab,
     showMembersTab = false,
     showPermissionTab,
+    spaceLevel,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -67,17 +88,28 @@ export function KnowledgeSpaceShareDialog({
         if (open) {
             setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
             setCopied(false);
-            setCurrentSubjectType("user");
-            setGrantSubjectType("user");
+            const firstSubject = getAllowedSubjectTabs(resourceType, spaceLevel)[0]?.value ?? "user";
+            setCurrentSubjectType(firstSubject);
+            setGrantSubjectType(firstSubject);
             setGrantIncludeChildren(true);
         }
-    }, [open, showMembersTab, showShareTab]);
+    }, [open, resourceType, showMembersTab, showShareTab, spaceLevel]);
 
     useEffect(() => {
         if (grantSubjectType !== "department" && grantIncludeChildren !== true) {
             setGrantIncludeChildren(true);
         }
     }, [grantIncludeChildren, grantSubjectType]);
+
+    useEffect(() => {
+        const allowed = getAllowedSubjectTabs(resourceType, spaceLevel);
+        if (!allowed.some((tab) => tab.value === currentSubjectType)) {
+            setCurrentSubjectType(allowed[0]?.value ?? "user");
+        }
+        if (!allowed.some((tab) => tab.value === grantSubjectType)) {
+            setGrantSubjectType(allowed[0]?.value ?? "user");
+        }
+    }, [currentSubjectType, grantSubjectType, resourceType, spaceLevel]);
 
     useEffect(() => {
         if (!open) return;
@@ -158,14 +190,7 @@ export function KnowledgeSpaceShareDialog({
         </div>
     );
 
-    const SUBJECT_TABS: Array<{
-        value: "user" | "department" | "user_group";
-        labelKey: string;
-    }> = [
-        { value: "user", labelKey: "com_permission.subject_user" },
-        { value: "department", labelKey: "com_permission.subject_department" },
-        { value: "user_group", labelKey: "com_permission.subject_user_group" },
-    ];
+    const allowedSubjectTabs = getAllowedSubjectTabs(resourceType, spaceLevel);
 
     const permissionPanel = (
         <Tabs
@@ -175,7 +200,7 @@ export function KnowledgeSpaceShareDialog({
         >
             <div className="flex items-center justify-between gap-3">
                 <TabsList className="w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
-                    {SUBJECT_TABS.map((tab) => (
+                    {allowedSubjectTabs.map((tab) => (
                         <TabsTrigger
                             key={tab.value}
                             value={tab.value}
@@ -252,7 +277,7 @@ export function KnowledgeSpaceShareDialog({
                     <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex items-center gap-3">
                             <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
-                                {SUBJECT_TABS.map((tab) => (
+                                {allowedSubjectTabs.map((tab) => (
                                     <button
                                         key={tab.value}
                                         type="button"
@@ -290,6 +315,7 @@ export function KnowledgeSpaceShareDialog({
                                 prefetchedUseDefaultModels={useDefaultModels}
                                 skipGrantableModelsRequest
                                 fixedSubjectType={grantSubjectType}
+                                allowedSubjectTypes={allowedSubjectTabs.map((tab) => tab.value)}
                                 includeChildren={grantIncludeChildren}
                                 onIncludeChildrenChange={setGrantIncludeChildren}
                                 hideDepartmentIncludeChildrenControl

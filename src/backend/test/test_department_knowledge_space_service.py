@@ -377,7 +377,7 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
 
 
 @pytest.mark.asyncio
-async def test_grant_department_members_viewer_writes_exact_department_tuple():
+async def test_grant_department_members_viewer_includes_child_departments():
     DepartmentKnowledgeSpaceService = _load_service_class()
 
     with patch(
@@ -396,7 +396,7 @@ async def test_grant_department_members_viewer_writes_exact_department_tuple():
     assert grant.subject_type == 'department'
     assert grant.subject_id == 10
     assert grant.relation == 'viewer'
-    assert grant.include_children is False
+    assert grant.include_children is True
 
 
 @pytest.mark.asyncio

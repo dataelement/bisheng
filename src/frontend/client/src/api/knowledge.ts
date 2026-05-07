@@ -78,6 +78,19 @@ export enum SpaceRole {
     MEMBER = "member"
 }
 
+export enum SpaceLevel {
+    PUBLIC = "public",
+    DEPARTMENT = "department",
+    TEAM = "team",
+    PERSONAL = "personal",
+}
+
+export type SpaceOwnerType =
+    | "tenant_root_department"
+    | "department"
+    | "user_group"
+    | "user";
+
 // ─────────────────────────────────────────────
 // Frontend domain interfaces (used by components)
 // ─────────────────────────────────────────────
@@ -116,6 +129,27 @@ export interface KnowledgeSpace {
     departmentName?: string;
     approvalEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
+    spaceLevel: SpaceLevel;
+    ownerType?: SpaceOwnerType;
+    ownerId?: number;
+    ownerName?: string;
+}
+
+export interface KnowledgeSpaceCreateOptions {
+    canCreatePublic: boolean;
+    canCreateDepartment: boolean;
+    canCreateTeam: boolean;
+    canCreatePersonal: boolean;
+    departments: Array<{ id: number; name: string; pathName?: string }>;
+    userGroups: Array<{ id: number; groupName: string }>;
+    defaultSpaceLevel: SpaceLevel;
+}
+
+export interface GroupedKnowledgeSpaces {
+    publicSpaces: KnowledgeSpace[];
+    departmentSpaces: KnowledgeSpace[];
+    teamSpaces: KnowledgeSpace[];
+    personalSpaces: KnowledgeSpace[];
 }
 
 export type SpaceSubscribeStatus = "subscribed" | "pending";
@@ -204,6 +238,10 @@ interface RawKnowledgeSpace {
     is_pending?: boolean;
     is_followed?: boolean;
     subscription_status?: string;
+    space_level?: string;
+    owner_type?: string;
+    owner_id?: number;
+    owner_name?: string;
 }
 
 interface RawSpaceChild {
@@ -309,6 +347,10 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).sensitive_check_enabled !== undefined
                 ? Boolean((raw as any).sensitive_check_enabled)
                 : undefined,
+        spaceLevel: ((raw as any).space_level as SpaceLevel) || SpaceLevel.PERSONAL,
+        ownerType: (raw as any).owner_type as SpaceOwnerType | undefined,
+        ownerId: (raw as any).owner_id ?? undefined,
+        ownerName: (raw as any).owner_name ?? undefined,
     };
 }
 
@@ -632,6 +674,44 @@ export async function getDepartmentSpacesApi(params?: {
     return extractKnowledgeSpaceList(res).map(mapSpace);
 }
 
+export async function getGroupedSpacesApi(params?: {
+    order_by?: string;
+}): Promise<GroupedKnowledgeSpaces> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/grouped`, {
+        params: {
+            order_by: params?.order_by,
+        },
+    });
+    const payload: any = res?.data ?? {};
+    return {
+        publicSpaces: asArray<RawKnowledgeSpace>(payload.public_spaces).map(mapSpace),
+        departmentSpaces: asArray<RawKnowledgeSpace>(payload.department_spaces).map(mapSpace),
+        teamSpaces: asArray<RawKnowledgeSpace>(payload.team_spaces).map(mapSpace),
+        personalSpaces: asArray<RawKnowledgeSpace>(payload.personal_spaces).map(mapSpace),
+    };
+}
+
+export async function getCreateSpaceOptionsApi(): Promise<KnowledgeSpaceCreateOptions> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/create-options`);
+    const raw: any = res?.data ?? {};
+    return {
+        canCreatePublic: Boolean(raw.can_create_public),
+        canCreateDepartment: Boolean(raw.can_create_department),
+        canCreateTeam: Boolean(raw.can_create_team),
+        canCreatePersonal: raw.can_create_personal !== false,
+        departments: asArray<any>(raw.departments).map((dept) => ({
+            id: Number(dept.id),
+            name: String(dept.name ?? ""),
+            pathName: dept.path_name ?? undefined,
+        })),
+        userGroups: asArray<any>(raw.user_groups).map((group) => ({
+            id: Number(group.id),
+            groupName: String(group.group_name ?? ""),
+        })),
+        defaultSpaceLevel: (raw.default_space_level as SpaceLevel) || SpaceLevel.PERSONAL,
+    };
+}
+
 /**
  * Get public knowledge square (paginated)
  */
@@ -774,6 +854,10 @@ export async function getSquareSpacesApi(params?: {
                 isPending,
                 squareStatus,
                 subscriptionStatus: subscriptionStatus || undefined,
+                spaceLevel: (rawAny?.space_level as SpaceLevel) || SpaceLevel.PERSONAL,
+                ownerType: rawAny?.owner_type as SpaceOwnerType | undefined,
+                ownerId: rawAny?.owner_id ?? undefined,
+                ownerName: rawAny?.owner_name ?? undefined,
             };
         })
         // Keep entries without id but avoid "undefined" key; drawer won't open for them.
@@ -794,6 +878,9 @@ export async function createSpaceApi(data: {
     icon?: string;
     auth_type: string;
     is_released?: boolean;
+    space_level?: SpaceLevel;
+    department_id?: number;
+    user_group_id?: number;
 }): Promise<KnowledgeSpace> {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;

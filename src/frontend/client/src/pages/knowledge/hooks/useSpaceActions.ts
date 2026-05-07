@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
     KnowledgeSpace,
-    SpaceSortType,
+    GroupedKnowledgeSpaces,
+    SpaceLevel,
     updateSpaceApi,
     deleteSpaceApi,
     unsubscribeSpaceApi,
@@ -13,12 +14,7 @@ import { useLocalize } from "~/hooks";
 
 interface UseSpaceActionsOptions {
     activeSpaceId?: string;
-    createdSortBy: SpaceSortType;
-    joinedSortBy: SpaceSortType;
-    departmentSortBy: SpaceSortType;
-    createdSpaces: KnowledgeSpace[];
-    joinedSpaces: KnowledgeSpace[];
-    departmentSpaces: KnowledgeSpace[];
+    groupedSpaces: GroupedKnowledgeSpaces;
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
 }
 
@@ -29,12 +25,7 @@ interface UseSpaceActionsOptions {
  */
 export function useSpaceActions({
     activeSpaceId,
-    createdSortBy,
-    joinedSortBy,
-    departmentSortBy,
-    createdSpaces,
-    joinedSpaces,
-    departmentSpaces,
+    groupedSpaces,
     onSpaceSelect,
 }: UseSpaceActionsOptions) {
     const localize = useLocalize();
@@ -43,23 +34,27 @@ export function useSpaceActions({
 
     // ── Cache updaters scoped to current sort keys ──
 
-    const updateCreatedCache = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
-        queryClient.setQueryData(["knowledgeSpaces", "mine", createdSortBy], (old: KnowledgeSpace[] = []) => updater(old));
-    };
-
-    const updateJoinedCache = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
-        queryClient.setQueryData(["knowledgeSpaces", "joined", joinedSortBy], (old: KnowledgeSpace[] = []) => updater(old));
-    };
-
-    const updateDepartmentCache = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
-        queryClient.setQueryData(["knowledgeSpaces", "department", departmentSortBy], (old: KnowledgeSpace[] = []) => updater(old));
-    };
-
     const updateAllCaches = (updater: (list: KnowledgeSpace[]) => KnowledgeSpace[]) => {
-        updateCreatedCache(updater);
-        updateJoinedCache(updater);
-        updateDepartmentCache(updater);
+        queryClient.setQueryData(
+            ["knowledgeSpaces", "grouped"],
+            (old: GroupedKnowledgeSpaces | undefined) => {
+                if (!old) return old;
+                return {
+                    publicSpaces: updater(old.publicSpaces),
+                    departmentSpaces: updater(old.departmentSpaces),
+                    teamSpaces: updater(old.teamSpaces),
+                    personalSpaces: updater(old.personalSpaces),
+                };
+            },
+        );
     };
+
+    const allSpaces = [
+        ...groupedSpaces.publicSpaces,
+        ...groupedSpaces.departmentSpaces,
+        ...groupedSpaces.teamSpaces,
+        ...groupedSpaces.personalSpaces,
+    ];
 
     // ── Rename space (double-click inline edit) ──
 
@@ -76,6 +71,7 @@ export function useSpaceActions({
                 description: space.description,
                 icon: space.icon,
                 auth_type: space.visibility,
+                is_released: space.isReleased,
             });
             showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
         } catch {
@@ -90,41 +86,8 @@ export function useSpaceActions({
     const handleDeleteSpace = async (spaceId: string) => {
         let nextActive: KnowledgeSpace | null = null;
 
-        // Optimistic remove from created list
-        queryClient.setQueryData(
-            ["knowledgeSpaces", "mine", createdSortBy],
-            (old: KnowledgeSpace[] = []) => {
-                const newData = old.filter(s => s.id !== spaceId);
-                if (activeSpaceId === spaceId && newData.length > 0) nextActive = newData[0];
-                return newData;
-            }
-        );
-
-        // Also check joined list for fallback selection
-        if (activeSpaceId === spaceId && !nextActive) {
-            const joined = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "joined", joinedSortBy]) || [];
-            const newJoined = joined.filter(s => s.id !== spaceId);
-            queryClient.setQueryData(["knowledgeSpaces", "joined", joinedSortBy], newJoined);
-            if (newJoined.length > 0) nextActive = newJoined[0];
-        } else {
-            queryClient.setQueryData(
-                ["knowledgeSpaces", "joined", joinedSortBy],
-                (old: KnowledgeSpace[] = []) => old.filter(s => s.id !== spaceId)
-            );
-        }
-
-        // Also check department list for fallback selection
-        if (activeSpaceId === spaceId && !nextActive) {
-            const dept = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "department", departmentSortBy]) || [];
-            const newDept = dept.filter(s => s.id !== spaceId);
-            queryClient.setQueryData(["knowledgeSpaces", "department", departmentSortBy], newDept);
-            if (newDept.length > 0) nextActive = newDept[0];
-        } else {
-            queryClient.setQueryData(
-                ["knowledgeSpaces", "department", departmentSortBy],
-                (old: KnowledgeSpace[] = []) => old.filter(s => s.id !== spaceId)
-            );
-        }
+        updateAllCaches((list) => list.filter(s => s.id !== spaceId));
+        nextActive = allSpaces.find(s => s.id !== spaceId) ?? null;
 
         if (activeSpaceId === spaceId) {
             onSpaceSelect(nextActive);
@@ -145,18 +108,10 @@ export function useSpaceActions({
     const handleLeaveSpace = async (spaceId: string) => {
         let nextActive: KnowledgeSpace | null = null;
 
-        // Optimistic remove from joined list
-        queryClient.setQueryData(
-            ["knowledgeSpaces", "joined", joinedSortBy],
-            (old: KnowledgeSpace[] = []) => {
-                const newData = old.filter(s => s.id !== spaceId);
-                if (activeSpaceId === spaceId && newData.length > 0) nextActive = newData[0];
-                return newData;
-            }
-        );
+        updateAllCaches((list) => list.filter(s => s.id !== spaceId));
 
         if (activeSpaceId === spaceId) {
-            if (!nextActive && createdSpaces.length > 0) nextActive = createdSpaces[0];
+            nextActive = allSpaces.find(s => s.id !== spaceId) ?? null;
             onSpaceSelect(nextActive);
         }
 
@@ -164,15 +119,19 @@ export function useSpaceActions({
             await unsubscribeSpaceApi(spaceId);
             showToast({ message: localize("com_knowledge.exited_space"), severity: NotificationSeverity.SUCCESS });
         } catch {
-            queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "joined"] });
+            queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: localize("com_knowledge.exit_space_failed"), severity: NotificationSeverity.ERROR });
         }
     };
 
     // ── Pin / Unpin space ──
 
-    const handlePinSpace = async (spaceId: string, pinned: boolean, type: "created" | "joined" | "department") => {
-        const targetList = type === "created" ? createdSpaces : type === "department" ? departmentSpaces : joinedSpaces;
+    const handlePinSpace = async (spaceId: string, pinned: boolean, type: SpaceLevel) => {
+        const targetList =
+            type === SpaceLevel.PUBLIC ? groupedSpaces.publicSpaces
+                : type === SpaceLevel.DEPARTMENT ? groupedSpaces.departmentSpaces
+                    : type === SpaceLevel.TEAM ? groupedSpaces.teamSpaces
+                        : groupedSpaces.personalSpaces;
         if (pinned && targetList.filter(s => s.isPinned).length >= 5) {
             showToast({ message: localize("com_knowledge.pin_limit_reached"), severity: NotificationSeverity.INFO });
             return;

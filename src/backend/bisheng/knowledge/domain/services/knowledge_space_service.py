@@ -17,6 +17,8 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
     SpaceSubscribePrivateError, SpaceSubscribeLimitError,
     SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
+    SpaceInvalidLevelError, SpaceInvalidScopeOwnerError, SpaceCreatePublicDeniedError, SpaceCreateDepartmentDeniedError,
+    SpaceCreateTeamDeniedError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
@@ -28,19 +30,30 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.tenant import TenantDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
+    KnowledgeSpaceScope,
+    KnowledgeSpaceScopeDao,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType, FileSource
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
-    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum, KnowledgeSpaceFileResponse
+    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum, KnowledgeSpaceFileResponse,
+    GroupedKnowledgeSpacesResp, KnowledgeSpaceCreateOptionsResp,
+    KnowledgeSpaceCreateOptionDepartment, KnowledgeSpaceCreateOptionUserGroup,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -48,6 +61,7 @@ from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.permission_service import PermissionService
@@ -161,6 +175,202 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return UserRoleEnum.MEMBER
         return None
 
+    async def _get_tenant_root_department_id(self) -> int:
+        tenant = await TenantDao.aget_by_id(int(self.login_user.tenant_id))
+        root_dept_id = int(getattr(tenant, 'root_dept_id', 0) or 0) if tenant else 0
+        if not root_dept_id:
+            raise SpaceInvalidScopeOwnerError(msg='Tenant root department does not exist')
+        dept = await DepartmentDao.aget_by_id(root_dept_id)
+        if dept is None or getattr(dept, 'status', 'active') != 'active':
+            raise SpaceInvalidScopeOwnerError(msg='Tenant root department does not exist')
+        return root_dept_id
+
+    @staticmethod
+    def _normalize_space_level(level: KnowledgeSpaceLevelEnum | str | None) -> KnowledgeSpaceLevelEnum:
+        if level is None:
+            return KnowledgeSpaceLevelEnum.PERSONAL
+        if isinstance(level, KnowledgeSpaceLevelEnum):
+            return level
+        try:
+            return KnowledgeSpaceLevelEnum(str(level))
+        except ValueError:
+            raise SpaceInvalidLevelError()
+
+    async def _admin_department_ids(self) -> set[int]:
+        departments = await DepartmentDao.aget_user_admin_departments(self.login_user.user_id)
+        ids: set[int] = set()
+        for dept in departments:
+            if getattr(dept, 'id', None) is None:
+                continue
+            ids.add(int(dept.id))
+            path = getattr(dept, 'path', None)
+            if path:
+                ids.update(int(i) for i in await DepartmentDao.aget_subtree_ids(path))
+        return ids
+
+    async def _user_group_ids_for_create(self) -> set[int]:
+        member_rows = await UserGroupDao.aget_user_group(self.login_user.user_id)
+        admin_rows = await UserGroupDao.aget_user_admin_group(self.login_user.user_id)
+        return {
+            int(row.group_id)
+            for row in [*(member_rows or []), *(admin_rows or [])]
+            if getattr(row, 'group_id', None) is not None
+        }
+
+    async def _resolve_space_scope_on_create(
+        self,
+        *,
+        space_level: KnowledgeSpaceLevelEnum | str | None,
+        department_id: Optional[int],
+        user_group_id: Optional[int],
+    ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
+        level = self._normalize_space_level(space_level)
+
+        if level == KnowledgeSpaceLevelEnum.PUBLIC:
+            if department_id is not None or user_group_id is not None:
+                raise SpaceInvalidScopeOwnerError()
+            if not self.login_user.is_admin():
+                raise SpaceCreatePublicDeniedError()
+            return level, KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT, await self._get_tenant_root_department_id()
+
+        if level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+            if department_id is None or user_group_id is not None:
+                raise SpaceInvalidScopeOwnerError()
+            dept = await DepartmentDao.aget_by_id(int(department_id))
+            if dept is None or getattr(dept, 'status', 'active') != 'active':
+                raise SpaceInvalidScopeOwnerError(msg='Department does not exist or is archived')
+            if not self.login_user.is_admin():
+                admin_department_ids = await self._admin_department_ids()
+                if int(department_id) not in admin_department_ids:
+                    raise SpaceCreateDepartmentDeniedError()
+            return level, KnowledgeSpaceOwnerTypeEnum.DEPARTMENT, int(department_id)
+
+        if level == KnowledgeSpaceLevelEnum.TEAM:
+            if user_group_id is None or department_id is not None:
+                raise SpaceInvalidScopeOwnerError()
+            group = await GroupDao.aget_by_id(int(user_group_id))
+            if group is None:
+                raise SpaceInvalidScopeOwnerError(msg='User group does not exist')
+            user_group_ids = await self._user_group_ids_for_create()
+            if int(user_group_id) not in user_group_ids:
+                raise SpaceCreateTeamDeniedError()
+            return level, KnowledgeSpaceOwnerTypeEnum.USER_GROUP, int(user_group_id)
+
+        if level == KnowledgeSpaceLevelEnum.PERSONAL:
+            if department_id is not None or user_group_id is not None:
+                raise SpaceInvalidScopeOwnerError()
+            return level, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
+
+        raise SpaceInvalidScopeOwnerError()
+
+    async def _create_space_scope(
+        self,
+        *,
+        space_id: int,
+        level: KnowledgeSpaceLevelEnum,
+        owner_type: KnowledgeSpaceOwnerTypeEnum,
+        owner_id: int,
+    ) -> KnowledgeSpaceScope:
+        return await KnowledgeSpaceScopeDao.acreate(
+            tenant_id=int(self.login_user.tenant_id),
+            space_id=space_id,
+            level=level,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            created_by=int(self.login_user.user_id),
+        )
+
+    async def _grant_default_scope_permissions(
+        self,
+        *,
+        level: KnowledgeSpaceLevelEnum,
+        owner_id: int,
+        space_id: int,
+    ) -> None:
+        grant: Optional[AuthorizeGrantItem] = None
+        if level == KnowledgeSpaceLevelEnum.PUBLIC:
+            grant = AuthorizeGrantItem(
+                subject_type='department',
+                subject_id=owner_id,
+                relation='viewer',
+                include_children=True,
+            )
+        elif level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+            grant = AuthorizeGrantItem(
+                subject_type='department',
+                subject_id=owner_id,
+                relation='viewer',
+                include_children=True,
+            )
+        elif level == KnowledgeSpaceLevelEnum.TEAM:
+            grant = AuthorizeGrantItem(
+                subject_type='user_group',
+                subject_id=owner_id,
+                relation='viewer',
+                include_children=False,
+            )
+        if grant is None:
+            return
+        await PermissionService.authorize(
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            grants=[grant],
+            enforce_fga_success=True,
+        )
+
+    async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
+        user_group_ids = await self._user_group_ids_for_create()
+        groups = await GroupDao.aget_group_by_ids(list(user_group_ids)) if user_group_ids else []
+        group_options = [
+            KnowledgeSpaceCreateOptionUserGroup(id=int(group.id), group_name=group.group_name)
+            for group in groups
+            if getattr(group, 'id', None) is not None
+        ]
+
+        if self.login_user.is_admin():
+            departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+            can_create_department = True
+        else:
+            departments = await DepartmentDao.aget_user_admin_departments(self.login_user.user_id)
+            can_create_department = bool(departments)
+
+        dept_name_map = {
+            int(dept.id): dept.name
+            for dept in departments
+            if getattr(dept, 'id', None) is not None
+        }
+
+        def _path_name(dept) -> Optional[str]:
+            path_ids = [
+                int(part)
+                for part in str(getattr(dept, 'path', '') or '').split('/')
+                if part.isdigit()
+            ]
+            names = [dept_name_map.get(dept_id) for dept_id in path_ids if dept_name_map.get(dept_id)]
+            if not names and getattr(dept, 'name', None):
+                names = [dept.name]
+            return '/'.join(names) if names else None
+
+        dept_options = [
+            KnowledgeSpaceCreateOptionDepartment(
+                id=int(dept.id),
+                name=dept.name,
+                path_name=_path_name(dept),
+            )
+            for dept in departments
+            if getattr(dept, 'id', None) is not None
+        ]
+
+        return KnowledgeSpaceCreateOptionsResp(
+            can_create_public=bool(self.login_user.is_admin()),
+            can_create_department=can_create_department,
+            can_create_team=bool(group_options),
+            can_create_personal=True,
+            departments=dept_options,
+            user_groups=group_options,
+            default_space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+        )
+
     async def _decorate_department_metadata(
         self,
         spaces: List[KnowledgeSpaceInfoResp],
@@ -169,20 +379,90 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return spaces
         space_ids = [int(space.id) for space in spaces]
         bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids(space_ids)
-        if not bindings:
-            return spaces
+        try:
+            scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(space_ids)
+        except Exception as e:
+            _logger.debug('Failed to load knowledge space scope metadata: %s', e)
+            scopes = {}
         binding_map = {binding.space_id: binding for binding in bindings}
-        departments = await DepartmentDao.aget_by_ids([binding.department_id for binding in bindings])
-        department_name_map = {dept.id: dept.name for dept in departments}
+        department_ids = {
+            int(binding.department_id)
+            for binding in bindings
+            if getattr(binding, 'department_id', None) is not None
+        }
+        for scope in scopes.values():
+            if scope.owner_type in {
+                KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+                KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
+            }:
+                department_ids.add(int(scope.owner_id))
+        departments = await DepartmentDao.aget_by_ids(list(department_ids))
+        department_name_map = {int(dept.id): dept.name for dept in departments}
+
+        group_ids = [
+            int(scope.owner_id)
+            for scope in scopes.values()
+            if scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER_GROUP
+        ]
+        try:
+            groups = await GroupDao.aget_group_by_ids(group_ids) if group_ids else []
+        except Exception as e:
+            _logger.debug('Failed to load knowledge space owner groups: %s', e)
+            groups = []
+        group_name_map = {int(group.id): group.group_name for group in groups}
+
+        user_ids = {
+            int(scope.owner_id)
+            for scope in scopes.values()
+            if scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+        }
+        user_ids.update(
+            int(space.user_id)
+            for space in spaces
+            if int(space.id) not in scopes
+        )
+        try:
+            users = await UserDao.aget_user_by_ids(list(user_ids)) if user_ids else []
+        except Exception as e:
+            _logger.debug('Failed to load knowledge space owner users: %s', e)
+            users = []
+        user_name_map = {int(user.user_id): user.user_name for user in users}
+
         for space in spaces:
             binding = binding_map.get(int(space.id))
-            if binding is None:
-                continue
-            space.space_kind = 'department'
-            space.department_id = binding.department_id
-            space.department_name = department_name_map.get(binding.department_id)
-            space.approval_enabled = binding.approval_enabled
-            space.sensitive_check_enabled = binding.sensitive_check_enabled
+            scope = scopes.get(int(space.id))
+            if scope is None:
+                if binding is not None:
+                    space.space_level = KnowledgeSpaceLevelEnum.DEPARTMENT
+                    space.owner_type = KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
+                    space.owner_id = int(binding.department_id)
+                else:
+                    space.space_level = KnowledgeSpaceLevelEnum.PERSONAL
+                    space.owner_type = KnowledgeSpaceOwnerTypeEnum.USER
+                    space.owner_id = int(space.user_id or 0)
+            else:
+                space.space_level = scope.level
+                space.owner_type = scope.owner_type
+                space.owner_id = int(scope.owner_id)
+
+            if space.owner_type in {
+                KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+                KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
+            }:
+                space.owner_name = department_name_map.get(int(space.owner_id or 0))
+            elif space.owner_type == KnowledgeSpaceOwnerTypeEnum.USER_GROUP:
+                space.owner_name = group_name_map.get(int(space.owner_id or 0))
+            elif space.owner_type == KnowledgeSpaceOwnerTypeEnum.USER:
+                space.owner_name = user_name_map.get(int(space.owner_id or 0))
+
+            if binding is not None or space.space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+                dept_id = int(binding.department_id) if binding is not None else int(space.owner_id or 0)
+                space.space_kind = 'department'
+                space.department_id = dept_id
+                space.department_name = department_name_map.get(dept_id)
+                if binding is not None:
+                    space.approval_enabled = binding.approval_enabled
+                    space.sensitive_check_enabled = binding.sensitive_check_enabled
         return spaces
 
     async def _format_accessible_spaces(
@@ -874,6 +1154,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         icon: Optional[str] = None,
         auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
         is_released: bool = False,
+        space_level: KnowledgeSpaceLevelEnum | str | None = KnowledgeSpaceLevelEnum.PERSONAL,
+        department_id: Optional[int] = None,
+        user_group_id: Optional[int] = None,
         share_to_children: Optional[bool] = None,
         skip_user_limit: bool = False,
     ) -> Knowledge:
@@ -896,6 +1179,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
+
+        level, owner_type, owner_id = await self._resolve_space_scope_on_create(
+            space_level=space_level,
+            department_id=department_id,
+            user_group_id=user_group_id,
+        )
 
         db_knowledge = Knowledge(
             name=name,
@@ -926,6 +1215,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         except Exception as e:
             _logger.warning('Failed to write owner tuple for knowledge_space %s: %s', knowledge_space.id, e)
+
+        await self._create_space_scope(
+            space_id=int(knowledge_space.id),
+            level=level,
+            owner_type=owner_type,
+            owner_id=owner_id,
+        )
+        await self._grant_default_scope_permissions(
+            level=level,
+            owner_id=owner_id,
+            space_id=int(knowledge_space.id),
+        )
 
         # F017: fan out group-sharing for Root-created resources.
         # share_on_create handles the Root-only gate, FGA writes, is_shared
@@ -1180,6 +1481,50 @@ class KnowledgeSpaceService(KnowledgeUtils):
             exclude_created=True,
             required_permission_id='view_space',
         )
+
+    async def get_grouped_spaces(
+        self,
+        order_by: str = 'update_time',
+    ) -> GroupedKnowledgeSpacesResp:
+        members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+        space_ids = {
+            int(member.business_id)
+            for member in members
+            if str(member.business_id).isdigit()
+        }
+        created_ids, accessible_ids = await asyncio.gather(
+            KnowledgeDao.aget_knowledge_ids_created_by(
+                self.login_user.user_id,
+                KnowledgeTypeEnum.SPACE,
+            ),
+            PermissionService.list_accessible_ids(
+                user_id=self.login_user.user_id,
+                relation='can_read',
+                object_type='knowledge_space',
+                login_user=self.login_user,
+            ),
+        )
+        space_ids.update(int(space_id) for space_id in created_ids)
+        if accessible_ids is not None:
+            space_ids.update(int(space_id) for space_id in accessible_ids if str(space_id).isdigit())
+
+        spaces = await self._format_accessible_spaces(
+            list(space_ids),
+            order_by,
+            memberships=members,
+            required_permission_id='view_space',
+        )
+        grouped = GroupedKnowledgeSpacesResp()
+        for space in spaces:
+            if space.space_level == KnowledgeSpaceLevelEnum.PUBLIC:
+                grouped.public_spaces.append(space)
+            elif space.space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+                grouped.department_spaces.append(space)
+            elif space.space_level == KnowledgeSpaceLevelEnum.TEAM:
+                grouped.team_spaces.append(space)
+            else:
+                grouped.personal_spaces.append(space)
+        return grouped
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)

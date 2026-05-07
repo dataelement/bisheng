@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field, ConfigDict
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
+)
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -21,6 +25,12 @@ class KnowledgeSpaceCreateReq(BaseModel):
     icon: Optional[str] = Field(None, description="Icon Object Name")
     auth_type: AuthTypeEnum = Field(AuthTypeEnum.PUBLIC, description="Authentication Type")
     is_released: bool = Field(default=False, description="Knowledge Space Status")
+    space_level: KnowledgeSpaceLevelEnum = Field(
+        default=KnowledgeSpaceLevelEnum.PERSONAL,
+        description="Knowledge space level: public/department/team/personal",
+    )
+    department_id: Optional[int] = Field(None, description="Department id for department spaces")
+    user_group_id: Optional[int] = Field(None, description="User group id for team spaces")
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
@@ -42,6 +52,41 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     department_name: Optional[str] = Field(default=None, description="Bound department name for department spaces")
     approval_enabled: Optional[bool] = Field(default=None, description="Whether department-space uploads require approval")
     sensitive_check_enabled: Optional[bool] = Field(default=None, description="Whether department-space uploads require content safety check")
+    space_level: KnowledgeSpaceLevelEnum = Field(
+        default=KnowledgeSpaceLevelEnum.PERSONAL,
+        description="Knowledge space level",
+    )
+    owner_type: Optional[KnowledgeSpaceOwnerTypeEnum] = Field(default=None, description="Scope owner type")
+    owner_id: Optional[int] = Field(default=None, description="Scope owner id")
+    owner_name: Optional[str] = Field(default=None, description="Scope owner display name")
+
+
+class KnowledgeSpaceCreateOptionDepartment(BaseModel):
+    id: int
+    name: str
+    path_name: Optional[str] = None
+
+
+class KnowledgeSpaceCreateOptionUserGroup(BaseModel):
+    id: int
+    group_name: str
+
+
+class KnowledgeSpaceCreateOptionsResp(BaseModel):
+    can_create_public: bool = False
+    can_create_department: bool = False
+    can_create_team: bool = False
+    can_create_personal: bool = True
+    departments: List[KnowledgeSpaceCreateOptionDepartment] = Field(default_factory=list)
+    user_groups: List[KnowledgeSpaceCreateOptionUserGroup] = Field(default_factory=list)
+    default_space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
+
+
+class GroupedKnowledgeSpacesResp(BaseModel):
+    public_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    department_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    team_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+    personal_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

@@ -26,6 +26,10 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import SpaceSubscriptionStatusEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 
@@ -104,6 +108,10 @@ def _install_schema_stubs() -> None:
 
         @staticmethod
         def process_one_file(*args, **kwargs):
+            return None
+
+        @staticmethod
+        def create_knowledge_base(*args, **kwargs):
             return None
 
         @staticmethod
@@ -218,6 +226,73 @@ def _make_space(
         is_released=is_released,
         auth_type=auth_type,
     )
+
+
+@pytest.mark.asyncio
+async def test_create_team_space_writes_scope_and_default_user_group_viewer():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    created_space = _make_space(space_id=11, user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserGroupDao.aget_user_group',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(group_id=5)],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserGroupDao.aget_user_admin_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=5, group_name='项目组'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+        return_value=created_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+        new_callable=AsyncMock,
+    ) as mock_create_scope, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ) as mock_authorize, patch(
+        'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+        new_callable=AsyncMock,
+    ):
+        result = await svc.create_knowledge_space(
+            name='团队空间',
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+            user_group_id=5,
+        )
+
+    assert result.id == 11
+    mock_create_scope.assert_awaited_once()
+    assert mock_create_scope.await_args.kwargs['space_id'] == 11
+    assert mock_create_scope.await_args.kwargs['level'] == KnowledgeSpaceLevelEnum.TEAM
+    assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER_GROUP
+    assert mock_create_scope.await_args.kwargs['owner_id'] == 5
+    grant = mock_authorize.await_args.kwargs['grants'][0]
+    assert grant.subject_type == 'user_group'
+    assert grant.subject_id == 5
+    assert grant.relation == 'viewer'
 
 
 def _make_file(
