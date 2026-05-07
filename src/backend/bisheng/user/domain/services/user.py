@@ -308,23 +308,29 @@ class UserService:
 
         需审批模式下角色可仅勾选一级菜单（workstation/admin）而无二级项，仍视为有菜单权限，允许登录。
         """
-        roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-        if not roles:
+        # Pre-tenant-context check: any role/dept/group access across all tenants
+        # qualifies for login. Without bypass, every DAO below trips
+        # NoTenantContextError because do_orm_execute can't infer a tenant for
+        # tenant-aware tables (userrole/department/usergroup/roleaccess).
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        with bypass_tenant_filter():
+            roles = await UserRoleDao.aget_user_roles(db_user.user_id)
+            if not roles:
+                if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
+                    return None
+                group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
+                if group_admins:
+                    return None
+                return UserNoRoleForLoginError.return_resp()
+
+            if any(ur.role_id == AdminRole for ur in roles):
+                return None
             if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
                 return None
-            group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
-            if group_admins:
-                return None
-            return UserNoRoleForLoginError.return_resp()
 
-        if any(ur.role_id == AdminRole for ur in roles):
+            if not await LoginUser.user_has_workbench_or_admin_effective_menu(db_user):
+                return UserNoWebMenuForLoginError.return_resp()
             return None
-        if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
-            return None
-
-        if not await LoginUser.user_has_workbench_or_admin_effective_menu(db_user):
-            return UserNoWebMenuForLoginError.return_resp()
-        return None
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
@@ -374,8 +380,36 @@ class UserService:
 
         if settings.multi_tenant.enabled:
             from bisheng.database.models.tenant import UserTenantDao, TenantDao
-            from bisheng.common.errcode.tenant import NoTenantsAvailableError
+            from bisheng.common.errcode.tenant import (
+                NoTenantsAvailableError, TenantDisabledError,
+            )
             from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+
+            # Reject login when the user's primary department mounts to a
+            # disabled child tenant. TenantResolver intentionally walks past
+            # non-active mount points to keep users functional during
+            # archive/orphan transitions; ``disabled`` is different — PRD
+            # treats it as a member-level freeze. Without this guard a member
+            # of a disabled tenant would get fallback-routed to Root and log
+            # in normally, which contradicts the operator's intent.
+            from bisheng.database.models.department import (
+                DepartmentDao, UserDepartmentDao,
+            )
+            with bypass_tenant_filter():
+                primary_dept = await UserDepartmentDao.aget_user_primary_department(
+                    db_user.user_id,
+                )
+                if primary_dept is not None:
+                    mount_dept = await DepartmentDao.aget_ancestors_with_mount(
+                        primary_dept.department_id,
+                    )
+                    if mount_dept is not None and mount_dept.mounted_tenant_id:
+                        mount_tenant = await TenantDao.aget_by_id(
+                            mount_dept.mounted_tenant_id,
+                        )
+                        if mount_tenant is not None and mount_tenant.status == 'disabled':
+                            raise TenantDisabledError()
+
             user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
             active_tenants = [t for t in user_tenants if t.get('status') == 'active']
 
