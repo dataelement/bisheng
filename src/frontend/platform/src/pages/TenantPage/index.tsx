@@ -18,6 +18,7 @@ import {
 } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { locationContext } from "@/contexts/locationContext";
+import { userContext } from "@/contexts/userContext";
 import { useTable } from "@/util/hook";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useContext, useState } from "react";
@@ -26,6 +27,7 @@ import { Navigate } from "react-router-dom";
 import { CreateTenantDialog } from "./components/CreateTenantDialog";
 import { TenantUserDialog } from "./components/TenantUserDialog";
 import { TenantQuotaDialog } from "./components/TenantQuotaDialog";
+import { isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import type { Tenant } from "@/types/api/tenant";
 
 const statusColors: Record<string, string> = {
@@ -40,7 +42,21 @@ const statusColors: Record<string, string> = {
 // surfacing an error path; edit/quota remain allowed.
 const isRootTenant = (tenant: Tenant) => tenant.id === 1;
 
+// The /tenant route currently uses permission='sys' so the route guard
+// admits Child Admins (routes/index.tsx falls 'sys' back for them). But
+// every API this page calls is super-only (get_admin_user) — a Child
+// Admin landing here would trip the request.ts 403 → /403 redirect.
+// Wrap so the inner component (with all its hooks) only mounts for
+// global super admins; everyone else gets bounced to /sys.
 export default function TenantPage() {
+  const { user } = useContext(userContext) as any;
+  if (!isGlobalSuperUser(user)) {
+    return <Navigate to="/sys" replace />;
+  }
+  return <TenantPageInner />;
+}
+
+function TenantPageInner() {
   const { t } = useTranslation("bs");
   const { appConfig } = useContext(locationContext);
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled;

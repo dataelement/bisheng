@@ -100,6 +100,7 @@
     "systemConfigRootBanner": "Configuring {{tenantName}} (global default). Unconfigured child tenants will inherit these settings.",
     "systemConfigTenantBanner": "Configuring {{tenantName}}. Unconfigured items inherit from {{rootName}} (when {{rootName}} sharing is on).",
     "systemConfigRootReadOnlyBanner": "{{tenantName}} shared · read-only. Switch to your tenant view to configure your own defaults.",
+    "systemConfigChildOwnBanner": "Configuring your tenant's system models. Unconfigured items inherit from {{rootName}} (when {{rootName}} sharing is on).",
     "systemConfigInheritedBadge": "Inherited from Root",
     "systemConfigFallbackBlockedBanner": "Root sharing is off. Ask the super admin to enable sharing or configure this tenant directly.",
     "systemConfigForbiddenWriteRoot": "Forbidden: cannot modify Root default configuration."
