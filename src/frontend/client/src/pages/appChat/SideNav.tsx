@@ -13,11 +13,7 @@ import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropd
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { currentChatState } from '~/pages/appChat/store/atoms';
-import {
-    normalizeAppChatReturn,
-    readAppChatReturnTo,
-    writeAppChatReturnTo,
-} from '~/pages/appChat/appChatOrigin';
+import { resolveAppChatExitNavigateTarget } from '~/pages/appChat/appChatOrigin';
 import { cn } from '~/utils';
 
 function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
@@ -76,20 +72,11 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 export function SideNav() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { fid: flowId, type: flowType } = useParams();
-    type AppSurfaceLocationState = { appSurfaceReturn?: string };
+    const { conversationId, fid: flowId, type: flowType } = useParams();
 
     const handleGoBack = () => {
-        // Mirror the browser's back behavior: pop one entry off history. If
-        // there is no usable previous entry (direct landing / shared link),
-        // fall back to /apps so we never get stuck. URL-param/sessionStorage
-        // routing was unreliable when the entry point's URL did not reflect
-        // the user's perceived navigation source.
-        if (typeof window !== 'undefined' && window.history.length > 1) {
-            navigate(-1);
-            return;
-        }
-        navigate('/apps', { replace: true });
+        const target = resolveAppChatExitNavigateTarget(conversationId, location);
+        navigate(target, { replace: target === '/apps' });
     };
 
     const localize = useLocalize();

@@ -50,6 +50,24 @@ export function normalizeCitationMarkers(content: string) {
   });
 }
 
+/**
+ * Remove citation marker groups (...) from a string. Used when
+ * exporting message text to plain contexts like clipboard copy where the
+ * private-use markers have no rendered counterpart and would surface as
+ * unreadable noise.
+ */
+export function stripCitationMarkers(content: string) {
+  if (!content) return content;
+  return content
+    // Strip well-formed groups first (non-greedy across separators).
+    .replace(/[\s\S]*?/g, '')
+    // Also handle the escaped form ("...") that may slip through
+    // when a message hasn't been passed through normalizeCitationMarkers.
+    .replace(/\\u[eE]200[\s\S]*?\\u[eE]202/g, '')
+    // Drop any orphan markers (e.g. a streaming-truncated group).
+    .replace(/[]/g, '');
+}
+
 function padTimeUnit(value: number) {
   return String(value).padStart(2, '0');
 }
@@ -192,11 +210,11 @@ export function getCitationClassName(type?: string) {
   switch (type?.toLowerCase()) {
     case 'web':
     case 'websearch':
-      return 'bg-[#F7F3FF] text-[#7224D9]';
+      return 'bg-[#F7F3FF] text-[#7224D9] transition-colors duration-150 hover:bg-[#EDE4FF] data-[state=open]:bg-[#EDE4FF]';
     case 'knowledgesearch':
-      return 'bg-[#F5F8FF] text-[#024DE3]';
+      return 'bg-[#F5F8FF] text-[#024DE3] transition-colors duration-150 hover:bg-[#D6EBFF] data-[state=open]:bg-[#D6EBFF]';
     default:
-      return 'bg-[#F5F8FF] text-[#024DE3]';
+      return 'bg-[#F5F8FF] text-[#024DE3] transition-colors duration-150 hover:bg-[#D6EBFF] data-[state=open]:bg-[#D6EBFF]';
   }
 }
 

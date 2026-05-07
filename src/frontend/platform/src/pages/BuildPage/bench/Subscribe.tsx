@@ -152,7 +152,6 @@ export default function Subscribe() {
                                         className="mt-3"
                                         value={formData.maxChunkSize ?? ''}
                                         defaultValue={15000}
-                                        max={15000}
                                         onValueChange={(val) => {
                                             setFormData(prev => ({ ...prev, maxChunkSize: val }));
                                         }}

@@ -304,14 +304,27 @@ function CitationPreviewCard({
     </svg>
   );
 
+  const typeLabel = isWeb ? '网页' : '文档';
+  const showCitationIndex =
+    typeof label === 'number' && Number.isFinite(label);
+  const footerTagText = showCitationIndex ? `[${label}] - ${typeLabel}` : typeLabel;
+
+  const footerTagMinWidth = showCitationIndex
+    ? isWeb
+      ? 'min-w-[104px]'
+      : 'min-w-[92px]'
+    : isWeb
+      ? 'min-w-[79px]'
+      : 'min-w-[76px]';
+
   const renderLabelTag = () => (
     <div
-      className={`absolute bottom-0 right-0 z-[1] flex h-6 whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
-        ? 'min-w-[79px] bg-[#F7F3FF] text-[#8537F5]'
-        : 'min-w-[76px] bg-[#F5F8FF] text-[#024DE3]'
+      className={`absolute bottom-0 right-0 z-[1] flex h-6 max-w-[calc(100%-8px)] whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
+        ? `bg-[#F7F3FF] text-[#8537F5] ${footerTagMinWidth}`
+        : `bg-[#F5F8FF] text-[#024DE3] ${footerTagMinWidth}`
         }`}
     >
-      {isWeb ? '网页' : '文档'}
+      <span className="truncate">{footerTagText}</span>
     </div>
   );
   const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
@@ -362,7 +375,7 @@ function CitationPreviewCard({
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+        <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -382,7 +395,7 @@ function CitationPreviewCard({
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+        <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -578,9 +591,9 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer select-none items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
+          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] cursor-pointer select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-[#024DE3]/25 focus-visible:ring-2 ${citationClassName}`}
         >
-          <span className="flex h-[18px] items-center">{children}</span>
+          <span className="flex items-center justify-center">{children}</span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>

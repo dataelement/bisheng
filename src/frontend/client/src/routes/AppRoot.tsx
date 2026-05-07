@@ -13,7 +13,7 @@ import {
     copyAppChatReturnTo,
     copyAppChatOrigin,
     normalizeAppChatReturn,
-    readAppChatReturnTo,
+    resolveAppChatExitNavigateTarget,
     writeAppChatReturnTo,
 } from '~/pages/appChat/appChatOrigin';
 import { appConversationsState, sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
@@ -49,14 +49,15 @@ export default function AppRoot() {
 
     const toggleSidebar = () => setSidebarVisible((prev) => !prev);
     const handleGoBack = () => {
-        // Same browser-history-based back as SideNav. Avoids unreliable
-        // URL-param routing when the chat URL doesn't reflect the user's
-        // perceived navigation source.
-        if (typeof window !== 'undefined' && window.history.length > 1) {
-            navigate(-1);
-            return;
-        }
-        navigate('/apps', { replace: true });
+        const pathSegments = location.pathname.split('/').filter(Boolean);
+        const appSegmentIndex = pathSegments.indexOf('app');
+        const conversationId =
+            appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
+        const target = resolveAppChatExitNavigateTarget(
+            conversationId || undefined,
+            { state: location.state, search: location.search },
+        );
+        navigate(target, { replace: target === '/apps' });
     };
     const handleCreateNewAppChat = () => {
         const pathSegments = location.pathname.split('/').filter(Boolean);

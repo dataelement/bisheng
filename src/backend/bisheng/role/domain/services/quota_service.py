@@ -433,14 +433,11 @@ class QuotaService:
         qc = (role.quota_config or {}).get('knowledge_space_file')
         if qc == -1:
             return -1.0
-        legacy = getattr(role, 'knowledge_space_file_limit', None) or 0
         candidates: list[float] = []
         if qc is not None and isinstance(qc, (int, float)) and not isinstance(qc, bool):
             g = float(qc)
             if g > 0:
                 candidates.append(round(g, 1))
-        if isinstance(legacy, int) and legacy > 0:
-            candidates.append(float(legacy))
         return max(candidates) if candidates else 0.0
 
     @classmethod
@@ -462,7 +459,7 @@ class QuotaService:
     @staticmethod
     def _knowledge_space_quota_gb_to_bytes(gb: float) -> int:
         g = round(float(gb), 1)
-        return int(round(g * (1024**3)))
+        return int(round(g * (1024 ** 3)))
 
     @classmethod
     async def get_knowledge_space_upload_limit_bytes(cls, login_user) -> Optional[int]:
@@ -653,6 +650,7 @@ def require_quota(resource_type: str):
 
     Note: Defined in F005, applied to resource endpoints in F008.
     """
+
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
@@ -667,5 +665,7 @@ def require_quota(resource_type: str):
             if asyncio.iscoroutinefunction(func):
                 return await func(*args, **kwargs)
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
