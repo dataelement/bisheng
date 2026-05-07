@@ -2098,6 +2098,8 @@
   "department.inheritedAdminSource": "{{department}} から継承",
   "department.enabled": "有効",
   "department.disabled": "無効",
+  "department.accountEnabledToast": "アカウントを有効化しました",
+  "department.accountDisabledToast": "アカウントを停止しました",
   "department.all": "すべて",
   "menu.department": "組織管理",
   "department.assignRolesEmptyHint": "割り当て可能なロールがありません。先にロール管理で可視ロールを作成してください。",

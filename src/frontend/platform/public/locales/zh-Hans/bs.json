@@ -2097,6 +2097,8 @@
   "department.inheritedAdminSource": "继承自 {{department}}",
   "department.enabled": "启用",
   "department.disabled": "已禁用",
+  "department.accountEnabledToast": "账号已启用",
+  "department.accountDisabledToast": "账号已停用",
   "department.all": "全部",
   "menu.department": "组织管理",
   "department.assignRolesEmptyHint": "暂无可分配角色，请先在角色管理中创建可见角色",
