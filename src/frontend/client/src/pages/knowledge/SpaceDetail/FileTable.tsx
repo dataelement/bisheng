@@ -167,7 +167,8 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
     const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
     const statusReason = file?.approvalReason?.trim() || file?.errorMessage?.trim() || null;
     const wrapWithReason = (node: React.ReactNode) => {
-        if (!statusReason) return node;
+        // Skip tooltip for queueing status
+        if (!statusReason || status === FileStatus.WAITING) return node;
         return (
             <Tooltip>
                 <TooltipTrigger asChild>
