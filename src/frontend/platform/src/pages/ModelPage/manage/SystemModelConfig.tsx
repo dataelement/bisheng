@@ -17,7 +17,17 @@ import WorkbenchModel from "./tabs/WorkbenchModel";
 
 const ROOT_TENANT_ID = 1;
 
-export default function SystemModelConfig({ data, defaultTab, onBack }: { data: any; defaultTab?: string; onBack: () => void }) {
+export default function SystemModelConfig({
+    data,
+    defaultTab,
+    onBack,
+    onTabChange,
+}: {
+    data: any;
+    defaultTab?: string;
+    onBack: () => void;
+    onTabChange?: (tab: string) => void;
+}) {
     const { t } = useTranslation('model')
     const { user } = useContext(userContext) as any
     const isGlobalSuper = isGlobalSuperUser(user)
@@ -118,7 +128,14 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
                     rootTenant={rootTenant}
                     childTenant={childTenant}
                 />
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
+                <Tabs
+                    value={activeTab}
+                    onValueChange={(tab) => {
+                        setActiveTab(tab)
+                        onTabChange?.(tab)
+                    }}
+                    className="flex flex-col"
+                >
                     <TabsList className="w-[550px] m-auto">
                         <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>

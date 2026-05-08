@@ -175,7 +175,12 @@ export default function Management() {
         }}
     />
 
-    if (systemModel) return <SystemModelConfig data={data} defaultTab={systemModelTab} onBack={() => { setSystemModel(false); setSystemModelTab(undefined); }} />
+    if (systemModel) return <SystemModelConfig
+        data={data}
+        defaultTab={systemModelTab}
+        onTabChange={setSystemModelTab}
+        onBack={() => { setSystemModel(false); setSystemModelTab(undefined); }}
+    />
 
     return <div className="relative bg-background-login h-full px-2 py-4">
         {loading && (
