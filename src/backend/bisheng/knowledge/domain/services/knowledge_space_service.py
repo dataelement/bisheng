@@ -47,6 +47,7 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import default_permission_ids_for_relation
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.owner_service import OwnerService
@@ -571,46 +572,158 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and str(binding.get('subject_id')) == str(user_id)
         )
 
-    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
-        """Remove direct ReBAC grants and UI binding metadata for a space user."""
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings, _save_bindings
-        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+    @classmethod
+    async def sync_direct_space_user_permissions(
+        cls,
+        space_id: int,
+        user_id: int,
+        user_role: Optional[UserRoleEnum],
+        *,
+        is_active: bool,
+    ) -> None:
+        """Keep direct space memberships and ReBAC grants in sync."""
+        from bisheng.permission.api.endpoints.resource_permission import (
+            _binding_key_with_scope,
+            _get_bindings,
+            _save_bindings,
+        )
 
-        bindings = await _get_bindings()
-        to_remove = [
-            binding for binding in bindings
-            if self._is_direct_space_user_binding(binding, space_id, user_id)
-        ]
-        if not to_remove:
-            return
+        desired_relation = None
+        if is_active and user_role is not None:
+            desired_relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(user_role)
+            if desired_relation == 'owner':
+                desired_relation = None
 
-        revokes = []
-        revoked_relations = set()
-        for binding in to_remove:
-            relation = binding.get('relation')
-            if not relation or relation in revoked_relations:
-                continue
-            revoked_relations.add(relation)
-            revokes.append(AuthorizeRevokeItem(
+        relations_to_revoke = {'viewer', 'editor', 'manager'}
+        if desired_relation:
+            relations_to_revoke.discard(desired_relation)
+
+        revokes = [
+            AuthorizeRevokeItem(
                 subject_type='user',
                 subject_id=int(user_id),
                 relation=relation,
                 include_children=False,
+            )
+            for relation in sorted(relations_to_revoke)
+        ]
+        grants = []
+        if desired_relation:
+            grants.append(AuthorizeGrantItem(
+                subject_type='user',
+                subject_id=int(user_id),
+                relation=desired_relation,
+                include_children=False,
+                model_id=desired_relation,
             ))
 
-        if revokes:
-            await PermissionService.authorize(
-                object_type='knowledge_space',
-                object_id=str(space_id),
-                grants=[],
-                revokes=revokes,
-                enforce_fga_success=True,
-            )
+        await PermissionService.authorize(
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            grants=grants,
+            revokes=revokes,
+            enforce_fga_success=True,
+        )
 
+        bindings = await _get_bindings()
+        updated_bindings = [
+            binding for binding in bindings
+            if not cls._is_direct_space_user_binding(binding, space_id, user_id)
+        ]
+        if desired_relation:
+            key = _binding_key_with_scope(
+                'knowledge_space',
+                str(space_id),
+                'user',
+                int(user_id),
+                desired_relation,
+                None,
+            )
+            updated_bindings.append({
+                'key': key,
+                'resource_type': 'knowledge_space',
+                'resource_id': str(space_id),
+                'subject_type': 'user',
+                'subject_id': int(user_id),
+                'relation': desired_relation,
+                'include_children': None,
+                'model_id': desired_relation,
+            })
+        await _save_bindings(updated_bindings)
+
+    @staticmethod
+    def _should_preserve_private_space_tuple(
+        creator_user_id: int,
+        resource_type: str,
+        tuple_item: dict,
+    ) -> bool:
+        relation = tuple_item.get('relation')
+        tuple_user = tuple_item.get('user')
+        if resource_type == 'knowledge_space':
+            return relation == 'owner' and tuple_user == f'user:{creator_user_id}'
+        if resource_type in {'folder', 'knowledge_file'}:
+            return relation == 'parent'
+        return False
+
+    @classmethod
+    async def clear_space_authorization_for_private(
+        cls,
+        *,
+        space: Knowledge,
+        child_resources: List[tuple[str, int]],
+    ) -> None:
+        """Remove non-owner space permissions when a space becomes private."""
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings, _save_bindings
+
+        resources = [('knowledge_space', int(space.id))] + list(child_resources)
+        resource_keys = {(resource_type, str(resource_id)) for resource_type, resource_id in resources}
+
+        bindings = await _get_bindings()
         await _save_bindings([
             binding for binding in bindings
-            if not self._is_direct_space_user_binding(binding, space_id, user_id)
+            if (binding.get('resource_type'), str(binding.get('resource_id'))) not in resource_keys
         ])
+
+        fga = await PermissionService._aget_fga()
+        if fga is None:
+            raise RuntimeError('FGAClient not available while clearing private-space permissions')
+
+        operations: List[TupleOperation] = []
+        for resource_type, resource_id in resources:
+            tuples = await fga.read_tuples(object=f'{resource_type}:{resource_id}')
+            for tuple_item in tuples:
+                if cls._should_preserve_private_space_tuple(space.user_id, resource_type, tuple_item):
+                    continue
+                operations.append(TupleOperation(
+                    action='delete',
+                    user=tuple_item['user'],
+                    relation=tuple_item['relation'],
+                    object=tuple_item['object'],
+                ))
+
+        if operations:
+            await PermissionService.batch_write_tuples(
+                operations,
+                crash_safe=True,
+                raise_on_failure=True,
+                stop_on_failure=True,
+            )
+
+        await OwnerService.write_owner_tuple(
+            space.user_id,
+            'knowledge_space',
+            str(space.id),
+            enforce_fga_success=True,
+        )
+
+    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
+        """Remove direct ReBAC grants and UI binding metadata for a space user."""
+        await self.__class__.sync_direct_space_user_permissions(
+            space_id,
+            user_id,
+            None,
+            is_active=False,
+        )
         if hasattr(self, '_relation_bindings_cache'):
             delattr(self, '_relation_bindings_cache')
 
@@ -1063,6 +1176,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
+            child_resources = await self._list_space_child_resources(space_id)
+            await self.__class__.clear_space_authorization_for_private(
+                space=space,
+                child_resources=child_resources,
+            )
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
         elif old_auth_type == AuthTypeEnum.APPROVAL and new_auth_type == AuthTypeEnum.PUBLIC:
             pending_members = await SpaceChannelMemberDao.async_get_members_by_space(
@@ -1071,6 +1189,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for member in pending_members:
                 member.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(member)
+                await self.__class__.sync_direct_space_user_permissions(
+                    space_id,
+                    member.user_id,
+                    member.user_role,
+                    is_active=True,
+                )
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         return space
@@ -2440,6 +2564,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
+
+        if member.status == MembershipStatusEnum.ACTIVE:
+            await self.__class__.sync_direct_space_user_permissions(
+                space_id,
+                member.user_id,
+                member.user_role,
+                is_active=True,
+            )
 
         return {
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
