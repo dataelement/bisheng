@@ -1965,7 +1965,7 @@ class TestTupleLifecycle:
         assert result['data'] == [{'id': 202}]
 
     @pytest.mark.asyncio
-    async def test_public_subscribe_updates_membership_without_rebac_tuple(self, service):
+    async def test_public_subscribe_updates_membership_and_syncs_rebac_tuple(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
 
         with patch(
@@ -1983,14 +1983,17 @@ class TestTupleLifecycle:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
             new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        ), patch.object(
+            service.__class__,
+            'sync_direct_space_user_permissions',
             new_callable=AsyncMock,
-        ) as mock_authorize:
+        ) as mock_sync_permissions:
             result = await service.subscribe_space(1)
 
         assert result['status'] == 'subscribed'
-        mock_authorize.assert_not_awaited()
+        mock_sync_permissions.assert_awaited_once()
+        assert mock_sync_permissions.await_args.args[:3] == (1, service.login_user.user_id, UserRoleEnum.MEMBER)
+        assert mock_sync_permissions.await_args.kwargs['is_active'] is True
 
     @pytest.mark.asyncio
     async def test_public_to_approval_does_not_sync_member_tuples(self, service):
@@ -2018,7 +2021,47 @@ class TestTupleLifecycle:
         mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_approval_to_public_activates_pending_members_without_rebac_tuple(self, service):
+    async def test_public_to_private_cleans_members_and_permissions(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
+        child_resources = [('folder', 11), ('knowledge_file', 12)]
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch.object(
+            service, '_require_manage_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+            return_value=private_space,
+        ), patch.object(
+            service,
+            '_list_space_child_resources',
+            new_callable=AsyncMock,
+            return_value=child_resources,
+        ) as mock_list_children, patch.object(
+            service.__class__,
+            'clear_space_authorization_for_private',
+            new_callable=AsyncMock,
+        ) as mock_clear_permissions, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_non_creator_members',
+            new_callable=AsyncMock,
+        ) as mock_delete_members:
+            await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        mock_list_children.assert_awaited_once_with(1)
+        mock_clear_permissions.assert_awaited_once_with(
+            space=private_space,
+            child_resources=child_resources,
+        )
+        mock_delete_members.assert_awaited_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_approval_to_public_activates_pending_members_and_syncs_rebac_tuple(self, service):
         approval_space = _make_space(auth_type=AuthTypeEnum.APPROVAL)
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         pending_member = _make_member(user_id=12, status=MembershipStatusEnum.PENDING)
@@ -2045,16 +2088,22 @@ class TestTupleLifecycle:
         ) as mock_update_member, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_rejected_members',
             new_callable=AsyncMock,
-        ) as mock_delete_rejected, patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        ) as mock_delete_rejected, patch.object(
+            service.__class__,
+            'sync_direct_space_user_permissions',
             new_callable=AsyncMock,
-        ) as mock_authorize:
+        ) as mock_sync_permissions:
             await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PUBLIC)
 
         assert pending_member.status == MembershipStatusEnum.ACTIVE
         mock_update_member.assert_awaited_once()
         mock_delete_rejected.assert_awaited_once_with(1)
-        mock_authorize.assert_not_awaited()
+        mock_sync_permissions.assert_awaited_once_with(
+            1,
+            pending_member.user_id,
+            pending_member.user_role,
+            is_active=True,
+        )
 
     @pytest.mark.asyncio
     async def test_unsubscribe_space_blocks_creator(self, service):
