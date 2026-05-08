@@ -16,6 +16,7 @@ from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import Hie
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.file import download_minio_file
 
@@ -59,6 +60,11 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             object_name=self.db_file.object_name,
             root_dir=self.tmp_dir,
             calc_sha256=False
+        )
+
+    def _get_image_object_dir(self) -> Optional[str]:
+        return KnowledgeUtils.get_knowledge_file_image_dir(
+            str(self.db_file.id), self.db_file.knowledge_id
         )
 
     def _init_abstract_transformers(self) -> List[BaseDocumentTransformer]:

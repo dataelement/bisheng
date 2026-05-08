@@ -58,7 +58,12 @@ class ExtraFileTransformer(BaseDocumentTransformer):
             self.knowledge_file.bbox_object_name = file_bbox_object_name
 
         # upload image in file
-        if self.retain_images and self.loader.local_image_dir and os.path.exists(self.loader.local_image_dir):
+        # When loader.image_object_dir is set, the loader has already uploaded images
+        # to MinIO and embedded the final URLs in page_content during load(). Touching
+        # page_content here would shift character offsets relative to metadata.indexes
+        # and break per-chunk bbox alignment after the splitter — so we skip entirely.
+        if (self.retain_images and not self.loader.image_object_dir
+                and self.loader.local_image_dir and os.path.exists(self.loader.local_image_dir)):
             files = [f for f in os.listdir(self.loader.local_image_dir)]
             local_image_object_dir = KnowledgeUtils.get_knowledge_file_image_dir(self.document_id, self.knoledge_id)
             for file_name in files:
