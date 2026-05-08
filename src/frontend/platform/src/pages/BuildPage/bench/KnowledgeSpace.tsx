@@ -323,63 +323,56 @@ const useKnowledgeConfig = () => {
             const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
             const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
+            // When backend returns no saved value, seed the textarea with the
+            // localized default template so it is editable as a real value.
+            const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
+            const resolvedUserPrompt = resolveConfigString(userPromptFromRes, '');
             setFormData((prev) => ({
                 ...prev,
-                systemPrompt: resolveConfigString(systemPromptFromRes, prev.systemPrompt),
-                userPrompt: resolveConfigString(userPromptFromRes, prev.userPrompt),
+                systemPrompt: resolvedSystemPrompt || t('chatConfig.aiPrompt'),
+                userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
             }));
         });
-    }, []);
+    }, [t]);
 
     const { toast } = useToast();
     const { reloadConfig } = useContext(locationContext);
 
     const handleSave = async () => {
-        // 校验系统提示词 & 用户提示词：不能为空且不超过 30000 字
+        // Refill blank prompts with the i18n default template so the empty input
+        // never reaches the server; reflect the refill in formData for the UI too.
+        const finalSystemPrompt = (formData.systemPrompt || '').trim() || t('chatConfig.aiPrompt');
+        const finalUserPrompt = (formData.userPrompt || '').trim() || t('chatConfig.retrievedAndQuestion');
+        if (finalSystemPrompt !== formData.systemPrompt || finalUserPrompt !== formData.userPrompt) {
+            setFormData((prev) => ({
+                ...prev,
+                systemPrompt: finalSystemPrompt,
+                userPrompt: finalUserPrompt,
+            }));
+        }
+
+        // Length cap is the only remaining check after auto-refill removes the blank case.
         let isValid = true;
         const nextErrors = { systemPrompt: '', userPrompt: '' };
 
-        const sys = (formData.systemPrompt || '').trim();
-        if (!sys) {
-            nextErrors.systemPrompt = t('chatConfig.errors.required');
-            isValid = false;
-        } else if (sys.length > 30000) {
+        if (finalSystemPrompt.length > 30000) {
             nextErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
         }
-
-        const user = (formData.userPrompt || '').trim();
-        if (!user) {
-            nextErrors.userPrompt = t('chatConfig.errors.required');
-            isValid = false;
-        } else if (user.length > 30000) {
+        if (finalUserPrompt.length > 30000) {
             nextErrors.userPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
         }
 
         setErrors(nextErrors);
         if (!isValid) {
-            if (!sys) {
-                toast({
-                    variant: 'error',
-                    description: '系统提示词不可为空',
-                });
-                return false;
-            }
-            if (!user) {
-                toast({
-                    variant: 'error',
-                    description: '用户提示词不可为空',
-                });
-                return false;
-            }
             return false;
         }
 
         const dataToSave = {
-            system_prompt: formData.systemPrompt,
-            user_prompt: formData.userPrompt,
+            system_prompt: finalSystemPrompt,
+            user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
         };
 
