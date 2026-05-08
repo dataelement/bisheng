@@ -56,7 +56,11 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     # — knowledge table has no `status` column (has `state` + `is_released`)
     # and delete_knowledge uses hard DELETE, so a plain COUNT(*) is correct.
     'knowledge_space': "SELECT COUNT(*) FROM knowledge WHERE {col}=:{param}",
-    'knowledge_space_file': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND status IN (1,2)",
+    # status IN (1,2,4,5) covers every state whose minio object still occupies
+    # storage: PROCESSING + SUCCESS + REBUILDING + WAITING. FAILED (3) and
+    # TIMEOUT (6) are excluded because the user can no longer act on them and
+    # the platform reaps them on retry / cleanup paths.
+    'knowledge_space_file': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND status IN (1,2,4,5)",
     # KI-01 fix: channel has no `status` column either; removed filter to
     # avoid silent 0 counts via _count_resource's try/except.
     'channel': "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
@@ -76,7 +80,7 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     'dashboard': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=15 AND status!=0",
     # F016 T02: tenant-only resource types.
     # storage_gb: total bytes of active knowledge files; converted to GB in _count_resource.
-    'storage_gb': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND status IN (1,2)",
+    'storage_gb': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND status IN (1,2,4,5)",
     # user_count: active users in the tenant; only meaningful when {col}='tenant_id'
     # (user-level count returns 0 because user_tenant.user_id column is the join, not filter).
     'user_count': (
@@ -649,7 +653,7 @@ class QuotaService:
 
         Root rows aggregate self + Σ active children (INV-T9); leaf rows use
         strict-equality count (INV-T6). Both paths share the SQL template
-        ``storage_gb`` (status IN (1,2)) so the displayed value matches what
+        ``storage_gb`` (status IN (1,2,4,5)) so the displayed value matches what
         the quota interceptor enforces on writes.
 
         Returns ``{tid: gb_float}`` with 0.0 for tenants that have no usage.
