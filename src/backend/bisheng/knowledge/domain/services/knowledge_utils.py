@@ -257,6 +257,12 @@ class KnowledgeUtils(BaseService):
                     collection_name,
                     knowledge.id,
                 )
+                if vector_client is None or getattr(vector_client, "col", None) is None:
+                    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                        invoke_user_id,
+                        knowledge=knowledge,
+                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+                    )
                 return vector_client
         except Exception:
             redis_client = None
@@ -290,6 +296,12 @@ class KnowledgeUtils(BaseService):
                         collection_name,
                         knowledge.id,
                     )
+                    if vector_client is None or getattr(vector_client, "col", None) is None:
+                        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                            invoke_user_id,
+                            knowledge=knowledge,
+                            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+                        )
                     return vector_client
                 time.sleep(cls.schema_ready_poll_interval)
 
