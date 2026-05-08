@@ -460,6 +460,9 @@ export default function Knowledge() {
                     description: form.description,
                     auth_type,
                     is_released,
+                    space_level: form.spaceLevel,
+                    department_id: form.departmentId,
+                    user_group_id: form.userGroupId,
                 });
                 setActiveSpace(newSpace);
 
@@ -477,7 +480,7 @@ export default function Knowledge() {
                     });
                 }
 
-                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
+                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
             }
             return true;
@@ -820,6 +823,7 @@ export default function Knowledge() {
                 resourceId={spacePermissionDialogSpace?.id || ""}
                 resourceName={spacePermissionDialogSpace?.name || ""}
                 currentUserRole={spacePermissionDialogSpace?.role || null}
+                spaceLevel={spacePermissionDialogSpace?.spaceLevel}
                 showShareTab={false}
                 showMembersTab={false}
                 showPermissionTab

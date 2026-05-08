@@ -81,6 +81,41 @@ class SpacePermissionDeniedError(BaseErrorCode):
     Msg: str = 'Permission denied: only the creator or admin can perform this operation'
 
 
+class SpaceInvalidLevelError(BaseErrorCode):
+    Code: int = 18041
+    Msg: str = 'Invalid knowledge space level'
+
+
+class SpaceInvalidScopeOwnerError(BaseErrorCode):
+    Code: int = 18042
+    Msg: str = 'Invalid knowledge space owner'
+
+
+class SpaceCreatePublicDeniedError(BaseErrorCode):
+    Code: int = 18043
+    Msg: str = 'Only super admin can create public knowledge spaces'
+
+
+class SpaceCreateDepartmentDeniedError(BaseErrorCode):
+    Code: int = 18044
+    Msg: str = 'Only super admin or department admin can create department knowledge spaces'
+
+
+class SpaceCreateTeamDeniedError(BaseErrorCode):
+    Code: int = 18045
+    Msg: str = 'You can only create team knowledge spaces for your user groups'
+
+
+class SpaceAuthorizeSubjectDeniedError(BaseErrorCode):
+    Code: int = 18046
+    Msg: str = 'This subject type cannot be authorized for the knowledge space level'
+
+
+class SpaceAuthorizeScopeDeniedError(BaseErrorCode):
+    Code: int = 18047
+    Msg: str = 'The authorization target is outside the allowed knowledge space scope'
+
+
 # —— TAG
 class SpaceTagExistsError(BaseErrorCode):
     Code: int = 18050

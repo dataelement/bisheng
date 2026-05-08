@@ -1,6 +1,6 @@
 import { Building2, MoreHorizontal, Pin, PinOff, Settings, UsersRound, LogOut } from "lucide-react";
 import { useState } from "react";
-import { KnowledgeSpace } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceLevel, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -27,7 +27,7 @@ import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
     isActive: boolean;
-    type: "created" | "joined" | "department";
+    type: SpaceLevel;
     onSelect: (space: KnowledgeSpace) => void;
     onUpdate: (space: KnowledgeSpace) => void;
     onDelete: (id: string) => void;
@@ -91,7 +91,7 @@ export default function KnowledgeSpaceItem({
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
-                    {type === "department" ? (
+                    {type === SpaceLevel.DEPARTMENT ? (
                         <Building2 className={`size-[14px] ${isActive ? "text-primary" : "text-[#86909C]"}`} />
                     ) : (
                         <SpaceNotebookIcon active={isActive} />
@@ -179,7 +179,7 @@ export default function KnowledgeSpaceItem({
 
                         <SidebarListMoreMenuDivider />
 
-                        {(canDeleteSpace || type === "joined") && (
+                        {(canDeleteSpace || space.role !== SpaceRole.CREATOR) && (
                             <DropdownMenuItem
                                 onClick={async () => {
                                     const actionName = canDeleteSpace ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");

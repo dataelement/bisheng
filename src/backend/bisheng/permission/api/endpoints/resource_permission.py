@@ -810,6 +810,96 @@ async def _resolve_grant_subject_tenant_id(
     return int(tenant_id)
 
 
+async def _get_knowledge_space_level(resource_id: str):
+    if not str(resource_id).isdigit():
+        return None
+    from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
+    from bisheng.knowledge.domain.models.knowledge_space_scope import (
+        KnowledgeSpaceLevelEnum,
+        KnowledgeSpaceScopeDao,
+    )
+
+    try:
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(resource_id))
+        if scope is not None:
+            return scope.level
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id))
+        if binding is not None:
+            return KnowledgeSpaceLevelEnum.DEPARTMENT
+    except Exception as e:
+        logger.debug('Could not load knowledge space level for %s: %s', resource_id, e)
+        return None
+    return KnowledgeSpaceLevelEnum.PERSONAL
+
+
+def _allowed_subject_types_for_space_level(space_level) -> set[str]:
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    if space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+        return {'user', 'department'}
+    if space_level == KnowledgeSpaceLevelEnum.TEAM:
+        return {'user', 'user_group'}
+    return {'user', 'department', 'user_group'}
+
+
+async def _validate_knowledge_space_authorize_scope(
+    *,
+    resource_type: str,
+    resource_id: str,
+    request: AuthorizeRequest,
+    login_user: UserPayload,
+):
+    if resource_type != 'knowledge_space':
+        return None
+
+    from bisheng.common.errcode.knowledge_space import (
+        SpaceAuthorizeScopeDeniedError,
+        SpaceAuthorizeSubjectDeniedError,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.database.models.user_group import UserGroupDao
+
+    level = await _get_knowledge_space_level(resource_id)
+    if level is None:
+        return None
+    allowed_subject_types = _allowed_subject_types_for_space_level(level)
+    items = [*(request.grants or []), *(request.revokes or [])]
+    if any(item.subject_type not in allowed_subject_types for item in items):
+        return SpaceAuthorizeSubjectDeniedError
+
+    if login_user.is_admin():
+        return None
+
+    if level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+        department_items = [item for item in items if item.subject_type == 'department']
+        if department_items:
+            admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+            allowed_department_ids: set[int] = set()
+            for dept in admin_departments:
+                if getattr(dept, 'id', None) is None:
+                    continue
+                allowed_department_ids.add(int(dept.id))
+                if getattr(dept, 'path', None):
+                    allowed_department_ids.update(
+                        int(i) for i in await DepartmentDao.aget_subtree_ids(dept.path)
+                    )
+            if any(int(item.subject_id) not in allowed_department_ids for item in department_items):
+                return SpaceAuthorizeScopeDeniedError
+
+    if level == KnowledgeSpaceLevelEnum.TEAM:
+        group_items = [item for item in items if item.subject_type == 'user_group']
+        if group_items:
+            allowed_group_ids = {
+                int(row[0]) if isinstance(row, tuple) else int(row)
+                for row in await UserGroupDao.aget_user_visible_group_ids(login_user.user_id)
+            }
+            if any(int(item.subject_id) not in allowed_group_ids for item in group_items):
+                return SpaceAuthorizeScopeDeniedError
+
+    return None
+
+
 def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
     return (
         getattr(revoke, 'subject_type', None) == 'user'
@@ -999,6 +1089,14 @@ async def authorize_resource(
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
+        return PermissionDeniedError.return_resp()
+    scope_error = await _validate_knowledge_space_authorize_scope(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        request=request,
+        login_user=login_user,
+    )
+    if scope_error is not None:
         return PermissionDeniedError.return_resp('部门或用户组无法成为所有者')
 
     from bisheng.permission.domain.services.permission_service import PermissionService
@@ -1220,6 +1318,10 @@ async def get_grant_subject_departments(
     )
     if tenant_id is None:
         return resp_200([])
+    if resource_type == 'knowledge_space':
+        level = await _get_knowledge_space_level(resource_id)
+        if level is not None and 'department' not in _allowed_subject_types_for_space_level(level):
+            return resp_200([])
     return resp_200(await _list_knowledge_space_grant_departments(tenant_id=tenant_id))
 
 
@@ -1245,6 +1347,10 @@ async def get_grant_subject_user_groups(
     )
     if tenant_id is None:
         return resp_200([])
+    if resource_type == 'knowledge_space':
+        level = await _get_knowledge_space_level(resource_id)
+        if level is not None and 'user_group' not in _allowed_subject_types_for_space_level(level):
+            return resp_200([])
     return resp_200(await _list_knowledge_space_grant_user_groups(tenant_id=tenant_id, keyword=keyword))
 
 

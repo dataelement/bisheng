@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { getGrantableRelationModels } from "~/api/permission";
+import { SpaceLevel } from "~/api/knowledge";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 
 jest.mock("~/hooks", () => ({
@@ -161,5 +162,31 @@ describe("KnowledgeSpaceShareDialog", () => {
     });
     expect(screen.getByText("list:folder:folder-9:user")).toBeInTheDocument();
     expect(screen.getByText("grant:folder:folder-9:user:include")).toBeInTheDocument();
+  });
+
+  it("hides user group grants for department knowledge spaces", async () => {
+    render(
+      <KnowledgeSpaceShareDialog
+        open
+        onOpenChange={jest.fn()}
+        resourceType="knowledge_space"
+        resourceId="space-59"
+        resourceName="Space 59"
+        spaceLevel={SpaceLevel.DEPARTMENT}
+        showShareTab={false}
+        showMembersTab={false}
+        showPermissionTab
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetGrantableRelationModels).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getAllByRole("button", {
+      name: "com_permission.subject_department",
+    })).toHaveLength(2);
+    expect(screen.queryByRole("button", {
+      name: "com_permission.subject_user_group",
+    })).not.toBeInTheDocument();
   });
 });

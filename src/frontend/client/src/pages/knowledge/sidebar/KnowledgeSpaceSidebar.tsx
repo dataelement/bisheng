@@ -1,12 +1,7 @@
-import {
-    ArrowLeftRightIcon,
-    ChevronDown,
-    Plus,
-    X
-} from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KnowledgeSpace, SpaceRole, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
+import { useQuery } from "@tanstack/react-query";
+import { GroupedKnowledgeSpaces, KnowledgeSpace, SpaceLevel, SpaceRole, SpaceSortType, getGroupedSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
@@ -17,7 +12,6 @@ import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
-import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import {
     hasKnowledgeSpacePermission,
@@ -43,9 +37,41 @@ interface KnowledgeSpaceSidebarProps {
 
 // Sort cycle: update_time → name → update_time
 const SORT_CYCLE = [SpaceSortType.UPDATE_TIME, SpaceSortType.NAME];
+const DEFAULT_SECTION_SORTS: Record<SpaceLevel, SpaceSortType> = {
+    [SpaceLevel.PUBLIC]: SpaceSortType.UPDATE_TIME,
+    [SpaceLevel.DEPARTMENT]: SpaceSortType.UPDATE_TIME,
+    [SpaceLevel.TEAM]: SpaceSortType.UPDATE_TIME,
+    [SpaceLevel.PERSONAL]: SpaceSortType.UPDATE_TIME,
+};
 
 function getSortLabel(sort: SpaceSortType, localize: any) {
     return sort === SpaceSortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
+}
+
+export function sortKnowledgeSpacesForSection(
+    spaces: KnowledgeSpace[],
+    sortBy: SpaceSortType,
+): KnowledgeSpace[] {
+    return [...spaces].sort((a, b) => {
+        if (a.isPinned !== b.isPinned) {
+            return a.isPinned ? -1 : 1;
+        }
+        if (sortBy === SpaceSortType.NAME) {
+            return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+        }
+        const timeA = Date.parse(a.updatedAt || "") || 0;
+        const timeB = Date.parse(b.updatedAt || "") || 0;
+        return timeB - timeA;
+    });
+}
+
+export function getNextSectionSorts(
+    currentSorts: Record<SpaceLevel, SpaceSortType>,
+    level: SpaceLevel,
+): Record<SpaceLevel, SpaceSortType> {
+    const current = currentSorts[level];
+    const next = SORT_CYCLE[(SORT_CYCLE.indexOf(current) + 1) % SORT_CYCLE.length];
+    return { ...currentSorts, [level]: next };
 }
 
 export function KnowledgeSpaceSidebar({
@@ -57,7 +83,6 @@ export function KnowledgeSpaceSidebar({
     onKnowledgeSquare,
     collapsed: collapsedProp,
     onCollapsedChange,
-    hideExpandToggleWhenCollapsed,
     mobileDrawerMode = false,
     onDrawerClose,
 }: KnowledgeSpaceSidebarProps) {
@@ -69,55 +94,47 @@ export function KnowledgeSpaceSidebar({
         onCollapsedChange?.(next);
         if (collapsedProp === undefined) setCollapsedState(next);
     };
-    const [createdCollapsed, setCreatedCollapsed] = useState(false);
-    const [joinedCollapsed, setJoinedCollapsed] = useState(false);
+    const [publicCollapsed, setPublicCollapsed] = useState(false);
     const [departmentCollapsed, setDepartmentCollapsed] = useState(false);
-    const [createdSortBy, setCreatedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
-    const [joinedSortBy, setJoinedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
-    const [departmentSortBy, setDepartmentSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
+    const [teamCollapsed, setTeamCollapsed] = useState(false);
+    const [personalCollapsed, setPersonalCollapsed] = useState(false);
+    const [sectionSortBy, setSectionSortBy] = useState<Record<SpaceLevel, SpaceSortType>>(DEFAULT_SECTION_SORTS);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
 
-    const queryClient = useQueryClient();
-
-    // Fetch "my created" space list — re-fetched whenever sort changes
-    const { data: createdSpaces = [], isLoading: isCreatedLoading } = useQuery({
-        queryKey: ["knowledgeSpaces", "mine", createdSortBy],
-        queryFn: () => getMineSpacesApi({ order_by: createdSortBy }),
+    const { data: groupedSpaces = {
+        publicSpaces: [],
+        departmentSpaces: [],
+        teamSpaces: [],
+        personalSpaces: [],
+    }, isLoading } = useQuery({
+        queryKey: ["knowledgeSpaces", "grouped"],
+        queryFn: () => getGroupedSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
         placeholderData: (prev) => prev,
     });
 
-    // Fetch "joined" space list
-    const { data: joinedSpaces = [], isLoading: isJoinedLoading } = useQuery({
-        queryKey: ["knowledgeSpaces", "joined", joinedSortBy],
-        queryFn: () => getJoinedSpacesApi({ order_by: joinedSortBy }),
-        placeholderData: (prev) => prev,
-    });
+    const sortedGroupedSpaces: GroupedKnowledgeSpaces = useMemo(() => ({
+        publicSpaces: sortKnowledgeSpacesForSection(groupedSpaces.publicSpaces, sectionSortBy[SpaceLevel.PUBLIC]),
+        departmentSpaces: sortKnowledgeSpacesForSection(groupedSpaces.departmentSpaces, sectionSortBy[SpaceLevel.DEPARTMENT]),
+        teamSpaces: sortKnowledgeSpacesForSection(groupedSpaces.teamSpaces, sectionSortBy[SpaceLevel.TEAM]),
+        personalSpaces: sortKnowledgeSpacesForSection(groupedSpaces.personalSpaces, sectionSortBy[SpaceLevel.PERSONAL]),
+    }), [groupedSpaces, sectionSortBy]);
 
-    // Fetch department space list
-    const { data: departmentSpaces = [], isLoading: isDepartmentLoading } = useQuery({
-        queryKey: ["knowledgeSpaces", "department", departmentSortBy],
-        queryFn: () => getDepartmentSpacesApi({ order_by: departmentSortBy }),
-        placeholderData: (prev) => prev,
-    });
-
-    // Filter department spaces out of other sections to avoid duplication
-    const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
-    const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
-    const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
+    const { publicSpaces, departmentSpaces, teamSpaces, personalSpaces } = sortedGroupedSpaces;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
+            ...publicSpaces.map(s => s.id),
             ...departmentSpaces.map(s => s.id),
-            ...filteredCreatedSpaces.map(s => s.id),
-            ...filteredJoinedSpaces.map(s => s.id),
+            ...teamSpaces.map(s => s.id),
+            ...personalSpaces.map(s => s.id),
         ])),
-        [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
+        [publicSpaces, departmentSpaces, teamSpaces, personalSpaces],
     );
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
 
-    const getItemPermissions = (space: KnowledgeSpace, type: "created" | "joined" | "department") => {
-        const isCreator = type === "created" || space.role === SpaceRole.CREATOR;
+    const getItemPermissions = (space: KnowledgeSpace) => {
+        const isCreator = space.role === SpaceRole.CREATOR;
         const canEditSpace = isCreator || hasKnowledgeSpacePermission(
             spaceActionPermissions,
             space.id,
@@ -144,44 +161,29 @@ export function KnowledgeSpaceSidebar({
         handlePinSpace,
     } = useSpaceActions({
         activeSpaceId,
-        createdSortBy,
-        joinedSortBy,
-        departmentSortBy,
-        createdSpaces: filteredCreatedSpaces,
-        joinedSpaces: filteredJoinedSpaces,
-        departmentSpaces,
+        groupedSpaces: sortedGroupedSpaces,
         onSpaceSelect,
     });
 
     // Auto-select first space when no space is active (mirrors ChannelSidebar)
     useEffect(() => {
         if (!activeSpaceId) {
-            if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
+            if (isLoading) return;
 
-            if (departmentSpaces.length > 0) {
+            if (publicSpaces.length > 0) {
+                onSpaceSelect(publicSpaces[0]);
+            } else if (departmentSpaces.length > 0) {
                 onSpaceSelect(departmentSpaces[0]);
-            } else if (filteredCreatedSpaces.length > 0) {
-                onSpaceSelect(filteredCreatedSpaces[0]);
-            } else if (filteredJoinedSpaces.length > 0) {
-                onSpaceSelect(filteredJoinedSpaces[0]);
+            } else if (teamSpaces.length > 0) {
+                onSpaceSelect(teamSpaces[0]);
+            } else if (personalSpaces.length > 0) {
+                onSpaceSelect(personalSpaces[0]);
             }
         }
-    }, [activeSpaceId, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
+    }, [activeSpaceId, publicSpaces, departmentSpaces, teamSpaces, personalSpaces, isLoading, onSpaceSelect]);
 
-    const toggleSort = (type: "created" | "joined" | "department") => {
-        if (type === "created") {
-            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(createdSortBy) + 1) % SORT_CYCLE.length];
-            queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "mine", createdSortBy] });
-            setCreatedSortBy(next);
-        } else if (type === "department") {
-            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(departmentSortBy) + 1) % SORT_CYCLE.length];
-            queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "department", departmentSortBy] });
-            setDepartmentSortBy(next);
-        } else {
-            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(joinedSortBy) + 1) % SORT_CYCLE.length];
-            queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "joined", joinedSortBy] });
-            setJoinedSortBy(next);
-        }
+    const toggleSort = (level: SpaceLevel) => {
+        setSectionSortBy((prev) => getNextSectionSorts(prev, level));
     };
 
     const handleListScroll = () => {
@@ -273,106 +275,71 @@ export function KnowledgeSpaceSidebar({
                     }}
                 >
                     <div
-                        className="h-full overflow-y-auto overscroll-y-contain scroll-on-scroll px-3 pb-5"
+                        className="h-full overflow-y-auto overscroll-y-contain scroll-on-scroll space-y-4 px-3 pb-5"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
-                        {/* Department spaces — always on top per PRD */}
-                        {departmentSpaces.length > 0 && (
-                            <div className="pt-0">
+                        {[
+                            {
+                                title: localize("com_knowledge.public_spaces"),
+                                spaces: publicSpaces,
+                                level: SpaceLevel.PUBLIC,
+                                collapsed: publicCollapsed,
+                                setCollapsed: setPublicCollapsed,
+                            },
+                            {
+                                title: localize("com_knowledge.department_spaces"),
+                                spaces: departmentSpaces,
+                                level: SpaceLevel.DEPARTMENT,
+                                collapsed: departmentCollapsed,
+                                setCollapsed: setDepartmentCollapsed,
+                            },
+                            {
+                                title: localize("com_knowledge.team_spaces"),
+                                spaces: teamSpaces,
+                                level: SpaceLevel.TEAM,
+                                collapsed: teamCollapsed,
+                                setCollapsed: setTeamCollapsed,
+                            },
+                            {
+                                title: localize("com_knowledge.personal_spaces"),
+                                spaces: personalSpaces,
+                                level: SpaceLevel.PERSONAL,
+                                collapsed: personalCollapsed,
+                                setCollapsed: setPersonalCollapsed,
+                            },
+                        ].map((section) => (
+                            <div key={section.level}>
                                 <SectionHeader
-                                    title={localize("com_knowledge.department_spaces")}
-                                    collapsed={departmentCollapsed}
-                                    onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                    sortText={getSortLabel(departmentSortBy, localize)}
-                                    onSort={() => toggleSort("department")}
+                                    title={section.title}
+                                    collapsed={section.collapsed}
+                                    onToggle={() => section.setCollapsed(!section.collapsed)}
+                                    sortText={getSortLabel(sectionSortBy[section.level], localize)}
+                                    onSort={() => toggleSort(section.level)}
                                 />
-                                {!departmentCollapsed && (
+                                {!section.collapsed && (
                                     <div className="space-y-1">
-                                        {departmentSpaces.map(s => (
+                                        {section.spaces.map(s => (
                                             <KnowledgeSpaceItem
                                                 key={s.id}
                                                 space={s}
-                                                type="department"
+                                                type={section.level}
                                                 isActive={s.id === activeSpaceId}
                                                 onSelect={onSpaceSelect}
                                                 onUpdate={handleUpdateSpace}
                                                 onDelete={handleDeleteSpace}
                                                 onLeave={handleLeaveSpace}
-                                                onPin={(id, pinned) => handlePinSpace(id, pinned, "department")}
+                                                onPin={(id, pinned) => handlePinSpace(id, pinned, section.level)}
                                                 onSettings={onSpaceSettings}
                                                 onManageMembers={onManageMembers}
-                                                {...getItemPermissions(s, "department")}
+                                                {...getItemPermissions(s)}
                                             />
                                         ))}
+                                        {!section.spaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
                                     </div>
                                 )}
                             </div>
-                        )}
-
-                        {/* My created */}
-                        <div className={departmentSpaces.length > 0 ? "py-4" : "pt-0"}>
-                            <SectionHeader
-                                title={localize("com_knowledge.created_by_me")}
-                                collapsed={createdCollapsed}
-                                onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                                sortText={getSortLabel(createdSortBy, localize)}
-                                onSort={() => toggleSort("created")}
-                            />
-                            {!createdCollapsed && (
-                                <div className="space-y-1">
-                                    {filteredCreatedSpaces.map(s => (
-                                        <KnowledgeSpaceItem
-                                            key={s.id}
-                                            space={s}
-                                            type="created"
-                                            isActive={s.id === activeSpaceId}
-                                            onSelect={onSpaceSelect}
-                                            onUpdate={handleUpdateSpace}
-                                            onDelete={handleDeleteSpace}
-                                            onLeave={handleLeaveSpace}
-                                            onPin={(id, pinned) => handlePinSpace(id, pinned, "created")}
-                                            onSettings={onSpaceSettings}
-                                            onManageMembers={onManageMembers}
-                                            {...getItemPermissions(s, "created")}
-                                        />
-                                    ))}
-                                    {!filteredCreatedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Joined */}
-                        <div className="py-4">
-                            <SectionHeader
-                                title={localize("com_knowledge.joined_by_me")}
-                                collapsed={joinedCollapsed}
-                                onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                                sortText={getSortLabel(joinedSortBy, localize)}
-                                onSort={() => toggleSort("joined")}
-                            />
-                            {!joinedCollapsed && (
-                                <div className="space-y-1">
-                                    {filteredJoinedSpaces.map(s => (
-                                        <KnowledgeSpaceItem
-                                            key={s.id}
-                                            space={s}
-                                            type="joined"
-                                            isActive={s.id === activeSpaceId}
-                                            onSelect={onSpaceSelect}
-                                            onUpdate={handleUpdateSpace}
-                                            onDelete={handleDeleteSpace}
-                                            onLeave={handleLeaveSpace}
-                                            onPin={(id, pinned) => handlePinSpace(id, pinned, "joined")}
-                                            onSettings={onSpaceSettings}
-                                            onManageMembers={onManageMembers}
-                                            {...getItemPermissions(s, "joined")}
-                                        />
-                                    ))}
-                                    {!filteredJoinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
-                                </div>
-                            )}
-                        </div>
+                        ))}
                     </div>
                 </div>
                 {mobileDrawerMode ? (

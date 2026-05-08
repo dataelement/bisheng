@@ -40,8 +40,19 @@ async def create_space(
         icon=req.icon,
         auth_type=req.auth_type,
         is_released=req.is_released,
+        space_level=req.space_level,
+        department_id=req.department_id,
+        user_group_id=req.user_group_id,
     )
-    return resp_200(space)
+    return resp_200(await svc.get_space_info(space.id))
+
+
+@router.get('/create-options')
+async def get_create_options(
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    options = await svc.get_create_options()
+    return resp_200(options)
 
 
 @router.get('/{space_id}/info')
@@ -91,6 +102,15 @@ async def delete_space(
 
 
 # ──────────────────────────── Space Listings ───────────────────────────────────
+
+@router.get('/grouped')
+async def get_grouped_spaces(
+        order_by: str = 'update_time',
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    spaces = await svc.get_grouped_spaces(order_by)
+    return resp_200(spaces)
+
 
 @router.get('/mine')
 async def get_my_created_spaces(

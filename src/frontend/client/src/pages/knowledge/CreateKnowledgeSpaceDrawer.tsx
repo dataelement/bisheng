@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
+import { useQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -14,7 +15,7 @@ import {
 } from "~/components/ui/Sheet";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
-import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceLevel, VisibilityType, getCreateSpaceOptionsApi } from "~/api/knowledge";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 
@@ -38,6 +39,9 @@ export interface CreateKnowledgeSpaceFormData {
     description: string;
     joinPolicy: JoinPolicy;
     publishToSquare: PublishToSquare;
+    spaceLevel: SpaceLevel;
+    departmentId?: number;
+    userGroupId?: number;
 }
 
 interface CreateKnowledgeSpaceDrawerProps {
@@ -66,6 +70,9 @@ export function CreateKnowledgeSpaceDrawer({
     const [description, setDescription] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
+    const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
+    const [departmentId, setDepartmentId] = useState<number | undefined>();
+    const [userGroupId, setUserGroupId] = useState<number | undefined>();
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
@@ -76,12 +83,43 @@ export function CreateKnowledgeSpaceDrawer({
         () => joinPolicy === "review" || joinPolicy === "public",
         [joinPolicy]
     );
+    const { data: createOptions } = useQuery({
+        queryKey: ["knowledgeSpaces", "createOptions"],
+        queryFn: getCreateSpaceOptionsApi,
+        enabled: open && mode === "create",
+    });
+
+    const levelOptions = useMemo(() => ([
+        {
+            value: SpaceLevel.PUBLIC,
+            label: localize("com_knowledge.public_spaces"),
+            enabled: createOptions?.canCreatePublic ?? false,
+        },
+        {
+            value: SpaceLevel.DEPARTMENT,
+            label: localize("com_knowledge.department_spaces"),
+            enabled: createOptions?.canCreateDepartment ?? false,
+        },
+        {
+            value: SpaceLevel.TEAM,
+            label: localize("com_knowledge.team_spaces"),
+            enabled: createOptions?.canCreateTeam ?? false,
+        },
+        {
+            value: SpaceLevel.PERSONAL,
+            label: localize("com_knowledge.personal_spaces"),
+            enabled: createOptions?.canCreatePersonal ?? true,
+        },
+    ]), [createOptions, localize]);
 
     const resetForm = () => {
         setName("");
         setDescription("");
         setJoinPolicy("review");
         setPublishToSquare("yes");
+        setSpaceLevel(SpaceLevel.PERSONAL);
+        setDepartmentId(undefined);
+        setUserGroupId(undefined);
         setShowSuccess(false);
         setSubmitting(false);
     };
@@ -104,9 +142,20 @@ export function CreateKnowledgeSpaceDrawer({
                         : "review"
             );
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
+            setSpaceLevel(editingSpace.spaceLevel || SpaceLevel.PERSONAL);
+            setDepartmentId(editingSpace.departmentId);
+            setUserGroupId(editingSpace.ownerType === "user_group" ? editingSpace.ownerId : undefined);
             setShowSuccess(false);
         }
     }, [open, mode, editingSpace]);
+
+    useEffect(() => {
+        if (!open || mode !== "create" || !createOptions) return;
+        if (!levelOptions.some((option) => option.value === spaceLevel && option.enabled)) {
+            const next = levelOptions.find((option) => option.enabled)?.value ?? SpaceLevel.PERSONAL;
+            setSpaceLevel(next);
+        }
+    }, [createOptions, levelOptions, mode, open, spaceLevel]);
 
     const handleConfirm = async () => {
         // Guard against double-submit while the previous request is still in-flight.
@@ -118,11 +167,28 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
+        if (spaceLevel === SpaceLevel.DEPARTMENT && !departmentId) {
+            showToast({
+                message: localize("com_knowledge.department_required"),
+                severity: NotificationSeverity.WARNING
+            });
+            return;
+        }
+        if (spaceLevel === SpaceLevel.TEAM && !userGroupId) {
+            showToast({
+                message: localize("com_knowledge.user_group_required"),
+                severity: NotificationSeverity.WARNING
+            });
+            return;
+        }
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
             description: description.trim(),
             joinPolicy,
-            publishToSquare: needPublishOption ? publishToSquare : "no"
+            publishToSquare: needPublishOption ? publishToSquare : "no",
+            spaceLevel,
+            departmentId: spaceLevel === SpaceLevel.DEPARTMENT ? departmentId : undefined,
+            userGroupId: spaceLevel === SpaceLevel.TEAM ? userGroupId : undefined,
         };
         try {
             setSubmitting(true);
@@ -203,6 +269,73 @@ export function CreateKnowledgeSpaceDrawer({
                 ) : (
                     <div className="scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                         <div className="mx-auto w-full max-w-[800px] space-y-7 overflow-visible px-6 py-5 touch-mobile:max-w-none touch-mobile:px-0">
+                            {/* 空间层级 */}
+                            <div className="space-y-3">
+                                <Label className="text-sm text-[#1D2129] font-medium">
+                                    <span className="text-[#F53F3F] mr-1">*</span>
+                                    {localize("com_knowledge.space_level")}
+                                </Label>
+                                {mode === "edit" ? (
+                                    <div className="h-8 rounded-[6px] bg-[#F7F8FA] px-3 text-[14px] leading-8 text-[#4E5969]">
+                                        {levelOptions.find((option) => option.value === spaceLevel)?.label || spaceLevel}
+                                        {editingSpace?.ownerName ? ` - ${editingSpace.ownerName}` : ""}
+                                    </div>
+                                ) : (
+                                    <RadioGroup.Root
+                                        value={spaceLevel}
+                                        onValueChange={(value) => setSpaceLevel(value as SpaceLevel)}
+                                        className="grid grid-cols-2 gap-3 touch-mobile:grid-cols-1"
+                                    >
+                                        {levelOptions.map((option) => (
+                                            <label
+                                                key={option.value}
+                                                className={cn(
+                                                    "flex cursor-pointer items-center gap-2 rounded-[6px] border border-[#E5E6EB] px-3 py-2 text-[14px] text-[#212121]",
+                                                    !option.enabled && "cursor-not-allowed opacity-50",
+                                                )}
+                                            >
+                                                <RadioGroup.Item
+                                                    value={option.value}
+                                                    disabled={!option.enabled}
+                                                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:border-[#165DFF] data-[state=checked]:bg-[#165DFF]"
+                                                >
+                                                    <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                                </RadioGroup.Item>
+                                                <span>{option.label}</span>
+                                            </label>
+                                        ))}
+                                    </RadioGroup.Root>
+                                )}
+                                {mode === "create" && spaceLevel === SpaceLevel.DEPARTMENT && (
+                                    <select
+                                        value={departmentId ?? ""}
+                                        onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : undefined)}
+                                        className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
+                                    >
+                                        <option value="">{localize("com_knowledge.select_department")}</option>
+                                        {(createOptions?.departments || []).map((dept) => (
+                                            <option key={dept.id} value={dept.id}>
+                                                {dept.pathName || dept.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                {mode === "create" && spaceLevel === SpaceLevel.TEAM && (
+                                    <select
+                                        value={userGroupId ?? ""}
+                                        onChange={(event) => setUserGroupId(event.target.value ? Number(event.target.value) : undefined)}
+                                        className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
+                                    >
+                                        <option value="">{localize("com_knowledge.select_user_group")}</option>
+                                        {(createOptions?.userGroups || []).map((group) => (
+                                            <option key={group.id} value={group.id}>
+                                                {group.groupName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+
                             {/* 知识空间名称 */}
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">

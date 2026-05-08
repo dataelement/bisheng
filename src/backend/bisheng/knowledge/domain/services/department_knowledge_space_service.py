@@ -23,6 +23,7 @@ from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
 )
@@ -171,7 +172,7 @@ class DepartmentKnowledgeSpaceService:
                         subject_type='department',
                         subject_id=department_id,
                         relation='viewer',
-                        include_children=False,
+                        include_children=True,
                     ),
                 ],
             )
@@ -291,6 +292,8 @@ class DepartmentKnowledgeSpaceService:
                 icon=item.icon,
                 auth_type=item.auth_type or cls.DEFAULT_AUTH_TYPE,
                 is_released=cls.DEFAULT_IS_RELEASED if item.is_released is None else item.is_released,
+                space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+                department_id=dept.id,
                 skip_user_limit=True,
             )
             await DepartmentKnowledgeSpaceDao.acreate(
