@@ -43,7 +43,11 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         const selectFooter = (
             <div
                 className="px-3 py-2 text-sm text-primary cursor-pointer hover:bg-[#EBF0FF] dark:hover:bg-gray-700"
-                onClick={() => navigate('/model/management?systemModel=assis')}
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate('/model/management?systemModel=assis');
+                }}
             >
                 + {t('bench.addMoreModels')}
             </div>
