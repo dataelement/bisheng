@@ -172,7 +172,7 @@ export function ChannelLayout({
                                 aria-label={localize("com_subscription.ai_assistant")}
                             >
                                 <AiAssistantPanel
-                                    features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                                    features={{ tools: false, knowledgeBase: false, fileUpload: false }}
                                     articleDocId={selectedArticle.id}
                                     onClose={() => setH5AiAssistantOpen(false)}
                                 />
