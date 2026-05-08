@@ -358,6 +358,43 @@ class ArticleEsService:
 
         return {"bool": bool_query}
 
+    def _build_rule_groups_query(self, rule_groups: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """构造多个规则组的 ES 查询。
+
+        同一 channel_type 的规则组保留原有 OR 语义；不同 channel_type
+        之间使用 AND，使子频道规则在主频道过滤结果上继续收窄。
+        """
+        grouped_queries: Dict[str, List[Dict[str, Any]]] = {}
+        channel_type_order: List[str] = []
+        for group in rule_groups:
+            group_query = self._build_rule_group_query(group)
+            if group_query is None:
+                continue
+            channel_type = group.get("channel_type", "main")
+            if channel_type not in grouped_queries:
+                grouped_queries[channel_type] = []
+                channel_type_order.append(channel_type)
+            grouped_queries[channel_type].append(group_query)
+
+        channel_type_queries = []
+        for channel_type in channel_type_order:
+            group_queries = grouped_queries[channel_type]
+            if len(group_queries) == 1:
+                channel_type_queries.append(group_queries[0])
+            else:
+                channel_type_queries.append({
+                    "bool": {
+                        "should": group_queries,
+                        "minimum_should_match": 1,
+                    }
+                })
+
+        if not channel_type_queries:
+            return None
+        if len(channel_type_queries) == 1:
+            return channel_type_queries[0]
+        return {"bool": {"must": channel_type_queries}}
+
     def _build_count_query(
             self,
             source_ids: Optional[List[str]] = None,
@@ -381,22 +418,9 @@ class ArticleEsService:
 
         if filter_rules:
             rule_groups = self._normalize_rule_groups(filter_rules)
-            group_queries = []
-            for group in rule_groups:
-                group_query = self._build_rule_group_query(group)
-                if group_query is not None:
-                    group_queries.append(group_query)
-
-            if group_queries:
-                if len(group_queries) == 1:
-                    must_clauses.append(group_queries[0])
-                else:
-                    must_clauses.append({
-                        "bool": {
-                            "should": group_queries,
-                            "minimum_should_match": 1,
-                        }
-                    })
+            rule_groups_query = self._build_rule_groups_query(rule_groups)
+            if rule_groups_query is not None:
+                must_clauses.append(rule_groups_query)
 
         bool_query: Dict[str, Any] = {}
         if must_clauses:
@@ -530,22 +554,9 @@ class ArticleEsService:
         # 3. Channel filter rules
         if filter_rules:
             rule_groups = self._normalize_rule_groups(filter_rules)
-            group_queries = []
-            for group in rule_groups:
-                group_query = self._build_rule_group_query(group)
-                if group_query is not None:
-                    group_queries.append(group_query)
-
-            if group_queries:
-                if len(group_queries) == 1:
-                    must_clauses.append(group_queries[0])
-                else:
-                    must_clauses.append({
-                        "bool": {
-                            "should": group_queries,
-                            "minimum_should_match": 1,
-                        }
-                    })
+            rule_groups_query = self._build_rule_groups_query(rule_groups)
+            if rule_groups_query is not None:
+                must_clauses.append(rule_groups_query)
 
         # Assemble complete query
         bool_query: Dict[str, Any] = {}

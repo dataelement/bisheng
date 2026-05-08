@@ -237,7 +237,7 @@ export function KnowledgeAiInput({
 
                 {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
                 <div className="p-3 pb-10">
-                    <div ref={outerScrollRevealRef} className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-hover pr-6">
+                    <div ref={outerScrollRevealRef} className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-scroll pr-6">
                         <div className="relative">
                             {selectedTag && (
                                 <span

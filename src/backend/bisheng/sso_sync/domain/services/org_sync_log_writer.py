@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from loguru import logger
+from sqlalchemy import func
 
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import (
@@ -104,7 +105,7 @@ async def flush_log(
         member_reactivated=buffer.member_reactivated,
         error_details=(buffer.errors + buffer.warnings) or None,
         start_time=buffer.start_time,
-        end_time=datetime.utcnow(),
+        end_time=func.now(),
     )
     # The endpoint calls flush_log *after* the service returns, by which
     # point the bypass_tenant_filter + current_tenant_id context set up

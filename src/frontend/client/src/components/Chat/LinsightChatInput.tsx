@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
+import { checkFileParseStatus } from "~/api/linsight";
 import { File_Accept } from "~/common";
 import { LinsiTools } from "~/components/Chat/Input/ChatFormTools";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -25,6 +26,7 @@ import { useLinsightSessionManager } from "~/hooks/useLinsightManager";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import { useToastContext } from "~/Providers";
 import { cn, removeFocusRings } from "~/utils";
 import SameSopSpan, { sameSopLabelState } from "./Input/SameSopSpan";
 
@@ -93,6 +95,7 @@ const LinsightChatInput = memo(
         const showVoice = !!modelData?.asr_model?.id;
 
         const localize = useLocalize();
+        const { showToast } = useToastContext();
         const { data: count, refetch } = useGetUserLinsightCountQuery();
 
         useEffect(() => {
@@ -122,6 +125,72 @@ const LinsightChatInput = memo(
         // not /api/v1/workstation/config; reading it from bsConfig would
         // silently fall back to 50MB because bsConfig lacks this field.
         const envConfig = useRecoilValue(bishengConfState)
+        const filesParsing = Array.isArray(chatFiles) && chatFiles.some((file) => {
+            const status = file?.parsing_status || 'pending';
+            return file?.file_id && !['completed', 'failed'].includes(status);
+        });
+
+        useEffect(() => {
+            const filesToCheck = Array.isArray(chatFiles)
+                ? chatFiles.filter((file) => {
+                    const status = file?.parsing_status || 'pending';
+                    return file?.file_id && !['completed', 'failed'].includes(status);
+                })
+                : [];
+
+            if (!filesToCheck.length) return;
+
+            const intervalId = window.setInterval(async () => {
+                try {
+                    const res = await checkFileParseStatus(filesToCheck.map((file) => file.file_id));
+                    const statusList = Array.isArray(res.data) ? res.data.filter(Boolean) : [];
+                    const statusMap = new Map(statusList.map((item) => [item.file_id, item.parsing_status]));
+
+                    if (!statusMap.size) return;
+
+                    inputFilesRef.current?.updateParsingStatus?.(statusMap);
+
+                    setChatFiles((prev) => {
+                        if (!Array.isArray(prev)) return prev;
+
+                        let changed = false;
+                        const nextFiles = prev.reduce((result, file) => {
+                            const fileId = file?.file_id;
+                            const nextStatus = statusMap.get(fileId);
+
+                            if (!nextStatus) {
+                                result.push(file);
+                                return result;
+                            }
+
+                            if (nextStatus === 'failed') {
+                                changed = true;
+                                showToast({
+                                    message: localize('com_file_parse_failed_auto_removed', { 0: file.filename || file.file_name || file.name }),
+                                    status: 'error',
+                                });
+                                return result;
+                            }
+
+                            if (nextStatus !== file.parsing_status) {
+                                changed = true;
+                                result.push({ ...file, parsing_status: nextStatus });
+                                return result;
+                            }
+
+                            result.push(file);
+                            return result;
+                        }, [] as any[]);
+
+                        return changed ? nextFiles : prev;
+                    });
+                } catch (error) {
+                    console.error('Linsight file parsing status check failed:', error);
+                }
+            }, 2000);
+
+            return () => window.clearInterval(intervalId);
+        }, [chatFiles, localize, showToast]);
 
         const biu = (trimmed) => {
             if (bsConfig?.linsight_invitation_code && count === 0)
@@ -132,7 +201,7 @@ const LinsightChatInput = memo(
                 files: Array.from(chatFiles || []).map(item => ({
                     file_id: item.file_id,
                     file_name: item.filename || item.name,
-                    parsing_status: 'completed'
+                    parsing_status: item.parsing_status || 'completed'
                 })),
                 question: trimmed,
                 // feedback: '',
@@ -156,7 +225,7 @@ const LinsightChatInput = memo(
 
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
-            if ((!trimmed && !chatFiles?.length) || disabled || isStreaming || fileUploading) return;
+            if ((!trimmed && !chatFiles?.length) || disabled || isStreaming || fileUploading || filesParsing) return;
             // Pass files through to parent
             // onSend(trimmed, chatFiles);
             biu(trimmed)
@@ -167,7 +236,7 @@ const LinsightChatInput = memo(
             if (textAreaRef.current) {
                 textAreaRef.current.style.height = "auto";
             }
-        }, [text, disabled, isStreaming, fileUploading, onSend, chatFiles, sameSopLabel, linsightTools, bsConfig, count]);
+        }, [text, disabled, isStreaming, fileUploading, filesParsing, onSend, chatFiles, sameSopLabel, linsightTools, bsConfig, count]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -276,7 +345,8 @@ const LinsightChatInput = memo(
                                     disabled={
                                         !text?.trim() ||
                                         disabled ||
-                                        fileUploading
+                                        fileUploading ||
+                                        filesParsing
                                     }
                                     className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10 bg-gradient-to-b from-[#143BFF] to-[#99BCFF]"
                                     aria-label="Send message"

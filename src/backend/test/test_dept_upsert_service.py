@@ -198,3 +198,83 @@ class TestUpsertFromSyncPayload:
                 await DeptUpsertService.upsert_from_sync_payload(
                     existing=None, item=item, source='sso', last_sync_ts=100,
                 )
+
+    async def test_reparent_into_other_mount_subtree_rejected(self):
+        """INV-T1 (2-layer lock) — when SSO upstream tries to reparent an
+        existing dept whose subtree contains a mount under a destination
+        already inside another mount, raise 22001 instead of letting the
+        DAO write a nested ``is_tenant_root=1`` row.
+        """
+        from bisheng.common.errcode.tenant_tree import (
+            TenantTreeNestingForbiddenError,
+        )
+        from bisheng.sso_sync.domain.services.dept_upsert_service import (
+            DeptUpsertService,
+        )
+
+        # existing.parent_id (was 7) ≠ new parent.id (5) → reparent path.
+        existing = _dept('C', id=42, path='/1/7/42/', parent_id=7)
+        new_parent = _dept('P', id=5, path='/3/5/')
+        item = DepartmentUpsertItem(
+            external_id='C', name='Child', parent_external_id='P',
+            sort=0, ts=300,
+        )
+
+        async def _reject(*_args, **_kwargs):
+            raise TenantTreeNestingForbiddenError()
+
+        with patch(
+            'bisheng.sso_sync.domain.services.dept_upsert_service.'
+            'DepartmentDao.aget_by_source_external_id',
+            new_callable=AsyncMock, return_value=new_parent,
+        ), patch(
+            'bisheng.sso_sync.domain.services.dept_upsert_service.'
+            'DepartmentDao.aassert_reparent_legal',
+            new=_reject,
+        ), patch(
+            'bisheng.sso_sync.domain.services.dept_upsert_service.'
+            'DepartmentDao.aupsert_by_external_id',
+            new_callable=AsyncMock,
+        ) as upsert_mock:
+            with pytest.raises(TenantTreeNestingForbiddenError):
+                await DeptUpsertService.upsert_from_sync_payload(
+                    existing=existing, item=item,
+                    source='sso', last_sync_ts=300,
+                )
+        # Reject is pre-write — DAO must not be called.
+        upsert_mock.assert_not_awaited()
+
+    async def test_reparent_skips_check_when_parent_unchanged(self):
+        """Optimization: an upsert that doesn't change parent_id must NOT
+        trigger the INV-T1 gate (avoids per-item DAO churn on idempotent
+        sync rounds where most items are unchanged).
+        """
+        from bisheng.sso_sync.domain.services.dept_upsert_service import (
+            DeptUpsertService,
+        )
+
+        existing = _dept('C', id=42, path='/3/5/42/', parent_id=5)
+        new_parent = _dept('P', id=5, path='/3/5/')
+        item = DepartmentUpsertItem(
+            external_id='C', name='Child', parent_external_id='P',
+            sort=0, ts=300,
+        )
+        gate = AsyncMock()
+        with patch(
+            'bisheng.sso_sync.domain.services.dept_upsert_service.'
+            'DepartmentDao.aget_by_source_external_id',
+            new_callable=AsyncMock, return_value=new_parent,
+        ), patch(
+            'bisheng.sso_sync.domain.services.dept_upsert_service.'
+            'DepartmentDao.aassert_reparent_legal',
+            new=gate,
+        ), patch(
+            'bisheng.sso_sync.domain.services.dept_upsert_service.'
+            'DepartmentDao.aupsert_by_external_id',
+            new_callable=AsyncMock, return_value=existing,
+        ):
+            await DeptUpsertService.upsert_from_sync_payload(
+                existing=existing, item=item,
+                source='sso', last_sync_ts=300,
+            )
+        gate.assert_not_awaited()

@@ -270,7 +270,7 @@ export default function ChannelSquare({
           scrollRef.current = el;
           scrollRevealRef(el);
         }}
-        className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
+        className="flex-1 overflow-y-auto scrollbar-on-scroll bg-white"
         onScroll={handleListScroll}
       >
         <div className="relative mx-auto mb-6 mt-6 w-full max-w-[480px]">

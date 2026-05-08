@@ -122,7 +122,7 @@ class TestAdeleteTenantRootProtection:
             'bisheng.tenant.domain.services.tenant_service.TenantDao.adelete_tenant',
             new_callable=AsyncMock,
         ) as dao_mock, patch(
-            'bisheng.tenant.domain.services.tenant_service.TenantDao.acount_tenant_users',
+            'bisheng.tenant.domain.services.tenant_service.UserDepartmentDao.acount_users_by_tenant_subtree',
             new_callable=AsyncMock, return_value=0,
         ):
             with pytest.raises(TenantTreeRootProtectedError):

@@ -174,9 +174,9 @@ function hasRoutePermission(permissions: string[], key: string) {
  * 把后端下发的 web_menu 转成路由层用的 permissions 数组。
  *
  * - 部门管理员补 `create_app`（后端来不及下发时的兜底，原有行为）。
- * - 子租户管理员（Child Admin）补 `sys`：后端 web_menu 不下发 sys/system_config 给非
- *   超管/非部门管理员，但 SystemPage 内部按 Tab 控制权限（org + role），需要前端先放行
- *   /sys 路由。判断与侧栏 `MainLayout.showSystemNav` 一致。
+ * - 子租户管理员（Child Admin）补 `sys` / `model`：后端 web_menu 不下发 sys/system_config 给非
+ *   超管/非部门管理员，且默认不下发 `model` 资源。子租户管理员需要在自己租户内管理模型
+ *   （PRD §6.1 模型租户隔离），路由层放行后由后端 `get_tenant_admin_user` 校验实际权限。
  */
 export function resolveRoutePermissions(user: {
   web_menu?: string[]
@@ -189,6 +189,9 @@ export function resolveRoutePermissions(user: {
   }
   if (user.is_child_admin && !perms.includes("sys")) {
     perms = [...perms, "sys"]
+  }
+  if (user.is_child_admin && !perms.includes("model")) {
+    perms = [...perms, "model"]
   }
   return perms
 }

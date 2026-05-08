@@ -1261,7 +1261,13 @@ export async function uploadFileToServerApi(
     formData.append("file", file);
     const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "upload file failed");
+        // Preserve status_code and data so the caller can render the localized
+        // backend message via i18n (e.g. api_errors.19403 with used_gb/quota_gb)
+        // instead of falling through to a generic "upload failed" toast.
+        const err = new Error(res.status_message || res.message || res.msg || "upload file failed");
+        (err as any).statusCode = res.status_code;
+        (err as any).errorData = res.data;
+        throw err;
     }
     if (!res?.data?.file_path) {
         throw new Error("upload file failed: missing file path");

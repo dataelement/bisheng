@@ -23,6 +23,12 @@ from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventDat
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.context.tenant import (
+    DEFAULT_TENANT_ID,
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_current_tenant_id,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
@@ -226,24 +232,36 @@ class UserService:
             raise UserNameTooLongError()
         db_user.password = cls.decrypt_md5_password(user.password)
         # Under JudgmentadminDoes the user exist
-        admin = await UserDao.aget_user(1)
-        if admin:
-            db_user = await UserDao.add_user_and_default_role(db_user)
-            await LegacyRBACSyncService.sync_user_auth_created(
-                db_user.user_id,
-                [DefaultRole],
-            )
-        else:
-            db_user.user_id = 1
-            db_user = await UserDao.add_user_and_admin_role(db_user)
-            await LegacyRBACSyncService.sync_user_auth_created(
-                db_user.user_id,
-                [AdminRole],
-            )
+        assigned_tenant_id = await cls._resolve_registration_tenant_id()
+
+        tenant_token = None
         if settings.multi_tenant.enabled:
-            await cls._ensure_user_default_tenant_association(db_user.user_id)
-        await cls._ensure_user_guest_department_membership(db_user.user_id)
-        return db_user
+            tenant_token = set_current_tenant_id(int(assigned_tenant_id))
+        try:
+            admin = await UserDao.aget_user(1)
+            if admin:
+                db_user = await UserDao.add_user_and_default_role(db_user)
+                await LegacyRBACSyncService.sync_user_auth_created(
+                    db_user.user_id,
+                    [DefaultRole],
+                )
+            else:
+                db_user.user_id = 1
+                db_user = await UserDao.add_user_and_admin_role(db_user)
+                await LegacyRBACSyncService.sync_user_auth_created(
+                    db_user.user_id,
+                    [AdminRole],
+                )
+
+            await cls._ensure_user_default_tenant_association(
+                db_user.user_id,
+                tenant_id=assigned_tenant_id,
+            )
+            await cls._ensure_user_guest_department_membership(db_user.user_id)
+            return db_user
+        finally:
+            if tenant_token is not None:
+                current_tenant_id.reset(tenant_token)
 
     @classmethod
     async def _ensure_user_guest_department_membership(cls, user_id: int) -> None:
@@ -287,18 +305,32 @@ class UserService:
             await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
-    async def _ensure_user_default_tenant_association(cls, user_id: int) -> None:
-        """When multi-tenant is on, every user must have at least one ``user_tenant`` row to log in."""
-        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
-        from bisheng.database.models.tenant import TenantDao, UserTenantDao
+    async def _resolve_registration_tenant_id(cls) -> int:
+        """Resolve the tenant_id used for anonymous self-registration."""
+        from bisheng.database.models.tenant import TenantDao
+
+        code = (settings.multi_tenant.default_tenant_code or 'default').strip() or 'default'
+        with bypass_tenant_filter():
+            tenant = await TenantDao.aget_by_code(code)
+        return int(tenant.id) if tenant else DEFAULT_TENANT_ID
+
+    @classmethod
+    async def _ensure_user_default_tenant_association(
+        cls, user_id: int, tenant_id: Optional[int] = None,
+    ) -> int:
+        """Ensure a user has a default tenant row and return its tenant_id."""
+        from bisheng.database.models.tenant import UserTenantDao
 
         existing = await UserTenantDao.aget_user_tenants(user_id)
         if existing:
-            return
-        code = (settings.multi_tenant.default_tenant_code or 'default').strip() or 'default'
-        tenant = await TenantDao.aget_by_code(code)
-        tenant_id = tenant.id if tenant else DEFAULT_TENANT_ID
+            for row in existing:
+                if getattr(row, 'is_default', 0) == 1:
+                    return int(row.tenant_id)
+            return int(existing[0].tenant_id)
+        if tenant_id is None:
+            tenant_id = await cls._resolve_registration_tenant_id()
         await UserTenantDao.aadd_user_to_tenant(user_id=user_id, tenant_id=tenant_id, is_default=1)
+        return int(tenant_id)
 
     @classmethod
     async def _reject_login_if_user_has_no_usable_access(

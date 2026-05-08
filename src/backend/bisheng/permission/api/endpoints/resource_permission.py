@@ -1097,7 +1097,7 @@ async def authorize_resource(
         login_user=login_user,
     )
     if scope_error is not None:
-        return scope_error.return_resp()
+        return PermissionDeniedError.return_resp('部门或用户组无法成为所有者')
 
     from bisheng.permission.domain.services.permission_service import PermissionService
 

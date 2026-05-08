@@ -22,6 +22,7 @@ from bisheng.common.errcode.tenant_tree import (
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.department import UserDepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao, UserTenantDao
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.schemas.tenant_schema import (
@@ -136,12 +137,21 @@ class TenantService:
         login_user,
     ) -> dict:
         """List tenants with pagination. System admin only."""
+        import asyncio
+
+        from bisheng.role.domain.services.quota_service import QuotaService
+
         tenants, total = await TenantDao.alist_tenants(
             keyword=keyword, status=status, page=page, page_size=page_size,
         )
-        # Batch count users to avoid N+1 queries
+        # F024 phase-2: count via primary-dept-in-subtree so the column
+        # matches the dialog list source exactly. v2.5.0 ``aadd_users``
+        # residue rows in UserTenant no longer surface as phantom members.
         tenant_ids = [t.id for t in tenants]
-        user_counts = await TenantDao.acount_tenant_users_batch(tenant_ids)
+        user_counts, usage_map = await asyncio.gather(
+            UserDepartmentDao.acount_users_by_tenant_subtree_batch(tenant_ids),
+            QuotaService.get_storage_used_gb_batch(tenant_ids),
+        )
 
         # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
         # operators see the original code in the tenant list. The stored value
@@ -159,7 +169,7 @@ class TenantService:
                 logo=t.logo,
                 status=t.status,
                 user_count=user_counts.get(t.id, 0),
-                storage_used_gb=None,
+                storage_used_gb=round(usage_map.get(t.id, 0.0), 2),
                 storage_quota_gb=_get_storage_quota(t),
                 create_time=t.create_time,
             ))
@@ -168,13 +178,16 @@ class TenantService:
     @classmethod
     async def aget_tenant(cls, tenant_id: int, login_user) -> dict:
         """Get tenant detail including admin users."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+
         with bypass_tenant_filter():
             tenant = await TenantDao.aget_by_id(tenant_id)
         if not tenant:
             raise TenantNotFoundError()
 
-        user_count = await TenantDao.acount_tenant_users(tenant_id)
+        user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         admin_users = await cls._get_tenant_admin_users(tenant_id)
+        usage_map = await QuotaService.get_storage_used_gb_batch([tenant_id])
 
         from bisheng.tenant.domain.services.tenant_mount_service import (
             display_tenant_code,
@@ -186,7 +199,7 @@ class TenantService:
             logo=tenant.logo,
             status=tenant.status,
             user_count=user_count,
-            storage_used_gb=None,
+            storage_used_gb=round(usage_map.get(tenant_id, 0.0), 2),
             storage_quota_gb=_get_storage_quota(tenant),
             create_time=tenant.create_time,
             root_dept_id=tenant.root_dept_id,
@@ -300,7 +313,10 @@ class TenantService:
     async def adelete_tenant(cls, tenant_id: int, login_user) -> None:
         """Delete a tenant. Requires zero active users."""
         _guard_default_tenant(tenant_id)
-        user_count = await TenantDao.acount_tenant_users(tenant_id)
+        # F024 phase-2: gate the delete on the same "primary dept in subtree"
+        # source the UI shows, so admins are never blocked by phantom
+        # UserTenant residue rows they cannot see.
+        user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         if user_count > 0:
             raise TenantHasUsersError()
 
@@ -347,7 +363,7 @@ class TenantService:
             raise TenantNotFoundError()
 
         usage = {}
-        user_count = await TenantDao.acount_tenant_users(tenant_id)
+        user_count = await UserDepartmentDao.acount_users_by_tenant_subtree(tenant_id)
         usage['user_count'] = user_count
 
         return TenantQuotaResponse(
@@ -685,13 +701,23 @@ class TenantService:
 
     @classmethod
     async def _get_tenant_admin_users(cls, tenant_id: int) -> List[dict]:
-        """Get admin users for a tenant by checking each user's admin relation."""
+        """Get admin users for a tenant via a single FGA batch_check.
+
+        Sequential per-user PermissionService.check (the pre-fix shape)
+        hung the edit-tenant dialog on Root: each check went through the
+        full permission pipeline (~2.5–3s) and 100 UserTenant rows pushed
+        the response past the 120s frontend timeout. batch_check folds
+        them into one FGA round-trip while preserving the semantic — the
+        authorization model still resolves super_admin → admin, so Root
+        super_admins continue to surface as Root admins.
+        """
         users, _ = await UserTenantDao.aget_tenant_users(tenant_id, page=1, page_size=100)
-        admin_users = []
-        for user in users:
-            if await cls._is_tenant_admin(user['user_id'], tenant_id):
-                admin_users.append(user)
-        return admin_users
+        if not users:
+            return []
+        flags = await cls._batch_check_tenant_admin(
+            [u['user_id'] for u in users], tenant_id,
+        )
+        return [u for u, ok in zip(users, flags) if ok]
 
     @classmethod
     async def _is_tenant_admin(cls, user_id: int, tenant_id: int) -> bool:
@@ -706,17 +732,58 @@ class TenantService:
             return False
 
     @classmethod
-    async def _count_tenant_admins(cls, tenant_id: int) -> int:
-        """Count admins by checking each tenant user's admin relation.
+    async def _batch_check_tenant_admin(
+        cls, user_ids: List[int], tenant_id: int,
+    ) -> List[bool]:
+        """Resolve admin flags for ``user_ids`` on ``tenant_id`` in one FGA call.
 
-        Falls back to counting all users when FGA is unavailable (fail-open),
-        which blocks removal since count will be >= 1.
+        Returns a list aligned with ``user_ids``. On any failure (FGA
+        unavailable, batch_check error) returns all-False so callers can
+        apply their own fail-closed policy.
+        """
+        if not user_ids:
+            return []
+        try:
+            from bisheng.core.openfga.manager import (
+                aget_fga_client,
+                get_fga_client,
+            )
+
+            fga = await aget_fga_client()
+            if fga is None:
+                fga = get_fga_client()
+            if fga is None:
+                return [False] * len(user_ids)
+            checks = [
+                {
+                    'user': f'user:{uid}',
+                    'relation': 'admin',
+                    'object': f'tenant:{tenant_id}',
+                }
+                for uid in user_ids
+            ]
+            return await fga.batch_check(checks)
+        except Exception as e:
+            logger.warning(
+                'batch_check tenant admins failed (tenant_id=%s): %s',
+                tenant_id, e,
+            )
+            return [False] * len(user_ids)
+
+    @classmethod
+    async def _count_tenant_admins(cls, tenant_id: int) -> int:
+        """Count admins via a single FGA batch_check.
+
+        Falls back to counting all users when FGA is unavailable (fail-closed
+        against last-admin removal: count will be >= 1).
         """
         users, _ = await UserTenantDao.aget_tenant_users(
             tenant_id, page=1, page_size=100,
         )
-        count = 0
-        for user in users:
-            if await cls._is_tenant_admin(user['user_id'], tenant_id):
-                count += 1
+        if not users:
+            return 0
+        flags = await cls._batch_check_tenant_admin(
+            [u['user_id'] for u in users], tenant_id,
+        )
+        count = sum(1 for f in flags if f)
         return count if count > 0 else len(users)  # Fail-closed: if no FGA, assume all are admins

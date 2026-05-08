@@ -383,7 +383,7 @@ const AiChatInput = memo(
                     {hasSelectionTags && (
                         <div
                             ref={selectionTagsScrollRevealRef}
-                            className="mt-1 mb-2.5  max-h-[72px] overflow-y-auto scrollbar-on-hover"
+                            className="mt-1 mb-2.5  max-h-[72px] overflow-y-auto scrollbar-on-scroll"
                         >
                             <div className="flex flex-wrap gap-1">
                                 {uploadingFiles.map((file) => (

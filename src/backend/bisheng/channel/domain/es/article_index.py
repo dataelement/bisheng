@@ -67,30 +67,28 @@ ARTICLE_MAPPINGS = {
 
 # ES Settings (IK analyzer configuration, fallback to standard)
 ARTICLE_SETTINGS = {
-    "number_of_shards": 1,
-    "number_of_replicas": 0,
+    "index": {
+        "max_ngram_diff": 2
+    },
     "analysis": {
-        "tokenizer": {
-            "single_char_tokenizer": {
-                "type": "ngram",
-                "min_gram": 2,
-                "max_gram": 3,
-                "token_chars": [
-                    "letter",
-                    "digit",
-                    "punctuation",
-                    "symbol",
-                    "whitespace"
-                ],
-            }
-        },
         "analyzer": {
             "single_char_analyzer": {
                 "type": "custom",
-                "tokenizer": "single_char_tokenizer",
+                "tokenizer": "single_char_tokenizer"
             }
         },
-    },
+        "tokenizer": {
+            "single_char_tokenizer": {
+                "type": "ngram",
+                "min_gram": 1,
+                "max_gram": 3,
+                "token_chars": [
+                    "letter",
+                    "digit"
+                ]
+            }
+        }
+    }
 }
 
 

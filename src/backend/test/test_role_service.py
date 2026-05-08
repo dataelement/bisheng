@@ -306,6 +306,38 @@ class TestListRoles:
             assert item.is_readonly is False
 
     @pytest.mark.asyncio
+    async def test_admin_can_edit_role_created_by_others(self, mock_admin_user):
+        """System admin can edit roles even when the creator is someone else."""
+        from bisheng.role.domain.services.role_service import RoleService
+
+        roles = [
+            _make_role(5, 'Custom Tenant', role_type='tenant', department_id=8),
+            _make_role(6, 'Global Other', role_type='global'),
+        ]
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch.object(RoleService, '_get_department_names', new_callable=AsyncMock,
+                          return_value={}), \
+             patch.object(RoleService, '_department_scope_paths_for_roles', new_callable=AsyncMock,
+                          return_value={}), \
+             patch.object(RoleService, '_get_role_creator_ids', new_callable=AsyncMock,
+                          return_value={5: 99, 6: 42}), \
+             patch.object(RoleService, '_get_creator_names', new_callable=AsyncMock,
+                          return_value={5: 'someone-else', 6: 'another-user'}):
+            mock_dao.aget_visible_roles = AsyncMock(return_value=roles)
+            mock_dao.acount_visible_roles = AsyncMock(return_value=2)
+            mock_dao.aget_user_count_by_role_ids = AsyncMock(return_value={5: 1, 6: 2})
+
+            result = await RoleService.list_roles(
+                keyword=None, page=1, limit=10,
+                login_user=mock_admin_user,
+            )
+
+        readonly = {item.id: item.is_readonly for item in result['data']}
+        assert readonly[5] is False
+        assert readonly[6] is False
+
+    @pytest.mark.asyncio
     async def test_tenant_admin_sees_global_readonly(self, mock_tenant_admin):
         """AC-03: Tenant admin sees global roles as readonly."""
         from bisheng.role.domain.services.role_service import RoleService

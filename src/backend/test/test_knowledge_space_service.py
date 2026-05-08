@@ -1360,6 +1360,140 @@ class TestTupleLifecycle:
         mock_update_space.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_add_file_blocks_and_rolls_back_when_tenant_storage_quota_exceeded(self, service):
+        """Tenant-level storage cap must trip 19403 (independent of user-role cap).
+
+        Bug 1 fix: previously add_file only compared the *user's* total upload
+        against limit_bytes. With the same user upload size below the user-role
+        cap but the target tenant chain near exhaustion, writes leaked through.
+        """
+        from bisheng.common.errcode.tenant_quota import TenantStorageQuotaExceededError
+
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        space.tenant_id = 7
+        added_file = _make_file(file_id=91, knowledge_id=1, file_name='big.txt')
+        added_file.status = 5
+        added_file.file_size = 6
+
+        with patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes',
+            new_callable=AsyncMock,
+            return_value=None,  # user-role unlimited; only tenant cap should bite
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes',
+            new_callable=AsyncMock,
+            return_value=5,  # 5 bytes remaining on the tenant chain
+        ) as mock_remaining, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_used_bytes',
+            new_callable=AsyncMock,
+            return_value=10,
+        ) as mock_used, patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_require_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file',
+            return_value=added_file,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples',
+            new_callable=AsyncMock,
+        ) as mock_batch_write, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ) as mock_cleanup_tuples, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ) as mock_delete_files, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery.delay',
+        ) as mock_parse, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            with pytest.raises(TenantStorageQuotaExceededError) as exc_info:
+                await service.add_file(1, ['/tmp/big.txt'])
+
+        # Targeted the destination space's tenant_id, not login_user.tenant_id
+        mock_remaining.assert_awaited_once_with(7)
+        mock_used.assert_awaited_once_with(7)
+        # Defense-in-depth: error code is 19403 with reason='tenant_limit'
+        assert exc_info.value.Code == 19403
+        assert exc_info.value.kwargs.get('reason') == 'tenant_limit'
+        # Cleanup ran (rollback): the partially-written row was removed
+        mock_cleanup_tuples.assert_awaited_once_with([('knowledge_file', 91)])
+        mock_delete_files.assert_awaited_once_with([91])
+        mock_parse.assert_not_called()
+        mock_batch_write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_add_file_admin_still_blocked_by_tenant_storage_quota(self, service):
+        """Super admin upload must still be capped by the *target tenant*.
+
+        Pre-fix: get_knowledge_space_upload_limit_bytes returned None for
+        admins, and tenant-cap was only enforced inside that helper, so admins
+        could write past a child tenant's storage_gb.
+        """
+        from bisheng.common.errcode.tenant_quota import TenantStorageQuotaExceededError
+
+        admin_user = _make_login_user(user_id=1)
+        admin_user.is_admin = lambda: True
+        service.login_user = admin_user
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        space.tenant_id = 9
+
+        # Tenant chain already exhausted → helper raises directly (mirrors
+        # _apply_tenant_chain_cap behaviour).
+        with patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes',
+            new_callable=AsyncMock,
+            side_effect=TenantStorageQuotaExceededError(
+                msg='exhausted',
+                used_gb=2,
+                quota_gb=2,
+                tenant_name='child-1',
+                tenant_id=9,
+                reason='tenant_limit',
+            ),
+        ) as mock_remaining, patch(
+            'bisheng.approval.domain.services.approval_service.ApprovalService.should_require_department_space_approval',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file',
+        ) as mock_process:
+            with pytest.raises(TenantStorageQuotaExceededError):
+                await service.add_file(1, ['/tmp/anything.txt'])
+
+        mock_remaining.assert_awaited_once_with(9)
+        # Quota check fires before any file is processed.
+        mock_process.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_add_file_requires_parent_tuple_write_success(self, service):
         space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         added_file = _make_file(file_id=84, knowledge_id=1, file_name='doc.txt')
@@ -1906,7 +2040,7 @@ class TestTupleLifecycle:
         assert result['data'] == [{'id': 202}]
 
     @pytest.mark.asyncio
-    async def test_public_subscribe_updates_membership_without_rebac_tuple(self, service):
+    async def test_public_subscribe_updates_membership_and_syncs_rebac_tuple(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
 
         with patch(
@@ -1924,14 +2058,17 @@ class TestTupleLifecycle:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
             new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        ), patch.object(
+            service.__class__,
+            'sync_direct_space_user_permissions',
             new_callable=AsyncMock,
-        ) as mock_authorize:
+        ) as mock_sync_permissions:
             result = await service.subscribe_space(1)
 
         assert result['status'] == 'subscribed'
-        mock_authorize.assert_not_awaited()
+        mock_sync_permissions.assert_awaited_once()
+        assert mock_sync_permissions.await_args.args[:3] == (1, service.login_user.user_id, UserRoleEnum.MEMBER)
+        assert mock_sync_permissions.await_args.kwargs['is_active'] is True
 
     @pytest.mark.asyncio
     async def test_public_to_approval_does_not_sync_member_tuples(self, service):
@@ -1959,7 +2096,47 @@ class TestTupleLifecycle:
         mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_approval_to_public_activates_pending_members_without_rebac_tuple(self, service):
+    async def test_public_to_private_cleans_members_and_permissions(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
+        child_resources = [('folder', 11), ('knowledge_file', 12)]
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch.object(
+            service, '_require_manage_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+            return_value=private_space,
+        ), patch.object(
+            service,
+            '_list_space_child_resources',
+            new_callable=AsyncMock,
+            return_value=child_resources,
+        ) as mock_list_children, patch.object(
+            service.__class__,
+            'clear_space_authorization_for_private',
+            new_callable=AsyncMock,
+        ) as mock_clear_permissions, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_non_creator_members',
+            new_callable=AsyncMock,
+        ) as mock_delete_members:
+            await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        mock_list_children.assert_awaited_once_with(1)
+        mock_clear_permissions.assert_awaited_once_with(
+            space=private_space,
+            child_resources=child_resources,
+        )
+        mock_delete_members.assert_awaited_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_approval_to_public_activates_pending_members_and_syncs_rebac_tuple(self, service):
         approval_space = _make_space(auth_type=AuthTypeEnum.APPROVAL)
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         pending_member = _make_member(user_id=12, status=MembershipStatusEnum.PENDING)
@@ -1986,16 +2163,22 @@ class TestTupleLifecycle:
         ) as mock_update_member, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_rejected_members',
             new_callable=AsyncMock,
-        ) as mock_delete_rejected, patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        ) as mock_delete_rejected, patch.object(
+            service.__class__,
+            'sync_direct_space_user_permissions',
             new_callable=AsyncMock,
-        ) as mock_authorize:
+        ) as mock_sync_permissions:
             await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PUBLIC)
 
         assert pending_member.status == MembershipStatusEnum.ACTIVE
         mock_update_member.assert_awaited_once()
         mock_delete_rejected.assert_awaited_once_with(1)
-        mock_authorize.assert_not_awaited()
+        mock_sync_permissions.assert_awaited_once_with(
+            1,
+            pending_member.user_id,
+            pending_member.user_role,
+            is_active=True,
+        )
 
     @pytest.mark.asyncio
     async def test_unsubscribe_space_blocks_creator(self, service):

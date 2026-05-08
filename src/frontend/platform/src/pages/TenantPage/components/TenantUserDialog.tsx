@@ -23,7 +23,6 @@ import { useTable } from "@/util/hook";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
 interface Props {
   tenant: Tenant;
@@ -102,25 +101,6 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
           {t("tenant.users")} - {displayTenantName(tenant.tenant_name)}
         </h3>
 
-        {/* F024: tenant membership is derived from the user's primary
-            department. Adding/removing members is done by editing the
-            primary dept on the org page; this dialog is now read-only +
-            tenant-admin assignment only. */}
-        <div className="mb-4 rounded-md border border-primary/30 bg-primary/5 p-3">
-          <p className="text-sm font-medium">
-            {t("tenant.membershipBanner.title")}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("tenant.membershipBanner.body")}
-          </p>
-          <Link
-            to="/sys"
-            className="mt-2 inline-block text-xs text-primary hover:underline"
-          >
-            {t("tenant.membershipBanner.cta")}
-          </Link>
-        </div>
-
         {/* Search */}
         <div className="mb-4">
           <SearchInput
@@ -135,6 +115,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>{t("system.username")}</TableHead>
+                <TableHead>{t("tenant.userIdColumn")}</TableHead>
                 <TableHead>{t("tenant.lastAccess")}</TableHead>
                 <TableHead className="text-right">
                   {t("tenant.actions")}
@@ -166,6 +147,9 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                           </span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.external_id ?? user.user_id}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {user.join_time

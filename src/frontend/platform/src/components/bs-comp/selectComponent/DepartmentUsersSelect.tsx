@@ -13,6 +13,8 @@ import { useTranslation } from "react-i18next"
 export type DepartmentUserOption = {
   label: string
   value: number
+  /** Login credential (external_id). Falls back to value (user_id) when absent. */
+  external_id?: string | null
   /** 选人时由组织树节点解析，供编辑页即时展示部门路径 */
   department_path?: string
 }
@@ -39,6 +41,7 @@ interface DepartmentUsersSelectProps {
 type UserListItem = {
   user_id: number
   user_name: string
+  external_id?: string | null
   dept_id?: number | string | null
   department_id?: number | null
 }
@@ -150,6 +153,7 @@ export default function DepartmentUsersSelect({
       const users = (res?.data || []).map((u) => ({
         value: Number(u.user_id),
         label: u.user_name,
+        external_id: u.person_id ?? null,
       }))
       setDeptUsersMap((prev) => ({ ...prev, [did]: users }))
     } finally {
@@ -269,7 +273,11 @@ export default function DepartmentUsersSelect({
     for (const u of searchedUsers || []) {
       const did = resolveTreeDepartmentId(u, deptBusinessKeyToId)
       if (did == null) continue
-      const row = { value: Number(u.user_id), label: u.user_name }
+      const row: DepartmentUserOption = {
+        value: Number(u.user_id),
+        label: u.user_name,
+        external_id: u.external_id ?? null,
+      }
       const arr = map.get(did) || []
       if (!arr.some((x) => x.value === row.value)) arr.push(row)
       map.set(did, arr)
@@ -369,7 +377,7 @@ export default function DepartmentUsersSelect({
                   <Checkbox checked={selected} disabled={locked} onCheckedChange={() => setPicked(u, displayPathForNode)} />
                   <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="truncate">{u.label}</span>
-                  <span className="shrink-0">（{u.value}）</span>
+                  <span className="shrink-0">（{u.external_id ?? u.value}）</span>
                 </div>
               )
             })}
@@ -401,7 +409,7 @@ export default function DepartmentUsersSelect({
                 key={v.value}
                 className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs text-foreground"
               >
-                {v.label}（{v.value}）
+                {v.label}（{v.external_id ?? v.value}）
                 {!disabled && !lockedSet.has(Number(v.value)) && (
                   <X
                     className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"

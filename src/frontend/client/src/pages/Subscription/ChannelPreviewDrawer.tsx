@@ -340,7 +340,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                         </SheetHeader>
 
                         {/* Article List / Pending Message */}
-                        <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover pt-2">
+                        <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll pt-2">
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <img

@@ -409,6 +409,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 fileIds={selectedFileObjs.map(f => Number(f.id))}
                                 onUpdate={reload}
                                 isEditable={canBatchEditTags}
+                                mode="batch"
                             >
                                 <Button
                                     variant="outline"

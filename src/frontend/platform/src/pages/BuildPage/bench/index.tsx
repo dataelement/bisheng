@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
-import { Model, ModelManagement } from "./ModelManagement";
+import { Model } from "./ModelManagement";
 import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
@@ -256,27 +256,7 @@ export default function index() {
                             />
                         </div>
 
-                        {/* Model Management */}
-                        {/* Bind model management container ref */}
                         <div className="mb-6" ref={modelManagementContainerRef}>
-                            <p className="text-lg font-bold mb-2">{t('chatConfig.modelManagement')}</p>
-                            <div className="mb-6">
-                                <ModelManagement
-                                    ref={modelRefs}
-                                    models={formData.models}
-                                    errors={errors.modelNames}
-                                    error={errors.model}
-                                    onAdd={addModel}
-                                    onRemove={(index) => {
-                                        const newModels = [...formData.models];
-                                        newModels.splice(index, 1);
-                                        setFormData(prev => ({ ...prev, models: newModels }));
-                                    }}
-                                    onModelChange={handleModelChange}
-                                    onNameChange={handleModelNameChange}
-                                    onVisualToggle={handleVisualToggle}
-                                />
-                            </div>
                             <FormInput
                                 label={<Label className="bisheng-label block pt-2">{t('chatConfig.maxTokens')}</Label>}
                                 type="number"
@@ -500,10 +480,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                         cfg.applicationCenterWelcomeMessage ?? prev.applicationCenterWelcomeMessage,
                     applicationCenterDescription:
                         cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
-                    models:
-                        Array.isArray(cfg.models) && cfg.models.length > 0
-                            ? cfg.models
-                            : prev.models,
                     maxTokens:
                         typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
                     systemPrompt: cfgSystemPrompt,
@@ -640,68 +616,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
             isValid = false;
         }
-        // Validate models
-        if (formData.models.length === 0) {
-            newErrors.model = t('chatConfig.errors.atLeastOneModel');
-            if (!firstErrorRef) {
-                // Modified: Use model management container ref as priority scroll target
-                firstErrorRef = refs.modelManagementContainerRef.current
-                    ? { current: refs.modelManagementContainerRef.current }
-                    : refs.sidebarSloganRef; // Keep default fallback
-            }
-            modelErrorMessages.push(newErrors.model);
-            isValid = false;
-        }
-
-        const modelNameErrors: string[][] = [];
-        formData.models.forEach((model, index) => {
-            const displayName = model.displayName.trim();
-            let error = [];
-
-            if (!displayName) {
-                error = ['', t('chatConfig.errors.modelNameRequired')];
-                if (!firstErrorRef && refs.modelRefs.current[index]) {
-                    firstErrorRef = { current: refs.modelRefs.current[index] };
-                }
-            } else if (!model.id) {
-                error = [t('chatConfig.errors.modelRequired'), ''];
-                if (!firstErrorRef && refs.modelRefs.current[index]) {
-                    firstErrorRef = { current: refs.modelRefs.current[index] };
-                }
-            } else if (displayName.length > 30) {
-                error = ['', t('chatConfig.errors.maxCharacters', { count: 30 })];
-                if (!firstErrorRef && refs.modelRefs.current[index]) {
-                    firstErrorRef = { current: refs.modelRefs.current[index] };
-                }
-            } else {
-                formData.models.some((m, i) => {
-                    if (i !== index) {
-                        error = ['', ''];
-                        if (m.id === model.id) {
-                            error[0] = t('chatConfig.errors.modelDuplicate')
-                        }
-                        if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
-                            error[1] = t('chatConfig.errors.modelNameDuplicate')
-                        }
-                        if (error[0] || error[1]) {
-                            if (!firstErrorRef && refs.modelRefs.current[index]) {
-                                firstErrorRef = { current: refs.modelRefs.current[index] };
-                            }
-                            return true;
-                        }
-                    }
-                });
-            }
-
-            if (error[0] || error[1]) {
-                modelNameErrors[model.key] = error;
-                if (error[0]) modelErrorMessages.push(error[0]);
-                if (error[1]) modelErrorMessages.push(error[1]);
-                isValid = false;
-            }
-        });
-
-        newErrors.modelNames = modelNameErrors;
+        newErrors.modelNames = [];
         setErrors(newErrors);
 
         return {
@@ -753,7 +668,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             inputPlaceholder: formData.inputPlaceholder.trim(),
             applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
             applicationCenterDescription: formData.applicationCenterDescription.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
-            models: formData.models,
             maxTokens: formData.maxTokens || 15000,
             systemPrompt: formData.systemPrompt,
             knowledgeBase: formData.knowledgeBase,

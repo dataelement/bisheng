@@ -261,8 +261,10 @@ const EditTool = forwardRef((props: any, ref) => {
     };
 
     const { message } = useToast()
+    const [saveLoading, setSaveLoading] = useState(false)
     // save api
     const handleSave = () => {
+        if (saveLoading) return
         const errors = [];
 
         if (!formState.toolName) {
@@ -309,7 +311,9 @@ const EditTool = forwardRef((props: any, ref) => {
         }
 
         const methodApi = delShow ? updateTool : createTool
+        setSaveLoading(true)
         captureAndAlertRequestErrorHoc(methodApi(data)).then(res => {
+            setSaveLoading(false)
             if (!res) return
             // save
             setEditShow(false)
@@ -603,7 +607,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         >{t('tools.delete')}</Button>
                     )}
                     <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
-                    <Button size="sm" className="text-[white]" onClick={handleSave}>{t('tools.save')}</Button>
+                    <Button size="sm" className="text-[white]" disabled={saveLoading} onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet >

@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Optional
 
 from loguru import logger
+from sqlalchemy import func
 
 from bisheng.common.errcode.org_sync import (
     OrgSyncAlreadyRunningError,
@@ -204,7 +205,7 @@ class OrgSyncService:
                 log.member_disabled = stats['member_disabled']
                 log.member_reactivated = stats['member_reactivated']
                 log.error_details = errors or None
-                log.end_time = datetime.now()
+                log.end_time = func.now()
                 try:
                     await OrgSyncLogDao.aupdate(log)
                 except Exception:
@@ -212,7 +213,7 @@ class OrgSyncService:
 
             # Step 15: Update config
             try:
-                config.last_sync_at = datetime.now()
+                config.last_sync_at = func.now()
                 config.last_sync_result = log.status if log else 'failed'
                 await OrgSyncConfigDao.aupdate(config)
             except Exception:
@@ -361,6 +362,13 @@ class OrgSyncService:
 
         if new_parent_id is None or new_parent_id == old_parent_id:
             return
+
+        # INV-T1 (2-layer lock): same gate as F002 amove + F014 SSO upsert —
+        # legacy v2.4 org-sync must not reparent a mounted subtree under
+        # another mount, otherwise we silently produce nested
+        # ``is_tenant_root=1`` rows. Per-op exception isolation in the
+        # caller turns this into a recorded sync error, not a batch abort.
+        await DepartmentDao.aassert_reparent_legal(op.local.id, new_parent_id)
 
         # Update parent_id
         op.local.parent_id = new_parent_id

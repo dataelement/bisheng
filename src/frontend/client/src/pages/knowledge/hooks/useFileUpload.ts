@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import i18next from "i18next";
 import {
     FileStatus,
     FileType,
@@ -19,6 +20,28 @@ import { useToastContext } from "~/Providers";
 import { getFileTypeFromName, isKnowledgeItemPending, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
+/**
+ * Resolve a human-friendly reason from an upload error.
+ * Prefers the localized api_errors.{code} template (so 19403 renders as
+ * "当前企业存储配额已耗尽（X/Y GB）..." with backend-provided used_gb/quota_gb)
+ * and only falls back to the raw status_message when no template exists.
+ * Returns "" when the error carries no actionable info — caller may then
+ * append the generic browser-upload hint as a last-resort fallback.
+ */
+function resolveUploadErrorReason(err: any): string {
+    const statusCode = err?.statusCode;
+    if (statusCode != null) {
+        const codeKey = `api_errors.${statusCode}`;
+        if (i18next.exists(codeKey)) {
+            return String(i18next.t(codeKey, err?.errorData ?? {}));
+        }
+    }
+    if (typeof err?.message === "string" && err.message && err.message !== "upload file failed") {
+        return err.message;
+    }
+    return "";
+}
+
 /** A duplicate file entry detected from addFiles response (status === 3) */
 export interface DuplicateFileEntry {
     fileId: string;
@@ -36,10 +59,13 @@ const PENDING_REGISTERED_FILE_STATUSES = new Set<FileStatus>([
 ]);
 
 export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): DuplicateFileEntry[] {
+    // Backend marks duplicates by setting `old_file_level_path` to a string (possibly empty
+    // when the existing file lives at the space root). Real parse failures leave the field
+    // unset (None → undefined). Use type check, not truthiness, to keep root-level duplicates.
     return registeredFiles
         .filter((file) => (
             file.status === FileStatus.FAILED &&
-            Boolean(file.oldFileLevelPath?.trim()) &&
+            typeof file.oldFileLevelPath === "string" &&
             Boolean((file as any)._raw)
         ))
         .map((file) => ({
@@ -130,25 +156,35 @@ export function useFileUpload({
             // Upload each file to server
             const uploadedPaths: string[] = [];
 
-            const failedFileNames: string[] = [];
+            const failures: { name: string; reason: string }[] = [];
             for (const file of fileArray) {
                 try {
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
                     uploadedPaths.push(res.file_path);
-                } catch {
-                    failedFileNames.push(file.name);
+                } catch (err) {
+                    failures.push({
+                        name: file.name,
+                        reason: resolveUploadErrorReason(err),
+                    });
                 }
             }
-            if (failedFileNames.length > 0) {
-                // Single summary toast: lists every failed file plus the browser-upload
-                // hint once at the bottom (avoids repeating the same hint per file when
-                // a client-wide time limit fails the whole batch).
-                const lines = failedFileNames.map((name) =>
-                    localize("com_knowledge.file_upload_failed", { 0: name })
+            if (failures.length > 0) {
+                // Render each failure with the backend reason inline (quota / dup /
+                // permission etc). The browser-upload hint is now strictly a
+                // last-resort fallback — only appended when *every* failure has
+                // no actionable reason (i.e. likely a client-wide network /
+                // timeout case, the scenario the hint was originally written for).
+                const lines = failures.map(({ name, reason }) =>
+                    reason
+                        ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
+                        : localize("com_knowledge.file_upload_failed", { 0: name })
                 );
-                const hint = localize("com_knowledge.upload_browser_hint");
+                const everyReasonMissing = failures.every((f) => !f.reason);
+                const message = everyReasonMissing
+                    ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
+                    : lines.join("\n");
                 showToast({
-                    message: [...lines, hint].join("\n"),
+                    message,
                     severity: NotificationSeverity.ERROR,
                 });
             }

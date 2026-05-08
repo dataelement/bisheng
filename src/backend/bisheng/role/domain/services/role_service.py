@@ -625,6 +625,10 @@ class RoleService:
             return False
         if role.role_type == 'global' and not login_user.is_admin():
             return False
+        # The creator-only restriction below is intentionally scoped to dept_admin;
+        # system admin bypasses it.
+        if permission_level == 'admin':
+            return True
         if permission_level == 'tenant_admin':
             role_tenant_id = getattr(role, 'tenant_id', None)
             login_tenant_id = getattr(login_user, 'tenant_id', None)

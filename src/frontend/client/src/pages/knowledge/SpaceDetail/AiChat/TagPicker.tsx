@@ -71,7 +71,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                 containerRef.current = el;
                 listScrollRevealRef(el);
             }}
-            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scrollbar-on-hover"
+            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scrollbar-on-scroll"
         >
             <div className="p-1.5">
                 {filtered.map((tag, i) => (

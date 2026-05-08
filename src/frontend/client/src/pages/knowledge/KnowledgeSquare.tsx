@@ -259,7 +259,7 @@ export default function KnowledgeSquare({
                     scrollRef.current = el;
                     scrollRevealRef(el);
                 }}
-                className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
+                className="flex-1 overflow-y-auto scrollbar-on-scroll bg-white"
             >
                 <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />

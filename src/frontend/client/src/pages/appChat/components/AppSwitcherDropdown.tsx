@@ -72,7 +72,7 @@ export function AppSwitcherDropdown() {
         {/* App list */}
         <div
           ref={appListScrollRevealRef}
-          className="flex-1 overflow-y-auto scrollbar-on-hover px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]"
+          className="flex-1 overflow-y-auto scrollbar-on-scroll px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]"
         >
           {loading ? (
             <div className="flex items-center justify-center py-6">

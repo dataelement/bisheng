@@ -11,6 +11,7 @@
 #   RULE-5: API 层不跨模块互相导入（VIOLATION）
 #   RULE-6: 前端 store 不直接调 HTTP（WARNING）
 #   RULE-7: 硬编码敏感信息检测（WARNING）
+#   RULE-8: DAO/Model 层不得直读 RoleAccessDao 做权限过滤（INV-T19，VIOLATION）
 
 FILE="$1"
 [ -z "$FILE" ] && exit 0
@@ -94,6 +95,26 @@ if echo "$FILE" | grep -qE "\.(py|ts|tsx|js|json)$"; then
     # 检测 password/secret/token/api_key 赋值为字面字符串（≥8 字符）
     if grep -qE "(password|secret_key|api_key|access_token)\s*=\s*['\"][^'\"]{8,}['\"]" "$FILE" 2>/dev/null; then
         echo "⚠️  [arch-guard] RULE-7 WARNING: $(basename "$FILE") — 疑似硬编码敏感信息"
+    fi
+fi
+
+# ── RULE-8：DAO/Model 层不得直读 RoleAccessDao 做权限过滤（INV-T19）──
+# F008 已把 5 对 10 类资源 AccessType 迁到 ReBAC（PermissionService）。
+# 资源消费侧若想"按用户过滤可见 ID"，必须经 PermissionService 委托。
+# 直接调 RoleAccessDao.{find,judge,afind,ajudge}_role_access 或
+# RoleAccessDao.get_role_access(*, AccessType.X) 视为漏网。
+#
+# 例外白名单（允许文件路径）：
+#   - bisheng/user/domain/services/auth.py     LoginUser legacy fallback
+#   - bisheng/user/api/user.py                 /role_access CRUD 端点
+#   - bisheng/role/domain/services/role_service.py  WEB_MENU 读取
+#   - bisheng/permission/migration/            F006 迁移工具
+#   - bisheng/database/models/role_access.py   DAO 自身定义
+if echo "$FILE" | grep -q "/bisheng/" && echo "$FILE" | grep -q "\.py$"; then
+    if ! echo "$FILE" | grep -qE "/(user/domain/services/auth\.py|user/api/user\.py|role/domain/services/role_service\.py|permission/migration/|database/models/role_access\.py)$"; then
+        if grep -qE "RoleAccessDao\.(find|judge|afind|ajudge)_role_access\(|RoleAccessDao\.get_role_access\(" "$FILE" 2>/dev/null; then
+            echo "⚠️  [arch-guard] RULE-8 VIOLATION: $(basename "$FILE") — DAO/Model 层禁止直读 RoleAccessDao 做权限过滤（INV-T19，请改走 PermissionService.list_accessible_ids/check）"
+        fi
     fi
 fi
 

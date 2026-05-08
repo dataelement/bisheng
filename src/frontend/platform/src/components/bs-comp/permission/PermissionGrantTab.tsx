@@ -215,6 +215,10 @@ export function PermissionGrantTab({
 
   const handleSubmit = async () => {
     if (selected.length === 0) return
+    if (subjectType !== 'user' && relation === 'owner') {
+      message({ title: '部门或用户组无法成为所有者', variant: 'error' })
+      return
+    }
 
     const grants: GrantItem[] = selected.map((subject) => ({
       subject_type: subject.type,

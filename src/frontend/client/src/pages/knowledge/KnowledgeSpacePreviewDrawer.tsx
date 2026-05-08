@@ -475,7 +475,7 @@ export function KnowledgeSpacePreviewDrawer({
 
                         <div
                             ref={spacePreviewScrollRevealRef}
-                            className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
+                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
