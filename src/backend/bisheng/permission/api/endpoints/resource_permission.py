@@ -753,6 +753,7 @@ async def _list_knowledge_space_grant_user_groups(
     *,
     tenant_id: int,
     keyword: str,
+    login_user,
 ) -> list[dict]:
     from sqlmodel import col, select
 
@@ -760,6 +761,22 @@ async def _list_knowledge_space_grant_user_groups(
     from bisheng.core.database import get_async_db_session
     from bisheng.database.models.group import LEGACY_HIDDEN_USER_GROUP_NAMES, Group
     from bisheng.database.models.tenant import Tenant
+    from bisheng.database.models.user_group import UserGroupDao
+    from bisheng.user_group.domain.services.user_group_service import (
+        _can_view_all_groups,
+    )
+
+    viewer_group_ids: set[int] = set()
+    can_view_all = await _can_view_all_groups(login_user)
+    if not can_view_all:
+        raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
+            login_user.user_id,
+        )
+        viewer_group_ids = {
+            int(x[0]) if isinstance(x, tuple) else int(x)
+            for x in raw_visible_group_ids or []
+            if x is not None
+        }
 
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
@@ -774,6 +791,22 @@ async def _list_knowledge_space_grant_user_groups(
                 .order_by(Group.update_time.desc())
                 .limit(2000)
             )
+            if not can_view_all:
+                if viewer_group_ids:
+                    stmt = stmt.where(
+                        (
+                            (Group.visibility == 'public')
+                            | (Group.create_user == login_user.user_id)
+                            | (Group.id.in_(viewer_group_ids))
+                        )
+                    )
+                else:
+                    stmt = stmt.where(
+                        (
+                            (Group.visibility == 'public')
+                            | (Group.create_user == login_user.user_id)
+                        )
+                    )
             if keyword:
                 stmt = stmt.where(Group.group_name.like(f'%{keyword}%'))
             result = await session.exec(stmt)
@@ -1483,7 +1516,11 @@ async def get_grant_subject_user_groups(
         level = await _get_knowledge_space_level(resource_id)
         if level is not None and 'user_group' not in _allowed_subject_types_for_space_level(level):
             return resp_200([])
-    return resp_200(await _list_knowledge_space_grant_user_groups(tenant_id=tenant_id, keyword=keyword))
+    return resp_200(await _list_knowledge_space_grant_user_groups(
+        tenant_id=tenant_id,
+        keyword=keyword,
+        login_user=login_user,
+    ))
 
 
 @router.get('/knowledge-spaces/{space_id}/grant-subjects/departments')
@@ -1546,7 +1583,11 @@ async def get_knowledge_space_grant_subject_user_groups(
     if level is not None and 'user_group' not in _allowed_subject_types_for_space_level(level):
         return resp_200([])
 
-    groups = await _list_knowledge_space_grant_user_groups(tenant_id=tenant_id, keyword=keyword)
+    groups = await _list_knowledge_space_grant_user_groups(
+        tenant_id=tenant_id,
+        keyword=keyword,
+        login_user=login_user,
+    )
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
     if level != KnowledgeSpaceLevelEnum.TEAM:

@@ -157,6 +157,14 @@ class KnowledgeSpaceChatService:
             history.insert(0, inputs[0])
             inputs = history
 
+        logger.info(
+            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} | messages={}",
+            session.chat_id,
+            model_id,
+            len(finally_docs),
+            [{"role": m.type, "content": m.content} for m in inputs],
+        )
+
         async for one in llm.astream(inputs):
             chunk_reasoning_content = extract_reasoning_content(one)
             yield ChatResponse(

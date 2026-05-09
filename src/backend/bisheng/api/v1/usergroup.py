@@ -57,9 +57,11 @@ async def _can_use_v25_role_catalog(user: UserPayload) -> bool:
 @router.get('/list')
 async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    Get all groups（PRD：超管全量；其他用户见公开组 + 自建/加入的私密组）
+    Get all groups（PRD：超管/租户管理员全量；其他用户见公开组 + 自建/加入的私密组）
     """
-    if login_user.is_admin():
+    from bisheng.department.domain.services.department_service import _is_tenant_admin
+
+    if login_user.is_admin() or await _is_tenant_admin(login_user):
         groups_res = RoleGroupService().get_group_list([])
     else:
         groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 5000, '')

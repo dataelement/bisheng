@@ -39,9 +39,11 @@ class WorkStationService(BaseService):
         config: Optional[WorkstationConfig],
         workbench_config: Optional[WorkbenchModelConfig],
     ) -> Optional[WorkstationConfig]:
-        if config is None:
-            return None
         models = getattr(workbench_config, 'models', None)
+        if config is None:
+            if models is None:
+                return None
+            return WorkstationConfig(models=models)
         if models is not None:
             config.models = models
         return config

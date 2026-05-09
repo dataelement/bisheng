@@ -9,6 +9,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
@@ -688,6 +689,94 @@ class TestPermissionApiIntegration:
         mock_list_groups.assert_awaited_once()
         assert mock_list_groups.await_args.kwargs['tenant_id'] == 3
         assert mock_list_groups.await_args.kwargs['keyword'] == '产品'
+        assert mock_list_groups.await_args.kwargs['login_user'].user_id == 7
+
+    @pytest.mark.asyncio
+    async def test_grant_subject_user_groups_helper_filters_private_groups_for_plain_user(self):
+        from contextlib import asynccontextmanager
+
+        from bisheng.permission.api.endpoints import resource_permission as m
+
+        captured_stmt = None
+
+        class _Rows:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def all(self):
+                return self._rows
+
+        class _Session:
+            async def exec(self, stmt):
+                nonlocal captured_stmt
+                captured_stmt = stmt
+                return _Rows([SimpleNamespace(id=5, group_name='产品组')])
+
+        @asynccontextmanager
+        async def _session_cm():
+            yield _Session()
+
+        viewer = SimpleNamespace(user_id=7, tenant_id=3, user_role=[2], is_global_super=False)
+
+        with patch(
+            'bisheng.core.database.get_async_db_session',
+            side_effect=_session_cm,
+        ), patch(
+            'bisheng.database.models.user_group.UserGroupDao.aget_user_visible_group_ids',
+            new_callable=AsyncMock, return_value=[9],
+        ), patch(
+            'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
+            new_callable=AsyncMock, return_value=False,
+        ):
+            data = await m._list_knowledge_space_grant_user_groups(
+                tenant_id=3, keyword='产品', login_user=viewer,
+            )
+
+        assert data == [{'id': 5, 'group_name': '产品组'}]
+        stmt_text = str(captured_stmt).lower()
+        assert 'group.visibility' in stmt_text
+        assert 'group.create_user' in stmt_text
+
+    @pytest.mark.asyncio
+    async def test_grant_subject_user_groups_helper_allows_all_for_tenant_admin(self):
+        from contextlib import asynccontextmanager
+
+        from bisheng.permission.api.endpoints import resource_permission as m
+
+        captured_stmt = None
+
+        class _Rows:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def all(self):
+                return self._rows
+
+        class _Session:
+            async def exec(self, stmt):
+                nonlocal captured_stmt
+                captured_stmt = stmt
+                return _Rows([SimpleNamespace(id=8, group_name='私密组')])
+
+        @asynccontextmanager
+        async def _session_cm():
+            yield _Session()
+
+        viewer = SimpleNamespace(user_id=7, tenant_id=3, user_role=[2], is_global_super=False)
+
+        with patch(
+            'bisheng.core.database.get_async_db_session',
+            side_effect=_session_cm,
+        ), patch(
+            'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
+            new_callable=AsyncMock, return_value=True,
+        ):
+            data = await m._list_knowledge_space_grant_user_groups(
+                tenant_id=3, keyword='', login_user=viewer,
+            )
+
+        assert data == [{'id': 8, 'group_name': '私密组'}]
+        assert 'group.visibility' not in str(captured_stmt).lower()
 
     def test_permissions_list_reads_workflow_permissions_after_fine_grained_allow(self):
         app = _make_app(_ViewerUser)

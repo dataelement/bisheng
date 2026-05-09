@@ -2,6 +2,7 @@ from typing import Any, Optional, List
 
 from pydantic import Field, BaseModel, model_validator
 
+from bisheng.api.v1.schemas import WSModel
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
 from bisheng.utils.mask_data import JsonFieldMasker
 from bisheng_langchain.linsight.const import TaskMode
@@ -67,14 +68,6 @@ class LLMServerInfo(LLMServerBase):
         mask_maker = JsonFieldMasker()
         self.config = mask_maker.mask_json(self.config)
         return self
-
-
-class WSModel(BaseModel):
-    key: Optional[str] = None
-    id: str
-    name: Optional[str] = None
-    displayName: Optional[str] = None
-    visual: Optional[bool] = False
 
 
 class WorkbenchModelConfig(BaseModel):

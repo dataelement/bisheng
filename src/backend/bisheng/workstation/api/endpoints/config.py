@@ -21,7 +21,7 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret = await WorkStationService.get_daily_chat_config()
     linsight_config = await WorkStationService.get_linsight_config()
     etl_for_lm_url = (await bisheng_settings.async_get_knowledge()).etl4lm.url
-    ret = ret.model_dump() if ret else {}
+    ret = ret.model_dump(exclude_unset=True) if ret else {}
     ret['linsightConfig'] = linsight_config.model_dump() if linsight_config else {}
     ret['enable_etl4lm'] = bool(etl_for_lm_url)
     linsight_invitation_code = (await bisheng_settings.aget_all_config()).get('linsight_invitation_code', None)
@@ -43,7 +43,7 @@ async def get_config(request: Request, login_user=LoginUserDep):
 @router.get('/config/daily', summary='Get daily workbench configuration', response_model=UnifiedResponseModel)
 async def get_daily_config(request: Request, login_user=LoginUserDep):
     ret = await WorkStationService.get_daily_chat_config()
-    return resp_200(data=ret)
+    return resp_200(data=ret.model_dump(exclude_unset=True) if ret else None)
 
 
 @router.post('/config/daily', summary='Update daily workbench configuration', response_model=UnifiedResponseModel)

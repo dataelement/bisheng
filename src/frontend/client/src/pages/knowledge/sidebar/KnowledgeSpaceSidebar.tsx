@@ -170,10 +170,10 @@ export function KnowledgeSpaceSidebar({
         if (!activeSpaceId) {
             if (isLoading) return;
 
-            if (publicSpaces.length > 0) {
-                onSpaceSelect(publicSpaces[0]);
-            } else if (departmentSpaces.length > 0) {
+            if (departmentSpaces.length > 0) {
                 onSpaceSelect(departmentSpaces[0]);
+            } else if (publicSpaces.length > 0) {
+                onSpaceSelect(publicSpaces[0]);
             } else if (teamSpaces.length > 0) {
                 onSpaceSelect(teamSpaces[0]);
             } else if (personalSpaces.length > 0) {
@@ -281,18 +281,18 @@ export function KnowledgeSpaceSidebar({
                     >
                         {[
                             {
-                                title: localize("com_knowledge.public_spaces"),
-                                spaces: publicSpaces,
-                                level: SpaceLevel.PUBLIC,
-                                collapsed: publicCollapsed,
-                                setCollapsed: setPublicCollapsed,
-                            },
-                            {
                                 title: localize("com_knowledge.department_spaces"),
                                 spaces: departmentSpaces,
                                 level: SpaceLevel.DEPARTMENT,
                                 collapsed: departmentCollapsed,
                                 setCollapsed: setDepartmentCollapsed,
+                            },
+                            {
+                                title: localize("com_knowledge.public_spaces"),
+                                spaces: publicSpaces,
+                                level: SpaceLevel.PUBLIC,
+                                collapsed: publicCollapsed,
+                                setCollapsed: setPublicCollapsed,
                             },
                             {
                                 title: localize("com_knowledge.team_spaces"),
