@@ -227,7 +227,11 @@ export async function getKnowledgeSpaceGrantDepartments(
   resourceId: string,
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
-  return getResourceGrantDepartments("knowledge_space", resourceId, config);
+  const res = await request.get(
+    `/api/v1/permissions/knowledge-spaces/${resourceId}/grant-subjects/departments`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrapArray(res);
 }
 
 export async function getUserGroups(
@@ -263,5 +267,12 @@ export async function getKnowledgeSpaceGrantUserGroups(
   params?: { keyword?: string },
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
-  return getResourceGrantUserGroups("knowledge_space", resourceId, params, config);
+  const res = await request.get(
+    `/api/v1/permissions/knowledge-spaces/${resourceId}/grant-subjects/user-groups`,
+    {
+      params: { keyword: params?.keyword ?? "" },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrapArray(res);
 }

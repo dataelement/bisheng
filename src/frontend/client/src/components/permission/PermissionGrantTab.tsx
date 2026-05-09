@@ -4,6 +4,8 @@ import { useToastContext } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getKnowledgeSpaceGrantDepartments,
+  getKnowledgeSpaceGrantUserGroups,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -215,6 +217,16 @@ export function PermissionGrantTab({
     setSelectedDepartmentSummary([]);
   };
 
+  const loadKnowledgeSpaceDepartments = useCallback(
+    (config?: { signal?: AbortSignal }) => getKnowledgeSpaceGrantDepartments(resourceId, config),
+    [resourceId]
+  );
+  const loadKnowledgeSpaceUserGroups = useCallback(
+    (config?: { signal?: AbortSignal; keyword?: string }) =>
+      getKnowledgeSpaceGrantUserGroups(resourceId, { keyword: config?.keyword }, { signal: config?.signal }),
+    [resourceId]
+  );
+
   const handleSubmit = async () => {
     if (selected.length === 0) return;
     const grants: GrantItem[] = selected.map((s) => ({
@@ -320,6 +332,7 @@ export function PermissionGrantTab({
             onIncludeChildrenChange={handleIncludeChildrenChange}
             onSelectionSummaryChange={setSelectedDepartmentSummary}
             disabledIds={grantedSubjectIds.department}
+            loadDepartments={resourceType === "knowledge_space" ? loadKnowledgeSpaceDepartments : undefined}
           />
         )}
         {subjectType === "user_group" && (
@@ -329,6 +342,7 @@ export function PermissionGrantTab({
             resourceType={resourceType}
             resourceId={resourceId}
             disabledIds={grantedSubjectIds.user_group}
+            loadUserGroups={resourceType === "knowledge_space" ? loadKnowledgeSpaceUserGroups : undefined}
           />
         )}
       </div>
