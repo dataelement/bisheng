@@ -119,6 +119,7 @@ async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
     target_user = SimpleNamespace(
         user_id=99, user_name='赵亚运', external_id='BS@u', source='local', delete=0,
     )
+    locked_group = SimpleNamespace(id=55, group_name='创建者私密组', visibility='private')
     primary_ud = SimpleNamespace(id=1, user_id=99, department_id=10, is_primary=1)
     foreign_ud = SimpleNamespace(id=2, user_id=99, department_id=20, is_primary=0)
 
@@ -181,6 +182,12 @@ async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
     ), patch(
         'bisheng.database.models.user_group.UserGroupDao.aget_user_group',
         new_callable=AsyncMock, return_value=[],
+    ), patch(
+        'bisheng.database.models.user_group.UserGroupDao.aget_user_admin_group',
+        new_callable=AsyncMock, return_value=[SimpleNamespace(group_id=55)],
+    ), patch(
+        'bisheng.database.models.group.GroupDao.aget_group_by_ids',
+        new_callable=AsyncMock, return_value=[locked_group],
     ), patch.object(
         m.DepartmentService, '_aget_assignable_roles_catalog',
         new=classmethod(fake_catalog),
@@ -200,3 +207,10 @@ async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
     assert 'BS@foreign' not in affiliate_dept_ids
     # Primary block remains valid (ctx_dept is the target's primary).
     assert result['primary_department']['dept_id'] == 'BS@ctx'
+    assert result['current_group_ids'] == [55]
+    assert result['locked_group_ids'] == [55]
+    assert result['manageable_groups'] == [{
+        'id': 55,
+        'group_name': '创建者私密组',
+        'visibility': 'private',
+    }]
