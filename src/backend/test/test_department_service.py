@@ -756,6 +756,79 @@ class TestPermission:
         assert captured_ug_stmt is not None
         assert 'group.visibility' not in str(captured_ug_stmt).lower()
 
+    @pytest.mark.asyncio
+    async def test_get_members_excludes_user_group_admin_rows_from_memberships(self):
+        from bisheng.department.domain.services.department_service import DepartmentService
+
+        dept = SimpleNamespace(id=10)
+        user_row = SimpleNamespace(
+            user_id=99,
+            user_name='Alice',
+            user_external_id='BS@alice',
+            department_id=10,
+            is_primary=1,
+            source='local',
+            member_join_time=None,
+            user_create_time=None,
+            user_update_time=None,
+            user_deleted=0,
+            user_disable_source=None,
+        )
+
+        class _Rows:
+            def __init__(self, *, one=None, all_rows=None):
+                self._one = one
+                self._all_rows = all_rows or []
+
+            def one(self):
+                return self._one
+
+            def all(self):
+                return self._all_rows
+
+        captured_ug_stmt = None
+
+        class _FakeSession:
+            def __init__(self, responses):
+                self._responses = list(responses)
+
+            async def exec(self, stmt):
+                nonlocal captured_ug_stmt
+                if 'group_name' in str(stmt):
+                    captured_ug_stmt = stmt
+                return self._responses.pop(0)
+
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _session_cm_factory(responses):
+            yield _FakeSession(responses)
+
+        session_responses = [
+            [_Rows(one=1), _Rows(all_rows=[user_row])],
+            [_Rows(all_rows=[(99, 5, 'Private Group')]), _Rows(all_rows=[])],
+        ]
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            side_effect=lambda: _session_cm_factory(session_responses.pop(0)),
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock, return_value=dept,
+        ), patch.object(
+            DepartmentService, '_aget_department_admin_user_ids',
+            new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
+            new_callable=AsyncMock, return_value=True,
+        ):
+            await DepartmentService.aget_members(
+                'BS@test', 1, 20, '', _NonAdminUser(is_global_super=True),
+            )
+
+        assert captured_ug_stmt is not None
+        assert 'user_group.is_group_admin = :is_group_admin_1' in str(captured_ug_stmt).lower()
+
     async def test_check_permission_raises(self):
         """_check_permission raises DepartmentPermissionDeniedError for non-admin.
 

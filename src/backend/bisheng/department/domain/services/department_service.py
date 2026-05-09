@@ -1144,6 +1144,7 @@ class DepartmentService:
                     .join(Group, UserGroup.group_id == Group.id)
                     .where(
                         UserGroup.user_id.in_(user_ids),
+                        UserGroup.is_group_admin == 0,
                         col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                     )
                 )
