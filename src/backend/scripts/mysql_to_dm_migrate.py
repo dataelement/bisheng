@@ -2,22 +2,36 @@
 """
 mysql_to_dm_migrate.py — Copy all data from MySQL to DaMeng.
 
-Prerequisites:
-  1. DaMeng schema already exists (run alembic upgrade head first):
-       BISHENG_DATABASE_URL="dm+dmPython://..." uv run alembic upgrade head
-  2. This script copies data only — tables must already exist on DaMeng.
+This script handles DATA migration only.  Table structure is created by the
+application's startup logic (SQLModel.metadata.create_all), not by Alembic.
 
-Usage:
+Prerequisites — run in order:
+
+  Step 1: Let the app create all tables on DaMeng via create_all()
+    BISHENG_DATABASE_URL="dm+dmPython://SYSDBA:pass@host:5236/BISHENG" \\
+      uv run python -c "
+        import asyncio
+        from bisheng.core.database.manager import get_database_connection
+        asyncio.run(get_database_connection().create_db_and_tables())
+      "
+
+  Step 2: Stamp Alembic so it knows the schema is already at HEAD
+    BISHENG_DATABASE_URL="dm+dmPython://SYSDBA:pass@host:5236/BISHENG" \\
+      uv run alembic stamp head
+
+  Step 3: Run this script to copy data from MySQL
     uv run python scripts/mysql_to_dm_migrate.py \\
         --src "mysql+pymysql://user:pass@host/db" \\
-        --dst "dm+dmPython://SYSDBA:pass@host:5236/BISHENG" \\
-        [--tables t1,t2]      # migrate only these tables
-        [--skip   t1,t2]      # additional tables to skip
-        [--batch-size 500]    # rows per INSERT batch (default 500)
-        [--resume-from TABLE] # skip tables before TABLE (use after a failure)
-        [--truncate]          # DELETE FROM dst table before inserting
-        [--dry-run]           # analyse only, no writes
-        [--no-verify]         # skip row-count check at the end
+        --dst "dm+dmPython://SYSDBA:pass@host:5236/BISHENG"
+
+Options:
+    --tables t1,t2      migrate only these tables
+    --skip   t1,t2      additional tables to skip
+    --batch-size 500    rows per INSERT batch (default 500)
+    --resume-from TABLE skip tables before TABLE (use after a failure)
+    --truncate          DELETE FROM dst table before inserting
+    --dry-run           analyse only, no writes
+    --no-verify         skip row-count check at the end
 """
 from __future__ import annotations
 
