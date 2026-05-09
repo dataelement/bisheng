@@ -47,6 +47,7 @@ from bisheng.database.models.department_admin_grant import (
     DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
     DepartmentAdminGrantDao,
 )
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
     DepartmentLocalMemberCreate,
@@ -82,6 +83,8 @@ def _is_admin(login_user) -> bool:
 
     Checks if AdminRole (id=1) is in login_user.user_role.
     """
+    if bool(getattr(login_user, 'is_global_super', False)):
+        return True
     if hasattr(login_user, 'user_role') and isinstance(login_user.user_role, list):
         return _ADMIN_ROLE_ID in login_user.user_role
     return False
@@ -1118,7 +1121,21 @@ class DepartmentService:
                 # User groups
                 from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
                 from bisheng.database.models.user_group import UserGroup
-                ug_result = await session.exec(
+                from bisheng.user_group.domain.services.user_group_service import (
+                    _can_view_all_groups,
+                )
+
+                viewer_group_ids: set[int] = set()
+                if not await _can_view_all_groups(login_user):
+                    raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
+                        login_user.user_id,
+                    )
+                    viewer_group_ids = {
+                        int(x[0]) if isinstance(x, tuple) else int(x)
+                        for x in raw_visible_group_ids or []
+                        if x is not None
+                    }
+                ug_stmt = (
                     select(
                         UserGroup.user_id,
                         Group.id,
@@ -1127,10 +1144,27 @@ class DepartmentService:
                     .join(Group, UserGroup.group_id == Group.id)
                     .where(
                         UserGroup.user_id.in_(user_ids),
-                        Group.visibility == 'public',
+                        UserGroup.is_group_admin == 0,
                         col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                     )
                 )
+                if not await _can_view_all_groups(login_user):
+                    if viewer_group_ids:
+                        ug_stmt = ug_stmt.where(
+                            or_(
+                                Group.visibility == 'public',
+                                Group.create_user == login_user.user_id,
+                                Group.id.in_(viewer_group_ids),
+                            ),
+                        )
+                    else:
+                        ug_stmt = ug_stmt.where(
+                            or_(
+                                Group.visibility == 'public',
+                                Group.create_user == login_user.user_id,
+                            ),
+                        )
+                ug_result = await session.exec(ug_stmt)
                 for uid, gid, gname in ug_result.all():
                     user_groups_map.setdefault(uid, []).append(
                         {'id': gid, 'group_name': gname},

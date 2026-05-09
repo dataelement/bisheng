@@ -118,3 +118,84 @@ class TestCreateGroupCompatibility:
         mock_user_group_dao.aset_admins_batch.assert_awaited_once_with(
             25, add_ids=[mock_group_owner.user_id], remove_ids=[],
         )
+
+
+class TestManageableGroups:
+
+    @pytest.mark.asyncio
+    async def test_global_super_is_treated_as_admin_for_manageable_groups(self):
+        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+        login_user = SimpleNamespace(
+            user_id=88,
+            tenant_id=1,
+            user_role=[2],
+            is_global_super=True,
+        )
+        all_groups = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+
+        with patch(
+            'bisheng.user_group.domain.services.user_group_service.GroupDao',
+        ) as mock_group_dao:
+            mock_group_dao.aget_all_groups = AsyncMock(return_value=(all_groups, len(all_groups)))
+
+            groups = await UserGroupService._list_manageable_groups(login_user)
+
+        assert groups == all_groups
+        mock_group_dao.aget_all_groups.assert_awaited_once_with(1, 2000, '')
+
+    @pytest.mark.asyncio
+    async def test_tenant_admin_is_treated_as_admin_for_manageable_groups(self):
+        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+        login_user = SimpleNamespace(
+            user_id=66,
+            tenant_id=9,
+            user_role=[2],
+            is_global_super=False,
+        )
+        all_groups = [SimpleNamespace(id=3), SimpleNamespace(id=4)]
+
+        with patch(
+            'bisheng.department.domain.services.department_service._is_tenant_admin',
+            new_callable=AsyncMock, return_value=True,
+        ), patch(
+            'bisheng.user_group.domain.services.user_group_service.GroupDao',
+        ) as mock_group_dao:
+            mock_group_dao.aget_all_groups = AsyncMock(return_value=(all_groups, len(all_groups)))
+
+            groups = await UserGroupService._list_manageable_groups(login_user)
+
+        assert groups == all_groups
+        mock_group_dao.aget_all_groups.assert_awaited_once_with(1, 2000, '')
+
+
+class TestListGroups:
+
+    @pytest.mark.asyncio
+    async def test_tenant_admin_gets_all_groups_in_management_list(self):
+        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+        login_user = SimpleNamespace(
+            user_id=66,
+            tenant_id=9,
+            user_role=[2],
+            is_global_super=False,
+        )
+        groups = [SimpleNamespace(id=1, group_name='A'), SimpleNamespace(id=2, group_name='B')]
+
+        with patch(
+            'bisheng.department.domain.services.department_service._is_tenant_admin',
+            new_callable=AsyncMock, return_value=True,
+        ), patch(
+            'bisheng.user_group.domain.services.user_group_service.GroupDao',
+        ) as mock_group_dao, patch.object(
+            UserGroupService, '_enrich_groups',
+            new_callable=AsyncMock, return_value=[{'id': 1}, {'id': 2}],
+        ):
+            mock_group_dao.aget_all_groups = AsyncMock(return_value=(groups, 2))
+
+            result = await UserGroupService.alist_groups(1, 20, '', login_user)
+
+        assert result == {'data': [{'id': 1}, {'id': 2}], 'total': 2}
+        mock_group_dao.aget_all_groups.assert_awaited_once_with(1, 20, '')

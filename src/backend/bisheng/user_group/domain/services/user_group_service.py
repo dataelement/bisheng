@@ -71,6 +71,8 @@ def _sync_user_group_delete_side_effects(group_id: int) -> list[tuple[int, int, 
 
 def _is_admin(login_user) -> bool:
     """Check if login_user has system admin role. Temporary until F004."""
+    if bool(getattr(login_user, 'is_global_super', False)):
+        return True
     if hasattr(login_user, 'user_role') and isinstance(login_user.user_role, list):
         return AdminRole in login_user.user_role
     return False
@@ -95,9 +97,19 @@ async def _can_open_user_group_management(login_user) -> bool:
     return await _is_tenant_admin(login_user)
 
 
+async def _can_view_all_groups(login_user) -> bool:
+    """Who may see all groups in list/selectors: 超管 / 租户管理员."""
+    if _is_admin(login_user):
+        return True
+    from bisheng.department.domain.services.department_service import (
+        _is_tenant_admin,
+    )
+    return await _is_tenant_admin(login_user)
+
+
 async def _user_can_view_group(login_user, group: Group) -> bool:
     """List/detail/members visibility (align with GroupDao.aget_visible_groups)."""
-    if _is_admin(login_user):
+    if await _can_view_all_groups(login_user):
         return True
     if group.visibility == 'public':
         return True
@@ -168,11 +180,11 @@ class UserGroupService:
     async def _list_manageable_groups(cls, login_user) -> List[Group]:
         """Groups whose **membership** the caller may assign (编辑人员用户组多选).
 
-        System admins: any group. Department admins: public groups + groups they
-        created (private groups created by others remain out of scope). Other
-        users: only groups they created.
+        System admins / tenant admins: any group. Department admins: public
+        groups + groups they created (private groups created by others remain
+        out of scope). Other users: only groups they created.
         """
-        if _is_admin(login_user):
+        if await _can_view_all_groups(login_user):
             groups, _ = await GroupDao.aget_all_groups(1, 2000, '')
             return groups
 
@@ -263,7 +275,7 @@ class UserGroupService:
     async def alist_groups(
         cls, page: int, limit: int, keyword: str, login_user,
     ) -> Dict[str, Any]:
-        if _is_admin(login_user):
+        if await _can_view_all_groups(login_user):
             groups, total = await GroupDao.aget_all_groups(page, limit, keyword)
         else:
             groups, total = await GroupDao.aget_visible_groups(

@@ -62,7 +62,7 @@ export default function Root() {
                 与 MainLayout 白卡 min-h-[calc(100dvh-16px)]（main p-2）对齐，占满卡片高度；
                 内层 flex-1 min-h-0 overflow-hidden 把高度传给 ChatView，避免整页滚动把输入框卷出视口。
               */}
-              <div className="flex h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)] flex-col overflow-hidden">
+              <div className="flex h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)] flex-col overflow-hidden min-w-0">
                 <Banner onHeightChange={setBannerHeight} />
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
