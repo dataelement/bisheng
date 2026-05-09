@@ -1505,6 +1505,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     login_user=self.login_user,
                 )
                 result.user_role = self._permission_level_to_space_user_role(level)
+                is_global_admin = False
+                is_admin = getattr(self.login_user, 'is_admin', None)
+                if callable(is_admin):
+                    is_global_admin = bool(is_admin())
+                if result.user_role is not None and not is_global_admin:
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             if result.user_role is None and has_content_permission:
                 result.user_role = UserRoleEnum.MEMBER
         result.follower_num = follower_num

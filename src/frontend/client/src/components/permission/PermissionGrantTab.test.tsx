@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getKnowledgeSpaceGrantDepartments,
+  getKnowledgeSpaceGrantUserGroups,
   getResourcePermissions,
   getResourceGrantDepartments,
   getResourceGrantUserGroups,
@@ -21,6 +23,8 @@ jest.mock("~/Providers", () => ({
 jest.mock("~/api/permission", () => ({
   authorizeResource: jest.fn(),
   getGrantableRelationModels: jest.fn(),
+  getKnowledgeSpaceGrantDepartments: jest.fn(),
+  getKnowledgeSpaceGrantUserGroups: jest.fn(),
   getResourcePermissions: jest.fn(),
   getResourceGrantDepartments: jest.fn(),
   getResourceGrantUserGroups: jest.fn(),
@@ -29,6 +33,8 @@ jest.mock("~/api/permission", () => ({
 
 const mockedAuthorizeResource = jest.mocked(authorizeResource);
 const mockedGetGrantableRelationModels = jest.mocked(getGrantableRelationModels);
+const mockedGetKnowledgeSpaceGrantDepartments = jest.mocked(getKnowledgeSpaceGrantDepartments);
+const mockedGetKnowledgeSpaceGrantUserGroups = jest.mocked(getKnowledgeSpaceGrantUserGroups);
 const mockedGetResourcePermissions = jest.mocked(getResourcePermissions);
 const mockedGetResourceGrantDepartments = jest.mocked(getResourceGrantDepartments);
 const mockedGetResourceGrantUserGroups = jest.mocked(getResourceGrantUserGroups);
@@ -66,7 +72,8 @@ describe("PermissionGrantTab", () => {
       },
     ]);
     mockedGetResourceGrantUsers.mockResolvedValue([]);
-    mockedGetResourceGrantDepartments.mockResolvedValue([
+    mockedGetResourceGrantDepartments.mockResolvedValue([]);
+    mockedGetKnowledgeSpaceGrantDepartments.mockResolvedValue([
       {
         id: 7,
         dept_id: "dept-7",
@@ -77,6 +84,45 @@ describe("PermissionGrantTab", () => {
       },
     ]);
     mockedGetResourceGrantUserGroups.mockResolvedValue([]);
+    mockedGetKnowledgeSpaceGrantUserGroups.mockResolvedValue([]);
+  });
+
+  it("hides owner from knowledge space uniform grant options for every subject type", async () => {
+    mockedGetGrantableRelationModels.mockResolvedValue([
+      {
+        id: "owner",
+        name: "Owner",
+        relation: "owner",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("com_permission.level_viewer")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_department" }));
+    expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_user_group" }));
+    expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
   });
 
   it("submits the current include-children checkbox value for department grants", async () => {
@@ -109,15 +155,14 @@ describe("PermissionGrantTab", () => {
         [],
       );
     });
-    expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
-      "knowledge_space",
+    expect(mockedGetKnowledgeSpaceGrantDepartments).toHaveBeenCalledWith(
       "space-1",
       { signal: expect.any(AbortSignal) },
     );
   });
 
   it("shows inherited child departments in the selected department summary", async () => {
-    mockedGetResourceGrantDepartments.mockResolvedValue([
+    mockedGetKnowledgeSpaceGrantDepartments.mockResolvedValue([
       {
         id: 7,
         dept_id: "dept-7",
@@ -234,7 +279,7 @@ describe("PermissionGrantTab", () => {
         relation: "viewer",
       },
     ] as any);
-    mockedGetResourceGrantUserGroups.mockResolvedValue([
+    mockedGetKnowledgeSpaceGrantUserGroups.mockResolvedValue([
       { id: 9, group_name: "测试用户组" },
     ]);
 
