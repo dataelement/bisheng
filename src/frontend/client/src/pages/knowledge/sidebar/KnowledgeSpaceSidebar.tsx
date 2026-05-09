@@ -279,7 +279,7 @@ export function KnowledgeSpaceSidebar({
                     >
                         {/* Department spaces — always on top per PRD */}
                         {departmentSpaces.length > 0 && (
-                            <div className="pt-0">
+                            <div className="pt-0 pb-4">
                                 <SectionHeader
                                     title={localize("com_knowledge.department_spaces")}
                                     collapsed={departmentCollapsed}
