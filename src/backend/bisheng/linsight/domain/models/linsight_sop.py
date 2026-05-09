@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Literal
 from loguru import logger
 from sqlalchemy import update
 from sqlalchemy import Integer
-from sqlalchemy.dialects.mysql import LONGTEXT
+from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementUpdateSchema
@@ -21,7 +21,7 @@ class LinsightSOPBase(SQLModelSerializable):
     description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOPContents',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
+                         sa_column=Column(LargeText, nullable=False, comment="SOPContents"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
     showcase: Optional[bool] = Field(default=False, index=True, description='Whether to display it on the homepage as a featured case')
@@ -60,7 +60,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOPContents',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
+                         sa_column=Column(LargeText, nullable=False, comment="SOPContents"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
     execute_feedback: Optional[str] = Field(None, description='Execution Result Feedback Information', sa_type=Text, nullable=True)

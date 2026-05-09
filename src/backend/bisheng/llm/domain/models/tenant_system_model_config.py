@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 from sqlalchemy import Column, DateTime, Integer, SmallInteger, String, UniqueConstraint, text
-from sqlalchemy.dialects.mysql import LONGTEXT
+from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable

@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from pydantic import model_validator
 from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, text, func
-from sqlalchemy.dialects.mysql import LONGTEXT
+from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -17,7 +17,7 @@ from ..const import AuthType, ToolPresetType
 class GptsToolsBase(SQLModelSerializable):
     name: str = Field(sa_column=Column(String(length=125), index=True))
     logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
-    desc: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT, index=False))
+    desc: Optional[str] = Field(default=None, sa_column=Column(LargeText, index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
     type: int = Field(default=0, description='of the category to which they belongID')
     is_preset: int = Field(default=ToolPresetType.API.value,

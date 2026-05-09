@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, BaseModel, model_validator
 from sqlalchemy import Integer, Select
-from sqlalchemy.dialects.mysql import LONGTEXT
+from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -47,7 +47,7 @@ class FinetuneBase(SQLModelSerializable):
     train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Personal Training Dataset Information')
     preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Preset training dataset information')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='Status of the training task')
-    reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='Task Failure Reason')
+    reason: Optional[str] = Field(default='', sa_column=Column(LargeText), description='Task Failure Reason')
     log_path: Optional[str] = Field(default='', max_length=512, description='Training log inminioPath on')
     report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Assessment report data for training tasks')
     user_id: int = Field(default=None, index=True, description='creatorID')

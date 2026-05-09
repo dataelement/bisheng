@@ -28,6 +28,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import CLOB
 from sqlalchemy.dialects.mysql import LONGTEXT
 
 from bisheng.common.models.config import ConfigKeyEnum
@@ -54,10 +55,8 @@ _ROOT_TENANT_ID = 1
 
 def upgrade() -> None:
     if not table_exists(_TABLE):
-        # ``LONGTEXT`` is MySQL-specific; ``with_variant(sa.Text(), 'sqlite')``
-        # lets the same DDL compile in sqlite-backed test harnesses (the
-        # production migration still emits LONGTEXT on MySQL).
-        value_type = sa.Text().with_variant(LONGTEXT(), 'mysql')
+        # Use with_variant so the same DDL compiles on MySQL, DaMeng and SQLite.
+        value_type = sa.Text().with_variant(LONGTEXT(), 'mysql').with_variant(CLOB(), 'dm')
         op.create_table(
             _TABLE,
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -100,44 +99,42 @@ def upgrade() -> None:
             'ix_tenant_system_model_config_key', _TABLE, ['key'],
         )
 
-    # Backfill the 5 keys from `config` to tenant_id=1. The SQL flavor
-    # for "INSERT ... avoid duplicates" varies by dialect — MySQL uses
-    # `INSERT IGNORE`, SQLite uses `INSERT OR IGNORE`. The dialect
-    # branch keeps the migration runnable in sqlite-backed test
-    # harnesses (see test_f034_tenant_system_model_config_migration.py)
-    # without sacrificing the prod MySQL path. AC-28 (idempotency on
-    # rerun) holds in both cases.
+    # Backfill the 5 keys from `config` to tenant_id=1.
+    # Uses SQLAlchemy expression language for dialect-agnostic INSERT with
+    # idempotency: check-then-insert so reruns are safe (AC-28).
     if not table_exists('config'):
         return  # Fresh install before any global config exists.
     bind = op.get_bind()
-    dialect = bind.dialect.name
-    if dialect == 'mysql':
-        insert_prefix = 'INSERT IGNORE INTO'
-        key_quote = '`key`'
-    elif dialect == 'sqlite':
-        insert_prefix = 'INSERT OR IGNORE INTO'
-        key_quote = '"key"'
-    else:
-        # Postgres / other backends are not v2.5 targets; bail loudly so
-        # operators aren't silently left with an empty new table.
-        raise NotImplementedError(
-            f'F034 backfill: unsupported dialect {dialect!r}; '
-            "extend _insert_ignore() to support it."
-        )
+    meta = sa.MetaData()
+    config_tbl = sa.Table('config', meta, autoload_with=bind)
+    target_tbl = sa.Table(_TABLE, meta, autoload_with=bind)
+
     for key in _KEYS:
-        bind.execute(
-            sa.text(
-                f"""
-                {insert_prefix} tenant_system_model_config (tenant_id, {key_quote}, value)
-                SELECT :tid, c.{key_quote}, c.value
-                FROM config c
-                WHERE c.{key_quote} = :key
-                  AND c.value IS NOT NULL
-                  AND c.value <> ''
-                """
-            ),
-            {'tid': _ROOT_TENANT_ID, 'key': key},
-        )
+        existing = bind.execute(
+            sa.select(target_tbl.c.id).where(
+                target_tbl.c.tenant_id == _ROOT_TENANT_ID,
+                target_tbl.c.key == key,
+            ).limit(1)
+        ).fetchone()
+        if existing is not None:
+            continue
+
+        row = bind.execute(
+            sa.select(config_tbl.c.value).where(
+                config_tbl.c.key == key,
+                config_tbl.c.value.isnot(None),
+                config_tbl.c.value != '',
+            ).limit(1)
+        ).fetchone()
+
+        if row:
+            bind.execute(
+                sa.insert(target_tbl).values(
+                    tenant_id=_ROOT_TENANT_ID,
+                    key=key,
+                    value=row[0],
+                )
+            )
 
 
 def downgrade() -> None:
