@@ -353,6 +353,7 @@ class FineGrainedPermissionService:
         lineage: list[tuple[str, str | int]] | None = None,
         nearest_binding_wins: bool = False,
         return_match_metadata: bool = False,
+        use_permission_level_fallback: bool = True,
     ) -> set[str]:
         if models is None:
             models = await cls.get_relation_models_map()
@@ -449,14 +450,15 @@ class FineGrainedPermissionService:
                 return effective_permissions, matched_lineage_binding
             return effective_permissions
 
-        level = await PermissionService.get_permission_level(
-            user_id=login_user.user_id,
-            object_type=object_type,
-            object_id=str(object_id),
-            login_user=login_user,
-        )
-        relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
-        effective_permissions = cls.default_permission_ids_for_relation(object_type, relation or '')
+        if use_permission_level_fallback:
+            level = await PermissionService.get_permission_level(
+                user_id=login_user.user_id,
+                object_type=object_type,
+                object_id=str(object_id),
+                login_user=login_user,
+            )
+            relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
+            effective_permissions = cls.default_permission_ids_for_relation(object_type, relation or '')
         if return_match_metadata:
             return effective_permissions, matched_lineage_binding
         return effective_permissions

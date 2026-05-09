@@ -1268,11 +1268,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # runtime actions. Relation-only defaults are kept only as a legacy
         # fallback for old tuples or built-in system models.
         lineage = await self._build_resource_lineage(object_type, object_id, space_id=space_id)
+        lineage_binding_can_override = object_type in {'folder', 'knowledge_file'}
+        permission_lineage = (
+            [item for item in lineage if item[0] != 'knowledge_space']
+            if lineage_binding_can_override
+            else lineage
+        )
         user_subject_strings = await self._get_current_user_subject_strings()
         bindings = await self._get_relation_bindings()
         binding_department_paths = await self._get_binding_department_paths(bindings)
         models = await self._get_relation_models_map()
-        lineage_binding_can_override = object_type in {'folder', 'knowledge_file'}
         effective_permissions, matched_lineage_binding = await FineGrainedPermissionService.get_effective_permission_ids_async(
             self.login_user,
             object_type,
@@ -1281,9 +1286,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             bindings=bindings,
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
-            lineage=lineage,
+            lineage=permission_lineage,
             nearest_binding_wins=lineage_binding_can_override,
             return_match_metadata=True,
+            use_permission_level_fallback=not lineage_binding_can_override,
         )
         for lineage_type, lineage_id in lineage:
             if lineage_type == 'knowledge_space':
