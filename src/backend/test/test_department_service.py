@@ -7,10 +7,11 @@ our test session, allowing full integration testing without a real MySQL.
 Follows the pragmatic test-first approach: ORM + Service tested together.
 """
 
-import pytest
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from sqlalchemy import Column, Integer, Table, create_engine, text
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -39,68 +40,157 @@ def svc_engine():
     )
     with engine.begin() as conn:
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS department (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dept_id VARCHAR(64) NOT NULL UNIQUE,
-                name VARCHAR(128) NOT NULL,
-                parent_id INTEGER,
-                tenant_id INTEGER NOT NULL DEFAULT 1,
-                path VARCHAR(512) NOT NULL DEFAULT '',
-                sort_order INTEGER DEFAULT 0,
-                source VARCHAR(32) DEFAULT 'local',
-                external_id VARCHAR(128),
-                status VARCHAR(16) DEFAULT 'active',
-                is_tenant_root INTEGER NOT NULL DEFAULT 0,
-                mounted_tenant_id INTEGER,
-                is_deleted INTEGER NOT NULL DEFAULT 0,
-                last_sync_ts BIGINT NOT NULL DEFAULT 0,
-                default_role_ids JSON,
-                create_user INTEGER,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                UNIQUE(source, external_id)
-            )
-        """))
+                          CREATE TABLE IF NOT EXISTS department
+                          (
+                              id
+                              INTEGER
+                              PRIMARY
+                              KEY
+                              AUTOINCREMENT,
+                              dept_id
+                              VARCHAR
+                          (
+                              64
+                          ) NOT NULL UNIQUE,
+                              name VARCHAR
+                          (
+                              128
+                          ) NOT NULL,
+                              parent_id INTEGER,
+                              tenant_id INTEGER NOT NULL DEFAULT 1,
+                              path VARCHAR
+                          (
+                              512
+                          ) NOT NULL DEFAULT '',
+                              sort_order INTEGER DEFAULT 0,
+                              source VARCHAR
+                          (
+                              32
+                          ) DEFAULT 'local',
+                              external_id VARCHAR
+                          (
+                              128
+                          ),
+                              status VARCHAR
+                          (
+                              16
+                          ) DEFAULT 'active',
+                              is_tenant_root INTEGER NOT NULL DEFAULT 0,
+                              mounted_tenant_id INTEGER,
+                              is_deleted INTEGER NOT NULL DEFAULT 0,
+                              last_sync_ts BIGINT NOT NULL DEFAULT 0,
+                              default_role_ids JSON,
+                              create_user INTEGER,
+                              create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                              update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                              UNIQUE
+                          (
+                              source,
+                              external_id
+                          )
+                              )
+                          """))
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS user_department (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                department_id INTEGER NOT NULL,
-                is_primary INTEGER DEFAULT 1,
-                source VARCHAR(32) DEFAULT 'local',
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                UNIQUE(user_id, department_id)
-            )
-        """))
+                          CREATE TABLE IF NOT EXISTS user_department
+                          (
+                              id
+                              INTEGER
+                              PRIMARY
+                              KEY
+                              AUTOINCREMENT,
+                              user_id
+                              INTEGER
+                              NOT
+                              NULL,
+                              department_id
+                              INTEGER
+                              NOT
+                              NULL,
+                              is_primary
+                              INTEGER
+                              DEFAULT
+                              1,
+                              source
+                              VARCHAR
+                          (
+                              32
+                          ) DEFAULT 'local',
+                              create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                              UNIQUE
+                          (
+                              user_id,
+                              department_id
+                          )
+                              )
+                          """))
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS user (
-                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_name VARCHAR(255) UNIQUE,
-                password VARCHAR(255) NOT NULL DEFAULT 'hashed',
-                "delete" INTEGER DEFAULT 0,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                password_update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-        """))
+                          CREATE TABLE IF NOT EXISTS user
+                          (
+                              user_id
+                              INTEGER
+                              PRIMARY
+                              KEY
+                              AUTOINCREMENT,
+                              user_name
+                              VARCHAR
+                          (
+                              255
+                          ) UNIQUE,
+                              password VARCHAR
+                          (
+                              255
+                          ) NOT NULL DEFAULT 'hashed',
+                              "delete" INTEGER DEFAULT 0,
+                              create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                              update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                              password_update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                              )
+                          """))
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS tenant (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tenant_code VARCHAR(64) NOT NULL UNIQUE,
-                tenant_name VARCHAR(128) NOT NULL,
-                logo VARCHAR(512),
-                root_dept_id INTEGER,
-                status VARCHAR(16) NOT NULL DEFAULT 'active',
-                contact_name VARCHAR(64),
-                contact_phone VARCHAR(32),
-                contact_email VARCHAR(128),
-                quota_config JSON,
-                storage_config JSON,
-                create_user INTEGER,
-                create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
-            )
-        """))
+                          CREATE TABLE IF NOT EXISTS tenant
+                          (
+                              id
+                              INTEGER
+                              PRIMARY
+                              KEY
+                              AUTOINCREMENT,
+                              tenant_code
+                              VARCHAR
+                          (
+                              64
+                          ) NOT NULL UNIQUE,
+                              tenant_name VARCHAR
+                          (
+                              128
+                          ) NOT NULL,
+                              logo VARCHAR
+                          (
+                              512
+                          ),
+                              root_dept_id INTEGER,
+                              status VARCHAR
+                          (
+                              16
+                          ) NOT NULL DEFAULT 'active',
+                              contact_name VARCHAR
+                          (
+                              64
+                          ),
+                              contact_phone VARCHAR
+                          (
+                              32
+                          ),
+                              contact_email VARCHAR
+                          (
+                              128
+                          ),
+                              quota_config JSON,
+                              storage_config JSON,
+                              create_user INTEGER,
+                              create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                              update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                              )
+                          """))
     yield engine
     engine.dispose()
 
@@ -120,17 +210,21 @@ def session(svc_engine):
 
 class _MockLoginUser:
     """Minimal mock of LoginUser for testing."""
-    def __init__(self, user_id=1, user_role=None, tenant_id=1):
+
+    def __init__(self, user_id=1, user_role=None, tenant_id=1, is_global_super=False):
         self.user_id = user_id
         self.user_role = user_role if user_role is not None else [1]  # AdminRole=1
         self.tenant_id = tenant_id
+        self.is_global_super = is_global_super
 
 
 class _NonAdminUser:
     """Mock non-admin user."""
-    def __init__(self, user_id=99):
+
+    def __init__(self, user_id=99, is_global_super=False):
         self.user_id = user_id
         self.user_role = [2]  # Not AdminRole
+        self.is_global_super = is_global_super
 
 
 def _create_root(session, dept_id='BS@root', tenant_id=1):
@@ -209,8 +303,8 @@ class TestCreateDepartment:
         db_session = MagicMock()
         db_session.exec = AsyncMock(side_effect=[
             _Rows(parent),  # parent lookup
-            _Rows(None),    # duplicate-name lookup
-            _Rows(None),    # dept_id collision lookup
+            _Rows(None),  # duplicate-name lookup
+            _Rows(None),  # dept_id collision lookup
         ])
         db_session.add.side_effect = added.append
 
@@ -585,9 +679,82 @@ class TestPermission:
 
         admin = _MockLoginUser(user_role=[1])
         non_admin = _NonAdminUser()
+        global_super = _NonAdminUser(is_global_super=True)
 
         assert _is_admin(admin) is True
         assert _is_admin(non_admin) is False
+        assert _is_admin(global_super) is True
+
+    @pytest.mark.asyncio
+    async def test_get_members_includes_private_groups_for_global_super(self):
+        from bisheng.department.domain.services.department_service import DepartmentService
+
+        dept = SimpleNamespace(id=10)
+        user_row = SimpleNamespace(
+            user_id=99,
+            user_name='Alice',
+            user_external_id='BS@alice',
+            department_id=10,
+            is_primary=1,
+            source='local',
+            member_join_time=None,
+            user_create_time=None,
+            user_update_time=None,
+            user_deleted=0,
+            user_disable_source=None,
+        )
+
+        class _Rows:
+            def __init__(self, *, one=None, all_rows=None):
+                self._one = one
+                self._all_rows = all_rows or []
+
+            def one(self):
+                return self._one
+
+            def all(self):
+                return self._all_rows
+
+        captured_ug_stmt = None
+
+        class _FakeSession:
+            def __init__(self, responses):
+                self._responses = list(responses)
+
+            async def exec(self, stmt):
+                nonlocal captured_ug_stmt
+                if 'group_name' in str(stmt):
+                    captured_ug_stmt = stmt
+                return self._responses.pop(0)
+
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _session_cm_factory(responses):
+            yield _FakeSession(responses)
+
+        session_responses = [
+            [_Rows(one=1), _Rows(all_rows=[user_row])],
+            [_Rows(all_rows=[(99, 5, 'Private Group')]), _Rows(all_rows=[])],
+        ]
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+            side_effect=lambda: _session_cm_factory(session_responses.pop(0)),
+        ), patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock, return_value=dept,
+        ), patch.object(
+            DepartmentService, '_aget_department_admin_user_ids',
+            new_callable=AsyncMock, return_value=[],
+        ):
+            result = await DepartmentService.aget_members(
+                'BS@test', 1, 20, '', _NonAdminUser(is_global_super=True),
+            )
+
+        assert result['data'][0]['user_groups'] == [{'id': 5, 'group_name': 'Private Group'}]
+        assert captured_ug_stmt is not None
+        assert 'group.visibility' not in str(captured_ug_stmt).lower()
 
     async def test_check_permission_raises(self):
         """_check_permission raises DepartmentPermissionDeniedError for non-admin.
@@ -1107,6 +1274,7 @@ class TestMoveDepartmentSubtreeSync:
         from bisheng.tenant.domain.constants import UserTenantSyncTrigger
 
         session, fake_session, dept = self._move_test_setup()
+
         # Path after move: /1/9/7/
         async def _check_perm(_session, _dept_id, _login_user):
             return dept
