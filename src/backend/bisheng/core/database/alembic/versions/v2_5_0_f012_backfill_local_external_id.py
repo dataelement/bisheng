@@ -29,26 +29,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import table_exists
+
 revision: str = 'f012_backfill_local_external_id'
 down_revision: Union[str, Sequence[str], None] = 'f011_backfill_create_knowledge_web_menu'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            'SELECT COUNT(*) FROM information_schema.TABLES '
-            'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t',
-        ),
-        {'t': table_name},
-    )
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _table_exists('user'):
+    conn = op.get_bind()
+    if not table_exists(conn, 'user'):
         return
     op.execute(
         sa.text(
@@ -62,8 +52,8 @@ def upgrade() -> None:
         )
     )
 
-
 def downgrade() -> None:
+    conn = op.get_bind()
     # Intentional no-op: clearing external_id would re-break login for users
     # who have since logged in or been referenced by newer flows.
     pass

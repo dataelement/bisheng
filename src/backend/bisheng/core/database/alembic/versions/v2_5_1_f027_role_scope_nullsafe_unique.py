@@ -22,20 +22,12 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists
+
 revision: str = 'f027_role_scope_nullsafe_unique'
 down_revision: Union[str, Sequence[str], None] = 'f026_role_scope_name_unique'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
 
 def _constraint_exists(table_name: str, constraint_name: str) -> bool:
     conn = op.get_bind()
@@ -45,9 +37,8 @@ def _constraint_exists(table_name: str, constraint_name: str) -> bool:
     ), {'t': table_name, 'c': constraint_name})
     return result.scalar() > 0
 
-
 def upgrade() -> None:
-    if not _column_exists('role', 'department_scope_key'):
+    if not column_exists(conn, 'role', 'department_scope_key'):
         op.add_column(
             'role',
             sa.Column(
@@ -107,8 +98,8 @@ def upgrade() -> None:
             ['tenant_id', 'role_type', 'role_name', 'department_scope_key'],
         )
 
-
 def downgrade() -> None:
+    conn = op.get_bind()
     if _constraint_exists('role', 'uk_tenant_roletype_rolename_scope_key'):
         op.drop_constraint('uk_tenant_roletype_rolename_scope_key', 'role', type_='unique')
 
@@ -119,5 +110,5 @@ def downgrade() -> None:
             ['tenant_id', 'role_type', 'role_name', 'department_id'],
         )
 
-    if _column_exists('role', 'department_scope_key'):
+    if column_exists(conn, 'role', 'department_scope_key'):
         op.drop_column('role', 'department_scope_key')

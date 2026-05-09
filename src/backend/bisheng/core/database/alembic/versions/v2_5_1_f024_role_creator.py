@@ -10,29 +10,12 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, table_exists
+
 revision: str = 'f024_role_creator'
 down_revision: Union[str, Sequence[str], None] = 'f023_department_admin_membership_overlay'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.TABLES '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t'
-    ), {'t': table_name})
-    return result.scalar() > 0
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
 
 def _backfill_role_creator_from_auditlog() -> None:
     conn = op.get_bind()
@@ -59,18 +42,18 @@ def _backfill_role_creator_from_auditlog() -> None:
         'WHERE r.create_user IS NULL'
     ))
 
-
 def upgrade() -> None:
-    if not _column_exists('role', 'create_user'):
+    conn = op.get_bind()
+    if not column_exists(conn, 'role', 'create_user'):
         op.add_column(
             'role',
             sa.Column('create_user', sa.Integer(), nullable=True, comment='Role creator user ID'),
         )
 
-    if _table_exists('auditlog') and _column_exists('role', 'create_user'):
+    if table_exists(conn, 'auditlog') and column_exists(conn, 'role', 'create_user'):
         _backfill_role_creator_from_auditlog()
 
-
 def downgrade() -> None:
-    if _column_exists('role', 'create_user'):
+    conn = op.get_bind()
+    if column_exists(conn, 'role', 'create_user'):
         op.drop_column('role', 'create_user')

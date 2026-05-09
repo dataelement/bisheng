@@ -17,42 +17,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists
+
 revision: str = 'f009_org_sync'
 down_revision: Union[str, Sequence[str], None] = 'f005_role_menu_quota'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLES "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
-    ), {'t': table_name})
-    return result.scalar() > 0
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.STATISTICS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
+    conn = op.get_bind()
     # -- org_sync_config --
-    if not _table_exists('org_sync_config'):
+    if not table_exists(conn, 'org_sync_config'):
         op.create_table(
             'org_sync_config',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -94,18 +69,18 @@ def upgrade() -> None:
             ['tenant_id', 'provider', 'config_name'],
         )
     else:
-        if not _index_exists('org_sync_config', 'idx_osc_tenant'):
+        if not index_exists(conn, 'org_sync_config', 'idx_osc_tenant'):
             op.create_index('idx_osc_tenant', 'org_sync_config', ['tenant_id'])
-        if not _index_exists('org_sync_config', 'idx_osc_status'):
+        if not index_exists(conn, 'org_sync_config', 'idx_osc_status'):
             op.create_index('idx_osc_status', 'org_sync_config', ['status'])
-        if not _index_exists('org_sync_config', 'uk_tenant_provider_name'):
+        if not index_exists(conn, 'org_sync_config', 'uk_tenant_provider_name'):
             op.create_unique_constraint(
                 'uk_tenant_provider_name', 'org_sync_config',
                 ['tenant_id', 'provider', 'config_name'],
             )
 
     # -- org_sync_log --
-    if not _table_exists('org_sync_log'):
+    if not table_exists(conn, 'org_sync_log'):
         op.create_table(
             'org_sync_log',
             sa.Column('id', sa.BigInteger, primary_key=True, autoincrement=True),
@@ -136,53 +111,53 @@ def upgrade() -> None:
         op.create_index('idx_osl_tenant', 'org_sync_log', ['tenant_id'])
         op.create_index('idx_osl_config', 'org_sync_log', ['config_id'])
     else:
-        if not _index_exists('org_sync_log', 'idx_osl_tenant'):
+        if not index_exists(conn, 'org_sync_log', 'idx_osl_tenant'):
             op.create_index('idx_osl_tenant', 'org_sync_log', ['tenant_id'])
-        if not _index_exists('org_sync_log', 'idx_osl_config'):
+        if not index_exists(conn, 'org_sync_log', 'idx_osl_config'):
             op.create_index('idx_osl_config', 'org_sync_log', ['config_id'])
 
     # -- user table extension --
-    if not _column_exists('user', 'source'):
+    if not column_exists(conn, 'user', 'source'):
         op.add_column('user', sa.Column(
             'source', sa.String(32), nullable=False,
             server_default='local',
             comment='Source: local/feishu/wecom/dingtalk/generic_api',
         ))
-    if not _column_exists('user', 'external_id'):
+    if not column_exists(conn, 'user', 'external_id'):
         op.add_column('user', sa.Column(
             'external_id', sa.String(255), nullable=True,
             comment='External employee ID for sync',
         ))
-    if not _index_exists('user', 'uk_user_source_external_id'):
+    if not index_exists(conn, 'user', 'uk_user_source_external_id'):
         op.create_unique_constraint(
             'uk_user_source_external_id', 'user',
             ['source', 'external_id'],
         )
 
-
 def downgrade() -> None:
+    conn = op.get_bind()
     # -- user table rollback --
-    if _index_exists('user', 'uk_user_source_external_id'):
+    if index_exists(conn, 'user', 'uk_user_source_external_id'):
         op.drop_constraint('uk_user_source_external_id', 'user', type_='unique')
-    if _column_exists('user', 'external_id'):
+    if column_exists(conn, 'user', 'external_id'):
         op.drop_column('user', 'external_id')
-    if _column_exists('user', 'source'):
+    if column_exists(conn, 'user', 'source'):
         op.drop_column('user', 'source')
 
     # -- org_sync_log --
-    if _index_exists('org_sync_log', 'idx_osl_config'):
+    if index_exists(conn, 'org_sync_log', 'idx_osl_config'):
         op.drop_index('idx_osl_config', table_name='org_sync_log')
-    if _index_exists('org_sync_log', 'idx_osl_tenant'):
+    if index_exists(conn, 'org_sync_log', 'idx_osl_tenant'):
         op.drop_index('idx_osl_tenant', table_name='org_sync_log')
-    if _table_exists('org_sync_log'):
+    if table_exists(conn, 'org_sync_log'):
         op.drop_table('org_sync_log')
 
     # -- org_sync_config --
-    if _index_exists('org_sync_config', 'uk_tenant_provider_name'):
+    if index_exists(conn, 'org_sync_config', 'uk_tenant_provider_name'):
         op.drop_constraint('uk_tenant_provider_name', 'org_sync_config', type_='unique')
-    if _index_exists('org_sync_config', 'idx_osc_status'):
+    if index_exists(conn, 'org_sync_config', 'idx_osc_status'):
         op.drop_index('idx_osc_status', table_name='org_sync_config')
-    if _index_exists('org_sync_config', 'idx_osc_tenant'):
+    if index_exists(conn, 'org_sync_config', 'idx_osc_tenant'):
         op.drop_index('idx_osc_tenant', table_name='org_sync_config')
-    if _table_exists('org_sync_config'):
+    if table_exists(conn, 'org_sync_config'):
         op.drop_table('org_sync_config')

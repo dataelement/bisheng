@@ -21,32 +21,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import index_exists, table_exists
+
 revision: str = 'f017_llm_token_log'
 down_revision: Union[str, Sequence[str], None] = 'f017_is_shared'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.TABLES '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t'
-    ), {'t': name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.STATISTICS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i'
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _table_exists('llm_token_log'):
+    conn = op.get_bind()
+    if not table_exists(conn, 'llm_token_log'):
         op.create_table(
             'llm_token_log',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -74,19 +58,19 @@ def upgrade() -> None:
         op.create_index('idx_llm_token_log_model_id', 'llm_token_log', ['model_id'])
         op.create_index('idx_llm_token_log_server_id', 'llm_token_log', ['server_id'])
     else:
-        if not _index_exists('llm_token_log', 'idx_llm_token_log_tenant_created'):
+        if not index_exists(conn, 'llm_token_log', 'idx_llm_token_log_tenant_created'):
             op.create_index(
                 'idx_llm_token_log_tenant_created',
                 'llm_token_log', ['tenant_id', 'created_at'],
             )
-        if not _index_exists('llm_token_log', 'idx_llm_token_log_user_id'):
+        if not index_exists(conn, 'llm_token_log', 'idx_llm_token_log_user_id'):
             op.create_index('idx_llm_token_log_user_id', 'llm_token_log', ['user_id'])
-        if not _index_exists('llm_token_log', 'idx_llm_token_log_model_id'):
+        if not index_exists(conn, 'llm_token_log', 'idx_llm_token_log_model_id'):
             op.create_index('idx_llm_token_log_model_id', 'llm_token_log', ['model_id'])
-        if not _index_exists('llm_token_log', 'idx_llm_token_log_server_id'):
+        if not index_exists(conn, 'llm_token_log', 'idx_llm_token_log_server_id'):
             op.create_index('idx_llm_token_log_server_id', 'llm_token_log', ['server_id'])
 
-    if not _table_exists('llm_call_log'):
+    if not table_exists(conn, 'llm_call_log'):
         op.create_table(
             'llm_call_log',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -112,33 +96,33 @@ def upgrade() -> None:
         op.create_index('idx_llm_call_log_user_id', 'llm_call_log', ['user_id'])
         op.create_index('idx_llm_call_log_status', 'llm_call_log', ['status'])
     else:
-        if not _index_exists('llm_call_log', 'idx_llm_call_log_tenant_created'):
+        if not index_exists(conn, 'llm_call_log', 'idx_llm_call_log_tenant_created'):
             op.create_index(
                 'idx_llm_call_log_tenant_created',
                 'llm_call_log', ['tenant_id', 'created_at'],
             )
-        if not _index_exists('llm_call_log', 'idx_llm_call_log_user_id'):
+        if not index_exists(conn, 'llm_call_log', 'idx_llm_call_log_user_id'):
             op.create_index('idx_llm_call_log_user_id', 'llm_call_log', ['user_id'])
-        if not _index_exists('llm_call_log', 'idx_llm_call_log_status'):
+        if not index_exists(conn, 'llm_call_log', 'idx_llm_call_log_status'):
             op.create_index('idx_llm_call_log_status', 'llm_call_log', ['status'])
 
-
 def downgrade() -> None:
-    if _table_exists('llm_call_log'):
-        if _index_exists('llm_call_log', 'idx_llm_call_log_status'):
+    conn = op.get_bind()
+    if table_exists(conn, 'llm_call_log'):
+        if index_exists(conn, 'llm_call_log', 'idx_llm_call_log_status'):
             op.drop_index('idx_llm_call_log_status', 'llm_call_log')
-        if _index_exists('llm_call_log', 'idx_llm_call_log_user_id'):
+        if index_exists(conn, 'llm_call_log', 'idx_llm_call_log_user_id'):
             op.drop_index('idx_llm_call_log_user_id', 'llm_call_log')
-        if _index_exists('llm_call_log', 'idx_llm_call_log_tenant_created'):
+        if index_exists(conn, 'llm_call_log', 'idx_llm_call_log_tenant_created'):
             op.drop_index('idx_llm_call_log_tenant_created', 'llm_call_log')
         op.drop_table('llm_call_log')
-    if _table_exists('llm_token_log'):
-        if _index_exists('llm_token_log', 'idx_llm_token_log_server_id'):
+    if table_exists(conn, 'llm_token_log'):
+        if index_exists(conn, 'llm_token_log', 'idx_llm_token_log_server_id'):
             op.drop_index('idx_llm_token_log_server_id', 'llm_token_log')
-        if _index_exists('llm_token_log', 'idx_llm_token_log_model_id'):
+        if index_exists(conn, 'llm_token_log', 'idx_llm_token_log_model_id'):
             op.drop_index('idx_llm_token_log_model_id', 'llm_token_log')
-        if _index_exists('llm_token_log', 'idx_llm_token_log_user_id'):
+        if index_exists(conn, 'llm_token_log', 'idx_llm_token_log_user_id'):
             op.drop_index('idx_llm_token_log_user_id', 'llm_token_log')
-        if _index_exists('llm_token_log', 'idx_llm_token_log_tenant_created'):
+        if index_exists(conn, 'llm_token_log', 'idx_llm_token_log_tenant_created'):
             op.drop_index('idx_llm_token_log_tenant_created', 'llm_token_log')
         op.drop_table('llm_token_log')

@@ -10,32 +10,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import index_exists, table_exists
+
 revision: str = 'f022_approval_request'
 down_revision: Union[str, Sequence[str], None] = 'f021_department_knowledge_space'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.TABLES '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t'
-    ), {'t': name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.STATISTICS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i'
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _table_exists('approval_request'):
+    conn = op.get_bind()
+    if not table_exists(conn, 'approval_request'):
         op.create_table(
             'approval_request',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -74,12 +58,12 @@ def upgrade() -> None:
             ('idx_approval_request_applicant', ['applicant_user_id']),
             ('idx_approval_request_message_id', ['message_id']),
         ):
-            if not _index_exists('approval_request', index_name):
+            if not index_exists(conn, 'approval_request', index_name):
                 op.create_index(index_name, 'approval_request', columns)
 
-
 def downgrade() -> None:
-    if _table_exists('approval_request'):
+    conn = op.get_bind()
+    if table_exists(conn, 'approval_request'):
         for index_name in (
             'idx_approval_request_status',
             'idx_approval_request_space_id',
@@ -87,6 +71,6 @@ def downgrade() -> None:
             'idx_approval_request_applicant',
             'idx_approval_request_message_id',
         ):
-            if _index_exists('approval_request', index_name):
+            if index_exists(conn, 'approval_request', index_name):
                 op.drop_index(index_name, table_name='approval_request')
         op.drop_table('approval_request')

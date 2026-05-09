@@ -29,43 +29,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, index_exists
+
 revision: str = 'f014_sso_sync_fields'
 down_revision: Union[str, Sequence[str], None] = 'f013_auditlog_tenant_id_nullable'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
 SSO_SEED_CONFIG_ID = 9999
 SSO_SEED_TENANT_ID = 1
 SSO_SEED_PROVIDER = 'sso_realtime'
 SSO_SEED_CONFIG_NAME = 'SSO Gateway (internal)'
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            'SELECT COUNT(*) FROM information_schema.COLUMNS '
-            'WHERE TABLE_SCHEMA = DATABASE() '
-            '  AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-        ),
-        {'t': table_name, 'c': column_name},
-    )
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            'SELECT COUNT(*) FROM information_schema.STATISTICS '
-            'WHERE TABLE_SCHEMA = DATABASE() '
-            '  AND TABLE_NAME = :t AND INDEX_NAME = :i'
-        ),
-        {'t': table_name, 'i': index_name},
-    )
-    return result.scalar() > 0
-
 
 def _seed_exists() -> bool:
     conn = op.get_bind()
@@ -75,10 +49,9 @@ def _seed_exists() -> bool:
     )
     return result.scalar() > 0
 
-
 def upgrade() -> None:
     # -- department.is_deleted --
-    if not _column_exists('department', 'is_deleted'):
+    if not column_exists(conn, 'department', 'is_deleted'):
         op.add_column(
             'department',
             sa.Column(
@@ -91,7 +64,7 @@ def upgrade() -> None:
         )
 
     # -- department.last_sync_ts --
-    if not _column_exists('department', 'last_sync_ts'):
+    if not column_exists(conn, 'department', 'last_sync_ts'):
         op.add_column(
             'department',
             sa.Column(
@@ -102,7 +75,7 @@ def upgrade() -> None:
                 comment='F014/F015 INV-T12: high-water mark of the latest Gateway/Celery sync',
             ),
         )
-    if not _index_exists('department', 'idx_department_last_sync_ts'):
+    if not index_exists(conn, 'department', 'idx_department_last_sync_ts'):
         op.create_index(
             'idx_department_last_sync_ts', 'department', ['last_sync_ts'],
         )
@@ -135,7 +108,6 @@ def upgrade() -> None:
             },
         )
 
-
 def downgrade() -> None:
     if _seed_exists():
         conn = op.get_bind()
@@ -144,9 +116,9 @@ def downgrade() -> None:
             {'id': SSO_SEED_CONFIG_ID},
         )
 
-    if _index_exists('department', 'idx_department_last_sync_ts'):
+    if index_exists(conn, 'department', 'idx_department_last_sync_ts'):
         op.drop_index('idx_department_last_sync_ts', table_name='department')
-    if _column_exists('department', 'last_sync_ts'):
+    if column_exists(conn, 'department', 'last_sync_ts'):
         op.drop_column('department', 'last_sync_ts')
-    if _column_exists('department', 'is_deleted'):
+    if column_exists(conn, 'department', 'is_deleted'):
         op.drop_column('department', 'is_deleted')

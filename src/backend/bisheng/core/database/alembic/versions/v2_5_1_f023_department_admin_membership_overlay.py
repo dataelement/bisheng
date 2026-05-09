@@ -10,23 +10,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists
+
 revision: str = 'f023_department_admin_membership_overlay'
 down_revision: Union[str, Sequence[str], None] = 'f022_approval_request'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _column_exists('space_channel_member', 'department_admin_promoted_from_role'):
+    conn = op.get_bind()
+    if not column_exists(conn, 'space_channel_member', 'department_admin_promoted_from_role'):
         op.add_column(
             'space_channel_member',
             sa.Column(
@@ -37,7 +30,7 @@ def upgrade() -> None:
             ),
         )
 
-
 def downgrade() -> None:
-    if _column_exists('space_channel_member', 'department_admin_promoted_from_role'):
+    conn = op.get_bind()
+    if column_exists(conn, 'space_channel_member', 'department_admin_promoted_from_role'):
         op.drop_column('space_channel_member', 'department_admin_promoted_from_role')

@@ -29,11 +29,12 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists
+
 revision: str = 'f017_is_shared'
 down_revision: Union[str, Sequence[str], None] = 'f014_sso_sync_fields'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
 
 _SHAREABLE_TABLES: list[str] = [
     'knowledge',
@@ -46,20 +47,10 @@ _SHAREABLE_TABLES: list[str] = [
     't_gpts_tools_type',
 ]
 
-
-def _column_exists(table: str, column: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS '
-        'WHERE TABLE_SCHEMA = DATABASE() '
-        '  AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-    ), {'t': table, 'c': column})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
+    conn = op.get_bind()
     for table in _SHAREABLE_TABLES:
-        if not _column_exists(table, 'is_shared'):
+        if not column_exists(conn, table, 'is_shared'):
             op.add_column(
                 table,
                 sa.Column(
@@ -71,8 +62,8 @@ def upgrade() -> None:
                 ),
             )
 
-
 def downgrade() -> None:
+    conn = op.get_bind()
     for table in _SHAREABLE_TABLES:
-        if _column_exists(table, 'is_shared'):
+        if column_exists(conn, table, 'is_shared'):
             op.drop_column(table, 'is_shared')

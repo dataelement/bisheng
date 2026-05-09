@@ -29,45 +29,27 @@ from bisheng.core.database.alembic_helpers.f011 import (
     ensure_root_tenant_shape,
 )
 
+from bisheng.core.database.dialect_helpers import column_exists, index_exists
+
 revision: str = 'f011_tenant_tree'
 down_revision: Union[str, Sequence[str], None] = 'f011_backfill_create_knowledge_web_menu'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _column_exists(table: str, column: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS '
-        'WHERE TABLE_SCHEMA = DATABASE() '
-        '  AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-    ), {'t': table, 'c': column})
-    return result.scalar() > 0
-
-
-def _index_exists(table: str, index: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.STATISTICS '
-        'WHERE TABLE_SCHEMA = DATABASE() '
-        '  AND TABLE_NAME = :t AND INDEX_NAME = :i'
-    ), {'t': table, 'i': index})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
+    conn = op.get_bind()
     # -------------------------------------------------------------------
     # 1. tenant: add parent_tenant_id + share_default_to_children.
     # -------------------------------------------------------------------
-    if not _column_exists('tenant', 'parent_tenant_id'):
+    if not column_exists(conn, 'tenant', 'parent_tenant_id'):
         op.add_column(
             'tenant',
             sa.Column('parent_tenant_id', sa.Integer, nullable=True,
                       comment='NULL=Root; else Root id (MVP 2-layer lock)'),
         )
-    if not _index_exists('tenant', 'idx_tenant_parent'):
+    if not index_exists(conn, 'tenant', 'idx_tenant_parent'):
         op.create_index('idx_tenant_parent', 'tenant', ['parent_tenant_id'])
-    if not _column_exists('tenant', 'share_default_to_children'):
+    if not column_exists(conn, 'tenant', 'share_default_to_children'):
         op.add_column(
             'tenant',
             sa.Column('share_default_to_children', sa.Integer, nullable=False,
@@ -81,7 +63,7 @@ def upgrade() -> None:
     # -------------------------------------------------------------------
     # 3. user_tenant: add is_active, backfill, dedup, swap unique index.
     # -------------------------------------------------------------------
-    if not _column_exists('user_tenant', 'is_active'):
+    if not column_exists(conn, 'user_tenant', 'is_active'):
         op.add_column(
             'user_tenant',
             sa.Column('is_active', sa.Integer, nullable=True,
@@ -89,9 +71,9 @@ def upgrade() -> None:
         )
     backfill_is_active(op.get_bind())
     deduplicate_multi_active_user_tenants(op.get_bind())
-    if _index_exists('user_tenant', 'uk_user_tenant'):
+    if index_exists(conn, 'user_tenant', 'uk_user_tenant'):
         op.drop_constraint('uk_user_tenant', 'user_tenant', type_='unique')
-    if not _index_exists('user_tenant', 'uk_user_active'):
+    if not index_exists(conn, 'user_tenant', 'uk_user_active'):
         op.create_unique_constraint(
             'uk_user_active', 'user_tenant', ['user_id', 'is_active'],
         )
@@ -99,20 +81,20 @@ def upgrade() -> None:
     # -------------------------------------------------------------------
     # 4. department: add is_tenant_root, mounted_tenant_id.
     # -------------------------------------------------------------------
-    if not _column_exists('department', 'is_tenant_root'):
+    if not column_exists(conn, 'department', 'is_tenant_root'):
         op.add_column(
             'department',
             sa.Column('is_tenant_root', sa.Integer, nullable=False,
                       server_default='0',
                       comment='1=Tenant mount point (Child Tenant root dept)'),
         )
-    if not _column_exists('department', 'mounted_tenant_id'):
+    if not column_exists(conn, 'department', 'mounted_tenant_id'):
         op.add_column(
             'department',
             sa.Column('mounted_tenant_id', sa.Integer, nullable=True,
                       comment='FK→tenant.id when is_tenant_root=1'),
         )
-    if not _index_exists('department', 'idx_dept_mounted_tenant'):
+    if not index_exists(conn, 'department', 'idx_dept_mounted_tenant'):
         op.create_index(
             'idx_dept_mounted_tenant', 'department', ['mounted_tenant_id'],
         )
@@ -121,85 +103,85 @@ def upgrade() -> None:
     # 5. auditlog: append structured v2 columns (tenant_id already added
     #    by F001 TENANT_TABLES; only extend with the new ones here).
     # -------------------------------------------------------------------
-    if not _column_exists('auditlog', 'operator_tenant_id'):
+    if not column_exists(conn, 'auditlog', 'operator_tenant_id'):
         op.add_column(
             'auditlog',
             sa.Column('operator_tenant_id', sa.Integer, nullable=True,
                       comment='v2.5.1: operator leaf tenant'),
         )
-    if not _column_exists('auditlog', 'action'):
+    if not column_exists(conn, 'auditlog', 'action'):
         op.add_column(
             'auditlog',
             sa.Column('action', sa.String(64), nullable=True,
                       comment='v2.5.1: structured action name (see spec §5.4.2)'),
         )
-    if not _index_exists('auditlog', 'idx_auditlog_action'):
+    if not index_exists(conn, 'auditlog', 'idx_auditlog_action'):
         op.create_index('idx_auditlog_action', 'auditlog', ['action'])
-    if not _column_exists('auditlog', 'target_type'):
+    if not column_exists(conn, 'auditlog', 'target_type'):
         op.add_column(
             'auditlog',
             sa.Column('target_type', sa.String(32), nullable=True),
         )
-    if not _column_exists('auditlog', 'target_id'):
+    if not column_exists(conn, 'auditlog', 'target_id'):
         op.add_column(
             'auditlog',
             sa.Column('target_id', sa.String(64), nullable=True),
         )
-    if not _column_exists('auditlog', 'reason'):
+    if not column_exists(conn, 'auditlog', 'reason'):
         op.add_column(
             'auditlog',
             sa.Column('reason', sa.Text, nullable=True),
         )
-    if not _column_exists('auditlog', 'metadata'):
+    if not column_exists(conn, 'auditlog', 'metadata'):
         op.add_column(
             'auditlog',
             sa.Column('metadata', sa.JSON, nullable=True,
                       comment='v2.5.1: extended fields'),
         )
-    if not _index_exists('auditlog', 'idx_auditlog_tenant_time'):
+    if not index_exists(conn, 'auditlog', 'idx_auditlog_tenant_time'):
         # tenant_id already exists (F001 TENANT_TABLES); just add compound index.
         op.create_index(
             'idx_auditlog_tenant_time', 'auditlog', ['tenant_id', 'create_time'],
         )
 
-
 def downgrade() -> None:
+    conn = op.get_bind()
     # auditlog — reverse order of upgrade.
-    if _index_exists('auditlog', 'idx_auditlog_tenant_time'):
+    if index_exists(conn, 'auditlog', 'idx_auditlog_tenant_time'):
         op.drop_index('idx_auditlog_tenant_time', table_name='auditlog')
     for col in ('metadata', 'reason', 'target_id', 'target_type'):
-        if _column_exists('auditlog', col):
+        if column_exists(conn, 'auditlog', col):
             op.drop_column('auditlog', col)
-    if _index_exists('auditlog', 'idx_auditlog_action'):
+    if index_exists(conn, 'auditlog', 'idx_auditlog_action'):
         op.drop_index('idx_auditlog_action', table_name='auditlog')
-    if _column_exists('auditlog', 'action'):
+    if column_exists(conn, 'auditlog', 'action'):
         op.drop_column('auditlog', 'action')
-    if _column_exists('auditlog', 'operator_tenant_id'):
+    if column_exists(conn, 'auditlog', 'operator_tenant_id'):
         op.drop_column('auditlog', 'operator_tenant_id')
 
     # department.
-    if _index_exists('department', 'idx_dept_mounted_tenant'):
+    if index_exists(conn, 'department', 'idx_dept_mounted_tenant'):
         op.drop_index('idx_dept_mounted_tenant', table_name='department')
-    if _column_exists('department', 'mounted_tenant_id'):
+    if column_exists(conn, 'department', 'mounted_tenant_id'):
         op.drop_column('department', 'mounted_tenant_id')
-    if _column_exists('department', 'is_tenant_root'):
+    if column_exists(conn, 'department', 'is_tenant_root'):
         op.drop_column('department', 'is_tenant_root')
 
     # user_tenant — cannot recover is_active → original split; restore
     # uk_user_tenant and drop the new column + constraint.
-    if _index_exists('user_tenant', 'uk_user_active'):
+    if index_exists(conn, 'user_tenant', 'uk_user_active'):
         op.drop_constraint('uk_user_active', 'user_tenant', type_='unique')
-    if not _index_exists('user_tenant', 'uk_user_tenant'):
+    if not index_exists(conn, 'user_tenant', 'uk_user_tenant'):
         op.create_unique_constraint(
             'uk_user_tenant', 'user_tenant', ['user_id', 'tenant_id'],
         )
-    if _column_exists('user_tenant', 'is_active'):
+    if column_exists(conn, 'user_tenant', 'is_active'):
         op.drop_column('user_tenant', 'is_active')
 
     # tenant.
-    if _column_exists('tenant', 'share_default_to_children'):
+    if column_exists(conn, 'tenant', 'share_default_to_children'):
         op.drop_column('tenant', 'share_default_to_children')
-    if _index_exists('tenant', 'idx_tenant_parent'):
+    if index_exists(conn, 'tenant', 'idx_tenant_parent'):
         op.drop_index('idx_tenant_parent', table_name='tenant')
-    if _column_exists('tenant', 'parent_tenant_id'):
+    if column_exists(conn, 'tenant', 'parent_tenant_id'):
         op.drop_column('tenant', 'parent_tenant_id')

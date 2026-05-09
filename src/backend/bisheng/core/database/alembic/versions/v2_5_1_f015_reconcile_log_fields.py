@@ -30,41 +30,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, index_exists
+
 revision: str = 'f015_reconcile_log_fields'
 down_revision: Union[str, Sequence[str], None] = 'f014_sso_sync_fields'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            'SELECT COUNT(*) FROM information_schema.COLUMNS '
-            'WHERE TABLE_SCHEMA = DATABASE() '
-            '  AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-        ),
-        {'t': table_name, 'c': column_name},
-    )
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            'SELECT COUNT(*) FROM information_schema.STATISTICS '
-            'WHERE TABLE_SCHEMA = DATABASE() '
-            '  AND TABLE_NAME = :t AND INDEX_NAME = :i'
-        ),
-        {'t': table_name, 'i': index_name},
-    )
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
+    conn = op.get_bind()
     # -- org_sync_log.event_type --
-    if not _column_exists('org_sync_log', 'event_type'):
+    if not column_exists(conn, 'org_sync_log', 'event_type'):
         op.add_column(
             'org_sync_log',
             sa.Column(
@@ -80,7 +56,7 @@ def upgrade() -> None:
         )
 
     # -- org_sync_log.level --
-    if not _column_exists('org_sync_log', 'level'):
+    if not column_exists(conn, 'org_sync_log', 'level'):
         op.add_column(
             'org_sync_log',
             sa.Column(
@@ -93,7 +69,7 @@ def upgrade() -> None:
         )
 
     # -- org_sync_log.external_id --
-    if not _column_exists('org_sync_log', 'external_id'):
+    if not column_exists(conn, 'org_sync_log', 'external_id'):
         op.add_column(
             'org_sync_log',
             sa.Column(
@@ -105,7 +81,7 @@ def upgrade() -> None:
         )
 
     # -- org_sync_log.source_ts --
-    if not _column_exists('org_sync_log', 'source_ts'):
+    if not column_exists(conn, 'org_sync_log', 'source_ts'):
         op.add_column(
             'org_sync_log',
             sa.Column(
@@ -117,22 +93,22 @@ def upgrade() -> None:
         )
 
     # -- composite index serving the weekly conflict aggregation SQL --
-    if not _index_exists('org_sync_log', 'idx_conflict_lookup'):
+    if not index_exists(conn, 'org_sync_log', 'idx_conflict_lookup'):
         op.create_index(
             'idx_conflict_lookup',
             'org_sync_log',
             ['level', 'event_type', 'external_id', 'create_time'],
         )
 
-
 def downgrade() -> None:
-    if _index_exists('org_sync_log', 'idx_conflict_lookup'):
+    conn = op.get_bind()
+    if index_exists(conn, 'org_sync_log', 'idx_conflict_lookup'):
         op.drop_index('idx_conflict_lookup', table_name='org_sync_log')
-    if _column_exists('org_sync_log', 'source_ts'):
+    if column_exists(conn, 'org_sync_log', 'source_ts'):
         op.drop_column('org_sync_log', 'source_ts')
-    if _column_exists('org_sync_log', 'external_id'):
+    if column_exists(conn, 'org_sync_log', 'external_id'):
         op.drop_column('org_sync_log', 'external_id')
-    if _column_exists('org_sync_log', 'level'):
+    if column_exists(conn, 'org_sync_log', 'level'):
         op.drop_column('org_sync_log', 'level')
-    if _column_exists('org_sync_log', 'event_type'):
+    if column_exists(conn, 'org_sync_log', 'event_type'):
         op.drop_column('org_sync_log', 'event_type')
