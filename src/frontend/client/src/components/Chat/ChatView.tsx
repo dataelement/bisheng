@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, MousePointerClick } from 'lucide-react';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
+import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
@@ -29,6 +30,7 @@ import AppAvator from '../Avator';
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
   const { conversationId: cid } = useParams();
+  const location = useLocation();
   const conversationId = (cid ?? id) || 'new';
 
   const [showCode, setShowCode] = useState(false);
@@ -244,11 +246,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               briefly floats the input up before messages arrive). */}
           {(() => {
             const loadingExistingConvo = isLoading && conversationId !== 'new';
-            const useMessagesLayout = hasMessages || loadingExistingConvo;
+            // Keep input pinned to bottom as soon as a send starts (before first token lands),
+            // otherwise mobile can briefly fall back to the centered landing layout.
+            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming;
             return (
               <div className={cn(
                 showCode ? 'hidden' : 'flex flex-col relative',
-                useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
+                useMessagesLayout ? 'h-full' : ''
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
@@ -330,9 +334,14 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {citationPanelElement}
                   </div>
                 ) : (
-                  /* Landing page branch */
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 overflow-hidden flex flex-col justify-center">
+                  /* Landing page branch — Landing+input are pinned at ~25vh
+                     from the viewport top via padding-top (independent of how
+                     tall DailyFeaturedApps below becomes), so the welcome
+                     block stays in roughly the same screen position whether
+                     apps are absent or fill multiple rows. Apps follow
+                     directly after the input with only their own mt-4 gap. */
+                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
+                    <div className="shrink-0">
                       <Landing
                         lingsi={isLingsi}
                         lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
@@ -390,6 +399,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         )}
                       </div>
                     )}
+                    <DailyFeaturedApps t={t} isLingsi={isLingsi} />
                   </div>
                 )}
               </div>
@@ -398,12 +408,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
           {/* Lingsi Cases */}
           <Cases ref={casesRef} t={t} isLingsi={isLingsi} setIsLingsi={setIsLingsi} />
-          {/* Recommended apps — welcome page only. Also suppress while a
-              sidebar-nav is loading the new conversation, otherwise the chips
-              flicker into view for one frame before messages arrive. */}
-          {!hasMessages && !(isLoading && conversationId !== 'new') && (
-            <DailyFeaturedApps t={t} isLingsi={isLingsi} />
-          )}
         </div>
 
         {/* Invitation Code */}
@@ -430,6 +434,9 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
     const _chatId = generateUUID(32)
     const flowId = agent.id
     const flowType = agent.flow_type || agent.type
+    const homeReturnTo = '/c/new';
+    writeAppChatOrigin(_chatId, 'home');
+    writeAppChatReturnTo(_chatId, homeReturnTo);
     try {
       sessionStorage.setItem(`app-chat-entry:${_chatId}`, 'home')
       sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'home')
@@ -453,7 +460,9 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
       } as any);
     });
     setConversation((prevState: any) => ({ ...prevState, conversationId: _chatId }))
-    navigate(`/app/${_chatId}/${flowId}/${flowType}?from=home-recommended&entry=home`)
+    navigate(`/app/${_chatId}/${flowId}/${flowType}?from=home-recommended&entry=home&returnTo=${encodeURIComponent(homeReturnTo)}`, {
+      state: { appSurfaceReturn: homeReturnTo },
+    })
   }
   const displayApps = dailyApps
 

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -48,9 +47,10 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import default_permission_ids_for_relation
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
@@ -572,46 +572,158 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and str(binding.get('subject_id')) == str(user_id)
         )
 
-    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
-        """Remove direct ReBAC grants and UI binding metadata for a space user."""
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings, _save_bindings
-        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+    @classmethod
+    async def sync_direct_space_user_permissions(
+        cls,
+        space_id: int,
+        user_id: int,
+        user_role: Optional[UserRoleEnum],
+        *,
+        is_active: bool,
+    ) -> None:
+        """Keep direct space memberships and ReBAC grants in sync."""
+        from bisheng.permission.api.endpoints.resource_permission import (
+            _binding_key_with_scope,
+            _get_bindings,
+            _save_bindings,
+        )
 
-        bindings = await _get_bindings()
-        to_remove = [
-            binding for binding in bindings
-            if self._is_direct_space_user_binding(binding, space_id, user_id)
-        ]
-        if not to_remove:
-            return
+        desired_relation = None
+        if is_active and user_role is not None:
+            desired_relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(user_role)
+            if desired_relation == 'owner':
+                desired_relation = None
 
-        revokes = []
-        revoked_relations = set()
-        for binding in to_remove:
-            relation = binding.get('relation')
-            if not relation or relation in revoked_relations:
-                continue
-            revoked_relations.add(relation)
-            revokes.append(AuthorizeRevokeItem(
+        relations_to_revoke = {'viewer', 'editor', 'manager'}
+        if desired_relation:
+            relations_to_revoke.discard(desired_relation)
+
+        revokes = [
+            AuthorizeRevokeItem(
                 subject_type='user',
                 subject_id=int(user_id),
                 relation=relation,
                 include_children=False,
+            )
+            for relation in sorted(relations_to_revoke)
+        ]
+        grants = []
+        if desired_relation:
+            grants.append(AuthorizeGrantItem(
+                subject_type='user',
+                subject_id=int(user_id),
+                relation=desired_relation,
+                include_children=False,
+                model_id=desired_relation,
             ))
 
-        if revokes:
-            await PermissionService.authorize(
-                object_type='knowledge_space',
-                object_id=str(space_id),
-                grants=[],
-                revokes=revokes,
-                enforce_fga_success=True,
-            )
+        await PermissionService.authorize(
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            grants=grants,
+            revokes=revokes,
+            enforce_fga_success=True,
+        )
 
+        bindings = await _get_bindings()
+        updated_bindings = [
+            binding for binding in bindings
+            if not cls._is_direct_space_user_binding(binding, space_id, user_id)
+        ]
+        if desired_relation:
+            key = _binding_key_with_scope(
+                'knowledge_space',
+                str(space_id),
+                'user',
+                int(user_id),
+                desired_relation,
+                None,
+            )
+            updated_bindings.append({
+                'key': key,
+                'resource_type': 'knowledge_space',
+                'resource_id': str(space_id),
+                'subject_type': 'user',
+                'subject_id': int(user_id),
+                'relation': desired_relation,
+                'include_children': None,
+                'model_id': desired_relation,
+            })
+        await _save_bindings(updated_bindings)
+
+    @staticmethod
+    def _should_preserve_private_space_tuple(
+        creator_user_id: int,
+        resource_type: str,
+        tuple_item: dict,
+    ) -> bool:
+        relation = tuple_item.get('relation')
+        tuple_user = tuple_item.get('user')
+        if resource_type == 'knowledge_space':
+            return relation == 'owner' and tuple_user == f'user:{creator_user_id}'
+        if resource_type in {'folder', 'knowledge_file'}:
+            return relation == 'parent'
+        return False
+
+    @classmethod
+    async def clear_space_authorization_for_private(
+        cls,
+        *,
+        space: Knowledge,
+        child_resources: List[tuple[str, int]],
+    ) -> None:
+        """Remove non-owner space permissions when a space becomes private."""
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings, _save_bindings
+
+        resources = [('knowledge_space', int(space.id))] + list(child_resources)
+        resource_keys = {(resource_type, str(resource_id)) for resource_type, resource_id in resources}
+
+        bindings = await _get_bindings()
         await _save_bindings([
             binding for binding in bindings
-            if not self._is_direct_space_user_binding(binding, space_id, user_id)
+            if (binding.get('resource_type'), str(binding.get('resource_id'))) not in resource_keys
         ])
+
+        fga = await PermissionService._aget_fga()
+        if fga is None:
+            raise RuntimeError('FGAClient not available while clearing private-space permissions')
+
+        operations: List[TupleOperation] = []
+        for resource_type, resource_id in resources:
+            tuples = await fga.read_tuples(object=f'{resource_type}:{resource_id}')
+            for tuple_item in tuples:
+                if cls._should_preserve_private_space_tuple(space.user_id, resource_type, tuple_item):
+                    continue
+                operations.append(TupleOperation(
+                    action='delete',
+                    user=tuple_item['user'],
+                    relation=tuple_item['relation'],
+                    object=tuple_item['object'],
+                ))
+
+        if operations:
+            await PermissionService.batch_write_tuples(
+                operations,
+                crash_safe=True,
+                raise_on_failure=True,
+                stop_on_failure=True,
+            )
+
+        await OwnerService.write_owner_tuple(
+            space.user_id,
+            'knowledge_space',
+            str(space.id),
+            enforce_fga_success=True,
+        )
+
+    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
+        """Remove direct ReBAC grants and UI binding metadata for a space user."""
+        await self.__class__.sync_direct_space_user_permissions(
+            space_id,
+            user_id,
+            None,
+            is_active=False,
+        )
         if hasattr(self, '_relation_bindings_cache'):
             delattr(self, '_relation_bindings_cache')
 
@@ -952,7 +1064,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space, has_content_permission = await self._require_space_info_permission(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
-        total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)
+        total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
         result = KnowledgeSpaceInfoResp(**space.model_dump())
         if space.user_id != self.login_user.user_id:
             create_user = await UserDao.aget_user(space.user_id)
@@ -1008,6 +1120,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # F008: Delete all FGA tuples for this space and its child resources
         await self._cleanup_resource_tuples(child_resources + [('knowledge_space', space_id)])
 
+        # delete space channel memeber
+        await SpaceChannelMemberDao.clean_space_member(space_id)
+
         # TC-040: prune channel ➜ knowledge-space sync bindings that target
         # this space so the channel UI and the Celery sync worker stop
         # referencing a tombstone. Import lazily to avoid pulling the channel
@@ -1061,6 +1176,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
+            child_resources = await self._list_space_child_resources(space_id)
+            await self.__class__.clear_space_authorization_for_private(
+                space=space,
+                child_resources=child_resources,
+            )
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
         elif old_auth_type == AuthTypeEnum.APPROVAL and new_auth_type == AuthTypeEnum.PUBLIC:
             pending_members = await SpaceChannelMemberDao.async_get_members_by_space(
@@ -1069,6 +1189,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for member in pending_members:
                 member.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(member)
+                await self.__class__.sync_direct_space_user_permissions(
+                    space_id,
+                    member.user_id,
+                    member.user_role,
+                    is_active=True,
+                )
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         return space
@@ -1844,10 +1970,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type = 'folder'
             parent_resource_id = parent_id
 
-        # Upload cap: 实际上传人 login_user 的角色配额（多角色取 max），再与租户链取 min；超管不限
-        limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
-        logger.debug('space_file_upload_limit_bytes=%s user_id=%s', limit_bytes, self.login_user.user_id)
-        current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+        # User-role cap (multi-role max GB; admin returns None = unlimited).
+        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        logger.debug(
+            f'space_file_upload_limit_bytes={role_user_limit_bytes} '
+            f'user_id={self.login_user.user_id}'
+        )
+        current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+
+        # Tenant-level cap: applies to the *target tenant* of the destination
+        # knowledge space, regardless of the writer's role/admin status.
+        # Raises 19403 here if the tenant chain is already exhausted.
+        target_tid = db_knowledge.tenant_id
+        tenant_remaining_bytes = await QuotaService.get_tenant_storage_remaining_bytes(target_tid)
+        if tenant_remaining_bytes is not None:
+            tenant_used_at_start_bytes = await QuotaService.get_tenant_storage_used_bytes(target_tid)
+            tenant_cap_bytes = tenant_used_at_start_bytes + tenant_remaining_bytes
+            current_tenant_total_bytes = tenant_used_at_start_bytes
+        else:
+            tenant_cap_bytes = None
+            current_tenant_total_bytes = 0
 
         folder_id2name = {}
 
@@ -1871,40 +2013,64 @@ class KnowledgeSpaceService(KnowledgeUtils):
         failed_files = []
         preview_cache_keys = []
         created_files = []
-        for one in file_path:
-            if limit_bytes is not None:
-                try:
-                    incoming_size = os.path.getsize(one)
-                except OSError as exc:
-                    logger.warning('Cannot stat upload path %s: %s', one, exc)
-                    raise SpaceFileSizeLimitError() from exc
-                if incoming_size > limit_bytes or current_total_file_size + incoming_size > limit_bytes:
-                    raise SpaceFileSizeLimitError()
-            db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
-                                                        file_info=KnowledgeFileOne(
-                                                            file_path=one,
-                                                            excel_rule=ExcelRule()
-                                                        ), split_rule=file_split_rule.model_dump(),
-                                                        file_kwargs={"level": level,
-                                                                     "file_level_path": file_level_path,
-                                                                     "file_source": file_source.value})
-            if db_file.status != KnowledgeFileStatus.FAILED.value:
-                if getattr(db_file, 'id', None):
-                    created_files.append(db_file)
-                # Get a preview cache of this filekey
-                cache_key = self.get_preview_cache_key(
-                    knowledge_id, one
-                )
-                preview_cache_keys.append(cache_key)
-                process_files.append(db_file)
-                current_total_file_size += db_file.file_size
-            else:
-                failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
-                failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
-                failed_file.file_level_path = file_level_path
-                failed_files.append(failed_file)
+
+        async def cleanup_created_files() -> None:
+            created_file_ids = [
+                created_file.id
+                for created_file in created_files
+                if getattr(created_file, 'id', None)
+            ]
+            if not created_file_ids:
+                return
+            try:
+                await self._cleanup_resource_tuples([
+                    ('knowledge_file', created_file_id)
+                    for created_file_id in created_file_ids
+                ])
+            finally:
+                await KnowledgeFileDao.adelete_batch(created_file_ids)
 
         try:
+            for one in file_path:
+                db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
+                                                            file_info=KnowledgeFileOne(
+                                                                file_path=one,
+                                                                excel_rule=ExcelRule()
+                                                            ), split_rule=file_split_rule.model_dump(),
+                                                            file_kwargs={"level": level,
+                                                                         "file_level_path": file_level_path,
+                                                                         "file_source": file_source.value})
+                if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, 'id', None):
+                        created_files.append(db_file)
+                    # Get a preview cache of this filekey
+                    cache_key = self.get_preview_cache_key(
+                        knowledge_id, one
+                    )
+                    preview_cache_keys.append(cache_key)
+                    process_files.append(db_file)
+                    current_user_total += db_file.file_size
+                    current_tenant_total_bytes += db_file.file_size
+                else:
+                    failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
+                    failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
+                    failed_file.file_level_path = file_level_path
+                    failed_files.append(failed_file)
+                # Tenant-level cap: applies to admins as well; the write triggered by
+                # this upload would push the target tenant over its storage_gb cap.
+                if tenant_cap_bytes is not None and current_tenant_total_bytes > tenant_cap_bytes:
+                    blocker = (
+                        target_tid,
+                        'tenant_limit',
+                        round(current_tenant_total_bytes / (1024 ** 3), 2),
+                        round(tenant_cap_bytes / (1024 ** 3), 2),
+                        '',
+                    )
+                    raise QuotaService._make_storage_quota_error(blocker, 'storage_gb')
+                # User-role cap (preserved). Admins skip this branch because
+                # role_user_limit_bytes is None for them.
+                if role_user_limit_bytes is not None and current_user_total > role_user_limit_bytes:
+                    raise SpaceFileSizeLimitError()
             for created_file in created_files:
                 await self._initialize_child_resource_permissions(
                     'knowledge_file',
@@ -1913,17 +2079,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     parent_resource_id,
                 )
         except Exception:
-            created_file_ids = [
-                created_file.id
-                for created_file in created_files
-                if getattr(created_file, 'id', None)
-            ]
-            if created_file_ids:
-                await self._cleanup_resource_tuples([
-                    ('knowledge_file', created_file_id)
-                    for created_file_id in created_file_ids
-                ])
-                await KnowledgeFileDao.adelete_batch(created_file_ids)
+            try:
+                await cleanup_created_files()
+            except Exception as cleanup_exc:
+                logger.warning(f'Failed to cleanup files after knowledge space upload error: {cleanup_exc}')
             raise
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
@@ -1954,6 +2113,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
         return updated_file
+
+    async def update_file_encoding(
+        self, file_id: int, encoding: str,
+    ) -> KnowledgeFile:
+        """Update a file's file_encoding (shougang feature). Owner/admin only."""
+        file_record = await self._get_file_for_action(file_id)
+        # Reuse 'rename_file' permission action — that action is owner/admin-only,
+        # matching the required privilege level for editing encoding.
+        await self._require_permission_id(
+            'knowledge_file', file_id, 'rename_file',
+            space_id=file_record.knowledge_id,
+        )
+
+        cleaned = encoding.strip()
+        if not cleaned:
+            raise ValueError("encoding cannot be empty after strip")
+
+        file_record.file_encoding = cleaned
+        file_record.updater_id = self.login_user.user_id
+        file_record.updater_name = self.login_user.user_name
+        return await KnowledgeFileDao.async_update(file_record)
 
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
@@ -2384,6 +2564,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
+
+        if member.status == MembershipStatusEnum.ACTIVE:
+            await self.__class__.sync_direct_space_user_permissions(
+                space_id,
+                member.user_id,
+                member.user_role,
+                is_active=True,
+            )
 
         return {
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",

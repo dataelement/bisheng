@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Download, Loader2, X } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
@@ -238,6 +239,11 @@ export default function CitationReferencesDrawer({
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
   const autoResolveAttemptRef = useRef<Set<string>>(new Set());
+  const [citationOverlayPortalReady, setCitationOverlayPortalReady] = useState(false);
+
+  useEffect(() => {
+    setCitationOverlayPortalReady(true);
+  }, []);
 
   const references = useMemo(
     () => (referenceItems && referenceItems.length > 0
@@ -392,6 +398,7 @@ export default function CitationReferencesDrawer({
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
+  // 仅全屏参考资料（≤576）隐藏 MobileNav；平板窄屏保留顶栏标题，抽屉 z-[120] 已高于 MobileNav z-[60]
   useEffect(() => {
     if (!isNarrowLayout || !isOpen || !isFullBleedMobile) {
       return;
@@ -401,7 +408,7 @@ export default function CitationReferencesDrawer({
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [isNarrowLayout, isOpen, isFullBleedMobile, setChatMobileNavHidden]);
+  }, [isFullBleedMobile, isNarrowLayout, isOpen, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!isOpen && !panelOnly) {
@@ -550,20 +557,20 @@ export default function CitationReferencesDrawer({
           'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
           isMobileLikeViewport
             ? cn(
-                'px-4',
-                // 设计：左右上 16px；全屏手机在安全区下再留 16px，与对话内「查看文件」顶栏一致
-                isFullBleedMobile
-                  ? 'pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
-                  : 'pt-4',
-              )
+              'px-4',
+              // 竖直：侧栏/全屏均在顶栏内垂直居中；全屏保留安全区 + 顶 16px，并加底内边距平衡
+              isFullBleedMobile
+                ? 'pb-3 pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
+                : 'py-3',
+            )
             : 'h-10 px-4',
         )}
       >
-        <div className="flex items-center gap-2">
-          <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h2 className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]">
             {localize('com_msg_source_reference')}
           </h2>
-          <span className="inline-flex h-4 w-4 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
             {references.length}
           </span>
         </div>
@@ -571,7 +578,7 @@ export default function CitationReferencesDrawer({
           type="button"
           onClick={() => setOpenState(false)}
           className={cn(
-            'inline-flex items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
+            'inline-flex shrink-0 items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
             isMobileLikeViewport ? 'size-8 rounded-md' : 'size-6 rounded-[6px]',
           )}
           aria-label="关闭参考资料"
@@ -745,30 +752,38 @@ export default function CitationReferencesDrawer({
         </button>
       </div>
 
-      {!isDesktopInlinePanel && isOpen && (
-        isFullBleedMobile ? (
-          <aside
-            className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
-            aria-label="参考资料"
-          >
-            {panelContent}
-          </aside>
-        ) : (
-          <aside
-            ref={drawerRef}
-            className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300"
-            aria-label="参考资料"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {panelContent}
-          </aside>
-        )
-      )}
+      {citationOverlayPortalReady &&
+        !isDesktopInlinePanel &&
+        isOpen &&
+        createPortal(
+          isFullBleedMobile ? (
+            <aside
+              className="fixed inset-0 z-[130] flex min-h-0 flex-col overflow-hidden overscroll-contain bg-white [height:100dvh]"
+              aria-label="参考资料"
+            >
+              {panelContent}
+            </aside>
+          ) : (
+            <aside
+              ref={drawerRef}
+              className={cn(
+                'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
+                'rounded-tl-xl',
+              )}
+              aria-label="参考资料"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {panelContent}
+            </aside>
+          ),
+          document.body,
+        )}
       {!isDesktopInlinePanel && (
         <CitationDocumentPreviewDrawer
           preview={documentPreview}
           onClose={() => setDocumentPreview(null)}
+          manageMobileNavVisibility={false}
         />
       )}
     </>

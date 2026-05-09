@@ -154,6 +154,9 @@ const privateRouter = [
   { path: "/report/:id/", element: <Report />, errorElement: <RouteErrorBoundary /> },
   { path: "/diff/:id/:vid/:cid", element: <DiffFlowPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
+  // Backdoor login: also exposed inside privateRouter so an authenticated user
+  // navigating here (e.g. to switch accounts) does not fall into the * -> /404 trap.
+  { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "/404", element: <Page404 /> },
   { path: "*", element: <Navigate to="/404" replace /> }
@@ -171,9 +174,9 @@ function hasRoutePermission(permissions: string[], key: string) {
  * 把后端下发的 web_menu 转成路由层用的 permissions 数组。
  *
  * - 部门管理员补 `create_app`（后端来不及下发时的兜底，原有行为）。
- * - 子租户管理员（Child Admin）补 `sys`：后端 web_menu 不下发 sys/system_config 给非
- *   超管/非部门管理员，但 SystemPage 内部按 Tab 控制权限（org + role），需要前端先放行
- *   /sys 路由。判断与侧栏 `MainLayout.showSystemNav` 一致。
+ * - 子租户管理员（Child Admin）补 `sys` / `model`：后端 web_menu 不下发 sys/system_config 给非
+ *   超管/非部门管理员，且默认不下发 `model` 资源。子租户管理员需要在自己租户内管理模型
+ *   （PRD §6.1 模型租户隔离），路由层放行后由后端 `get_tenant_admin_user` 校验实际权限。
  */
 export function resolveRoutePermissions(user: {
   web_menu?: string[]
@@ -186,6 +189,9 @@ export function resolveRoutePermissions(user: {
   }
   if (user.is_child_admin && !perms.includes("sys")) {
     perms = [...perms, "sys"]
+  }
+  if (user.is_child_admin && !perms.includes("model")) {
+    perms = [...perms, "model"]
   }
   return perms
 }
@@ -227,6 +233,8 @@ export const getAdminRouter = () => {
 
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
+  // Backdoor entry: bypasses SSO auto-redirect when redirect_login_url is configured.
+  { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },

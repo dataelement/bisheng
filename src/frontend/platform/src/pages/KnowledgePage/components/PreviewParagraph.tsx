@@ -164,14 +164,20 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
     }, 30), [setValue])
     // 强制覆盖chunk
     const needCoverData = useKnowledgeStore((state) => state.needCoverData);
+    const setNeedCoverData = useKnowledgeStore((state) => state.setNeedCoverData);
     const vditorRef = useRef(null);
     useEffect(() => {
         const { index, txt } = needCoverData
         if (edit && data.chunkIndex === index && vditorRef.current) {
             vditorRef.current.setValue(txt)
             onChange(data.chunkIndex, txt)
+            // Consume the one-shot signal so this effect can't re-fire when
+            // its deps (notably parent-rebuilt onChange) change after the
+            // chunk PUT round-trips state — otherwise we re-enter on every
+            // re-render and spam /api/v1/knowledge/chunk indefinitely.
+            setNeedCoverData({ index: -1, txt: '' })
         }
-    }, [needCoverData, edit, data.chunkIndex, onChange])
+    }, [needCoverData, edit, data.chunkIndex, onChange, setNeedCoverData])
 
     const { toast } = useToast()
     const handleBlur = (newValue, restore) => {

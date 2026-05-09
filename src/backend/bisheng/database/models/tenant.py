@@ -191,6 +191,18 @@ class TenantDao:
             return result.first()
 
     @classmethod
+    async def aget_by_ids(cls, tenant_ids: List[int]) -> List[Tenant]:
+        """Batch fetch tenants by ids. Empty input returns empty list."""
+        if not tenant_ids:
+            return []
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(Tenant).where(Tenant.id.in_(tenant_ids))
+                )
+                return list(result.all())
+
+    @classmethod
     def get_by_code(cls, tenant_code: str) -> Optional[Tenant]:
         with get_sync_db_session() as session:
             return session.exec(
@@ -247,6 +259,13 @@ class TenantDao:
                 if status:
                     stmt = stmt.where(Tenant.status == status)
                     count_stmt = count_stmt.where(Tenant.status == status)
+                else:
+                    # archived is a terminal state used purely for audit; it must
+                    # not surface in the regular tenant management list. Callers
+                    # that need archived rows (audit views, tests) can pass
+                    # ``status='archived'`` explicitly.
+                    stmt = stmt.where(Tenant.status != 'archived')
+                    count_stmt = count_stmt.where(Tenant.status != 'archived')
 
                 result = await session.exec(count_stmt)
                 total = result.one()
@@ -292,19 +311,28 @@ class TenantDao:
 
     @classmethod
     async def acount_tenant_users(cls, tenant_id: int) -> int:
-        """Count active users in a tenant."""
+        """Count current leaf users in a tenant.
+
+        v2.5.1 F011: only ``is_active=1`` rows represent the user's current
+        leaf tenant; historical rows (``is_active=NULL``) left over from
+        mount/unmount swaps must be excluded so disabled tenants do not
+        report ghost members.
+        """
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(func.count()).select_from(UserTenant).where(
                     UserTenant.tenant_id == tenant_id,
-                    UserTenant.status == 'active',
+                    UserTenant.is_active == 1,
                 )
             )
             return result.one()
 
     @classmethod
     async def acount_tenant_users_batch(cls, tenant_ids: List[int]) -> dict:
-        """Count active users per tenant in a single query. Returns {tenant_id: count}."""
+        """Count current leaf users per tenant in a single query.
+
+        See ``acount_tenant_users`` — same ``is_active=1`` filter applies.
+        """
         if not tenant_ids:
             return {}
         async with get_async_db_session() as session:
@@ -312,7 +340,7 @@ class TenantDao:
                 select(UserTenant.tenant_id, func.count())
                 .where(
                     UserTenant.tenant_id.in_(tenant_ids),
-                    UserTenant.status == 'active',
+                    UserTenant.is_active == 1,
                 )
                 .group_by(UserTenant.tenant_id)
             )

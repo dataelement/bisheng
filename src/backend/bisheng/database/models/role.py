@@ -41,8 +41,8 @@ class RoleBase(SQLModelSerializable):
 
 class Role(RoleBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    tenant_id: int = Field(
-        default=1,
+    tenant_id: Optional[int] = Field(
+        default=None,
         sa_column=Column(Integer, nullable=False, server_default=text('1'),
                          index=True, comment='Tenant ID'),
     )

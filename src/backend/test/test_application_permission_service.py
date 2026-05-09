@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.core.openfga.exceptions import FGAClientError
+from bisheng.database.models.flow import FlowType
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
 
 
@@ -93,6 +94,133 @@ async def test_get_app_permission_map_async_honors_custom_model_permissions():
 
 
 @pytest.mark.asyncio
+async def test_get_bound_app_type_ids_async_matches_custom_binding_permissions():
+    login_user = SimpleNamespace(
+        user_id=7,
+        get_user_group_ids=AsyncMock(return_value=[]),
+    )
+
+    with patch(
+        'bisheng.permission.domain.services.application_permission_service._get_relation_models',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                'id': 'custom_view_only',
+                'name': '只看不用',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': ['view_app'],
+                'permissions_explicit': True,
+                'is_system': False,
+            },
+            {
+                'id': 'custom_use',
+                'name': '可使用',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': ['view_app', 'use_app'],
+                'permissions_explicit': True,
+                'is_system': False,
+            },
+        ],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service._get_bindings',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                'resource_type': 'workflow',
+                'resource_id': 'wf-view',
+                'subject_type': 'user',
+                'subject_id': 7,
+                'relation': 'viewer',
+                'include_children': None,
+                'model_id': 'custom_view_only',
+            },
+            {
+                'resource_type': 'assistant',
+                'resource_id': 'asst-use',
+                'subject_type': 'user',
+                'subject_id': 7,
+                'relation': 'viewer',
+                'include_children': None,
+                'model_id': 'custom_use',
+            },
+            {
+                'resource_type': 'assistant',
+                'resource_id': 'asst-other-user',
+                'subject_type': 'user',
+                'subject_id': 8,
+                'relation': 'viewer',
+                'include_children': None,
+                'model_id': 'custom_use',
+            },
+        ],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.DepartmentDao.aget_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        app_type_ids = await ApplicationPermissionService.get_bound_app_type_ids_async(
+            login_user,
+            ['use_app'],
+        )
+
+    assert app_type_ids == {
+        FlowType.ASSISTANT.value: ['asst-use'],
+    }
+
+    with patch(
+        'bisheng.permission.domain.services.application_permission_service._get_relation_models',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                'id': 'custom_view_only',
+                'name': '只看不用',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': ['view_app'],
+                'permissions_explicit': True,
+                'is_system': False,
+            },
+        ],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service._get_bindings',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                'resource_type': 'workflow',
+                'resource_id': 'wf-view',
+                'subject_type': 'user',
+                'subject_id': 7,
+                'relation': 'viewer',
+                'include_children': None,
+                'model_id': 'custom_view_only',
+            },
+        ],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.permission.domain.services.application_permission_service.DepartmentDao.aget_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        view_type_ids = await ApplicationPermissionService.get_bound_app_type_ids_async(
+            login_user,
+            ['view_app'],
+        )
+
+    assert view_type_ids == {
+        FlowType.WORKFLOW.value: ['wf-view'],
+    }
+
+
+@pytest.mark.asyncio
 async def test_get_effective_permission_ids_async_does_not_fallback_for_bound_empty_custom_model():
     login_user = SimpleNamespace(
         user_id=7,
@@ -159,7 +287,7 @@ async def test_get_effective_permission_ids_async_does_not_fallback_for_bound_em
 
 
 @pytest.mark.asyncio
-async def test_get_app_permission_map_async_uses_system_relation_defaults_when_permissions_not_explicit():
+async def test_get_app_permission_map_async_system_viewer_defaults_to_view_only():
     login_user = SimpleNamespace(
         user_id=7,
         get_user_group_ids=AsyncMock(return_value=[]),
@@ -217,7 +345,7 @@ async def test_get_app_permission_map_async_uses_system_relation_defaults_when_p
             ['view_app', 'use_app', 'edit_app'],
         )
 
-    assert permission_map == {'wf-1': {'view_app', 'use_app'}}
+    assert permission_map == {'wf-1': {'view_app'}}
 
 
 @pytest.mark.asyncio

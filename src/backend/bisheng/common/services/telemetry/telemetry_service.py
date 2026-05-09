@@ -7,9 +7,11 @@ from typing import Optional
 
 from elasticsearch import AsyncElasticsearch, Elasticsearch, exceptions as es_exceptions
 
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, BaseTelemetryEvent, UserContext, \
     UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
@@ -119,92 +121,107 @@ class BaseTelemetryService(object):
 
     @staticmethod
     async def _init_user_context(user_id: int) -> UserContext:
-        async with get_async_db_session() as session:
-            user_repository = UserRepositoryImpl(session)
-            user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
+        try:
+            async with get_async_db_session() as session:
+                user_repository = UserRepositoryImpl(session)
+                user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
+        except NoTenantContextError:
+            # Telemetry can run from startup/background tasks where request
+            # tenant ContextVars are absent. Fetch the specific user by PK and
+            # bypass auto tenant scoping so observability never crashes callers.
+            with bypass_tenant_filter():
+                async with get_async_db_session() as session:
+                    user_repository = UserRepositoryImpl(session)
+                    user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
 
-            if not user:
-                return UserContext(
-                    user_id=user_id,
-                    user_name=str(user_id),
-                    user_group_infos=[],
-                    user_role_infos=[],
-                    user_department_infos=[]
-                )
-
-            if user.groups is None:
-                user.groups = []
-            if user.roles is None:
-                user.roles = []
-
-            user_context = UserContext(
-                user_id=user.user_id,
-                user_name=user.user_name,
-                user_group_infos=[
-                    UserGroupInfo(
-                        user_group_id=group.id,
-                        user_group_name=group.group_name
-                    ) for group in user.groups
-                ],
-                user_role_infos=[
-                    UserRoleInfo(
-                        role_id=role.id,
-                        role_name=role.role_name,
-                        group_id=role.group_id,
-                    ) for role in user.roles
-                ],
-                user_department_infos=[
-                    UserDepartmentInfo(
-                        department_id=dept.id,
-                        department_name=dept.name
-                    ) for dept in getattr(user, 'departments', []) or []
-                ]
+        if not user:
+            return UserContext(
+                user_id=user_id,
+                user_name=str(user_id),
+                user_group_infos=[],
+                user_role_infos=[],
+                user_department_infos=[]
             )
+
+        if user.groups is None:
+            user.groups = []
+        if user.roles is None:
+            user.roles = []
+
+        user_context = UserContext(
+            user_id=user.user_id,
+            user_name=user.user_name,
+            user_group_infos=[
+                UserGroupInfo(
+                    user_group_id=group.id,
+                    user_group_name=group.group_name
+                ) for group in user.groups
+            ],
+            user_role_infos=[
+                UserRoleInfo(
+                    role_id=role.id,
+                    role_name=role.role_name,
+                    group_id=role.group_id,
+                ) for role in user.roles
+            ],
+            user_department_infos=[
+                UserDepartmentInfo(
+                    department_id=dept.id,
+                    department_name=dept.name
+                ) for dept in getattr(user, 'departments', []) or []
+            ]
+        )
         return user_context
 
     @staticmethod
     def _init_user_context_sync(user_id: int) -> UserContext:
-        with get_sync_db_session() as session:
-            user_repository = UserRepositoryImpl(session)
-            user = user_repository.get_user_with_groups_and_roles_by_user_id_sync(user_id)
+        try:
+            with get_sync_db_session() as session:
+                user_repository = UserRepositoryImpl(session)
+                user = user_repository.get_user_with_groups_and_roles_by_user_id_sync(user_id)
+        except NoTenantContextError:
+            with bypass_tenant_filter():
+                with get_sync_db_session() as session:
+                    user_repository = UserRepositoryImpl(session)
+                    user = user_repository.get_user_with_groups_and_roles_by_user_id_sync(user_id)
 
-            if not user:
-                return UserContext(
-                    user_id=user_id,
-                    user_name=str(user_id),
-                    user_group_infos=[],
-                    user_role_infos=[],
-                    user_department_infos=[]
-                )
-
-            if user.groups is None:
-                user.groups = []
-            if user.roles is None:
-                user.roles = []
-
-            user_context = UserContext(
-                user_id=user.user_id,
-                user_name=user.user_name,
-                user_group_infos=[
-                    UserGroupInfo(
-                        user_group_id=group.id,
-                        user_group_name=group.group_name
-                    ) for group in user.groups
-                ],
-                user_role_infos=[
-                    UserRoleInfo(
-                        role_id=role.id,
-                        role_name=role.role_name,
-                        group_id=role.group_id,
-                    ) for role in user.roles
-                ],
-                user_department_infos=[
-                    UserDepartmentInfo(
-                        department_id=dept.id,
-                        department_name=dept.name
-                    ) for dept in getattr(user, 'departments', []) or []
-                ]
+        if not user:
+            return UserContext(
+                user_id=user_id,
+                user_name=str(user_id),
+                user_group_infos=[],
+                user_role_infos=[],
+                user_department_infos=[]
             )
+
+        if user.groups is None:
+            user.groups = []
+        if user.roles is None:
+            user.roles = []
+
+        user_context = UserContext(
+            user_id=user.user_id,
+            user_name=user.user_name,
+            user_group_infos=[
+                UserGroupInfo(
+                    user_group_id=group.id,
+                    user_group_name=group.group_name
+                ) for group in user.groups
+            ],
+            user_role_infos=[
+                UserRoleInfo(
+                    role_id=role.id,
+                    role_name=role.role_name,
+                    group_id=role.group_id,
+                ) for role in user.roles
+            ],
+            user_department_infos=[
+                UserDepartmentInfo(
+                    department_id=dept.id,
+                    department_name=dept.name
+                ) for dept in getattr(user, 'departments', []) or []
+            ]
+        )
         return user_context
 
     @property

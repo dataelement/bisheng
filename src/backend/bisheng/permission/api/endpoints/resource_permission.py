@@ -11,6 +11,13 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.permission import (
+    PermissionDeniedError,
+    PermissionInvalidResourceError,
+    PermissionRelationModelNameExistsError,
+    PermissionTupleWriteError,
+)
+from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import resp_200
 from bisheng.permission.domain.application_permission_template import (
     APPLICATION_PERMISSION_TEMPLATE,
@@ -24,10 +31,6 @@ from bisheng.permission.domain.knowledge_space_permission_template import (
     KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
     default_permission_ids_for_relation as default_knowledge_space_permissions,
 )
-from bisheng.permission.domain.tool_permission_template import (
-    TOOL_PERMISSION_TEMPLATE,
-    default_permission_ids_for_relation as default_tool_permissions,
-)
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
@@ -37,13 +40,10 @@ from bisheng.permission.domain.schemas.permission_schema import (
     RelationModelItem,
     RelationModelUpdateRequest,
 )
-from bisheng.common.errcode.permission import (
-    PermissionDeniedError,
-    PermissionInvalidResourceError,
-    PermissionRelationModelNameExistsError,
-    PermissionTupleWriteError,
+from bisheng.permission.domain.tool_permission_template import (
+    TOOL_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_tool_permissions,
 )
-from bisheng.common.models.config import ConfigDao
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -158,22 +158,6 @@ def _normalize_model_dict(m: dict) -> dict:
     return out
 
 
-def _is_legacy_subscription_permission_item(
-    resource_type: str,
-    item: ResourcePermissionItem,
-    binding: dict | None,
-) -> bool:
-    # Subscription/member rows are maintained outside ReBAC. Legacy code wrote
-    # active subscribers as unbound user viewer tuples; do not surface those in
-    # the explicit authorization list.
-    return (
-        resource_type in {'knowledge_space', 'channel'}
-        and item.subject_type == 'user'
-        and item.relation == 'viewer'
-        and not (binding and binding.get('model_id'))
-    )
-
-
 def _default_relation_models() -> list[dict]:
     return [
         {
@@ -249,7 +233,7 @@ async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> li
         int(binding.get('resource_id'))
         for binding in bindings
         if binding.get('resource_type') == 'knowledge_space'
-        and str(binding.get('resource_id', '')).isdigit()
+           and str(binding.get('resource_id', '')).isdigit()
     }
     if not legacy_ids:
         return bindings
@@ -444,10 +428,20 @@ def _default_permission_ids_for_relation(resource_type: str, relation: str) -> s
     return set()
 
 
+def _resource_permission_universe(resource_type: str) -> set[str]:
+    # The owner defaults cover the full canonical permission set for each
+    # resource type, so they can be used as the scope filter for explicit
+    # relation-model permissions persisted in DB.
+    return _default_permission_ids_for_relation(resource_type, 'owner')
+
+
 def _permission_ids_for_model(resource_type: str, relation: str, model: dict | None) -> set[str]:
     if model is None:
         return _default_permission_ids_for_relation(resource_type, relation)
+    scope = _resource_permission_universe(resource_type)
     permissions = model.get('permissions') or []
+    if model.get('permissions_explicit') is True:
+        return set(permissions) & scope
     if model.get('is_system'):
         return _default_permission_ids_for_relation(resource_type, model.get('relation') or relation)
     return set(permissions)
@@ -466,6 +460,29 @@ def _can_grant_relation_model(
 ) -> bool:
     if not _model_matches_relation(relation, model):
         return False
+
+    tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
+    if tier_map:
+        grant_tier = (
+            model.get('grant_tier')
+            if model and model.get('grant_tier') in _GRANT_TIER_VALUES
+            else _infer_grant_tier_from_relation(relation)
+        )
+        required_manage_permissions = {
+            permission_id
+            for tier, permission_id in tier_map.items()
+            if tier == grant_tier
+        }
+
+        # Custom or explicitly edited models may themselves carry management
+        # permissions. Require the caller to already hold those management
+        # capabilities so a "usage" grant cannot smuggle owner-management power.
+        if model and (not model.get('is_system') or model.get('permissions_explicit') is True):
+            model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
+            required_manage_permissions.update(model_permission_ids & set(tier_map.values()))
+
+        return bool(required_manage_permissions) and required_manage_permissions.issubset(caller_permission_ids)
+
     model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
     return model_permission_ids.issubset(caller_permission_ids)
 
@@ -527,15 +544,40 @@ def _permission_subject_key(item: ResourcePermissionItem) -> tuple[str, int, str
 
 async def _list_knowledge_space_grant_users(
     *,
+    tenant_id: int,
     keyword: str,
     page: int,
     page_size: int,
 ) -> list[dict]:
-    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-    from bisheng.user.domain.models.user import UserDao
+    from sqlmodel import select
 
-    users = await UserDao.afilter_users([], keyword=keyword, page=page, limit=page_size)
-    active_users = [user for user in users if getattr(user, 'delete', 0) == 0]
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.tenant import Tenant, UserTenant
+    from bisheng.user.domain.models.user import User
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            stmt = (
+                select(User)
+                .join(UserTenant, UserTenant.user_id == User.user_id)
+                .join(Tenant, Tenant.id == UserTenant.tenant_id)
+                .where(
+                    UserTenant.tenant_id == tenant_id,
+                    UserTenant.status == 'active',
+                    Tenant.status == 'active',
+                    User.delete == 0,
+                )
+                .order_by(User.user_id.desc())
+            )
+            if keyword:
+                stmt = stmt.where(User.user_name.like(f'%{keyword}%'))
+            if page and page_size:
+                stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+            result = await session.exec(stmt)
+            active_users = list(result.all())
+
     if not active_users:
         return []
 
@@ -548,11 +590,7 @@ async def _list_knowledge_space_grant_users(
         row for row in dept_rows
         if int(getattr(row, 'is_primary', 0) or 0) == 1
     ]
-    dept_ids = list({
-        int(row.department_id) for row in primary_rows
-        if getattr(row, 'department_id', None) is not None
-    })
-    departments = await DepartmentDao.aget_by_ids(dept_ids)
+    departments = await DepartmentDao.aget_active_by_tenant(tenant_id)
     dept_map = {
         int(dept.id): dept for dept in departments
         if getattr(dept, 'id', None) is not None
@@ -593,12 +631,89 @@ async def _list_knowledge_space_grant_users(
     ]
 
 
-async def _list_knowledge_space_grant_departments() -> list[dict]:
-    from bisheng.database.models.department import DepartmentDao
+async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dict]:
+    from sqlalchemy import func
+    from sqlmodel import select
 
-    departments = await DepartmentDao.aget_all_active()
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.department import Department, UserDepartment
+    from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            tenant = (
+                await session.exec(
+                    select(Tenant).where(
+                        Tenant.id == tenant_id,
+                        Tenant.status == 'active',
+                    )
+                )
+            ).first()
+            if tenant is None:
+                return []
+
+            root_dept = None
+            if getattr(tenant, 'root_dept_id', None):
+                root_dept = (
+                    await session.exec(
+                        select(Department).where(
+                            Department.id == int(tenant.root_dept_id),
+                            Department.status == 'active',
+                        )
+                    )
+                ).first()
+
+            if root_dept is not None:
+                stmt = select(Department).where(
+                    Department.path.like(f'{root_dept.path}%'),
+                    Department.status == 'active',
+                )
+                if tenant_id == ROOT_TENANT_ID:
+                    child_roots = (
+                        await session.exec(
+                            select(Department.path).where(
+                                Department.is_tenant_root == 1,
+                                Department.mounted_tenant_id.is_not(None),
+                                Department.mounted_tenant_id != ROOT_TENANT_ID,
+                                Department.status == 'active',
+                            )
+                        )
+                    ).all()
+                    for child_path in child_roots:
+                        stmt = stmt.where(~Department.path.like(f'{child_path}%'))
+            else:
+                stmt = select(Department).where(
+                    Department.tenant_id == tenant_id,
+                    Department.status == 'active',
+                )
+
+            result = await session.exec(
+                stmt.order_by(Department.sort_order, Department.id)
+            )
+            departments = list(result.all())
     if not departments:
         return []
+
+    dept_ids = [
+        int(dept.id)
+        for dept in departments
+        if getattr(dept, 'id', None) is not None
+    ]
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            count_result = await session.exec(
+                select(
+                    UserDepartment.department_id,
+                    func.count(UserDepartment.id),
+                )
+                .where(UserDepartment.department_id.in_(dept_ids))
+                .group_by(UserDepartment.department_id)
+            )
+            count_map = {
+                int(dept_id): int(count)
+                for dept_id, count in count_result.all()
+            }
 
     nodes = {
         int(dept.id): {
@@ -610,7 +725,7 @@ async def _list_knowledge_space_grant_departments() -> list[dict]:
             'sort_order': int(getattr(dept, 'sort_order', 0) or 0),
             'source': dept.source,
             'status': dept.status,
-            'member_count': 0,
+            'member_count': count_map.get(int(dept.id), 0),
             'children': [],
         }
         for dept in departments
@@ -636,11 +751,66 @@ async def _list_knowledge_space_grant_departments() -> list[dict]:
 
 async def _list_knowledge_space_grant_user_groups(
     *,
+    tenant_id: int,
     keyword: str,
+    login_user,
 ) -> list[dict]:
-    from bisheng.database.models.group import GroupDao
+    from sqlmodel import col, select
 
-    groups, _ = await GroupDao.aget_all_groups(page=1, limit=2000, keyword=keyword)
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.group import LEGACY_HIDDEN_USER_GROUP_NAMES, Group
+    from bisheng.database.models.tenant import Tenant
+    from bisheng.database.models.user_group import UserGroupDao
+    from bisheng.user_group.domain.services.user_group_service import (
+        _can_view_all_groups,
+    )
+
+    viewer_group_ids: set[int] = set()
+    can_view_all = await _can_view_all_groups(login_user)
+    if not can_view_all:
+        raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
+            login_user.user_id,
+        )
+        viewer_group_ids = {
+            int(x[0]) if isinstance(x, tuple) else int(x)
+            for x in raw_visible_group_ids or []
+            if x is not None
+        }
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            stmt = (
+                select(Group)
+                .join(Tenant, Tenant.id == Group.tenant_id)
+                .where(
+                    Group.tenant_id == tenant_id,
+                    Tenant.status == 'active',
+                    col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
+                )
+                .order_by(Group.update_time.desc())
+                .limit(2000)
+            )
+            if not can_view_all:
+                if viewer_group_ids:
+                    stmt = stmt.where(
+                        (
+                            (Group.visibility == 'public')
+                            | (Group.create_user == login_user.user_id)
+                            | (Group.id.in_(viewer_group_ids))
+                        )
+                    )
+                else:
+                    stmt = stmt.where(
+                        (
+                            (Group.visibility == 'public')
+                            | (Group.create_user == login_user.user_id)
+                        )
+                    )
+            if keyword:
+                stmt = stmt.where(Group.group_name.like(f'%{keyword}%'))
+            result = await session.exec(stmt)
+            groups = list(result.all())
     return [
         {
             'id': int(group.id),
@@ -649,6 +819,28 @@ async def _list_knowledge_space_grant_user_groups(
         for group in groups
         if getattr(group, 'id', None) is not None
     ]
+
+
+async def _resolve_grant_subject_tenant_id(
+    *,
+    resource_type: str,
+    resource_id: str,
+    login_user: UserPayload,
+) -> int | None:
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.database.models.tenant import TenantDao
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    tenant_id = await PermissionService._resolve_resource_tenant(resource_type, resource_id)
+    if tenant_id is None:
+        tenant_id = get_current_tenant_id() or getattr(login_user, 'tenant_id', None)
+    if tenant_id is None:
+        return None
+
+    tenant = await TenantDao.aget_by_id(int(tenant_id))
+    if tenant is None or getattr(tenant, 'status', None) != 'active':
+        return None
+    return int(tenant_id)
 
 
 def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
@@ -840,7 +1032,7 @@ async def authorize_resource(
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
-        return PermissionDeniedError.return_resp()
+        return PermissionDeniedError.return_resp('部门或用户组无法成为所有者')
 
     from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -910,13 +1102,13 @@ async def authorize_resource(
         if _tuple_signature(grant) in rebind_only_signatures
     ]
     tuple_grants = [
-        grant for grant in (request.grants or [])
-        if _tuple_signature(grant) not in rebind_only_signatures
-    ] + rebind_only_grants
+                       grant for grant in (request.grants or [])
+                       if _tuple_signature(grant) not in rebind_only_signatures
+                   ] + rebind_only_grants
     tuple_revokes = [
         revoke for revoke in (request.revokes or [])
         if _tuple_signature(revoke) not in rebind_only_signatures
-        and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+           and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
     ]
 
     self_owner_revokes = [
@@ -960,9 +1152,9 @@ async def authorize_resource(
         if (
             revoke.subject_type == 'department'
             and (
-                include_children is True
-                or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
-            )
+            include_children is True
+            or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+        )
         ):
             include_children_values = [True, False]
         for include_children in include_children_values:
@@ -1025,7 +1217,15 @@ async def get_grant_subject_users(
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return resp_200([])
     return resp_200(await _list_knowledge_space_grant_users(
+        tenant_id=tenant_id,
         keyword=keyword,
         page=page,
         page_size=page_size,
@@ -1046,7 +1246,14 @@ async def get_grant_subject_departments(
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
-    return resp_200(await _list_knowledge_space_grant_departments())
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return resp_200([])
+    return resp_200(await _list_knowledge_space_grant_departments(tenant_id=tenant_id))
 
 
 @router.get('/resources/{resource_type}/{resource_id}/grant-subjects/user-groups')
@@ -1064,7 +1271,18 @@ async def get_grant_subject_user_groups(
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
-    return resp_200(await _list_knowledge_space_grant_user_groups(keyword=keyword))
+    tenant_id = await _resolve_grant_subject_tenant_id(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        login_user=login_user,
+    )
+    if tenant_id is None:
+        return resp_200([])
+    return resp_200(await _list_knowledge_space_grant_user_groups(
+        tenant_id=tenant_id,
+        keyword=keyword,
+        login_user=login_user,
+    ))
 
 
 @router.get('/resources/{resource_type}/{resource_id}/permissions')
@@ -1116,8 +1334,7 @@ async def get_resource_permissions(
             p.model_id = matched.get('model_id')
             p.model_name = model_map.get(p.model_id, {}).get('name')
             p.include_children = matched.get('include_children')
-        if _is_legacy_subscription_permission_item(resource_type, p, matched):
-            continue
+
         visible_permissions.append(p)
     permissions = visible_permissions
     permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
@@ -1282,7 +1499,8 @@ async def delete_relation_model(
                 enforce_fga_success=True,
             )
     except Exception as e:
-        logger.error('delete_relation_model failed to revoke model=%s bindings=%d error=%s', model_id, len(to_remove), e)
+        logger.error('delete_relation_model failed to revoke model=%s bindings=%d error=%s', model_id, len(to_remove),
+                     e)
         return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
 
     remain_bindings = [b for b in bindings if b.get('model_id') != model_id]

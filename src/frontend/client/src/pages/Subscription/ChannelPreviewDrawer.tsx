@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +40,7 @@ interface ChannelPreviewDrawerProps {
 type SubscribeStatus = "none" | "subscribed" | "pending" | "rejected";
 
 export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
+    const previewListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
     const navigate = useNavigate();
     const { showToast } = useToastContext();
@@ -339,7 +340,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                         </SheetHeader>
 
                         {/* Article List / Pending Message */}
-                        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover pt-2">
+                        <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll pt-2">
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <img

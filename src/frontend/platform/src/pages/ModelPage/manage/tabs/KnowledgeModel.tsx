@@ -8,12 +8,14 @@ import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { getKnowledgeModelConfig, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
+import { getKnowledgeModelEnvelope, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Settings } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { defalutPrompt } from "./WorkbenchModel";
+import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
+import { useSystemConfigEnvelope } from "../useSystemConfigEnvelope";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, footer = null }) => {
 
@@ -125,22 +127,29 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
     // 最后保存的配置
     const lastSaveFormDataRef = useRef(null)
 
-    const [loading, setLoading] = useState(true)
+    const { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited } =
+        useSystemConfigEnvelope<any>(getKnowledgeModelEnvelope)
+
     useEffect(() => {
-        setLoading(true)
-        getKnowledgeModelConfig().then(config => {
-            const { embedding_model_id, extract_title_model_id, qa_similar_model_id, source_model_id, abstract_prompt } = config
-            setForm({
-                embeddingModelId: embedding_model_id,
-                sourceModelId: source_model_id,
-                extractModelId: extract_title_model_id,
-                qaSimilarModelId: qa_similar_model_id,
-                abstractPrompt: abstract_prompt ?? defalutPrompt
-            })
-            lastSaveFormDataRef.current = { ...config, abstract_prompt: abstract_prompt || defalutPrompt }
-            setLoading(false)
-        });
-    }, []);
+        if (!config) return
+        const { embedding_model_id, extract_title_model_id, qa_similar_model_id, source_model_id, abstract_prompt } = config
+        setForm({
+            embeddingModelId: embedding_model_id,
+            sourceModelId: source_model_id,
+            extractModelId: extract_title_model_id,
+            qaSimilarModelId: qa_similar_model_id,
+            abstractPrompt: abstract_prompt ?? defalutPrompt
+        })
+        lastSaveFormDataRef.current = { ...config, abstract_prompt: abstract_prompt || defalutPrompt }
+    }, [config]);
+
+    // Clear inherited flag on first user edit — the in-memory form no
+    // longer reflects Root's value, so the Badge should disappear before
+    // the save round-trip flips it on the server side.
+    const setFormAndClearInherited = (next: typeof form) => {
+        clearInherited()
+        setForm(next)
+    }
 
     const { message } = useToast()
     const [saveload, setSaveLoad] = useState(false)
@@ -185,12 +194,18 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
 
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+            <FallbackBlockedBanner visible={fallbackBlocked} />
+            {inheritedFromRoot && (
+                <div className="-mb-2 text-xs text-muted-foreground flex items-center">
+                    <InheritedBadge visible={true} />
+                </div>
+            )}
             <ModelSelect
                 required
                 label={t('model.defaultEmbeddingModel')}
                 value={form.embeddingModelId}
                 options={embeddings}
-                onChange={(val) => setForm({ ...form, embeddingModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, embeddingModelId: val })}
             />
             <ModelSelect
                 close
@@ -198,7 +213,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 tooltipText={t('model.sourceTracingModelTooltip')}
                 value={form.sourceModelId}
                 options={llmOptions}
-                onChange={(val) => setForm({ ...form, sourceModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, sourceModelId: val })}
             />
             <ModelSelect
                 close
@@ -206,7 +221,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 tooltipText={t('model.documentSummaryModelTooltip')}
                 value={form.extractModelId}
                 options={llmOptions}
-                onChange={(val) => setForm({ ...form, extractModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, extractModelId: val })}
             />
             <ModelSelect
                 required
@@ -214,14 +229,14 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 tooltipText={t('model.qaSimilarModelTooltip')}
                 value={form.qaSimilarModelId}
                 options={llmOptions}
-                onChange={(val) => setForm({ ...form, qaSimilarModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, qaSimilarModelId: val })}
             />
             <div className="absolute top-44 -right-28">
                 <PromptDialog
                     value={form.abstractPrompt}
-                    onChange={value => setForm({ ...form, abstractPrompt: value })}
+                    onChange={value => setFormAndClearInherited({ ...form, abstractPrompt: value })}
                     onSave={handleSavePrompt}
-                    onRestore={() => setForm({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
+                    onRestore={() => setFormAndClearInherited({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
                 >
                     <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side={"top"}>
                         <Button variant="link"><Settings size={14} className="mr-1" /> {t('model.editPromptButton')}</Button>

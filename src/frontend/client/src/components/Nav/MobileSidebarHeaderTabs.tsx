@@ -18,7 +18,7 @@ export function MobileSidebarHeaderTabs({
 
   return (
     <>
-      <div className="shrink-0 px-3 py-2.5">
+      <div className="shrink-0 px-2 py-2.5">
         <div className="flex items-center justify-between">
           {logoSrc ? (
             <img

@@ -69,6 +69,12 @@ class InboxMessage(SQLModelSerializable, table=True):
         description='User ID of the operator who approved/rejected the message',
     )
 
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
+
     create_time: datetime = Field(
         default_factory=datetime.now,
         description='Creation time',

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, text, String
+from sqlalchemy import JSON, Column, DateTime, Integer, text, String
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -18,6 +18,11 @@ class TemplateBase(SQLModelSerializable):
     flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value)
     flow_id: Optional[str] = Field(default=None, index=False)
     guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

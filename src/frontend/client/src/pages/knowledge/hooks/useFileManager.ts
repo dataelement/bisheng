@@ -23,6 +23,8 @@ interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
     /** Optional folder ID from URL deep link — navigate here on initial load */
     initialFolderId?: string;
+    /** Disable background loading/polling while the detail file list is not visible. */
+    enabled?: boolean;
 }
 
 const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
@@ -35,7 +37,7 @@ interface KnowledgeSpaceFilesRefreshEventDetail {
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
  */
-export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerOptions) {
+export function useFileManager({ activeSpace, initialFolderId, enabled = true }: UseFileManagerOptions) {
     const localize = useLocalize();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -56,7 +58,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
     // ─── Load file/folder list ──────────────────────────────────────────
     const loadFiles = useCallback(
         async (page: number = 1): Promise<KnowledgeFile[]> => {
-            if (!activeSpace?.id) return [];
+            if (!enabled || !activeSpace?.id) return [];
 
             setLoading(true);
             try {
@@ -112,6 +114,15 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
                                 file.name.toLowerCase().includes(keyword)
                             );
                         }
+                        // Apply the same status filtering logic as the backend API
+                        if (statusFilter.length > 0) {
+                            approvalFiles = approvalFiles.filter(
+                                (file) => file.status !== undefined && statusFilter.includes(file.status)
+                            );
+                        } else if (isMember) {
+                            // Match the default API behavior for members: exclude FAILED
+                            approvalFiles = approvalFiles.filter((file) => file.status !== FileStatus.FAILED);
+                        }
                         const existingIds = new Set(res.data.map((file) => file.id));
                         const uniqueApprovalFiles = approvalFiles.filter((file) => !existingIds.has(file.id));
                         mergedData = [...uniqueApprovalFiles, ...res.data];
@@ -132,7 +143,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
                 setLoading(false);
             }
         },
-        [activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
+        [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
     );
 
     // Track which initialFolderId has been consumed (value, not boolean)
@@ -144,7 +155,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
 
     // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
-        if (activeSpace) {
+        if (enabled && activeSpace) {
             setCurrentPage(1);
             setSearchQuery("");
             setSearchTagIds([]);
@@ -187,18 +198,18 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when space or deep-link folder changes
-    }, [activeSpace?.id, initialFolderId]);
+    }, [enabled, activeSpace?.id, initialFolderId]);
 
     // Reload files when folder navigation, filters, or space (via reloadToken) change.
     // All state updates from the space effect are batched by React, so when this effect
     // runs on the re-render, searchQuery/searchTagIds are already cleared.
     useEffect(() => {
-        if (activeSpace) {
+        if (enabled && activeSpace) {
             setCurrentPage(1);
             loadFiles(1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is stable via useCallback
-    }, [activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
+    }, [enabled, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────
     // Refresh the file list every 5s while any file on the current page
@@ -209,7 +220,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
     currentPageRef.current = currentPage;
 
     useEffect(() => {
-        if (!activeSpace?.id || typeof window === "undefined") return;
+        if (!enabled || !activeSpace?.id || typeof window === "undefined") return;
         const handleKnowledgeSpaceFilesRefresh = (event: Event) => {
             const detail = (event as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
             if (!detail?.spaceId) return;
@@ -220,9 +231,10 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
         return () => {
             window.removeEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
         };
-    }, [activeSpace?.id]);
+    }, [enabled, activeSpace?.id]);
 
     useEffect(() => {
+        if (!enabled) return;
         const hasPending = files.some(
             (f) => isKnowledgeItemPending(f)
         );
@@ -233,7 +245,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
         }, 5000);
 
         return () => clearInterval(timer);
-    }, [files]);
+    }, [enabled, files]);
 
     // ─── Search handler ─────────────────────────────────────────────────
     const handleSearch = useCallback((params: SearchParams) => {

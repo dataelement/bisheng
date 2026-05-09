@@ -14,7 +14,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
-    FileCreateReq, FileRenameReq,
+    FileCreateReq, FileRenameReq, FileEncodingUpdateReq,
     BatchDeleteReq, BatchDownloadReq,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest,
     ChatReq, ChatFolderReq, )
@@ -350,6 +350,17 @@ async def rename_file(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     file_record = await svc.rename_file(file_id, req.name)
+    return resp_200(file_record)
+
+
+@router.put('/{space_id}/files/{file_id}/encoding')
+async def update_file_encoding(
+        space_id: int,
+        file_id: int,
+        req: FileEncodingUpdateReq,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    file_record = await svc.update_file_encoding(file_id, req.encoding)
     return resp_200(file_record)
 
 

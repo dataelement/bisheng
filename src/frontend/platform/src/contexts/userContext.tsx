@@ -1,4 +1,5 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
+import { resolveRoutePermissions } from "@/routes";
 import { navigateBackOrFallback } from "@/utils/navigation";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
@@ -130,7 +131,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 获取用户信息
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
-            const { user_id, web_menu = [] } = res;
+            const { user_id } = res;
+            // Apply the same fallback that routes/index.tsx uses, so
+            // department-admins and child-admins reach pages whose menu key the
+            // backend strips from web_menu (e.g. `sys`, `model`). Without this,
+            // the route-level guard below would still redirect to /403 even
+            // though `getPrivateRouter` admits the route.
+            const web_menu: string[] = resolveRoutePermissions(res);
 
             localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
             // if (user_id) loadComponents();

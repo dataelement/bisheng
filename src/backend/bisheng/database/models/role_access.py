@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional, Union
 
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, Integer, text
 from sqlmodel import Field, select, delete, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -14,6 +14,11 @@ class RoleAccessBase(SQLModelSerializable):
     role_id: int = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

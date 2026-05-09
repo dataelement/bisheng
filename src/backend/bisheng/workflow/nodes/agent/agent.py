@@ -256,7 +256,7 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # Get a list of configured helper models
-        assistant_llm = LLMService.sync_get_assistant_llm()
+        assistant_llm = LLMService.sync_get_assistant_llm(tenant_id=self.tenant_id)
         if not assistant_llm.llm_list:
             raise Exception('Assistant reasoning model list is empty')
         default_llm = [
@@ -356,7 +356,7 @@ class AgentNode(BaseNode):
 
     def init_file_milvus(self, file_metadata: Dict) -> BaseRetriever:
         """ Initialize the temporary file selected by the usermilvus """
-        embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
+        embeddings = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
         if not embeddings:
             raise Exception('No default configuredembeddingModels')
         file_ids = [file_metadata['document_id']]

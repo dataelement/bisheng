@@ -100,6 +100,20 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
+const translateApiErrorMessage = (data: any) => {
+  const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
+  const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
+  const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
+
+  if (statusCodeKey && i18next.exists(statusCodeKey)) {
+    return i18next.t(statusCodeKey, data?.data);
+  }
+  if (statusMessageKey && i18next.exists(statusMessageKey)) {
+    return i18next.t(statusMessageKey, data?.data);
+  }
+  return statusMessage || (statusCodeKey ? i18next.t(statusCodeKey, data?.data) : "");
+};
+
 customAxios.interceptors.response.use(
   (response) => {
     if (response.data.status_code === 403) {
@@ -113,7 +127,7 @@ customAxios.interceptors.response.use(
 
     if (response.config.showError && response.data && response.data.status_code !== 200) {
       console.log('业务错误:>> ', response.config.url, response.data);
-      window.showToast?.({ message: i18next.t(`api_errors.${response.data.status_code}`, response.data.data), status: 'error' });
+      window.showToast?.({ message: translateApiErrorMessage(response.data), status: 'error' });
     }
     return response;
   },

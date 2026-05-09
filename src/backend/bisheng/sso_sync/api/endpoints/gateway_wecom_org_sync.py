@@ -109,7 +109,14 @@ async def gateway_wecom_org_sync(
         if m.external_user_id and str(m.external_user_id).strip()
     }
     for raw in payload.members:
-        item = raw.model_copy(update={'skip_org_sync_log': True})
+        # Gateway WeCom org sync is an authoritative full member snapshot.
+        # Older gateway builds omitted this field when a user had no secondary
+        # departments; normalize it to [] so stale WeCom secondary memberships
+        # are removed instead of preserved by legacy login-sync compatibility.
+        item = raw.model_copy(update={
+            'secondary_dept_external_ids': raw.secondary_dept_external_ids or [],
+            'skip_org_sync_log': True,
+        })
         try:
             await LoginSyncService.execute(
                 item, request_ip=request_ip, row_source=WECOM_SOURCE,

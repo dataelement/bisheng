@@ -35,6 +35,7 @@ import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
+import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
 
 export default function Knowledge() {
@@ -134,7 +135,11 @@ export default function Knowledge() {
     });
 
     // ─── File management (list, pagination, search, sort, navigation) ────
-    const fileManager = useFileManager({ activeSpace, initialFolderId: urlFolderId });
+    const fileManager = useFileManager({
+        activeSpace,
+        initialFolderId: urlFolderId,
+        enabled: !showKnowledgeSquare,
+    });
 
     // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
     useActivate(() => {
@@ -649,7 +654,8 @@ export default function Knowledge() {
                         const showMobileAiOnly = isH5 && aiPane.showAiAssistant;
                         if (showMobileAiOnly) {
                             return (
-                                <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white">
+                                // 与 MainLayout 内层卡片 min-h-[calc(100dvh-16px)]（main p-2）对齐，固定高度避免文档层滚动吃掉顶栏与输入区
+                                <div className="flex h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)] min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
                                     <KnowledgeAiPanel
                                         spaceId={String(activeSpace.id)}
                                         folderId={fileManager.currentFolderId}
@@ -664,36 +670,35 @@ export default function Knowledge() {
                                 {/* Left: file list */}
                                 <div
                                     style={{ width: aiPane.showAiAssistant ? `${aiPane.aiSplitWidth}px` : '100%' }}
-                                    className="h-full min-w-0 flex-shrink-0 overflow-hidden"
+                                    className={cn(
+                                        "flex h-full min-h-0 min-w-0 flex-shrink-0 flex-col overflow-hidden",
+                                        isH5 && "max-h-[calc(100dvh-16px)]",
+                                    )}
                                 >
                                     {isH5 ? (
-                                        <>
-                                            <div className="fixed left-2 right-2 top-0 z-30 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                                                <div className="mx-auto flex h-11 w-full max-w-[1000px] items-center justify-between px-4">
-                                                    <button
-                                                        type="button"
-                                                        aria-label={localize("com_nav_open_sidebar")}
-                                                        onClick={() => setSpaceListDrawerOpen(true)}
-                                                        className={mobileHeadIconBtnClassName}
-                                                    >
-                                                        <Menu className="size-4" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        aria-label={localize("com_knowledge.create_knowledge_space")}
-                                                        onClick={handleCreateSpace}
-                                                        className={mobileHeadIconBtnClassName}
-                                                    >
-                                                        <Plus className="size-4" />
-                                                    </button>
-                                                </div>
+                                        // 勿用 fixed 贴视口：会叠在 MainLayout 圆角白卡外，盖住卡片上沿圆角；放在面板流式布局内即可
+                                        <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                            <div className="flex h-11 w-full min-w-0 items-center justify-between px-4">
+                                                <button
+                                                    type="button"
+                                                    aria-label={localize("com_nav_open_sidebar")}
+                                                    onClick={() => setSpaceListDrawerOpen(true)}
+                                                    className={mobileHeadIconBtnClassName}
+                                                >
+                                                    <Menu className="size-4" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    aria-label={localize("com_knowledge.create_knowledge_space")}
+                                                    onClick={handleCreateSpace}
+                                                    className={mobileHeadIconBtnClassName}
+                                                >
+                                                    <Plus className="size-4" />
+                                                </button>
                                             </div>
-                                            <div
-                                                aria-hidden
-                                                className="h-[calc(env(safe-area-inset-top,0px)+52px)]"
-                                            />
-                                        </>
+                                        </div>
                                     ) : null}
+                                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                                     <KnowledgeSpaceContent
                                         space={activeSpace}
                                         files={fileManager.files}
@@ -727,24 +732,25 @@ export default function Knowledge() {
                                         onCreateSpace={handleCreateSpace}
                                         onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                                     />
+                                    </div>
                                 </div>
 
                                 {/* Splitter */}
                                 {!isH5 && aiPane.showAiAssistant && (
-                                    <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
-                                        {/* Flex 始终 1px；线条 1px → hover/active 时 w-1（与原实现一致），视觉上加宽不占额外 flex 宽度 */}
+                                    <div className="relative z-20 w-px min-w-px max-w-px flex-none shrink-0">
+                                        {/* 分隔线固定 1px（w-px）；宽命中区用于拖拽，hover 仅变色不加宽 */}
                                         <div
                                             onMouseDown={aiPane.startSplitResize}
                                             className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
                                         >
-                                            <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                                            <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-colors duration-150 group-hover:bg-primary group-active:bg-primary" />
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Right: AI assistant */}
+                                {/* Right: AI assistant（左侧分隔由上一列 1px 承担，避免 border-l 叠成双线） */}
                                 {!isH5 && aiPane.showAiAssistant && (
-                                    <div className="flex-1 h-full min-w-[360px] bg-white border-l border-[#e5e6eb]">
+                                    <div className="flex-1 h-full min-w-[360px] bg-white">
                                         <KnowledgeAiPanel
                                             spaceId={String(activeSpace.id)}
                                             folderId={fileManager.currentFolderId}

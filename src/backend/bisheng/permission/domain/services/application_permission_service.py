@@ -33,6 +33,7 @@ _FLOW_TYPE_TO_OBJECT_TYPE = {
     FlowType.WORKFLOW.value: 'workflow',
     FlowType.ASSISTANT.value: 'assistant',
 }
+_OBJECT_TYPE_TO_FLOW_TYPE = {object_type: flow_type for flow_type, object_type in _FLOW_TYPE_TO_OBJECT_TYPE.items()}
 
 
 class ApplicationPermissionService:
@@ -54,6 +55,8 @@ class ApplicationPermissionService:
     def _permission_ids_for_relation(relation: str, model: dict | None = None) -> set[str]:
         if model is not None:
             permissions = model.get('permissions') or []
+            if model.get('permissions_explicit') is True:
+                return set(permissions)
             if permissions:
                 return set(permissions)
             if model.get('is_system'):
@@ -79,6 +82,68 @@ class ApplicationPermissionService:
         }
         departments = await DepartmentDao.aget_by_ids(list(department_ids))
         return {dept.id: dept.path or '' for dept in departments}
+
+    @classmethod
+    async def get_bound_app_type_ids_async(
+        cls,
+        login_user: UserPayload,
+        permission_ids: Iterable[str],
+        flow_type: int | None = None,
+    ) -> dict[int, list[str]]:
+        """Return app IDs granted through persisted relation-model bindings.
+
+        ``list_objects`` may return no rows when OpenFGA tuples are missing or
+        unstable, while the saved binding config still contains the intended
+        grant model. This method lets list endpoints keep DB prefiltering without
+        falling back to scanning every app.
+        """
+        permission_id_set = set(permission_ids)
+        if not permission_id_set:
+            return {}
+
+        models, bindings, user_subject_strings = await asyncio.gather(
+            cls._get_relation_models_map(),
+            _get_bindings(),
+            cls._get_current_user_subject_strings(login_user),
+        )
+        if not bindings:
+            return {}
+
+        binding_department_paths = await cls._get_binding_department_paths(bindings)
+        user_department_paths = await FineGrainedPermissionService.get_current_user_department_paths(
+            user_subject_strings,
+        )
+
+        result: dict[int, list[str]] = {}
+        for binding in bindings:
+            resource_type = binding.get('resource_type')
+            app_flow_type = _OBJECT_TYPE_TO_FLOW_TYPE.get(resource_type)
+            if app_flow_type is None:
+                continue
+            if flow_type is not None and app_flow_type != flow_type:
+                continue
+            resource_id = binding.get('resource_id')
+            if resource_id is None:
+                continue
+            if not FineGrainedPermissionService._binding_matches_current_user(
+                binding,
+                user_subject_strings,
+                binding_department_paths,
+                user_department_paths,
+            ):
+                continue
+
+            model = models.get(binding.get('model_id')) if binding.get('model_id') else None
+            granted_permission_ids = cls._permission_ids_for_relation(binding.get('relation') or '', model)
+            if not (granted_permission_ids & permission_id_set):
+                continue
+
+            result.setdefault(app_flow_type, []).append(str(resource_id))
+
+        return {
+            app_flow_type: list(dict.fromkeys(resource_ids))
+            for app_flow_type, resource_ids in result.items()
+        }
 
     @staticmethod
     def _user_matches_binding(binding: dict, tuple_user: str, user_subject_strings: set[str]) -> bool:

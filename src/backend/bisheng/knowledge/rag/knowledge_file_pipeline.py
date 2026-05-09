@@ -9,12 +9,14 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
+from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.file import download_minio_file
 
@@ -60,6 +62,11 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             calc_sha256=False
         )
 
+    def _get_image_object_dir(self) -> Optional[str]:
+        return KnowledgeUtils.get_knowledge_file_image_dir(
+            str(self.db_file.id), self.db_file.knowledge_id
+        )
+
     def _init_abstract_transformers(self) -> List[BaseDocumentTransformer]:
         if self.no_summary:
             return []
@@ -67,6 +74,12 @@ class KnowledgeFilePipeline(BaseFilePipeline):
 
     def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
         abstract_transformers = self._init_abstract_transformers()
+        # FileEncodingTransformer runs right after AbstractTransformer (in _init_abstract_transformers),
+        # using the abstract field for LLM classification. When shougang is disabled it skips internally.
+        abstract_transformers.append(FileEncodingTransformer(
+            invoke_user_id=self.invoke_user_id,
+            knowledge_file=self.db_file,
+        ))
         abstract_transformers.append(ExtraFileTransformer(
             loader=self.loader,
             document_id=str(self.db_file.id),

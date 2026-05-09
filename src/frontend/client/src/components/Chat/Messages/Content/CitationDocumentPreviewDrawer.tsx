@@ -26,6 +26,7 @@ export type CitationDocumentPreviewState = {
 type CitationDocumentPreviewDrawerProps = {
   preview: CitationDocumentPreviewState | null;
   onClose: () => void;
+  manageMobileNavVisibility?: boolean;
 };
 
 type CitationDocumentPreviewContentProps = {
@@ -138,6 +139,7 @@ export function CitationDocumentPreviewContent({
 export default function CitationDocumentPreviewDrawer({
   preview,
   onClose,
+  manageMobileNavVisibility = true,
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
   const isNarrowLayout = usePrefersMobileLayout();
@@ -166,12 +168,12 @@ export default function CitationDocumentPreviewDrawer({
   }, [canRenderPreview, isFullBleedMobile]);
 
   useEffect(() => {
-    if (!canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
+    if (!manageMobileNavVisibility || !canRenderPreview || !isNarrowLayout || !isFullBleedMobile) return;
     setChatMobileNavHidden(true);
     return () => {
       setChatMobileNavHidden(false);
     };
-  }, [canRenderPreview, isNarrowLayout, isFullBleedMobile, setChatMobileNavHidden]);
+  }, [canRenderPreview, isFullBleedMobile, isNarrowLayout, manageMobileNavVisibility, setChatMobileNavHidden]);
 
   useEffect(() => {
     if (!canRenderPreview || isFullBleedMobile) return;
@@ -248,8 +250,10 @@ export default function CitationDocumentPreviewDrawer({
       <div
         className={cn(
           'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
-          isFullBleedMobile && 'h-11 px-2 pt-[env(safe-area-inset-top,0px)]',
-          !isFullBleedMobile && 'h-10 px-4',
+          // Symmetric vertical padding so icon/title/actions sit centered in the bar; safe-area only on top.
+          isFullBleedMobile &&
+            'px-4 pb-4 pt-[calc(env(safe-area-inset-top,0px)+16px)]',
+          !isFullBleedMobile && 'px-4 py-4',
         )}
       >
         <div className="flex min-w-0 items-center gap-2">

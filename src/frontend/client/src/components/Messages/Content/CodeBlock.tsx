@@ -10,6 +10,7 @@ import RunCode from '~/components/Messages/Content/RunCode';
 import Clipboard from '~/components/svg/Clipboard';
 import CheckMark from '~/components/svg/CheckMark';
 import useLocalize from '~/hooks/useLocalize';
+import { useScrollRevealRef } from '~/hooks';
 import cn from '~/utils/cn';
 
 type CodeBlockProps = Pick<
@@ -81,6 +82,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   error,
 }) => {
   const codeRef = useRef<HTMLElement>(null);
+  const codeScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const toolCallsMap = useToolCallsMapContext();
   const { messageId, partIndex } = useMessageContext();
   const key = allowExecution
@@ -128,7 +130,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         plugin={plugin === true}
         allowExecution={allowExecution}
       />
-      <div className={cn(classProp, 'overflow-y-auto scrollbar-on-hover p-4')}>
+      <div ref={codeScrollRevealRef} className={cn(classProp, 'overflow-y-auto scrollbar-on-scroll p-4')}>
         <code
           ref={codeRef}
           className={cn(

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, Integer, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -18,6 +18,11 @@ class ReportBase(SQLModelSerializable):
     newversion_key: Optional[str] = Field(index=False, default=None, description='Frontend Template Nextkey')
     object_name: Optional[str] = Field(default=None, index=False, description='Report Template Data Storage Path')
     del_yn: Optional[int] = Field(index=False, default=0, description='Delete Status 1Show Delete')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

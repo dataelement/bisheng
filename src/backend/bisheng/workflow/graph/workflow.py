@@ -17,11 +17,17 @@ class Workflow:
                  async_mode: bool = False,
                  max_steps: int = 0,
                  timeout: int = 0,
-                 callback: BaseCallback = None):
+                 callback: BaseCallback = None,
+                 tenant_id: int = None):
 
         # Unique identifier of the run, unique saved to the databaseID
         self.workflow_id = workflow_id
         self.user_id = user_id
+        # Owner tenant of the Flow — threaded from FlowDao at task entry so
+        # downstream nodes can call LLMService.get_*_llm(tenant_id=...) for
+        # the F022 system-config row owned by the Flow's tenant (INV-T18).
+        # ``None`` falls back to ContextVar / Root inside _resolve_tenant_id.
+        self.tenant_id = tenant_id
 
         # Timeout, how long has the user input not been received terminatedworkflowRun (in minutes)
         self.timeout = timeout
@@ -33,7 +39,8 @@ class Workflow:
                                         workflow_name=workflow_name or workflow_id,
                                         workflow_data=workflow_data,
                                         max_steps=max_steps,
-                                        callback=callback)
+                                        callback=callback,
+                                        tenant_id=tenant_id)
 
     def save_user_input_history(self, input_data: dict | None):
         if not input_data:

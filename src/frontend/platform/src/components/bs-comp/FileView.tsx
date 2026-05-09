@@ -141,7 +141,7 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         }
     }
 
-    return <div className="relative bg-[#fff] border-b-2 overflow-hidden" style={style}>
+    return <div className="absolute bg-[#fff] border-b-2 overflow-hidden" style={style}>
         {/* <span className="absolute">{index + 1}</span> */}
         {/* canvas  */}
         <div ref={wrapRef} className="canvasWrapper"></div>
@@ -400,19 +400,19 @@ export default function FileView({
                     ? <div className="flex h-full w-full items-center justify-center text-gray-400">
                         {t('file.previewNotAvailable', { ns: 'knowledge' })}
                     </div>
-                : <div id="warp-pdf" className="file-view relative h-full w-full overflow-hidden">
-                    <List
-                        ref={listRef}
-                        itemCount={pdf?.numPages || 100}
-                        itemSize={boxSize.width / pageScale}
-                        // 滚动区盒子大小
-                        width={boxSize.width}
-                        height={boxSize.height}
-                        onScroll={handleScroll}
-                    >
-                        {itemRenderer}
-                    </List>
-                </div>
+                    : <div id="warp-pdf" className="file-view relative h-full w-full overflow-hidden">
+                        <List
+                            ref={listRef}
+                            itemCount={pdf?.numPages || 100}
+                            itemSize={boxSize.width / pageScale}
+                            // 滚动区盒子大小
+                            width={boxSize.width}
+                            height={boxSize.height}
+                            onScroll={handleScroll}
+                        >
+                            {itemRenderer}
+                        </List>
+                    </div>
         }
         {select && <DragPanne onMouseEnd={hanleDragSelectLabel} />}
     </div>

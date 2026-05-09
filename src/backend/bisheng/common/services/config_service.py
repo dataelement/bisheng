@@ -9,7 +9,7 @@ from bisheng.common.repositories.implementations.config_repository_impl import C
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
     WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf, \
-    DailyChatConf
+    DailyChatConf, ShougangConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -224,6 +224,15 @@ class ConfigService(Settings):
         except Exception as e:
             logger.warning(f'Failed to load daily_chat conf, using defaults: {e}')
             return DailyChatConf()
+
+    async def aget_shougang_conf(self) -> ShougangConf:
+        """Get shougang deployment config from DB. Returns default (disabled) on miss/error."""
+        try:
+            all_config = await self.aget_all_config()
+            return ShougangConf(**(all_config.get('shougang', {}) or {}))
+        except Exception as e:
+            logger.warning(f'Failed to load shougang conf, using defaults: {e}')
+            return ShougangConf()
 
     def get_linsight_conf(self) -> LinsightConf:
         # Get Ideas-related configuration items

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { useAuthContext, usePrefersMobileLayout } from '~/hooks';
+import { useAuthContext, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { AuthContext } from '~/hooks/AuthContext';
 import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
@@ -76,7 +76,8 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
   const [isHovering, setIsHovering] = useState(false);
   const isTabletOrMobile = usePrefersMobileLayout();
-  const sidebarWidth = isTabletOrMobile ? 240 : 280;
+  const isChatShellCompact = useMediaQuery('(max-width: 1023px)');
+  const sidebarWidth = 240;
 
   const apiVersion = mode === 'guest' ? 'v2' : 'v1';
   const numericFlowType = FLOW_TYPE_MAP[flowType];
@@ -98,15 +99,23 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   if (!flowId) return null;
 
-  // 免登录：圆角在侧栏+主内容整体外侧；主内容与侧栏衔接处不单独圆角
+  // Guest: neutral gray page + one white rounded shell (ref. design: gray backdrop, white card)
   const guestOuterShell = isGuestMode
-    ? 'flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-[12px] bg-white touch-mobile:rounded-none'
+    ? 'flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-2xl bg-white shadow-[0_4px_32px_rgba(0,0,0,0.08)]'
     : 'contents';
 
   return (
     <StandaloneChatContext.Provider value={contextValue}>
-      <div className={cn('flex', isGuestMode ? 'bg-white' : 'bg-[#F9F9F9]')} style={{ height: '100dvh' }}>
-        <div className="relative z-0 flex h-full w-full overflow-hidden bg-[#F4F5F7] p-2">
+      <div
+        className={cn('flex', isGuestMode ? 'bg-[#DCDDDF]' : 'bg-[#F9F9F9]')}
+        style={{ height: '100dvh' }}
+      >
+        <div
+          className={cn(
+            'relative z-0 flex h-full w-full overflow-hidden p-2',
+            isGuestMode ? 'bg-[#DCDDDF]' : 'bg-[#F4F5F7]',
+          )}
+        >
           {/* Mobile overlay sidebar (covers full area; stays outside the guest rounded shell) */}
           {isTabletOrMobile && sidebarVisible && (
             <div className="absolute inset-0 z-[70] flex">
@@ -128,7 +137,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
               <div
                 className={cn(
                   'transition-all duration-300 overflow-hidden flex-shrink-0',
-                  sidebarVisible ? 'w-[280px]' : 'w-0',
+                  sidebarVisible ? 'w-[240px]' : 'w-0',
                 )}
               >
                 <StandaloneSideNav sidebar={sidebar} />
@@ -136,13 +145,13 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
             )}
 
             {/* Toggle button (desktop) */}
-            {!isTabletOrMobile && (
+            {!isTabletOrMobile && !isChatShellCompact && (
               <NavToggle
                 navVisible={sidebarVisible}
                 onToggle={toggleSidebar}
                 isHovering={isHovering}
                 setIsHovering={setIsHovering}
-                className="fixed top-1/2 z-[50]"
+                className="absolute left-2 top-1/2 z-[50]"
                 translateX={sidebarWidth - 5}
               />
             )}
@@ -154,15 +163,17 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                 'p-0',
               )}
             >
-              {isTabletOrMobile && (
-                <MobileNav
-                  variant="chat"
-                  navVisible={sidebarVisible}
-                  setNavVisible={setSidebarVisible}
-                  persistNavVisibleInLocalStorage={false}
-                  navigateToNewChatPath={false}
-                  onNewChat={createNewChat}
-                />
+              {isChatShellCompact && (
+                <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
+                  <MobileNav
+                    variant="chat"
+                    navVisible={sidebarVisible}
+                    setNavVisible={setSidebarVisible}
+                    persistNavVisibleInLocalStorage={false}
+                    navigateToNewChatPath={false}
+                    onNewChat={createNewChat}
+                  />
+                </div>
               )}
               <div
                 className={cn(

@@ -40,6 +40,8 @@ interface IProps<T> {
   onPermission?: (data: T) => void,
   permissionBadge?: React.ReactNode,
   showSwitch?: boolean,
+  /** 与「编辑应用」解耦：由发布/下线权限控制开关是否可操作 */
+  canSwitch?: boolean,
   /** 与「编辑应用」解耦：由角色「创建应用」(create_app) 等控制，见构建页 apps */
   showCopy?: boolean,
   onCopy?: (data: T) => void,
@@ -98,6 +100,7 @@ export default function CardComponent<T>({
   onPermission,
   permissionBadge = null,
   showSwitch = true,
+  canSwitch = edit,
   showCopy = false,
   onCopy,
 }: IProps<T>) {
@@ -107,6 +110,7 @@ export default function CardComponent<T>({
   const { t, i18n } = useTranslation()
 
   const handleCheckedChange = async (bln) => {
+    if (!canSwitch || !onCheckedChange) return false
     const res = await onCheckedChange(bln, data)
     if (res === false) return
     setChecked(bln)
@@ -183,7 +187,7 @@ export default function CardComponent<T>({
             className={i18next.language === 'ja' ? 'w-20' : 'w-12'}
             // @ts-ignore
             texts={[t('skills.online'), t('skills.offline')]}
-            onCheckedChange={(b) => edit && handleCheckedChange(b)}
+            onCheckedChange={handleCheckedChange}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
           ></Switch>}
         </div>

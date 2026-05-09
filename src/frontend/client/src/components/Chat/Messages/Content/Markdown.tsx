@@ -304,14 +304,27 @@ function CitationPreviewCard({
     </svg>
   );
 
+  const typeLabel = isWeb ? '网页' : '文档';
+  const showCitationIndex =
+    typeof label === 'number' && Number.isFinite(label);
+  const footerTagText = showCitationIndex ? `[${label}] - ${typeLabel}` : typeLabel;
+
+  const footerTagMinWidth = showCitationIndex
+    ? isWeb
+      ? 'min-w-[104px]'
+      : 'min-w-[92px]'
+    : isWeb
+      ? 'min-w-[79px]'
+      : 'min-w-[76px]';
+
   const renderLabelTag = () => (
     <div
-      className={`absolute bottom-0 right-0 z-[1] flex h-6 whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
-        ? 'min-w-[79px] bg-[#F7F3FF] text-[#8537F5]'
-        : 'min-w-[76px] bg-[#F5F8FF] text-[#024DE3]'
+      className={`absolute bottom-0 right-0 z-[1] flex h-6 max-w-[calc(100%-8px)] whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
+        ? `bg-[#F7F3FF] text-[#8537F5] ${footerTagMinWidth}`
+        : `bg-[#F5F8FF] text-[#024DE3] ${footerTagMinWidth}`
         }`}
     >
-      {isWeb ? '网页' : '文档'}
+      <span className="truncate">{footerTagText}</span>
     </div>
   );
   const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
@@ -362,7 +375,7 @@ function CitationPreviewCard({
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+        <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -382,7 +395,7 @@ function CitationPreviewCard({
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 min-h-6 pr-[95px] text-[#999999]">
+        <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -578,9 +591,9 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-4 min-w-4 cursor-pointer items-center justify-center rounded-[6px] px-1 text-[12px] font-normal leading-[18px] ${citationClassName}`}
+          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] cursor-pointer select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-[#024DE3]/25 focus-visible:ring-2 ${citationClassName}`}
         >
-          <span className="flex h-[18px] items-center">{children}</span>
+          <span className="flex items-center justify-center">{children}</span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -588,6 +601,8 @@ const Citation = ({
           side="top"
           align="start"
           sideOffset={8}
+          avoidCollisions
+          collisionPadding={16}
           onMouseEnter={() => {
             if (!citationPreviewUsesHover) return;
             handleOpenChange(true);
@@ -625,11 +640,12 @@ const Markdown = memo(({
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
   /**
-   * 与 tailwind `touch-mobile`（max 1023px）对齐；并排除 `(pointer: coarse)`，避免大屏触控误判成鼠标。
+   * 可精确指向且具备 hover 时用悬停打开溯源卡片、点击角标进全文；否则（触控为主）用点击切换卡片。
+   * 不按视口宽度区分，避免 PC 小窗或分屏宽度不足 1024px 时被误判为触控交互。
    */
-  const citationPreviewUsesHover =
-    useMediaQuery('(min-width: 1024px) and (hover: hover) and (pointer: fine)') &&
-    !useMediaQuery('(pointer: coarse)');
+  const citationPreviewUsesHover = useMediaQuery(
+    '(hover: hover) and (pointer: fine)',
+  );
   const isInitializing = content === '';
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const [activeCitationPopoverKey, setActiveCitationPopoverKey] = useState<string | null>(null);
@@ -887,10 +903,10 @@ const Markdown = memo(({
                       if (webContent?.[legacyIndex - 1]) {
                         nodes.push(
                           <Citation
-                            key={`legacy-${matchIndex}`}
+                            key={`legacy-${legacyIndexValue}-${matchIndex}`}
                             webContent={webContent}
                             loadCitationDetail={loadCitationDetail}
-                            popoverKey={`legacy-${matchIndex}`}
+                            popoverKey={`legacy-${legacyIndexValue}-${matchIndex}`}
                             activePopoverKey={activeCitationPopoverKey}
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}
@@ -925,11 +941,11 @@ const Markdown = memo(({
                         if (citationData) {
                           nodes.push(
                             <Citation
-                              key={`rag-legacy-${matchIndex}`}
+                              key={`rag-legacy-${citationData.ref}-${matchIndex}`}
                               data={citationData}
                               initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
                               loadCitationDetail={loadCitationDetail}
-                              popoverKey={`rag-legacy-${matchIndex}`}
+                              popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}`}
                               activePopoverKey={activeCitationPopoverKey}
                               onActivePopoverKeyChange={setActiveCitationPopoverKey}
                               onClosePopover={handleCloseCitationPopover}
@@ -946,11 +962,11 @@ const Markdown = memo(({
                       if (citationData) {
                         nodes.push(
                           <Citation
-                            key={`private-${matchIndex}`}
+                            key={`private-${privateRef}-${matchIndex}`}
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
                             loadCitationDetail={loadCitationDetail}
-                            popoverKey={`private-${matchIndex}`}
+                            popoverKey={`private-${privateRef}-${matchIndex}`}
                             activePopoverKey={activeCitationPopoverKey}
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}

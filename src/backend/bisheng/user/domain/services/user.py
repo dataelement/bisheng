@@ -23,6 +23,12 @@ from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventDat
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.context.tenant import (
+    DEFAULT_TENANT_ID,
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_current_tenant_id,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
@@ -226,24 +232,36 @@ class UserService:
             raise UserNameTooLongError()
         db_user.password = cls.decrypt_md5_password(user.password)
         # Under JudgmentadminDoes the user exist
-        admin = await UserDao.aget_user(1)
-        if admin:
-            db_user = await UserDao.add_user_and_default_role(db_user)
-            await LegacyRBACSyncService.sync_user_auth_created(
-                db_user.user_id,
-                [DefaultRole],
-            )
-        else:
-            db_user.user_id = 1
-            db_user = await UserDao.add_user_and_admin_role(db_user)
-            await LegacyRBACSyncService.sync_user_auth_created(
-                db_user.user_id,
-                [AdminRole],
-            )
+        assigned_tenant_id = await cls._resolve_registration_tenant_id()
+
+        tenant_token = None
         if settings.multi_tenant.enabled:
-            await cls._ensure_user_default_tenant_association(db_user.user_id)
-        await cls._ensure_user_guest_department_membership(db_user.user_id)
-        return db_user
+            tenant_token = set_current_tenant_id(int(assigned_tenant_id))
+        try:
+            admin = await UserDao.aget_user(1)
+            if admin:
+                db_user = await UserDao.add_user_and_default_role(db_user)
+                await LegacyRBACSyncService.sync_user_auth_created(
+                    db_user.user_id,
+                    [DefaultRole],
+                )
+            else:
+                db_user.user_id = 1
+                db_user = await UserDao.add_user_and_admin_role(db_user)
+                await LegacyRBACSyncService.sync_user_auth_created(
+                    db_user.user_id,
+                    [AdminRole],
+                )
+
+            await cls._ensure_user_default_tenant_association(
+                db_user.user_id,
+                tenant_id=assigned_tenant_id,
+            )
+            await cls._ensure_user_guest_department_membership(db_user.user_id)
+            return db_user
+        finally:
+            if tenant_token is not None:
+                current_tenant_id.reset(tenant_token)
 
     @classmethod
     async def _ensure_user_guest_department_membership(cls, user_id: int) -> None:
@@ -287,18 +305,32 @@ class UserService:
             await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
-    async def _ensure_user_default_tenant_association(cls, user_id: int) -> None:
-        """When multi-tenant is on, every user must have at least one ``user_tenant`` row to log in."""
-        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
-        from bisheng.database.models.tenant import TenantDao, UserTenantDao
+    async def _resolve_registration_tenant_id(cls) -> int:
+        """Resolve the tenant_id used for anonymous self-registration."""
+        from bisheng.database.models.tenant import TenantDao
+
+        code = (settings.multi_tenant.default_tenant_code or 'default').strip() or 'default'
+        with bypass_tenant_filter():
+            tenant = await TenantDao.aget_by_code(code)
+        return int(tenant.id) if tenant else DEFAULT_TENANT_ID
+
+    @classmethod
+    async def _ensure_user_default_tenant_association(
+        cls, user_id: int, tenant_id: Optional[int] = None,
+    ) -> int:
+        """Ensure a user has a default tenant row and return its tenant_id."""
+        from bisheng.database.models.tenant import UserTenantDao
 
         existing = await UserTenantDao.aget_user_tenants(user_id)
         if existing:
-            return
-        code = (settings.multi_tenant.default_tenant_code or 'default').strip() or 'default'
-        tenant = await TenantDao.aget_by_code(code)
-        tenant_id = tenant.id if tenant else DEFAULT_TENANT_ID
+            for row in existing:
+                if getattr(row, 'is_default', 0) == 1:
+                    return int(row.tenant_id)
+            return int(existing[0].tenant_id)
+        if tenant_id is None:
+            tenant_id = await cls._resolve_registration_tenant_id()
         await UserTenantDao.aadd_user_to_tenant(user_id=user_id, tenant_id=tenant_id, is_default=1)
+        return int(tenant_id)
 
     @classmethod
     async def _reject_login_if_user_has_no_usable_access(
@@ -308,23 +340,29 @@ class UserService:
 
         需审批模式下角色可仅勾选一级菜单（workstation/admin）而无二级项，仍视为有菜单权限，允许登录。
         """
-        roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-        if not roles:
+        # Pre-tenant-context check: any role/dept/group access across all tenants
+        # qualifies for login. Without bypass, every DAO below trips
+        # NoTenantContextError because do_orm_execute can't infer a tenant for
+        # tenant-aware tables (userrole/department/usergroup/roleaccess).
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        with bypass_tenant_filter():
+            roles = await UserRoleDao.aget_user_roles(db_user.user_id)
+            if not roles:
+                if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
+                    return None
+                group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
+                if group_admins:
+                    return None
+                return UserNoRoleForLoginError.return_resp()
+
+            if any(ur.role_id == AdminRole for ur in roles):
+                return None
             if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
                 return None
-            group_admins = await UserGroupDao.aget_user_admin_group(db_user.user_id)
-            if group_admins:
-                return None
-            return UserNoRoleForLoginError.return_resp()
 
-        if any(ur.role_id == AdminRole for ur in roles):
+            if not await LoginUser.user_has_workbench_or_admin_effective_menu(db_user):
+                return UserNoWebMenuForLoginError.return_resp()
             return None
-        if await DepartmentDao.aget_user_admin_departments(db_user.user_id):
-            return None
-
-        if not await LoginUser.user_has_workbench_or_admin_effective_menu(db_user):
-            return UserNoWebMenuForLoginError.return_resp()
-        return None
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
@@ -374,8 +412,36 @@ class UserService:
 
         if settings.multi_tenant.enabled:
             from bisheng.database.models.tenant import UserTenantDao, TenantDao
-            from bisheng.common.errcode.tenant import NoTenantsAvailableError
+            from bisheng.common.errcode.tenant import (
+                NoTenantsAvailableError, TenantDisabledError,
+            )
             from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+
+            # Reject login when the user's primary department mounts to a
+            # disabled child tenant. TenantResolver intentionally walks past
+            # non-active mount points to keep users functional during
+            # archive/orphan transitions; ``disabled`` is different — PRD
+            # treats it as a member-level freeze. Without this guard a member
+            # of a disabled tenant would get fallback-routed to Root and log
+            # in normally, which contradicts the operator's intent.
+            from bisheng.database.models.department import (
+                DepartmentDao, UserDepartmentDao,
+            )
+            with bypass_tenant_filter():
+                primary_dept = await UserDepartmentDao.aget_user_primary_department(
+                    db_user.user_id,
+                )
+                if primary_dept is not None:
+                    mount_dept = await DepartmentDao.aget_ancestors_with_mount(
+                        primary_dept.department_id,
+                    )
+                    if mount_dept is not None and mount_dept.mounted_tenant_id:
+                        mount_tenant = await TenantDao.aget_by_id(
+                            mount_dept.mounted_tenant_id,
+                        )
+                        if mount_tenant is not None and mount_tenant.status == 'disabled':
+                            raise TenantDisabledError()
+
             user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
             active_tenants = [t for t in user_tenants if t.get('status') == 'active']
 
@@ -429,6 +495,32 @@ class UserService:
                 'falling back to legacy tenant resolution',
                 db_user.user_id, exc,
             )
+
+        # Block login when the resolved leaf tenant is disabled/archived.
+        # Without this gate the JWT is issued and the very next request gets
+        # 403'd by the tenant-status middleware — users see "logged in then
+        # immediately kicked out" instead of a clear error on the login form.
+        # DB.status is authoritative; Redis blacklist is a defensive cross-check.
+        if settings.multi_tenant.enabled and tenant_id and tenant_id > 0:
+            from bisheng.database.models.tenant import TenantDao
+            from bisheng.common.errcode.tenant import TenantDisabledError
+            from bisheng.core.context.tenant import bypass_tenant_filter
+            with bypass_tenant_filter():
+                tenant_obj = await TenantDao.aget_by_id(tenant_id)
+            if not tenant_obj or tenant_obj.status != 'active':
+                raise TenantDisabledError()
+            try:
+                from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
+                redis_client = await get_redis_client()
+                if await redis_client.aget(DISABLED_TENANT_KEY.format(tenant_id)):
+                    raise TenantDisabledError()
+            except TenantDisabledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    'tenant blacklist check skipped for tenant %s: %s',
+                    tenant_id, exc,
+                )
 
         # Fetch fresh token_version (sync_user may have just bumped it) and
         # embed in the JWT payload so the middleware can reject stale tokens.

@@ -47,6 +47,7 @@ from bisheng.database.models.department_admin_grant import (
     DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
     DepartmentAdminGrantDao,
 )
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
     DepartmentLocalMemberCreate,
@@ -82,6 +83,8 @@ def _is_admin(login_user) -> bool:
 
     Checks if AdminRole (id=1) is in login_user.user_role.
     """
+    if bool(getattr(login_user, 'is_global_super', False)):
+        return True
     if hasattr(login_user, 'user_role') and isinstance(login_user.user_role, list):
         return _ADMIN_ROLE_ID in login_user.user_role
     return False
@@ -275,6 +278,20 @@ async def _get_dept_and_check_permission(session, dept_id: str, login_user) -> D
         raise DepartmentPermissionDeniedError()
     await _check_permission(login_user, dept_internal_id=dept.id)
     return dept
+
+
+async def _can_access_dept(login_user, dept_internal_id: int) -> bool:
+    """Non-throwing variant of ``_check_permission`` for soft scope filtering.
+
+    Used by member-edit flows to skip target-user departments that fall outside
+    the operator's admin scope (e.g. an affiliate row in another tenant subtree)
+    instead of failing the whole request with 21009.
+    """
+    try:
+        await _check_permission(login_user, dept_internal_id=int(dept_internal_id))
+        return True
+    except DepartmentPermissionDeniedError:
+        return False
 
 
 async def _ensure_department_can_archive(session, dept: Department) -> None:
@@ -700,6 +717,11 @@ class DepartmentService:
             if new_parent.path.startswith(dept.path):
                 raise DepartmentCircularMoveError()
 
+            # INV-T1 (2-layer lock): reject moves that would land a mounted
+            # subtree under another mount point. Single chokepoint shared
+            # with F014 SSO upsert and F009 org-sync move.
+            await DepartmentDao.aassert_reparent_legal(dept.id, new_parent.id)
+
             old_parent_id = dept.parent_id
             old_path = dept.path
             new_path = f'{new_parent.path}{dept.id}/'
@@ -843,6 +865,7 @@ class DepartmentService:
         cls, dept_id: str, data: DepartmentMemberAdd, login_user,
     ) -> None:
         default_role_ids_snapshot: List[int] = []
+        is_primary_add = int(data.is_primary or 0) == 1
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
             if dept.status == 'archived':
@@ -863,19 +886,36 @@ class DepartmentService:
                     msg=f'Users {existing_ids} are already members of this department',
                 )
 
-            # Batch insert
-            for uid in data.user_ids:
-                session.add(UserDepartment(
-                    user_id=uid,
-                    department_id=dept.id,
-                    is_primary=data.is_primary,
-                    source='local',
-                ))
-            await session.commit()
+            if not is_primary_add:
+                # Secondary add: bulk insert + single FGA dispatch keeps the
+                # batch path cheap (no leaf-tenant change to sync).
+                for uid in data.user_ids:
+                    session.add(UserDepartment(
+                        user_id=uid,
+                        department_id=dept.id,
+                        is_primary=0,
+                        source='local',
+                    ))
+                await session.commit()
 
-        # Fire change handler
-        ops = DepartmentChangeHandler.on_members_added(dept.id, data.user_ids)
-        await DepartmentChangeHandler.execute_async(ops)
+        if is_primary_add:
+            # F012: setting is_primary=1 is a primary-department change. Route
+            # per uid through the canonical service so the user's existing
+            # primary is demoted (avoid dual-primary state) and
+            # ``UserTenantSyncService.sync_user`` follows the leaf-tenant
+            # swap. ``TenantRelocateBlockedError`` propagates to the API
+            # layer for 409 translation when the user owns resources under
+            # the old tenant and ``enforce_transfer_before_relocate`` is on.
+            from bisheng.user.domain.services.user_department_service import (
+                UserDepartmentService,
+            )
+            for uid in data.user_ids:
+                await UserDepartmentService.change_primary_department(
+                    int(uid), int(dept.id),
+                )
+        else:
+            ops = DepartmentChangeHandler.on_members_added(dept.id, data.user_ids)
+            await DepartmentChangeHandler.execute_async(ops)
 
         # 部门「默认角色」：加入本部门后自动授予（可分配域内、且用户尚未拥有）
         await cls._grant_default_roles_to_users(
@@ -1081,7 +1121,21 @@ class DepartmentService:
                 # User groups
                 from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
                 from bisheng.database.models.user_group import UserGroup
-                ug_result = await session.exec(
+                from bisheng.user_group.domain.services.user_group_service import (
+                    _can_view_all_groups,
+                )
+
+                viewer_group_ids: set[int] = set()
+                if not await _can_view_all_groups(login_user):
+                    raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
+                        login_user.user_id,
+                    )
+                    viewer_group_ids = {
+                        int(x[0]) if isinstance(x, tuple) else int(x)
+                        for x in raw_visible_group_ids or []
+                        if x is not None
+                    }
+                ug_stmt = (
                     select(
                         UserGroup.user_id,
                         Group.id,
@@ -1090,10 +1144,27 @@ class DepartmentService:
                     .join(Group, UserGroup.group_id == Group.id)
                     .where(
                         UserGroup.user_id.in_(user_ids),
-                        Group.visibility == 'public',
+                        UserGroup.is_group_admin == 0,
                         col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                     )
                 )
+                if not await _can_view_all_groups(login_user):
+                    if viewer_group_ids:
+                        ug_stmt = ug_stmt.where(
+                            or_(
+                                Group.visibility == 'public',
+                                Group.create_user == login_user.user_id,
+                                Group.id.in_(viewer_group_ids),
+                            ),
+                        )
+                    else:
+                        ug_stmt = ug_stmt.where(
+                            or_(
+                                Group.visibility == 'public',
+                                Group.create_user == login_user.user_id,
+                            ),
+                        )
+                ug_result = await session.exec(ug_stmt)
                 for uid, gid, gname in ug_result.all():
                     user_groups_map.setdefault(uid, []).append(
                         {'id': gid, 'group_name': gname},
@@ -1359,6 +1430,94 @@ class DepartmentService:
             for r in roles
         ]
 
+    @staticmethod
+    def _department_scope_chain_ids(dept: Department) -> List[int]:
+        """Return ancestor ids from materialized path plus the department itself."""
+        chain: List[int] = []
+        seen: Set[int] = set()
+        for part in (dept.path or '').split('/'):
+            if not part.strip() or not part.isdigit():
+                continue
+            did = int(part)
+            if did not in seen:
+                seen.add(did)
+                chain.append(did)
+        if dept.id is not None:
+            did = int(dept.id)
+            if did not in seen:
+                chain.append(did)
+        return chain
+
+    @classmethod
+    async def _aget_assignable_roles_catalog(
+        cls, depts: List[Department], login_user,
+    ) -> dict:
+        """Batch build assignable-role catalogs for multiple departments."""
+        from bisheng.database.constants import AdminRole
+        from bisheng.database.models.role import Role
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        if not depts:
+            return {}
+
+        scope_by_dept_id: dict[str, set[int]] = {}
+        all_scope_ids: set[int] = set()
+        accessible_depts: List[Department] = []
+        for dept in depts:
+            # Soft-skip departments outside the operator's scope; member-edit
+            # callers may pass the target user's full dept set (incl. foreign
+            # affiliates) and we want to degrade gracefully instead of 21009.
+            if not await _can_access_dept(login_user, int(dept.id)):
+                continue
+            accessible_depts.append(dept)
+            scope_ids = set(cls._department_scope_chain_ids(dept))
+            if not scope_ids and dept.id is not None:
+                scope_ids = {int(dept.id)}
+            scope_by_dept_id[dept.dept_id] = scope_ids
+            all_scope_ids.update(scope_ids)
+        depts = accessible_depts
+        if not depts:
+            return {}
+
+        dept_scope = or_(
+            Role.department_id.is_(None),
+            Role.department_id.in_(list(all_scope_ids)),
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(Role).where(
+                    Role.id > AdminRole,
+                    or_(
+                        and_(Role.role_type == 'global', dept_scope),
+                        and_(
+                            Role.role_type == 'tenant',
+                            Role.tenant_id == login_user.tenant_id,
+                            dept_scope,
+                        ),
+                        and_(
+                            or_(Role.role_type.is_(None), Role.role_type == ''),
+                            Role.tenant_id == login_user.tenant_id,
+                            dept_scope,
+                        ),
+                    ),
+                ).order_by(Role.role_name.asc())
+                roles = (await session.exec(stmt)).all()
+
+        catalog: dict = {}
+        for dept in depts:
+            scope_ids = scope_by_dept_id.get(dept.dept_id, set())
+            catalog[dept.dept_id] = [
+                {
+                    'id': role.id,
+                    'role_name': role.role_name,
+                    'role_type': role.role_type,
+                    'department_id': role.department_id,
+                }
+                for role in roles
+                if role.department_id is None or int(role.department_id) in scope_ids
+            ]
+        return catalog
+
     @classmethod
     async def acreate_local_member(
         cls, dept_id: str, data: DepartmentLocalMemberCreate, login_user,
@@ -1432,6 +1591,20 @@ class DepartmentService:
         ops = DepartmentChangeHandler.on_members_added(dept.id, [user.user_id])
         await DepartmentChangeHandler.execute_async(ops)
 
+        # F012: a brand-new user has no UserTenant row yet — without sync the
+        # tenant user list (queries UserTenant) would not show this user
+        # until first login (where the password-login fallback writes a Root
+        # row first) or the 6h reconcile. sync_user upserts the correct leaf
+        # immediately. owned_count is 0 for a new user, so
+        # enforce_transfer_before_relocate cannot block this path.
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+        from bisheng.tenant.domain.services.user_tenant_sync_service import (
+            UserTenantSyncService,
+        )
+        await UserTenantSyncService.sync_user(
+            user.user_id, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+        )
+
         return {
             'user_id': user.user_id,
             'user_name': user.user_name,
@@ -1451,7 +1624,7 @@ class DepartmentService:
         """Return groups the current user can actually mutate."""
         from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
-        res = await UserGroupService.alist_manageable_groups(login_user)
+        res = await UserGroupService.alist_manageable_group_options(login_user)
         out = []
         for x in res or []:
             out.append({
@@ -1470,23 +1643,28 @@ class DepartmentService:
     async def _department_in_admin_writable_scope(
         cls, login_user, dept: Department,
     ) -> bool:
-        """主部门可选范围：超管任意 active 部门；部门管理员为 FGA 管辖子树内部门。"""
-        if not dept or getattr(dept, 'status', '') != 'active':
+        """主部门可选范围：超管 / 部门管理员 / 子租户管理员（Child Admin）。
+
+        Mirrors ``_check_permission``'s three-tier scope so a Child Admin can
+        repoint a user's primary department anywhere inside their tenant
+        mount-subtree, not only inside FGA dept-admin paths.
+        """
+        if not dept or getattr(dept, 'status', '') != 'active' or dept.id is None:
             return False
-        if _is_admin(login_user):
-            return True
-        admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
-        if not admin_depts:
-            return False
-        paths = [d.path for d in admin_depts if getattr(d, 'path', None)]
-        dp = dept.path or ''
-        return any(dp.startswith(p) for p in paths)
+        return await _can_access_dept(login_user, int(dept.id))
 
     @classmethod
     async def _apply_local_primary_department_change(
         cls, user_id: int, new_dept_id: int,
     ) -> None:
-        """将本地用户主部门切到 new_dept_id：从原主部门移除，不再保留为附属。"""
+        """将本地用户主部门切到 new_dept_id：从原主部门移除，不再保留为附属。
+
+        Triggers ``UserTenantSyncService.sync_user`` after the dept swap so
+        cross-tenant primary changes (调岗) take effect immediately rather
+        than waiting for the next login or the 6h reconcile. Propagates
+        ``TenantRelocateBlockedError`` when ``enforce_transfer_before_relocate``
+        is on and the user owns resources under the old tenant.
+        """
         old_dept_id_for_fga: Optional[int] = None
         fga_add_new: bool = False
         async with get_async_db_session() as session:
@@ -1498,38 +1676,17 @@ class DepartmentService:
             primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
             old_primary = primary_rows[0] if primary_rows else None
 
-            if not old_primary:
-                target_ud = next(
-                    (u for u in uds if int(u.department_id) == int(new_dept_id)),
-                    None,
-                )
-                if target_ud:
-                    target_ud.is_primary = 1
-                    session.add(target_ud)
-                else:
-                    session.add(UserDepartment(
-                        user_id=user_id,
-                        department_id=new_dept_id,
-                        is_primary=1,
-                        source='local',
-                    ))
-                    fga_add_new = True
-                await session.commit()
-                if fga_add_new:
-                    ops = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
-                    await DepartmentChangeHandler.execute_async(ops)
+            if old_primary and int(old_primary.department_id) == int(new_dept_id):
                 return
 
-            if int(old_primary.department_id) == int(new_dept_id):
-                return
-
-            old_dept_id_for_fga = int(old_primary.department_id)
             target_ud = next(
                 (u for u in uds if int(u.department_id) == int(new_dept_id)),
                 None,
             )
 
-            await session.delete(old_primary)
+            if old_primary is not None:
+                old_dept_id_for_fga = int(old_primary.department_id)
+                await session.delete(old_primary)
 
             if target_ud:
                 target_ud.is_primary = 1
@@ -1556,6 +1713,16 @@ class DepartmentService:
         if fga_add_new:
             ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
             await DepartmentChangeHandler.execute_async(ops_add)
+
+        # F012 leaf-tenant sync — see method docstring. Lazy import to keep
+        # the department → tenant module dependency off the top-level graph.
+        from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+        from bisheng.tenant.domain.services.user_tenant_sync_service import (
+            UserTenantSyncService,
+        )
+        await UserTenantSyncService.sync_user(
+            user_id, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+        )
 
     @classmethod
     async def _count_user_owned_data_assets(cls, user_id: int) -> dict:
@@ -1697,7 +1864,7 @@ class DepartmentService:
         if not user or user.delete != 0:
             raise DepartmentMemberNotFoundError()
 
-        old_roles = UserRoleDao.get_user_roles(user_id)
+        old_roles = await UserRoleDao.aget_user_roles(user_id)
         role_ids_user = {int(r.role_id) for r in old_roles}
         if AdminRole in role_ids_user:
             raise DepartmentPermissionDeniedError()
@@ -1705,6 +1872,15 @@ class DepartmentService:
         all_uds = await UserDepartmentDao.aget_user_departments(user_id)
         dept_int_ids = list({ud.department_id for ud in all_uds})
         depts = await DepartmentDao.aget_by_ids(dept_int_ids)
+        # Drop departments outside the operator's admin scope so a tenant /
+        # department admin can still edit the parts they manage even when the
+        # target user has affiliate rows in foreign subtrees. ``ctx_dept`` is
+        # already permission-checked above and stays in the visible set.
+        accessible_depts = []
+        for d in depts:
+            if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id)):
+                accessible_depts.append(d)
+        depts = accessible_depts
         dept_by_id = {d.id: d for d in depts}
 
         if mem.is_primary == 0:
@@ -1714,9 +1890,7 @@ class DepartmentService:
         else:
             edit_mode = 'synced_primary'
 
-        catalog: dict = {}
-        for d in depts:
-            catalog[d.dept_id] = await cls.aget_assignable_roles(d.dept_id, login_user)
+        catalog = await cls._aget_assignable_roles_catalog(depts, login_user)
 
         primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
         primary_block = None
@@ -1871,6 +2045,14 @@ class DepartmentService:
             if not primary_ud:
                 raise DepartmentInvalidRolesError()
             depts = await DepartmentDao.aget_by_ids([d.department_id for d in all_uds])
+            # Mirror aget_member_edit_form: hide affiliate rows outside the
+            # operator's scope so a sub-tenant admin can save without 21009 on
+            # foreign affiliates. Primary dept equals ctx_dept here (mem.is_primary
+            # == 1) and is always accessible.
+            depts = [
+                d for d in depts
+                if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id))
+            ]
             dept_by_id = {d.id: d for d in depts}
             pdept = dept_by_id.get(primary_ud.department_id)
             if not pdept:

@@ -2,9 +2,6 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import DepartmentUsersSelect, {
-  type DepartmentUserOption,
-} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
 import {
   Table,
   TableBody,
@@ -15,12 +12,9 @@ import {
 } from "@/components/bs-ui/table";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
-  addTenantUsersApi,
-  getTenantApi,
   getTenantUsersApi,
   grantTenantAdminApi,
   listTenantAdminsApi,
-  removeTenantUserApi,
   revokeTenantAdminApi,
 } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -41,12 +35,7 @@ const isRootTenant = (tenant: Tenant) => tenant.id === 1;
 
 export function TenantUserDialog({ tenant, onClose }: Props) {
   const { t } = useTranslation("bs");
-  const [pickedToAdd, setPickedToAdd] = useState<DepartmentUserOption[]>([]);
-  const [addingUsers, setAddingUsers] = useState(false);
   const [adminIds, setAdminIds] = useState<Set<number>>(new Set());
-  // ``root_dept_id`` lives on TenantDetail (not TenantListItem) so we fetch it
-  // once here to scope the member-picker to the tenant's department subtree.
-  const [rootDeptId, setRootDeptId] = useState<number | null>(null);
   const rootTenant = isRootTenant(tenant);
 
   const {
@@ -56,7 +45,6 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
     total,
     setPage,
     search,
-    reload,
   } = useTable(
     { pageSize: 10 },
     (param: any) =>
@@ -76,45 +64,8 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
 
   useEffect(() => {
     reloadAdmins();
-    // Resolve the tenant's root_dept_id once; failures degrade gracefully to
-    // an unscoped picker (the user-facing impact is just a wider candidate
-    // pool — backend still owns final validation).
-    getTenantApi(tenant.id)
-      .then((detail) => setRootDeptId(detail?.root_dept_id ?? null))
-      .catch(() => setRootDeptId(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.id]);
-
-  const handleAddPicked = () => {
-    if (pickedToAdd.length === 0 || addingUsers) return;
-    setAddingUsers(true);
-    captureAndAlertRequestErrorHoc(
-      addTenantUsersApi(tenant.id, {
-        user_ids: pickedToAdd.map((u) => Number(u.value)),
-      }).then(() => {
-        toast({ title: t("updateSuccess"), variant: "success" });
-        setPickedToAdd([]);
-        reload();
-      })
-    ).finally(() => setAddingUsers(false));
-  };
-
-  const handleRemoveUser = (userId: number) => {
-    bsConfirm({
-      title: t("tenant.removeUser"),
-      desc: t("tenant.confirmRemoveUser"),
-      onOk: (next: () => void) => {
-        captureAndAlertRequestErrorHoc(
-          removeTenantUserApi(tenant.id, userId).then(() => {
-            toast({ title: t("updateSuccess"), variant: "success" });
-            reload();
-            reloadAdmins();
-          })
-        );
-        next();
-      },
-    });
-  };
 
   const handlePromoteAdmin = (userId: number) => {
     captureAndAlertRequestErrorHoc(
@@ -150,48 +101,6 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
           {t("tenant.users")} - {displayTenantName(tenant.tenant_name)}
         </h3>
 
-        {/* Add User — restricted to the Tenant's department subtree so members
-            cannot be silently pulled in from outside (write-side guard for the
-            tenant-membership relation). Root Tenant has no mount point, so the
-            picker falls back to the full org tree. */}
-        <div className="mb-4 flex items-start gap-2">
-          <div className="flex-1">
-            <DepartmentUsersSelect
-              multiple
-              value={pickedToAdd}
-              onChange={setPickedToAdd}
-              rootDeptId={rootDeptId ?? undefined}
-              placeholder={t("tenant.addUser")}
-              searchPlaceholder={t("tenant.searchUser")}
-              emptyMessage={
-                rootDeptId != null
-                  ? t("tenant.addUserEmptySubtree", {
-                      defaultValue:
-                        "该子租户子树暂无可加成员，请先在组织树中调整后再添加。",
-                    })
-                  : undefined
-              }
-            />
-            {rootDeptId != null && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("tenant.addUserSubtreeHint", {
-                  defaultValue:
-                    "成员必须来自该子租户的部门子树，不能选取子树外用户。",
-                })}
-              </p>
-            )}
-          </div>
-          <Button
-            type="button"
-            onClick={handleAddPicked}
-            disabled={pickedToAdd.length === 0 || addingUsers}
-          >
-            {addingUsers
-              ? t("loading", { ns: "bs" })
-              : t("tenant.addUserAction", { defaultValue: "添加" })}
-          </Button>
-        </div>
-
         {/* Search */}
         <div className="mb-4">
           <SearchInput
@@ -206,6 +115,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>{t("system.username")}</TableHead>
+                <TableHead>{t("tenant.userIdColumn")}</TableHead>
                 <TableHead>{t("tenant.lastAccess")}</TableHead>
                 <TableHead className="text-right">
                   {t("tenant.actions")}
@@ -239,6 +149,9 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
+                      {user.external_id ?? user.user_id}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
                       {user.join_time
                         ? user.join_time.replace("T", " ").slice(0, 19)
                         : "-"}
@@ -265,12 +178,6 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                               })}
                             </button>
                           ))}
-                        <button
-                          className="text-red-500 hover:underline text-sm"
-                          onClick={() => handleRemoveUser(user.user_id)}
-                        >
-                          {t("tenant.removeUser")}
-                        </button>
                       </div>
                     </TableCell>
                   </TableRow>

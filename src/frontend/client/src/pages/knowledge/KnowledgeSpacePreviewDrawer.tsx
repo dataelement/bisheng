@@ -18,8 +18,9 @@ import {
     subscribeSpaceApi,
     unsubscribeSpaceApi
 } from "~/api/knowledge";
+import { checkPermission } from "~/api/permission";
 import { cn } from "~/utils";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -39,6 +40,7 @@ export function KnowledgeSpacePreviewDrawer({
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const spacePreviewScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showToast } = useToastContext();
     const MAX_JOINED_SPACES = 50;
 
@@ -50,6 +52,7 @@ export function KnowledgeSpacePreviewDrawer({
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
     const [loadingSpace, setLoadingSpace] = useState(false);
+    const [canViewApprovalContent, setCanViewApprovalContent] = useState<boolean | null>(null);
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
@@ -138,6 +141,7 @@ export function KnowledgeSpacePreviewDrawer({
         setFilesPreview([]);
         setChildrenPage(1);
         setChildrenTotal(0);
+        setCanViewApprovalContent(null);
         setParentStack([]);
         setParentNameStack([]);
         setLoadingChildrenMore(false);
@@ -254,20 +258,61 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    const isOwnerOrAdmin = space?.role === SpaceRole.CREATOR || space?.role === SpaceRole.ADMIN;
     const subscriptionRejected =
         String(space?.subscriptionStatus ?? "").toLowerCase() === "rejected" || status === "rejected";
     const hasReadableGrant =
         !!space &&
         !subscriptionRejected &&
         (
-            space.role === SpaceRole.CREATOR ||
-            space.role === SpaceRole.ADMIN ||
+            isOwnerOrAdmin ||
             String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
             space.isFollowed === true ||
             status === "joined"
         );
     const canViewFiles =
-        hasReadableGrant;
+        isPublic ||
+        isOwnerOrAdmin ||
+        (
+            hasReadableGrant &&
+            (
+                space?.visibility !== VisibilityType.APPROVAL ||
+                canViewApprovalContent === true
+            )
+        );
+
+    useEffect(() => {
+        if (!space || space.visibility !== VisibilityType.APPROVAL || isOwnerOrAdmin || !hasReadableGrant) {
+            setCanViewApprovalContent(null);
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+
+        checkPermission(
+            "knowledge_space",
+            String(space.id),
+            "can_read",
+            "view_space",
+            { signal: controller.signal },
+        )
+            .then((res) => {
+                if (!cancelled) {
+                    setCanViewApprovalContent(Boolean(res?.allowed));
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setCanViewApprovalContent(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [space?.id, space?.visibility, isOwnerOrAdmin, hasReadableGrant]);
 
     const handleClickAction = () => {
         if (!space) return;
@@ -429,7 +474,8 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
+                            ref={spacePreviewScrollRevealRef}
+                            className="scrollbar-on-scroll flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {

@@ -190,7 +190,7 @@ function AgentTimeline({
     })();
 
     return (
-        <>
+        <div className="flex w-full min-w-0 flex-col gap-3">
             {blocks.map((block, i) => {
                 if (block.kind === "text") {
                     if (i === finalTextIdx) return null;
@@ -214,7 +214,7 @@ function AgentTimeline({
                     />
                 );
             })}
-        </>
+        </div>
     );
 }
 
@@ -494,12 +494,14 @@ function AssistantBubble({
 
                 {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
                 {isAgentNative ? (
-                    <AgentTimeline
-                        events={message.events || []}
-                        isStreaming={!!isStreaming && isLatest}
-                        finalTextIdx={finalTextIdx}
-                        messageId={message.messageId}
-                    />
+                    <div className="mb-3 w-full min-w-0">
+                        <AgentTimeline
+                            events={message.events || []}
+                            isStreaming={Boolean(isStreaming && isLatest)}
+                            finalTextIdx={finalTextIdx}
+                            messageId={message.messageId}
+                        />
+                    </div>
                 ) : (
                     <>
                         {/* Legacy :::thinking::: reuse Thinking component */}

@@ -563,8 +563,13 @@ class AuditLogService:
     @classmethod
     def user_login(cls, user: UserPayload, ip_address: str):
         logger.info(f"act=user_login user={user.user_name} ip={ip_address} user_id={user.user_id}")
-        # Get the group to which the user belongs
-        user_group = UserGroupDao.get_user_group(user.user_id)
+        # bypass_tenant_filter: login-time audit captures the user's global
+        # group membership before tenant context is established. Without
+        # bypass, hotfix-3's tenant-aware user_group table trips
+        # NoTenantContextError on every login.
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        with bypass_tenant_filter():
+            user_group = UserGroupDao.get_user_group(user.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
                         ObjectType.NONE, '', '')

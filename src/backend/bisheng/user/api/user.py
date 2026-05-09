@@ -20,10 +20,12 @@ from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.user import (UserNotPasswordError, UserValidateError, UserPasswordError, UserForbiddenError)
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import DefaultGroup, GroupDao
+from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
@@ -92,7 +94,19 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         guard = await UserService._reject_login_if_user_has_no_usable_access(user_exist)
         if guard is not None:
             return guard
-        access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
+        # Resolve the user's active leaf tenant so the JWT carries the right
+        # tenant_id. Without this, ``create_access_token`` falls back to
+        # ``DEFAULT_TENANT_ID`` (root) — every Child Admin coming through SSO
+        # would be tagged as root in ``current_tenant_id``, causing tenant-aware
+        # writes (e.g. ``LLMServerDao.ainsert_server_with_models``) to land in
+        # tenant 1 instead of their own leaf tenant.
+        active_user_tenant = await UserTenantDao.aget_active_user_tenant(user_exist.user_id)
+        leaf_tenant_id = (
+            active_user_tenant.tenant_id if active_user_tenant is not None else DEFAULT_TENANT_ID
+        )
+        access_token = LoginUser.create_access_token(
+            user_exist, auth_jwt=auth_jwt, tenant_id=leaf_tenant_id,
+        )
 
         # Set the logged in user's currentcookie, .jwtValid for an additional hour
         redis_client = await get_redis_client()
@@ -260,6 +274,64 @@ async def _department_admin_scoped_user_ids(user_id: int) -> Optional[List[int]]
     return list({int(uid) for uid in rows})
 
 
+async def _tenant_admin_scoped_user_ids(
+    login_user: LoginUser,
+) -> Optional[List[int]]:
+    """子租户管理员：返回其挂载子树（含下挂子子租户）内全部 user_id；非子租户管理员返回 None。
+
+    Root 租户由 super_admin 负责（``is_admin()`` 已短路），此 helper 直接返回 None。
+    """
+    from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+    from bisheng.permission.domain.services.permission_service import (
+        PermissionService,
+    )
+
+    tenant_id = getattr(login_user, 'tenant_id', None)
+    if tenant_id is None or int(tenant_id) == ROOT_TENANT_ID:
+        return None
+    try:
+        is_tenant_admin = await PermissionService.check(
+            user_id=login_user.user_id,
+            relation='admin',
+            object_type='tenant',
+            object_id=str(tenant_id),
+            login_user=login_user,
+        )
+    except Exception:
+        logger.exception(
+            'tenant admin scope check failed user=%s tenant=%s',
+            getattr(login_user, 'user_id', None), tenant_id,
+        )
+        return None
+    if not is_tenant_admin:
+        return None
+
+    tenant = await TenantDao.aget_by_id(int(tenant_id))
+    if tenant is None or tenant.root_dept_id is None:
+        return []
+    mount = await DepartmentDao.aget_by_id(int(tenant.root_dept_id))
+    if mount is None or not mount.path:
+        return []
+    subtree = await DepartmentDao.aget_subtree_ids(mount.path)
+    if not subtree:
+        return []
+    internal_ids: set[int] = set()
+    for row in subtree:
+        if isinstance(row, (list, tuple)):
+            internal_ids.add(int(row[0]))
+        else:
+            internal_ids.add(int(row))
+    if not internal_ids:
+        return []
+    async with get_async_db_session() as session:
+        stmt = select(UserDepartment.user_id).where(
+            col(UserDepartment.department_id).in_(list(internal_ids)),
+        )
+        result = await session.exec(stmt)
+        rows = result.all()
+    return list({int(uid) for uid in rows})
+
+
 def _primary_department_id_map_for_user_ids(user_ids: List[int]) -> Dict[int, Optional[int]]:
     """user_id -> ``department.id``（主部门），供前端组织树挂载。
 
@@ -309,16 +381,29 @@ async def list_user(*,
         managed_groups = user_admin_groups
         # 部门管理员：管辖部门子树内用户（与是否同时为用户组管理员无关，均需纳入可选列表）
         dept_scoped_ids = await _department_admin_scoped_user_ids(login_user.user_id)
+        # 子租户管理员：挂载子树内全部用户（PRD §4.5）。tenant#admin 不会派生
+        # department#admin 元组，必须独立合并，否则筛选/选人/资源授权弹窗皆 500。
+        tenant_scoped_ids = await _tenant_admin_scoped_user_ids(login_user)
+
+        # 「组织管辖范围」= 部门子树 ∪ 子租户挂载子树。两个 helper 均返回 None
+        # 才视为「无组织管辖范围」（既非部门管理员也非子租户管理员）。
+        org_scoped_ids: Optional[set[int]] = None
+        if dept_scoped_ids is not None or tenant_scoped_ids is not None:
+            org_scoped_ids = set()
+            if dept_scoped_ids:
+                org_scoped_ids.update(dept_scoped_ids)
+            if tenant_scoped_ids:
+                org_scoped_ids.update(tenant_scoped_ids)
 
         if not managed_groups:
-            # 仅部门管理员：仅能看子树内用户
-            if dept_scoped_ids is None:
+            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户
+            if org_scoped_ids is None:
                 raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
-            if not dept_scoped_ids:
+            if not org_scoped_ids:
                 return resp_200({'data': [], 'total': 0})
-            user_ids = dept_scoped_ids
+            user_ids = list(org_scoped_ids)
         else:
-            # 同时为用户组管理员时：历史上仅查用户组成员，导致部门子树用户不可见；改为「组成员 ∪ 部门子树用户」
+            # 同时为用户组管理员时：「组成员 ∪ 部门子树用户 ∪ 租户子树用户」
             groups = managed_groups
             if group_id:
                 groups = list(set(groups) & set(group_id))
@@ -330,8 +415,8 @@ async def list_user(*,
 
             groups_user_ids = UserGroupDao.get_groups_user(groups)
             gids = {one.user_id for one in groups_user_ids} if groups_user_ids else set()
-            if dept_scoped_ids is not None:
-                user_ids = list(gids | set(dept_scoped_ids))
+            if org_scoped_ids is not None:
+                user_ids = list(gids | org_scoped_ids)
             else:
                 user_ids = list(gids)
             if not user_ids:
@@ -437,6 +522,74 @@ async def _dept_admin_can_manage_member_account_status(
     return bool(admin_ids & target_ids)
 
 
+async def _tenant_admin_can_manage_member_account_status(
+    login_user: LoginUser, target_user_id: int,
+) -> bool:
+    """子租户管理员是否管辖目标用户：操作者持有 tenant#admin，且目标用户的任一部门
+    位于操作者租户挂载子树内。Root 租户由 super_admin 走 ``is_admin()`` 快速通过，
+    不进入此路径。
+    """
+    from bisheng.database.models.department import Department
+    from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+    from bisheng.permission.domain.services.permission_service import (
+        PermissionService,
+    )
+
+    tenant_id = getattr(login_user, 'tenant_id', None)
+    if tenant_id is None or int(tenant_id) == ROOT_TENANT_ID:
+        return False
+    try:
+        is_tenant_admin = await PermissionService.check(
+            user_id=login_user.user_id,
+            relation='admin',
+            object_type='tenant',
+            object_id=str(tenant_id),
+            login_user=login_user,
+        )
+    except Exception:
+        logger.exception(
+            'tenant admin check failed user=%s tenant=%s',
+            getattr(login_user, 'user_id', None), tenant_id,
+        )
+        return False
+    if not is_tenant_admin:
+        return False
+
+    tenant = await TenantDao.aget_by_id(int(tenant_id))
+    if tenant is None or tenant.root_dept_id is None:
+        return False
+    mount = await DepartmentDao.aget_by_id(int(tenant.root_dept_id))
+    if mount is None or not mount.path:
+        return False
+    mount_path = mount.path
+
+    async with get_async_db_session() as session:
+        rows = (await session.exec(
+            select(UserDepartment).where(UserDepartment.user_id == target_user_id)
+        )).all()
+    target_dept_ids = {int(r.department_id) for r in rows if r.department_id is not None}
+    if not target_dept_ids:
+        return False
+    async with get_async_db_session() as session:
+        depts = (await session.exec(
+            select(Department).where(col(Department.id).in_(list(target_dept_ids)))
+        )).all()
+    return any(
+        d.path and d.path.startswith(mount_path) for d in depts
+    )
+
+
+async def _can_manage_member_account_status(
+    login_user: LoginUser, target_user_id: int,
+) -> bool:
+    """启/禁用账号状态的统一权限闸门：部门管理员或子租户管理员任一通过即放行。"""
+    if await _dept_admin_can_manage_member_account_status(login_user, target_user_id):
+        return True
+    if await _tenant_admin_can_manage_member_account_status(login_user, target_user_id):
+        return True
+    return False
+
+
 @router.post('/user/update', status_code=201)
 async def update(*,
                  request: Request,
@@ -451,15 +604,15 @@ async def update(*,
         user_group = UserGroupDao.get_user_group(db_user.user_id)
         user_group = [one.group_id for one in user_group]
         if not login_user.check_groups_admin(user_group):
-            # 组织与成员：部门管理员对用户组无管理权，但应对其管辖部门内成员可启/禁用账号
-            allow_dept_admin = (
+            # 组织与成员：部门/子租户管理员对用户组无管理权，但应对其管辖范围内成员可启/禁用账号
+            allow_org_admin = (
                 user.delete is not None
                 and not user.avatar
-                and await _dept_admin_can_manage_member_account_status(
+                and await _can_manage_member_account_status(
                     login_user, db_user.user_id,
                 )
             )
-            if not allow_dept_admin:
+            if not allow_org_admin:
                 raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
 
     # check if user already exist

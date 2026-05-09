@@ -296,6 +296,26 @@ class DailyChatConf(BaseModel):
         return n if n > 0 else 8000
 
 
+class ShougangConf(BaseModel):
+    """ Shougang (首钢) deployment-specific configuration.
+
+    Stored in DB config under key `shougang`. When the block exists and
+    `prefix` is set, the file-encoding feature is considered enabled.
+    """
+    prefix: Optional[str] = Field(
+        default=None,
+        description='File-encoding prefix, e.g. "GF". Empty/None disables the feature.',
+    )
+    # The two below are reserved for other shougang sub-features and are not
+    # consumed by the file-encoding pipeline. Kept here so the model accepts them.
+    deployment_label: Optional[str] = Field(default=None)
+    portal_admin_url: Optional[str] = Field(default=None)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.prefix and self.prefix.strip())
+
+
 class CookieConf(BaseModel):
     """ Cookie Configure """
     max_age: Optional[int] = Field(default=None, description="Cookie Maximum survival time in seconds")

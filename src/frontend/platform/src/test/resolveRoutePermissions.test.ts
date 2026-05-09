@@ -61,9 +61,39 @@ describe("resolveRoutePermissions", () => {
     expect(perms.filter((p) => p === "sys")).toHaveLength(1)
   })
 
+  it("injects model for Child Admin so /model/management is reachable", () => {
+    // PRD §6.1 model tenant isolation: Child Admin manages models within their
+    // own tenant. Backend `get_tenant_admin_user` enforces the actual write
+    // authz; the route layer just needs to admit them.
+    const perms = resolveRoutePermissions({
+      web_menu: ["build", "knowledge"],
+      is_child_admin: true,
+    })
+    expect(perms).toContain("model")
+  })
+
+  it("does not inject model when the user is not a Child Admin", () => {
+    const perms = resolveRoutePermissions({
+      web_menu: ["build"],
+      is_child_admin: false,
+    })
+    expect(perms).not.toContain("model")
+  })
+
+  it("does not duplicate model when already present in web_menu", () => {
+    const perms = resolveRoutePermissions({
+      web_menu: ["build", "model"],
+      is_child_admin: true,
+    })
+    expect(perms.filter((p) => p === "model")).toHaveLength(1)
+  })
+
   it("handles missing web_menu gracefully", () => {
     expect(resolveRoutePermissions({})).toEqual([])
-    expect(resolveRoutePermissions({ is_child_admin: true })).toEqual(["sys"])
+    expect(resolveRoutePermissions({ is_child_admin: true })).toEqual([
+      "sys",
+      "model",
+    ])
   })
 
   it("matches the real /user/info shape for a Child Admin (caiwu on 114)", () => {

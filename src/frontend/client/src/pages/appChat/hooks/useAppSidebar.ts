@@ -5,7 +5,7 @@ import { NotificationSeverity } from '~/common';
 import type { AppConversation, AppItem, ConversationGroup } from '~/@types/app';
 import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from '~/api/apps';
 import { groupConversationsByTime, getAppShareUrl } from '~/pages/apps/appUtils';
-import { copyText } from '~/utils';
+import { copyText, generateUUID } from '~/utils';
 import { useToastContext } from '~/Providers';
 import {
   appConversationsState,
@@ -13,7 +13,7 @@ import {
   sidebarVisibleState,
 } from '~/pages/appChat/store/appSidebarAtoms';
 import { currentChatState } from '~/pages/appChat/store/atoms';
-import { generateUUID } from '~/utils';
+import { copyAppChatOrigin, copyAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import { useLocalize } from '~/hooks';
 
 // flow_type 5 === assistant; anything else (1 = skill, 10 = workflow) goes through getFlowApi.
@@ -84,6 +84,8 @@ export function useAppSidebar() {
   const createNewChat = useCallback(() => {
     if (!flowId || !flowType) return;
     const chatId = generateUUID(32);
+    if (conversationId) copyAppChatOrigin(conversationId, chatId);
+    if (conversationId) copyAppChatReturnTo(conversationId, chatId);
     // Prepend a "New Chat" placeholder so the sidebar shows it immediately
     // and the auto-select guard won't redirect away from it.
     setConversations((prev) => [{
@@ -94,19 +96,17 @@ export function useAppSidebar() {
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     }, ...prev]);
-    const qs = location.search || '';
-    const nextPath = `/app/${chatId}/${flowId}/${flowType}${qs}`;
-    navigate(nextPath);
-  }, [flowId, flowType, location.search, navigate, setConversations]);
+    const nextPath = `/app/${chatId}/${flowId}/${flowType}`;
+    navigate(nextPath, { state: location.state });
+  }, [flowId, flowType, conversationId, location.state, navigate, setConversations, localize]);
 
   /** Switch to a specific conversation */
   const switchConversation = useCallback(
     (conv: AppConversation) => {
-      const qs = location.search || '';
-      const nextPath = `/app/${conv.id}/${conv.flowId}/${conv.flowType}${qs}`;
-      navigate(nextPath);
+      const nextPath = `/app/${conv.id}/${conv.flowId}/${conv.flowType}`;
+      navigate(nextPath, { state: location.state });
     },
-    [location.search, navigate],
+    [location.state, navigate],
   );
 
   /** Toggle sidebar visibility */

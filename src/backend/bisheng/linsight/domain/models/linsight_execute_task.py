@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, List
 
-from sqlalchemy import Enum as SQLEnum, Column, JSON, DateTime, text, CHAR, ForeignKey, update
+from sqlalchemy import Enum as SQLEnum, Column, Integer, JSON, DateTime, text, CHAR, ForeignKey, update
 from sqlmodel import Field, select, col
 
 from bisheng.core.database import get_async_db_session
@@ -67,6 +67,11 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
     status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="Status Misi",
                                           sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
     result: Optional[Dict] = Field(None, description='Result of Task', sa_type=JSON, nullable=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
 
 
 class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):

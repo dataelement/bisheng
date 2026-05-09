@@ -27,6 +27,23 @@ export default function AppCenter() {
     const isMobileLayout = usePrefersMobileLayout();
     const appLastOriginKey = 'app-last-origin';
     const appGridRef = useRef<HTMLDivElement | null>(null);
+    const [isMainScrolling, setIsMainScrolling] = useState(false);
+    const mainScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleMainScroll = () => {
+        setIsMainScrolling(true);
+        if (mainScrollTimerRef.current) clearTimeout(mainScrollTimerRef.current);
+        mainScrollTimerRef.current = setTimeout(() => {
+            setIsMainScrolling(false);
+            mainScrollTimerRef.current = null;
+        }, 600);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (mainScrollTimerRef.current) clearTimeout(mainScrollTimerRef.current);
+        };
+    }, []);
     const [appGridCols, setAppGridCols] = useState(() => {
         if (typeof window === 'undefined') return 4;
         const width = window.innerWidth;
@@ -105,7 +122,8 @@ export default function AppCenter() {
     return (
         <div
             className={cn(
-                'bg-white min-h-screen flex flex-col items-center relative w-full',
+                // 填满 MainLayout 白卡片；正文区单独滚动 + scroll-on-scroll（含 PC 窄屏）
+                'bg-white flex min-h-0 flex-1 w-full flex-col items-center relative overflow-hidden',
                 // 与首页 MobileNav（px-4）水平对齐；顶栏由 MainLayout 提供，正文略留底距
                 isH5Layout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
             )}
@@ -131,13 +149,13 @@ export default function AppCenter() {
                 </>
             ) : (
                 <>
-                    <header className="flex items-center leading-8 max-w-[1000px] w-full shrink-0 relative">
+                    <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
                         <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
                             应用中心
                         </h1>
                     </header>
 
-                    <div className="flex max-w-[1000px] w-full min-w-0 shrink-0 items-center gap-4 sm:gap-6 mt-4 mb-4">
+                    <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
                             <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
                                 <p
@@ -156,8 +174,12 @@ export default function AppCenter() {
                 </>
             )}
 
-            {/* 内容区域 */}
-            <main className="flex flex-col items-start gap-[14px] max-w-[1000px] w-full shrink-0 relative">
+            {/* 内容区域：flex-1 内滚动，PC 窄屏与移动端一致用 scroll-on-scroll */}
+            <main
+                className="relative flex min-h-0 w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px] overflow-x-hidden overflow-y-auto scroll-on-scroll"
+                onScroll={handleMainScroll}
+                data-scrolling={isMainScrolling ? 'true' : 'false'}
+            >
                 {loading ? (
                     <div className="flex w-full items-center justify-center py-20">
                         <Loader2 className="animate-spin text-[#335cff] size-8" />

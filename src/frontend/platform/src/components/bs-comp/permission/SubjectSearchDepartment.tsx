@@ -19,6 +19,7 @@ interface SubjectSearchDepartmentProps {
   allowOrganizationTree?: boolean
   includeChildren?: boolean
   onIncludeChildrenChange?: (v: boolean) => void
+  onSelectionSummaryChange?: (v: SelectedSubject[]) => void
   showIncludeChildrenToggle?: boolean
   disabledIds?: number[]
   disabledLabel?: string
@@ -27,42 +28,34 @@ interface SubjectSearchDepartmentProps {
 function collectExplicitDepartmentSelections(
   nodes: DepartmentTreeNode[],
   selectedDepartmentsById: Map<number, SelectedSubject>,
-  prefix: string[] = [],
   inherited = false,
 ): SelectedSubject[] {
   const out: SelectedSubject[] = []
   const visited = new Set<number>()
 
-  for (const node of nodes) {
-    const explicitSelection = selectedDepartmentsById.get(node.id)
-    const isSelected = inherited || Boolean(explicitSelection)
-    const pathSegments = [...prefix, node.name]
-    if (isSelected && !visited.has(node.id)) {
-      visited.add(node.id)
-      out.push({
-        type: 'department',
-        id: node.id,
-        name: pathSegments.join('/'),
-        include_children: false,
-      })
-    }
+  const walk = (items: DepartmentTreeNode[], prefix: string[], ancestorSelected: boolean) => {
+    for (const node of items) {
+      const explicitSelection = selectedDepartmentsById.get(node.id)
+      const isSelected = ancestorSelected || Boolean(explicitSelection)
+      const pathSegments = [...prefix, node.name]
+      if (isSelected && !visited.has(node.id)) {
+        visited.add(node.id)
+        out.push({
+          type: 'department',
+          id: node.id,
+          name: pathSegments.join('/'),
+          include_children: false,
+        })
+      }
 
-    if (node.children?.length) {
-      const childSelections = collectExplicitDepartmentSelections(
-        node.children,
-        selectedDepartmentsById,
-        pathSegments,
-        inherited || Boolean(explicitSelection?.include_children),
-      )
-      for (const child of childSelections) {
-        if (!visited.has(child.id)) {
-          visited.add(child.id)
-          out.push(child)
-        }
+      const nextAncestorSelected = ancestorSelected || Boolean(explicitSelection?.include_children)
+      if (node.children?.length) {
+        walk(node.children, pathSegments, nextAncestorSelected)
       }
     }
   }
 
+  walk(nodes, [], inherited)
   return out
 }
 
@@ -74,6 +67,7 @@ export function SubjectSearchDepartment({
   allowOrganizationTree = false,
   includeChildren = false,
   onIncludeChildrenChange = () => undefined,
+  onSelectionSummaryChange,
   showIncludeChildrenToggle = true,
   disabledIds = [],
   disabledLabel,
@@ -115,6 +109,12 @@ export function SubjectSearchDepartment({
       ),
     [value],
   )
+
+  useEffect(() => {
+    onSelectionSummaryChange?.(
+      collectExplicitDepartmentSelections(tree, selectedDepartmentsById),
+    )
+  }, [onSelectionSummaryChange, selectedDepartmentsById, tree])
 
   const toggle = (node: DepartmentTreeNode, pathLabel: string) => {
     if (disabledIdSet.has(node.id)) return

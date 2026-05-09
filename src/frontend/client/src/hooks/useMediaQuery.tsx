@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 
 export default function useMediaQuery(query: string) {
   const [matches, setMatches] = useState<boolean>(() => {
@@ -8,7 +8,8 @@ export default function useMediaQuery(query: string) {
     return window.matchMedia(query).matches;
   });
 
-  useEffect(() => {
+  // useLayoutEffect：首帧与窗口缩放时与 matchMedia 同步，避免依赖 useEffect 晚一拍出现错误布局（如应用对话悬浮钮闪现）
+  useLayoutEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
     }

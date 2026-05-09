@@ -93,6 +93,12 @@ export async function getTenantUsersApi(
   return await axios.get(`/api/v1/tenants/${tenantId}/users`, { params })
 }
 
+/**
+ * @deprecated F024 (v2.5.1) — endpoint returns 410 Gone. Tenant membership
+ * is derived from the user's primary department. Use department member
+ * edit (`POST /api/v1/department/{dept_id}/members/{user_id}/apply-edit`)
+ * to alter membership. Will be removed in v2.6.0.
+ */
 export async function addTenantUsersApi(
   tenantId: number,
   data: { user_ids: number[]; is_admin?: boolean }
@@ -100,6 +106,10 @@ export async function addTenantUsersApi(
   return await axios.post(`/api/v1/tenants/${tenantId}/users`, data)
 }
 
+/**
+ * @deprecated F024 (v2.5.1) — endpoint returns 410 Gone. See
+ * `addTenantUsersApi` for the migration path.
+ */
 export async function removeTenantUserApi(
   tenantId: number,
   userId: number

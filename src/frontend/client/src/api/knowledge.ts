@@ -171,6 +171,7 @@ export interface KnowledgeFile {
     approvalRequestId?: number;
     approvalStatus?: string;
     approvalReason?: string;
+    fileEncoding?: string | null;        // mapped from file_encoding
     isPendingApproval?: boolean;
     // Transient UI-only fields
     isCreating?: boolean;
@@ -492,6 +493,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalStatus: raw?.approval_status ?? undefined,
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
+        fileEncoding: raw?.file_encoding ?? null,
     };
 }
 
@@ -1172,7 +1174,13 @@ export async function uploadFileToServerApi(
     formData.append("file", file);
     const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "upload file failed");
+        // Preserve status_code and data so the caller can render the localized
+        // backend message via i18n (e.g. api_errors.19403 with used_gb/quota_gb)
+        // instead of falling through to a generic "upload failed" toast.
+        const err = new Error(res.status_message || res.message || res.msg || "upload file failed");
+        (err as any).statusCode = res.status_code;
+        (err as any).errorData = res.data;
+        throw err;
     }
     if (!res?.data?.file_path) {
         throw new Error("upload file failed: missing file path");
@@ -1344,4 +1352,18 @@ export async function getFileDownloadApi(
         original_url: data?.original_url ?? "",
         preview_url: data?.preview_url ?? "",
     };
+}
+
+/**
+ * Update a file's encoding (shougang feature). Owner/admin only.
+ */
+export async function updateFileEncoding(
+    spaceId: string,
+    fileId: string,
+    encoding: string,
+): Promise<KnowledgeFile> {
+    return await request.put(
+        `/api/v1/knowledge/space/${spaceId}/files/${fileId}/encoding`,
+        { encoding },
+    );
 }

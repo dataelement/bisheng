@@ -5,7 +5,7 @@ from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
+from sqlalchemy import JSON, Column, DateTime, Integer, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -74,8 +74,20 @@ class KnowledgeFileBase(SQLModelSerializable):
     user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                     description='User-defined metadata')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
+    file_encoding: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        sa_column=Column(String(64), nullable=True),
+        description='File encoding for shougang deployment, e.g. "GF-STD-SC-20260500000001". '
+                    'NULL when shougang is disabled or encoding generation has not run yet.',
+    )
     updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
     updater_name: Optional[str] = Field(default=None, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -93,6 +105,11 @@ class QAKnowledgeBase(SQLModelSerializable):
                                   description='1: Activate0: Close, the user manually closes;2: Sedang diproses3Failed to insert')
     extra_meta: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -233,6 +250,21 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
+
+    @classmethod
+    def get_user_upload_total_file_size(cls, user_id: int) -> int:
+        """Total bytes for active files uploaded by a user."""
+        statement = select(func.sum(KnowledgeFile.file_size)).where(
+            KnowledgeFile.user_id == user_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status.in_([
+                KnowledgeFileStatus.PROCESSING.value,
+                KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFileStatus.WAITING.value,
+            ]),
+        )
+        with get_sync_db_session() as session:
+            return session.scalar(statement) or 0
 
     @classmethod
     async def aadd_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
@@ -425,11 +457,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
         """
         Based on Knowledge BaseIDand status list query file
-        
+
         Args:
             knowledge_id: The knowledge base uponID
             status_list: List of status values
-            
+
         Returns:
             List[KnowledgeFile]: Matching Files List
         """

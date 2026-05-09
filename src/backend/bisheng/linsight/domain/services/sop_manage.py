@@ -25,6 +25,7 @@ from bisheng.common.errcode.server import (
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.ai import FakeEmbeddings
+from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
@@ -33,6 +34,9 @@ from bisheng.linsight.domain.schemas.linsight_schema import SopRecordRead
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
+from bisheng.llm.domain.share_fallback import (
+    get_model_by_id_with_share_fallback,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
@@ -52,7 +56,13 @@ class SOPManageService:
 
         try:
             if llm is None:
-                workbench_conf = await LLMService.get_workbench_llm()
+                # SOP 的 task_model + embedding_model 均强制使用 Root 行：
+                # SOPManageService 操作的 ``col_linsight_sop`` Milvus
+                # collection 是**全局共享**的（所有 tenant 共用一份向量库），
+                # 不同 tenant 用各自的 embedding 会破坏向量空间一致性。
+                # F022 之前是隐式全局（Config 表唯一行）；F022 后必须显式
+                # 锚到 Root 以保留原行为。SOP 真要按租户分库属于 v2.6+ 工作。
+                workbench_conf = await LLMService.get_workbench_llm(tenant_id=ROOT_TENANT_ID)
                 linsight_conf = settings.get_linsight_conf()
                 llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
                                                                 model_id=workbench_conf.task_model.id,
@@ -330,7 +340,7 @@ class SOPManageService:
         """
 
         # Get the current global configuration ofembeddingModels
-        workbench_conf = await LLMService.get_workbench_llm()
+        workbench_conf = await LLMService.get_workbench_llm(tenant_id=ROOT_TENANT_ID)
         try:
             emb_model_id = workbench_conf.embedding_model.id
             if not emb_model_id:
@@ -338,8 +348,10 @@ class SOPManageService:
         except AttributeError:
             return NoEmbeddingModelError.return_resp()
 
-        # CorrectionembeddingModels
-        embed_info = LLMDao.get_model_by_id(int(emb_model_id))
+        # Correction embedding Models. The id was resolved via the Root
+        # workbench config above, so the row may belong to Root — read with
+        # the share fallback to bypass the child-scope tenant filter.
+        embed_info = get_model_by_id_with_share_fallback(int(emb_model_id))
         if not embed_info:
             return EmbeddingModelNotExistError.return_resp()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
@@ -387,7 +399,7 @@ class SOPManageService:
         if sop_obj.content != existing_sop[0].content:
 
             # Get the current global configuration ofembeddingModels
-            workbench_conf = await LLMService.get_workbench_llm()
+            workbench_conf = await LLMService.get_workbench_llm(tenant_id=ROOT_TENANT_ID)
             try:
                 emb_model_id = workbench_conf.embedding_model.id
                 if not emb_model_id:
@@ -479,7 +491,7 @@ class SOPManageService:
             vector_search = True
             es_search = True
             error_msg = None
-            workbench_conf = await LLMService.get_workbench_llm()
+            workbench_conf = await LLMService.get_workbench_llm(tenant_id=ROOT_TENANT_ID)
             if workbench_conf.embedding_model is None or not workbench_conf.embedding_model.id:
                 vector_search = False
                 error_msg = LinsightVectorModelError

@@ -36,7 +36,7 @@ class FailedTupleBase(SQLModelSerializable):
                          comment='pending | succeeded | dead', index=True),
     )
     error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    tenant_id: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default='1', index=True))
+    tenant_id: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=False, server_default='1', index=True))
     create_time: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')),

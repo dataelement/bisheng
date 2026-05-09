@@ -4,7 +4,7 @@ from enum import Enum
 from typing import List, Dict, Optional, Literal, Union, Annotated
 
 from pydantic import BaseModel, Field as PydanticField, model_validator
-from sqlalchemy import CHAR, Column, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text, Text
+from sqlalchemy import CHAR, Column, Integer, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text, Text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -85,6 +85,12 @@ class Channel(SQLModelSerializable, table=True):
         default=False,
         description='F017: Root channel shared to all children (mirrors FGA shared_with tuples)',
         sa_column=Column(Boolean, nullable=False, server_default=text('0')),
+    )
+
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
     )
 
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',

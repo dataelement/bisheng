@@ -42,7 +42,40 @@ vi.mock("@/components/bs-comp/permission/SubjectSearchUser", () => ({
 vi.mock("@/components/bs-comp/permission/SubjectSearchDepartment", () => ({
   SubjectSearchDepartment: (props: any) => {
     subjectSearchDepartmentMock(props);
-    return <div data-testid="department-search">{props.disabledIds?.join(",")}</div>;
+    return (
+      <div data-testid="department-search">
+        {props.disabledIds?.join(",")}
+        <button
+          type="button"
+          onClick={() => {
+            props.onChange([
+              {
+                type: "department",
+                id: 10,
+                name: "研发部",
+                include_children: true,
+              },
+            ]);
+            props.onSelectionSummaryChange([
+              {
+                type: "department",
+                id: 10,
+                name: "研发部",
+                include_children: false,
+              },
+              {
+                type: "department",
+                id: 11,
+                name: "研发部/平台组",
+                include_children: false,
+              },
+            ]);
+          }}
+        >
+          select-department-with-children
+        </button>
+      </div>
+    );
   },
 }));
 
@@ -124,6 +157,21 @@ describe("PermissionGrantTab", () => {
     });
 
     expect(mockedGetGrantableRelationModelsApi).not.toHaveBeenCalled();
+  });
+
+  it("shows inherited child departments in the selected department summary", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_space"
+        resourceId="123"
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "subject.department" }));
+    fireEvent.click(await screen.findByRole("button", { name: "select-department-with-children" }));
+
+    expect(screen.getByText("研发部、研发部/平台组")).toBeInTheDocument();
   });
 
   it("passes already granted subjects into the search components as disabled checked ids", async () => {

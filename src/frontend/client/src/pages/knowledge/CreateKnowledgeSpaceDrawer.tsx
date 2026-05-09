@@ -67,6 +67,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
     const [showSuccess, setShowSuccess] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
     const nameComposingRef = useRef(false);
     const descComposingRef = useRef(false);
@@ -82,6 +83,7 @@ export function CreateKnowledgeSpaceDrawer({
         setJoinPolicy("review");
         setPublishToSquare("yes");
         setShowSuccess(false);
+        setSubmitting(false);
     };
 
     // Pre-fill form in edit mode
@@ -107,6 +109,8 @@ export function CreateKnowledgeSpaceDrawer({
     }, [open, mode, editingSpace]);
 
     const handleConfirm = async () => {
+        // Guard against double-submit while the previous request is still in-flight.
+        if (submitting) return;
         if (!name.trim()) {
             showToast({
                 message: localize("com_subscription.knowledge_space_name_empty") || localize("com_knowledge.space_name_empty"),
@@ -120,15 +124,20 @@ export function CreateKnowledgeSpaceDrawer({
             joinPolicy,
             publishToSquare: needPublishOption ? publishToSquare : "no"
         };
-        const result = await onConfirm?.(payload);
-        if (result === false) {
-            return;
-        }
-        // Only show success page in create mode
-        if (mode === "create") {
-            setShowSuccess(true);
-        } else {
-            onOpenChange(false);
+        try {
+            setSubmitting(true);
+            const result = await onConfirm?.(payload);
+            if (result === false) {
+                return;
+            }
+            // Only show success page in create mode
+            if (mode === "create") {
+                setShowSuccess(true);
+            } else {
+                onOpenChange(false);
+            }
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -245,7 +254,7 @@ export function CreateKnowledgeSpaceDrawer({
                             {/* 简介 */}
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
-                                    {localize("description")}
+                                    {localize("com_subscription.description")}
                                 </Label>
                                 <div>
                                     <Textarea
@@ -320,7 +329,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         },
                                         {
                                             value: "public",
-                                            label: localize("publice"),
+                                            label: localize("com_subscription.public"),
                                             desc: localize("com_subscription.anyone_can_subscribe") || localize("com_knowledge.direct_subscribe_desc")
                                         }
                                     ].map((opt) => (
@@ -398,10 +407,13 @@ export function CreateKnowledgeSpaceDrawer({
                             >
                                 {localize("com_knowledge.cancel")}</Button>
                             <Button
-                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] touch-mobile:flex-1"
+                                disabled={submitting}
+                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
                                 onClick={handleConfirm}
                             >
-                                {mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create")}
+                                {submitting
+                                    ? (mode === "edit" ? localize("com_subscription.saving") : localize("com_subscription.creating"))
+                                    : (mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create"))}
                             </Button>
                         </div>
                     </div>

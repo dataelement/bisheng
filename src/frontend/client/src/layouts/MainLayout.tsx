@@ -5,12 +5,12 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import MonitorIcon from '~/components/ui/icon/Monitor';
-import { Menu, X } from 'lucide-react';
+import { LayoutDashboard, Menu, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { usePrefersMobileLayout } from '~/hooks';
+import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -50,7 +50,7 @@ function SidebarItem({ icon, to, active, label, showLabel = false, onNavigate }:
           className={cn(
             'flex cursor-pointer rounded-lg transition-colors',
             showLabel
-              ? 'h-[44px] items-center justify-start gap-2 px-3 py-3 hover:bg-[#f2f3f5]'
+              ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2 hover:bg-[#f2f3f5]'
               : 'items-center justify-center p-3 hover:bg-[#e6edfc]',
             active && "bg-[#e6edfc]"
           )}
@@ -136,9 +136,16 @@ function Sidebar({
       || Boolean(plugins?.includes('backend') || plugins?.includes('admin'))
     );
 
+  // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
+  const portalAdminUrl =
+    bsConfig?.shougang?.portal_admin_url
+    ?? window.__SHOUGANG_PORTAL_ADMIN_URL__;
+  const showShougangPortalTab =
+    user?.role === 'admin' && !isMobile && Boolean(portalAdminUrl);
+
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo<Array<{
-    section: 'home' | 'apps' | 'channel' | 'knowledge';
+    section: 'home' | 'apps' | 'channel' | 'knowledge' | 'portal-admin';
     to: string;
     icon: React.ReactNode;
     label: string;
@@ -155,20 +162,21 @@ function Sidebar({
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
         closeDrawerOnNavigate: true,
       },
-      {
-        section: 'channel' as const,
-        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-        icon: <LinkIcon />,
-        label: localize('com_ui_channel'),
-        isActive: pathname.startsWith('/channel'),
-        closeDrawerOnNavigate: true,
-      },
+
       {
         section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
         icon: <BookOpenIcon />,
         label: localize('com_knowledge.knowledge_space'),
         isActive: pathname.startsWith('/knowledge'),
+        closeDrawerOnNavigate: true,
+      },
+      {
+        section: 'channel' as const,
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        icon: <LinkIcon />,
+        label: localize('com_ui_channel'),
+        isActive: pathname.startsWith('/channel'),
         closeDrawerOnNavigate: true,
       },
       {
@@ -179,14 +187,23 @@ function Sidebar({
         isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
         closeDrawerOnNavigate: true,
       },
+      {
+        section: 'portal-admin' as const,
+        to: '/shougang-portal-admin',
+        icon: <LayoutDashboard />,
+        label: localize('com_nav_portal_admin'),
+        isActive: pathname.startsWith('/shougang-portal-admin'),
+        closeDrawerOnNavigate: true,
+      },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
       if (l.section === 'apps') return showAppsTab;
       if (l.section === 'channel') return showSubscriptionTab;
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;
+      if (l.section === 'portal-admin') return showShougangPortalTab;
       return true;
     });
-  }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
+  }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -199,7 +216,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[100dvh] flex flex-col justify-between py-2 pl-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
         // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
         isChatSection && isMobile && 'hidden',
@@ -283,6 +300,7 @@ export default function MainLayout() {
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
   const isMobile = usePrefersMobileLayout();
+  const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
   const isAppsArea = pathname.includes('/apps');
   /** 探索广场：横幅内已有返回，隐藏主布局左上角汉堡，避免重复一行 */
@@ -297,6 +315,9 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
+  /** 订阅 / 应用中心：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  const innerScrollShell =
+    isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
@@ -419,11 +440,16 @@ export default function MainLayout() {
           saveScroll={true}
         >
           <div
+            ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
               'rounded-xl bg-white shadow-xl',
               isMobile
-                ? 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
-                : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover',
+                ? innerScrollShell
+                  ? 'flex h-[calc(100dvh-16px)] min-h-0 w-full flex-col overflow-hidden'
+                  : 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                : innerScrollShell
+                  ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
+                  : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
             )}
           >
             {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
@@ -448,7 +474,13 @@ export default function MainLayout() {
                 </div>
               </div>
             ) : null}
-            {outlet}
+            {innerScrollShell ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {outlet}
+              </div>
+            ) : (
+              outlet
+            )}
           </div>
         </KeepAlive>
       </main>

@@ -16,7 +16,7 @@ class UserGroupInfo(BaseModel):
 class UserRoleInfo(BaseModel):
     role_id: int
     role_name: str
-    group_id: int
+    group_id: Optional[int] = 0
 
 
 class UserDepartmentInfo(BaseModel):

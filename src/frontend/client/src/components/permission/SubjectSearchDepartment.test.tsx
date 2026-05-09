@@ -118,13 +118,53 @@ describe("SubjectSearchDepartment", () => {
       {
         type: "department",
         id: 2,
-        name: "子部门",
+        name: "全集团/子部门",
         include_children: false,
       },
     ]);
   });
 
-  it("shows already granted departments as checked and disabled", async () => {
+  it("reports selected descendant names for include-children department summaries", async () => {
+    const onSelectionSummaryChange = jest.fn();
+
+    render(
+      <SubjectSearchDepartment
+        value={[
+          {
+            type: "department",
+            id: 1,
+            name: "全集团",
+            include_children: true,
+          },
+        ]}
+        onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        onSelectionSummaryChange={onSelectionSummaryChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onSelectionSummaryChange).toHaveBeenLastCalledWith([
+        {
+          type: "department",
+          id: 1,
+          name: "全集团",
+          include_children: false,
+        },
+        {
+          type: "department",
+          id: 2,
+          name: "全集团/子部门",
+          include_children: false,
+        },
+      ]);
+    });
+  });
+
+  it("shows already granted departments as disabled without selecting them", async () => {
     render(
       <SubjectSearchDepartment
         value={[]}
@@ -140,8 +180,9 @@ describe("SubjectSearchDepartment", () => {
     const departmentLabel = await screen.findByText("全集团");
     const checkbox = within(departmentLabel.parentElement as HTMLElement).getByRole("checkbox");
 
-    expect(checkbox).toHaveAttribute("data-state", "checked");
+    expect(checkbox).toHaveAttribute("data-state", "unchecked");
     expect(checkbox).toBeDisabled();
+    expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
   });
 
   it("uses resource-scoped department candidates when a resource is provided", async () => {

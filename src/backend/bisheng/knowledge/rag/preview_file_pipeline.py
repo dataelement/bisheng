@@ -1,11 +1,12 @@
 import time
 from functools import cached_property
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from langchain_core.documents import BaseDocumentTransformer
 
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
@@ -47,6 +48,18 @@ class PreviewFilePipeline(BaseFilePipeline):
         )
         self.local_file_path = local_file_path
         self.knowledge_id = knowledge_id
+
+    @cached_property
+    def _preview_doc_id(self) -> str:
+        # Memoised so the loader (image upload destination) and ExtraFileTransformer
+        # (bbox file destination) can both be tied to the same scratch id within one
+        # pipeline run.
+        return generate_uuid()
+
+    def _get_image_object_dir(self) -> Optional[str]:
+        return KnowledgeUtils.get_knowledge_file_image_dir(
+            self._preview_doc_id, self.knowledge_id
+        )
 
     @cached_property
     def file_metadata(self) -> Dict:

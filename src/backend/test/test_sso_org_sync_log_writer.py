@@ -30,7 +30,12 @@ def mock_seed_config(monkeypatch):
     return fake_settings
 
 
-@pytest.mark.asyncio
+@pytest.fixture()
+def anyio_backend():
+    return 'asyncio'
+
+
+@pytest.mark.anyio
 class TestBufferAccumulation:
 
     async def test_warn_and_error_accumulate(self):
@@ -46,7 +51,7 @@ class TestBufferAccumulation:
         assert buf.errors[0]['entity_type'] == 'upsert'
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 class TestFlushLog:
 
     async def test_flush_writes_row_with_stats(self, mock_seed_config):
@@ -73,6 +78,20 @@ class TestFlushLog:
         assert written.status == 'success'  # no errors
         assert written.config_id == 9999  # seed default
         assert written.tenant_id == 1
+
+    async def test_flush_writes_end_time_with_database_clock(self, mock_seed_config):
+        from bisheng.sso_sync.domain.services.org_sync_log_writer import (
+            OrgSyncLogBuffer, flush_log,
+        )
+
+        with patch(
+            f'{MODULE}.OrgSyncLogDao.acreate',
+            new_callable=AsyncMock, return_value=MagicMock(),
+        ) as acreate:
+            await flush_log(OrgSyncLogBuffer(), trigger_type='sso_realtime')
+
+        written = acreate.await_args.args[0]
+        assert str(written.end_time).lower() == 'now()'
 
     async def test_flush_uses_seed_config_id_when_not_overridden(
         self, mock_seed_config,

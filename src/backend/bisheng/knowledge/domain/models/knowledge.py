@@ -3,16 +3,14 @@ from enum import Enum
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON, Boolean, String, collate
+from sqlalchemy import JSON, Boolean, Integer, String, collate
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
@@ -54,7 +52,11 @@ class MetadataFieldType(str, Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
-    tenant_id: int = Field(default=1, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     name: str = Field(index=True, min_length=1, max_length=200,
                       description='Knowledge Base Name')
     type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
@@ -107,8 +109,31 @@ class KnowledgeUpdate(BaseModel):
     description: Optional[str] = None
 
 
-class KnowledgeCreate(KnowledgeBase):
+class KnowledgeCreate(BaseModel):
+    user_id: Optional[int] = Field(default=None, index=True)
+    name: str = Field(index=True, min_length=1, max_length=200,
+                      description='Knowledge Base Name')
+    type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
+                      description='Knowledge Base Type, value from KnowledgeTypeEnum')
+    description: Optional[str] = Field(default=None, index=True)
+    model: Optional[str] = Field(default=None, index=False)
+    collection_name: Optional[str] = Field(default=None, index=False)
+    index_name: Optional[str] = Field(default=None, index=False)
+    state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
+                                 description='value from KnowledgeState')
+    is_released: bool = Field(default=False, description='is released to knowledge space square')
+    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
+    is_shared: bool = Field(default=False)
+    metadata_fields: Optional[List[Dict]] = Field(default=None,
+                                                  description="Metadata Field Configuration for Knowledge Base")
     is_partition: Optional[bool] = None
+
+    @field_validator('model', mode='before')
+    @classmethod
+    def convert_model(cls, v: Any) -> str:
+        if isinstance(v, int):
+            v = str(v)
+        return v
 
 
 class KnowledgeDao(KnowledgeBase):
@@ -347,80 +372,71 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     def judge_knowledge_permission(cls, user_name: str,
                                    knowledge_ids: List[int]) -> List[Knowledge]:
+        """Filter knowledge_ids to those the user can read.
+
+        F008 follow-up: delegates to ReBAC via PermissionService instead of
+        the legacy role_access table. Admin still gets the full set; owners
+        and tenant-admin scope are picked up by list_accessible_ids' implicit
+        scope expansion.
         """
-        Based on username and knowledge baseIDList to get a list of knowledge bases that the user has permission to view
-        :param user_name: Username
-        :param knowledge_ids: The knowledge base uponIDVertical
-        :return: Returns a list of knowledge bases that the user has permissions
-        """
-        # get user info
+        if not knowledge_ids:
+            return []
         user_info = UserDao.get_user_by_username(user_name)
         if not user_info:
             return []
 
-        # Query the role the user belongs to
-        role_list = UserRoleDao.get_user_roles(user_info.user_id)
-        if not role_list:
-            return []
+        from bisheng.permission.domain.services.owner_service import _run_async_safe
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.user.domain.services.auth import LoginUser
 
-        role_id_list = []
-        is_admin = False
-        for role in role_list:
-            role_id_list.append(role.role_id)
-            if role.role_id == 1:
-                is_admin = True
-        # admin User has all knowledge base permissions
-        if is_admin:
-            return KnowledgeDao.get_list_by_ids(knowledge_ids)
+        login_user = LoginUser.init_login_user_sync(
+            user_id=user_info.user_id,
+            user_name=user_name,
+        )
+        accessible_ids = _run_async_safe(
+            PermissionService.list_accessible_ids(
+                user_id=login_user.user_id,
+                relation='can_read',
+                object_type='knowledge_library',
+                login_user=login_user,
+            ),
+        )
+        if accessible_ids is None:
+            return cls.get_list_by_ids(knowledge_ids)
 
-        # query role List of knowledge bases with permissions
-        role_access_list = RoleAccessDao.find_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                          AccessType.KNOWLEDGE)
-
-        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                     knowledge_id_extra=[int(access.third_id) for access in
-                                                                         role_access_list],
-                                                     filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+        accessible_set = {int(x) for x in accessible_ids}
+        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
+        return cls.get_list_by_ids(filtered) if filtered else []
 
     @classmethod
     async def ajudge_knowledge_permission(cls, user_name: str,
                                           knowledge_ids: List[int]) -> List[Knowledge]:
-        """
-        By Username and Knowledge BaseIDlist, asynchronously get a list of knowledge bases that the user has permission to view
-        Args:
-            user_name:
-            knowledge_ids:
-
-        Returns:
-
-        """
-        # get user info
+        """Async variant of :meth:`judge_knowledge_permission`. Same semantics."""
+        if not knowledge_ids:
+            return []
         user_info = await UserDao.aget_user_by_username(user_name)
         if not user_info:
             return []
-        # Query the role the user belongs to
-        role_list = await UserRoleDao.aget_user_roles(user_info.user_id)
-        if not role_list:
-            return []
-        role_id_list = []
-        is_admin = False
-        for role in role_list:
-            role_id_list.append(role.role_id)
-            if role.role_id == 1:
-                is_admin = True
-        # admin User has all knowledge base permissions
-        if is_admin:
+
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.user.domain.services.auth import LoginUser
+
+        login_user = await LoginUser.init_login_user(
+            user_id=user_info.user_id,
+            user_name=user_name,
+        )
+        accessible_ids = await PermissionService.list_accessible_ids(
+            user_id=login_user.user_id,
+            relation='can_read',
+            object_type='knowledge_library',
+            login_user=login_user,
+        )
+        if accessible_ids is None:
             return await cls.aget_list_by_ids(knowledge_ids)
-        # query role List of knowledge bases with permissions
-        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                                 AccessType.KNOWLEDGE)
-        # Query whether the knowledge base created by the user is included
-        user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
-                                                            knowledge_id_extra=[int(access.third_id) for access in
-                                                                                role_access_list],
-                                                            filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+
+        accessible_set = {int(x) for x in accessible_ids}
+        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
+        return await cls.aget_list_by_ids(filtered) if filtered else []
 
     @classmethod
     def filter_knowledge_by_ids(cls,

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Text, and_, func, or_, text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, Text, and_, func, or_, text
 from sqlmodel import Field, select, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
@@ -23,7 +23,11 @@ class AssistantBase(SQLModelSerializable):
     id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True,
                               description='Uniqueness quantificationID')
     name: str = Field(default='', description='The assistant name.')
-    tenant_id: int = Field(default=1, index=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     logo: str = Field(default='', description='logoimage URL')
     desc: str = Field(default='', sa_column=Column(Text), description='Assistant description')
     system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')
@@ -56,6 +60,11 @@ class AssistantLinkBase(SQLModelSerializable):
     tool_id: Optional[int] = Field(default=0, index=True, description='ToolsID')
     flow_id: Optional[str] = Field(default='', index=True, description='SkillID')
     knowledge_id: Optional[int] = Field(default=0, index=True, description='The knowledge base uponID')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

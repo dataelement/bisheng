@@ -618,7 +618,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
         const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
         const canNavigateTarget = Boolean(target && target.targetId && targetName);
-        const targetLabel = targetSplitMatch ? targetName : ` ${targetName}`;
+        const targetLabel = targetName;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
@@ -743,8 +743,59 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor)}>
                         <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
                         <span className="min-w-0">
+                            {!targetSplitMatch && canNavigateTarget && (
+                                <span
+                                    className="font-medium cursor-pointer hover:text-[#165dff]"
+                                    onClick={() => {
+                                        console.info("[NotificationsDialog] target click", {
+                                            notificationId: notification.id,
+                                            messageType: notification.message_type,
+                                            actionCode: notification.action_code,
+                                            systemTextCode: getSystemTextCode(notification),
+                                            targetName,
+                                            resolvedTarget: target,
+                                        });
+                                        if (!target) {
+                                            console.warn("[NotificationsDialog] target unresolved", {
+                                                notificationId: notification.id,
+                                                content: notification.content,
+                                            });
+                                            return;
+                                        }
+                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+                                        if (target.targetType === "channel") {
+                                            const route = isRejectedChannelJoinNotification(notification)
+                                                ? `/channel/share/${target.targetId}?square=1`
+                                                : `/channel/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
+                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        } else {
+                                            const route = `/knowledge/space/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        }
+                                        onOpenChange?.(false);
+                                    }}
+                                >
+                                    {targetLabel}
+                                </span>
+                            )}
                             {textPrefix}
-                            {canNavigateTarget && (
+                            {targetSplitMatch && canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"
                                     onClick={() => {

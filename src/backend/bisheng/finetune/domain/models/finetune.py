@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, BaseModel, model_validator
-from sqlalchemy import Select
+from sqlalchemy import Integer, Select
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update, col
 
@@ -52,6 +52,11 @@ class FinetuneBase(SQLModelSerializable):
     report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Assessment report data for training tasks')
     user_id: int = Field(default=None, index=True, description='creatorID')
     user_name: str = Field(default=None, description='creatorName')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

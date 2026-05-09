@@ -7,7 +7,7 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
     LinsightExecuteTask
@@ -266,7 +266,7 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
 
     from bisheng.linsight.worker import NodeManager
 
-    redis_client = get_redis_client_sync()  # Get Redis Client
+    redis_client = await get_redis_client()  # Get Redis Client
     node_manager = NodeManager(redis_client, node_id)  # Get Node Manager Instance
 
     try:
@@ -286,7 +286,7 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
 
             # Check task ownership in Redis
             owner_key = f"linsight:task:owner:{session_id}"
-            owner_node_id = await redis_client.get(owner_key)
+            owner_node_id = await redis_client.aget(owner_key)
 
             should_terminate = False
 

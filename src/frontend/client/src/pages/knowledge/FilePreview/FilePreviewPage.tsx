@@ -171,6 +171,8 @@ export default function FilePreviewPage() {
 
     useEffect(() => {
         if (loading || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
+        const w = splitContainerRef.current.getBoundingClientRect().width;
+        if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return;
         hasAutoOpenedAiAssistant.current = true;
         setShowAiAssistant(true);
     }, [loading, showAiAssistant]);
@@ -276,7 +278,7 @@ export default function FilePreviewPage() {
 
             {/* Right: AI Assistant (full height) */}
             {showAiAssistant && (
-                <div className="flex-1 h-full min-w-[360px] bg-white">
+                <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white">
                     <AiAssistantPanel
                         features={{ tools: false, modelSelect: true, knowledgeBase: false, fileUpload: false }}
                         onClose={() => setShowAiAssistant(false)}

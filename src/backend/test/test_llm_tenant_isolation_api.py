@@ -1,15 +1,25 @@
-"""F020 T08 Router dependency downgrade smoke tests.
+"""LLM router dependency contract.
 
-Static checks that ``get_admin_user`` was replaced with
-``get_tenant_admin_user`` on the Tenant-scoped CRUD endpoints while
-system-level config endpoints (workbench / knowledge / assistant /
-evaluation) kept ``get_admin_user`` per AC-11 / D9.
+All LLM management endpoints — Tenant-scoped CRUD and system-level
+config — are gated by ``UserPayload.get_tenant_admin_user`` so global
+super admins **and** Child Admins on their own tenant can both pass.
 
-A full TestClient-backed integration pass requires mocking 4+ Service
-collaborators (model factories, background tasks, LLMDao, etc.) so end-
-to-end behaviour is deferred to the 114 pytest run in T16. The checks
-here catch the most likely regression — accidental dependency rollback —
-by inspecting the FastAPI route table.
+History:
+- F020 T08 originally chose ``get_tenant_admin_user`` for the CRUD set.
+- A later commit (``Align model management with role menu permissions``)
+  swapped the gate to ``get_model_admin_user`` (admin or any non-admin
+  holding the ``model`` web_menu entry). That broke Child Admins —
+  the backend strips ``model`` from their web_menu, so the page guard
+  redirected them to /403 even though PRD §6.1 allows them to manage
+  models within their own tenant.
+- The current revision restores ``get_tenant_admin_user`` everywhere,
+  matching the v2.5.1 LLM multi-tenant decisions (admin-scope switch,
+  Root-shared toggle, Child Admin autonomy, legacy data → Root) and the
+  technical spec §11.1 ruling.
+
+The cross-tenant write guard for system config remains in the router
+helper ``_assert_can_write_system_config`` and is covered by
+``test_llm_system_config_router_authz.py``.
 """
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -18,9 +28,7 @@ from bisheng.llm.api.router import router
 
 def _endpoint_deps(path: str, method: str) -> list[str]:
     """Return the names of Depends() callables bound to the given
-    (path, method) in the LLM router. Used to assert that the CRUD
-    endpoints hit ``get_tenant_admin_user`` and the system-level ones
-    stay on ``get_admin_user``."""
+    (path, method) in the LLM router."""
     for r in router.routes:
         if getattr(r, 'path', None) == path and method in getattr(r, 'methods', set()):
             names = []
@@ -33,7 +41,7 @@ def _endpoint_deps(path: str, method: str) -> list[str]:
     raise AssertionError(f'no route matched {method} {path}')
 
 
-# --- Tenant-scoped CRUD: must now admit Child Admins -----------------------
+# --- Tenant-scoped CRUD: must admit Child Admins ---------------------------
 
 
 def test_post_llm_uses_tenant_admin_dep():
@@ -41,6 +49,7 @@ def test_post_llm_uses_tenant_admin_dep():
     deps = _endpoint_deps('/llm', 'POST')
     assert 'get_tenant_admin_user' in deps
     assert 'get_admin_user' not in deps
+    assert 'get_model_admin_user' not in deps
 
 
 def test_put_llm_uses_tenant_admin_dep():
@@ -48,6 +57,7 @@ def test_put_llm_uses_tenant_admin_dep():
     further refuses writes on Root-owned rows."""
     deps = _endpoint_deps('/llm', 'PUT')
     assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
 
 
 def test_delete_llm_uses_tenant_admin_dep():
@@ -55,39 +65,60 @@ def test_delete_llm_uses_tenant_admin_dep():
     refuses Root-owned deletes for non-super."""
     deps = _endpoint_deps('/llm', 'DELETE')
     assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
 
 
 def test_get_info_and_online_endpoints_use_tenant_admin_dep():
     """Detail read + online toggle follow the same Child-Admin gate."""
     assert 'get_tenant_admin_user' in _endpoint_deps('/llm/info', 'GET')
     assert 'get_tenant_admin_user' in _endpoint_deps('/llm/online', 'POST')
+    assert 'get_model_admin_user' not in _endpoint_deps('/llm/info', 'GET')
+    assert 'get_model_admin_user' not in _endpoint_deps('/llm/online', 'POST')
 
 
-# --- System-level config: must stay super-admin only (AC-11 / D9) ----------
+# --- System-level config: same gate, plus _assert_can_write_system_config ---
+# Child Admin is allowed to write their own tenant's row (admin-scope or
+# direct ``tenant#admin`` grant). The cross-tenant write guard lives in
+# the router helper ``_assert_can_write_system_config`` and is covered
+# by ``test_llm_system_config_router_authz.py``.
 
 
-def test_workbench_endpoint_stays_super_admin_only():
+def test_workbench_endpoint_uses_tenant_admin_dep():
     deps = _endpoint_deps('/llm/workbench', 'POST')
-    assert 'get_admin_user' in deps
-    assert 'get_tenant_admin_user' not in deps
+    assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
 
 
-def test_knowledge_config_endpoint_stays_super_admin_only():
+def test_knowledge_config_endpoint_uses_tenant_admin_dep():
     deps = _endpoint_deps('/llm/knowledge', 'POST')
-    assert 'get_admin_user' in deps
-    assert 'get_tenant_admin_user' not in deps
+    assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
 
 
-def test_assistant_config_endpoint_stays_super_admin_only():
+def test_assistant_config_endpoint_uses_tenant_admin_dep():
     deps = _endpoint_deps('/llm/assistant', 'POST')
-    assert 'get_admin_user' in deps
-    assert 'get_tenant_admin_user' not in deps
+    assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
 
 
-# --- Sanity: get_tenant_admin_user is actually a UserPayload classmethod ---
+def test_evaluation_config_endpoint_uses_tenant_admin_dep():
+    deps = _endpoint_deps('/llm/evaluation', 'POST')
+    assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
 
 
-def test_get_tenant_admin_user_is_a_userpayload_classmethod():
+def test_workflow_config_endpoint_uses_tenant_admin_dep():
+    deps = _endpoint_deps('/llm/workflow', 'POST')
+    assert 'get_tenant_admin_user' in deps
+    assert 'get_model_admin_user' not in deps
+
+
+# --- Sanity: tenant_admin dep is a UserPayload classmethod ------------------
+
+
+def test_tenant_admin_dep_is_callable_classmethod():
+    """``get_tenant_admin_user`` is declared on ``UserPayload`` directly
+    so FastAPI's ``Depends(...)`` resolves it correctly."""
     fn = UserPayload.__dict__.get('get_tenant_admin_user')
-    assert fn is not None, 'T03 dependency must be declared on UserPayload'
+    assert fn is not None, 'get_tenant_admin_user must be declared on UserPayload'
     assert isinstance(fn, classmethod)

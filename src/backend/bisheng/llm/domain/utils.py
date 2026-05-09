@@ -357,6 +357,20 @@ def wrapper_bisheng_model_generator_async(func):
     return wrapper
 
 
+def _scoped_cache_key(key_prefix: str, unique_id: Any) -> str:
+    """Cache key namespaced by current tenant scope.
+
+    The ORM-level ``do_orm_execute`` listener filters reads by the active
+    tenant_id, so a Root admin's cached row would otherwise be served back
+    to a Child tenant on the next call (or vice versa). Including the
+    scope in the key keeps each tenant's view honest and avoids the
+    "first caller wins" symptom that masked the v2.5.1 root-share bug.
+    """
+    from bisheng.core.context.tenant import get_current_tenant_id
+    tid = get_current_tenant_id() or 0
+    return f"{key_prefix}t{tid}:{unique_id}"
+
+
 def wrapper_bisheng_llm_info(key_prefix: str):
     """
     LLM Information Cache Decorator
@@ -367,9 +381,9 @@ def wrapper_bisheng_llm_info(key_prefix: str):
         def wrapper(*args, **kwargs):
             unique_id = args[1] if args and len(args) > 1 else kwargs.get('model_id') or kwargs.get('server_id')
             cache_flag = kwargs.get('cache', False)
-            cache_key = f"{key_prefix}:{unique_id}"
             if not cache_flag:
                 return func(*args, **kwargs)
+            cache_key = _scoped_cache_key(key_prefix, unique_id)
             cache_info = LLM_CACHE.get(cache_key)
             if cache_info:
                 return cache_info
@@ -392,9 +406,9 @@ def wrapper_bisheng_llm_info_async(key_prefix: str):
         async def wrapper(*args, **kwargs):
             unique_id = args[1] if args and len(args) > 1 else kwargs.get('model_id') or kwargs.get('server_id')
             cache_flag = kwargs.get('cache', False)
-            cache_key = f"{key_prefix}:{unique_id}"
             if not cache_flag:
                 return await func(*args, **kwargs)
+            cache_key = _scoped_cache_key(key_prefix, unique_id)
             cache_info = LLM_CACHE.get(cache_key)
             if cache_info:
                 return cache_info

@@ -68,8 +68,8 @@ class Department(SQLModelSerializable, table=True):
             comment='Parent department ID, NULL=root',
         ),
     )
-    tenant_id: int = Field(
-        default=1,
+    tenant_id: Optional[int] = Field(
+        default=None,
         sa_column=Column(
             Integer, nullable=False,
             server_default=text('1'), index=True,
@@ -599,6 +599,65 @@ class DepartmentDao:
             return result.first()
 
     @classmethod
+    async def aassert_reparent_legal(
+        cls, dept_id: int, new_parent_id: Optional[int],
+    ) -> None:
+        """INV-T1 (2-layer tenant lock) gate for every reparent path.
+
+        Mount creation enforces this at ``TenantMountService.mount_child``;
+        the symmetric case is "reparent moves a mounted subtree under
+        another mount point". This helper is the single chokepoint that
+        F002 (manual move), F014 (SSO upsert), and F009 (org-sync move)
+        all call before changing ``parent_id``. Adding a new reparent
+        path? Call this first, or you reintroduce the dept-tree nesting
+        bug fixed in 2.5.1.
+
+        No-op when ``new_parent_id`` is None (top-level — outer mount
+        impossible) or when the moved subtree contains no mount (inner
+        mount irrelevant).
+        """
+        # Local import: errcode module pulls FastAPI's HTTPException, which
+        # would create a heavy cycle if pulled in at module import time.
+        from bisheng.common.errcode.tenant_tree import (
+            TenantTreeNestingForbiddenError,
+        )
+
+        if new_parent_id is None:
+            return
+        inner = await cls.aget_descendant_mount(dept_id)
+        if inner is None:
+            return
+        outer = await cls.aget_ancestors_with_mount(new_parent_id)
+        if outer is None:
+            return
+        raise TenantTreeNestingForbiddenError()
+
+    @classmethod
+    async def aget_descendant_mount(
+        cls, dept_id: int,
+    ) -> Optional['Department']:
+        """Return one descendant (or self) of ``dept_id`` that carries
+        ``is_tenant_root=1``, or None.
+
+        Used by reparent paths (F002 move, F014 SSO upsert) to enforce
+        INV-T1's 2-layer lock symmetrically: ``aget_ancestors_with_mount``
+        catches "new parent already inside a mount subtree", this helper
+        catches "moved subtree itself contains a mount". When both fire,
+        the move would produce nested mounts and must be rejected.
+        """
+        dept = await cls.aget_by_id(dept_id)
+        if dept is None or not dept.path:
+            return None
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.path.like(f'{dept.path}%'),
+                    Department.is_tenant_root == 1,
+                ).limit(1)
+            )
+            return result.first()
+
+    @classmethod
     async def aset_mount(
         cls, dept_id: int, tenant_id: int,
     ) -> None:
@@ -718,6 +777,7 @@ class DepartmentDao:
         ``is_deleted=1``), clears the flag and restores ``status='active'``
         so the department becomes visible again.
         """
+
         def final_path(parent_path: str, dept_id: int) -> str:
             base = (parent_path or '').strip()
             if base and not base.endswith('/'):
@@ -980,7 +1040,7 @@ class UserDepartmentDao:
 
         Each row is a UserDepartment joined with user info.
         """
-        from bisheng.database.models.user import User
+        from bisheng.user.domain.models.user import User
 
         with get_sync_db_session() as session:
             base = (
@@ -1014,7 +1074,7 @@ class UserDepartmentDao:
         cls, department_id: int, page: int = 1, limit: int = 20,
         keyword: str = '',
     ) -> Tuple[List, int]:
-        from bisheng.database.models.user import User
+        from bisheng.user.domain.models.user import User
 
         async with get_async_db_session() as session:
             base = (
@@ -1243,6 +1303,302 @@ class UserDepartmentDao:
                 )
             )
             return result.first() is not None
+
+    # -----------------------------------------------------------------------
+    # F024: tenant user list — authoritative source is "primary dept in
+    # tenant subtree", consistent with TenantResolver.resolve_user_leaf_tenant.
+    # Replaces UserTenantDao.aget_tenant_users for management UI listing,
+    # so v2.5.0 ``aadd_users``-residue rows do not surface as phantom
+    # members. UserTenant is only LEFT-JOINed for last_access_time
+    # decoration; query never filters on UserTenant rows.
+    # -----------------------------------------------------------------------
+    @classmethod
+    async def aget_users_by_tenant_subtree(
+        cls,
+        tenant_id: int,
+        page: int = 1,
+        page_size: int = 20,
+        keyword: Optional[str] = None,
+    ) -> Tuple[List[dict], int]:
+        """Get users whose primary department is mounted under the tenant.
+
+        Resolution rules (in order):
+          1. Look up ``tenant.root_dept_id`` → fetch the root dept's path,
+             match ``Department.path LIKE '<root_path>%'``.
+          2. If the tenant has no ``root_dept_id`` (legacy data from v2.5.0
+             or early v2.5.1), fall back to ``Department.tenant_id == tenant_id``
+             — preserves the v2.5.0 flat-model semantic so the UI keeps
+             working during migration.
+
+        ``UserTenant`` is LEFT-JOINed only to surface ``last_access_time``
+        as ``join_time`` for the response (matches the legacy DAO's shape).
+        Phantom UserTenant rows whose user has a primary dept outside the
+        subtree are NOT considered (AC-12).
+        """
+        from bisheng.database.models.tenant import Tenant, UserTenant
+        from bisheng.user.domain.models.user import User
+
+        async with get_async_db_session() as session:
+            # Step 1: resolve tenant.root_dept_id (if set) → path prefix
+            root_path: Optional[str] = None
+            tenant_row = (
+                await session.exec(
+                    select(Tenant.root_dept_id).where(Tenant.id == tenant_id)
+                )
+            ).first()
+            # session.exec with a column-tuple select returns the value
+            # directly on SQLModel >=0.0.14, but on some versions returns a
+            # 1-tuple Row. Normalise.
+            root_dept_id = (
+                tenant_row[0] if isinstance(tenant_row, tuple) else tenant_row
+            )
+            if root_dept_id is not None:
+                path_row = (
+                    await session.exec(
+                        select(Department.path).where(
+                            Department.id == root_dept_id,
+                        )
+                    )
+                ).first()
+                root_path = (
+                    path_row[0] if isinstance(path_row, tuple) else path_row
+                )
+
+            # Step 2: build the subtree filter
+            if root_path:
+                subtree_filter = Department.path.like(f'{root_path}%')
+            else:
+                # Fallback: legacy flat model
+                subtree_filter = Department.tenant_id == tenant_id
+
+            # Step 3: count distinct users matching the filter
+            count_stmt = (
+                select(func.count(func.distinct(User.user_id)))
+                .select_from(User)
+                .join(
+                    UserDepartment,
+                    UserDepartment.user_id == User.user_id,
+                )
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+            )
+            if keyword:
+                like_pattern = f'%{keyword}%'
+                count_stmt = count_stmt.where(
+                    User.user_name.like(like_pattern),
+                )
+            total = (await session.exec(count_stmt)).one()
+            # ``.one()`` returns a Row(count) on some versions and a scalar
+            # on others; normalise.
+            if isinstance(total, tuple):
+                total = total[0]
+
+            # Step 4: paginated user list. Use a distinct subquery on
+            # user_id to guard against multi-primary anomalies (the G1 fix
+            # closes the write path, but defensive DISTINCT here makes
+            # historical data render cleanly).
+            uid_subq = (
+                select(UserDepartment.user_id)
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+                .distinct()
+                .subquery()
+            )
+
+            stmt = (
+                select(
+                    User.user_id,
+                    User.user_name,
+                    User.external_id,
+                    User.avatar,
+                    UserTenant.last_access_time.label('join_time'),
+                )
+                .join(uid_subq, uid_subq.c.user_id == User.user_id)
+                .outerjoin(
+                    UserTenant,
+                    (UserTenant.user_id == User.user_id)
+                    & (UserTenant.tenant_id == tenant_id)
+                    & (UserTenant.is_active == 1),
+                )
+            )
+            if keyword:
+                like_pattern = f'%{keyword}%'
+                stmt = stmt.where(User.user_name.like(like_pattern))
+            stmt = (
+                stmt.order_by(
+                    UserTenant.last_access_time.desc(),
+                    User.user_id,
+                )
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+            rows = (await session.exec(stmt)).all()
+
+            return [
+                {
+                    'user_id': row.user_id,
+                    'user_name': row.user_name,
+                    'external_id': row.external_id,
+                    'avatar': row.avatar,
+                    'join_time': row.join_time,
+                }
+                for row in rows
+            ], total
+
+    # -----------------------------------------------------------------------
+    # F024 phase-2 follow-up: tenant user_count must use the same "primary
+    # dept in tenant subtree" source as the user list, so the management UI
+    # never shows a non-zero count whose detail dialog is empty (phantom
+    # UserTenant residues from v2.5.0 ``aadd_users``). Replaces
+    # ``TenantDao.acount_tenant_users``/``..._batch`` for display purposes.
+    # -----------------------------------------------------------------------
+    @classmethod
+    async def _aresolve_subtree_root_paths(
+        cls, session, tenant_ids: List[int],
+    ) -> dict:
+        """Resolve ``tenant_id -> Department.path`` for the given tenants.
+
+        Tenants without ``root_dept_id`` (legacy v2.5.0 / early v2.5.1) are
+        omitted from the result so callers can fall back to the flat-model
+        ``Department.tenant_id == tenant_id`` semantic.
+        """
+        from bisheng.database.models.tenant import Tenant
+        if not tenant_ids:
+            return {}
+        rows = (
+            await session.exec(
+                select(Tenant.id, Tenant.root_dept_id).where(
+                    Tenant.id.in_(tenant_ids),
+                )
+            )
+        ).all()
+        root_dept_to_tenant: dict = {}
+        for row in rows:
+            tid = row[0] if isinstance(row, (list, tuple)) else row.id
+            rdid = (
+                row[1] if isinstance(row, (list, tuple))
+                else row.root_dept_id
+            )
+            if rdid is not None:
+                root_dept_to_tenant.setdefault(rdid, []).append(tid)
+        if not root_dept_to_tenant:
+            return {}
+        path_rows = (
+            await session.exec(
+                select(Department.id, Department.path).where(
+                    Department.id.in_(list(root_dept_to_tenant.keys())),
+                )
+            )
+        ).all()
+        result: dict = {}
+        for row in path_rows:
+            dept_id = row[0] if isinstance(row, (list, tuple)) else row.id
+            path = row[1] if isinstance(row, (list, tuple)) else row.path
+            for tid in root_dept_to_tenant.get(dept_id, []):
+                if path:
+                    result[tid] = path
+        return result
+
+    @classmethod
+    async def acount_users_by_tenant_subtree(cls, tenant_id: int) -> int:
+        """Count users whose primary department is mounted under the tenant.
+
+        Companion of ``aget_users_by_tenant_subtree``. Use this when only
+        the count is needed (tenant list / detail / quota usage), so the
+        UI count column matches the dialog list source exactly.
+        """
+        from bisheng.user.domain.models.user import User
+
+        async with get_async_db_session() as session:
+            paths = await cls._aresolve_subtree_root_paths(
+                session, [tenant_id],
+            )
+            root_path = paths.get(tenant_id)
+            if root_path:
+                subtree_filter = Department.path.like(f'{root_path}%')
+            else:
+                subtree_filter = Department.tenant_id == tenant_id
+            stmt = (
+                select(func.count(func.distinct(User.user_id)))
+                .select_from(User)
+                .join(
+                    UserDepartment,
+                    UserDepartment.user_id == User.user_id,
+                )
+                .join(
+                    Department,
+                    Department.id == UserDepartment.department_id,
+                )
+                .where(
+                    UserDepartment.is_primary == 1,
+                    subtree_filter,
+                )
+            )
+            total = (await session.exec(stmt)).one()
+            if isinstance(total, tuple):
+                total = total[0]
+            return int(total or 0)
+
+    @classmethod
+    async def acount_users_by_tenant_subtree_batch(
+        cls, tenant_ids: List[int],
+    ) -> dict:
+        """Batch counterpart of ``acount_users_by_tenant_subtree``.
+
+        Returns ``{tenant_id: count}``. Tenants with zero matches are
+        omitted (callers default missing entries to 0). The query opens a
+        single session, resolves all ``root_path`` prefixes up front, then
+        issues one aggregate query per tenant — N is bounded by the
+        list page size (≤100), so per-tenant round-trips are acceptable
+        and avoid string-SQL UNION fan-out.
+        """
+        from bisheng.user.domain.models.user import User
+
+        if not tenant_ids:
+            return {}
+        async with get_async_db_session() as session:
+            paths = await cls._aresolve_subtree_root_paths(session, tenant_ids)
+            counts: dict = {}
+            for tid in tenant_ids:
+                root_path = paths.get(tid)
+                if root_path:
+                    subtree_filter = Department.path.like(f'{root_path}%')
+                else:
+                    subtree_filter = Department.tenant_id == tid
+                stmt = (
+                    select(func.count(func.distinct(User.user_id)))
+                    .select_from(User)
+                    .join(
+                        UserDepartment,
+                        UserDepartment.user_id == User.user_id,
+                    )
+                    .join(
+                        Department,
+                        Department.id == UserDepartment.department_id,
+                    )
+                    .where(
+                        UserDepartment.is_primary == 1,
+                        subtree_filter,
+                    )
+                )
+                total = (await session.exec(stmt)).one()
+                if isinstance(total, tuple):
+                    total = total[0]
+                if total:
+                    counts[tid] = int(total)
+            return counts
 
 
 # Register ``department_admin_grant`` on SQLModel metadata for migrations / create_all.

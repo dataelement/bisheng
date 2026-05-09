@@ -9,6 +9,9 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.models import LLMDao
+from bisheng.llm.domain.share_fallback import (
+    get_model_by_id_with_share_fallback,
+)
 
 
 class ToolInput(BaseModel):
@@ -88,7 +91,9 @@ class SearchKnowledgeBase(BaseTool):
         if not knowledge_info.model:
             # "Knowledge Base Not ConfiguredembeddingModels"
             raise Exception("Knowledge Base Not ConfiguredembeddingModels")
-        embed_info = LLMDao.get_model_by_id(int(knowledge_info.model))
+        # The KB embedding may be a Root-shared system default; read via
+        # the share fallback so child tenants can resolve Root-owned rows.
+        embed_info = get_model_by_id_with_share_fallback(int(knowledge_info.model))
         if not embed_info:
             # "Configured by the Knowledge BaseembeddingModel does not exist or has been deleted"
             raise Exception("Configured by the Knowledge BaseembeddingModel does not exist or has been deleted")

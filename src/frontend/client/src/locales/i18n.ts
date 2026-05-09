@@ -17,6 +17,18 @@ export const resources = {
 
 const config = window.BRAND_CONFIG || {};
 
+// APP_CONFIG.disableJa (config.js): drop any saved Japanese choice so
+// LanguageDetector below doesn't auto-restore it on this load.
+const jaDisabled = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);
+if (jaDisabled) {
+  try {
+    const saved = localStorage.getItem('i18nextLng');
+    if (saved && saved.toLowerCase().startsWith('ja')) {
+      localStorage.removeItem('i18nextLng');
+    }
+  } catch { /* localStorage may be unavailable */ }
+}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -25,6 +37,9 @@ i18n
       'zh-TW': ['zh-Hant', 'en'],
       'zh-HK': ['zh-Hant', 'en'],
       'zh': ['zh-Hans', 'en'],
+      // When ja is disabled at runtime, browser-detected ja* falls through
+      // to English instead of loading the bundled Japanese resources.
+      ...(jaDisabled ? { ja: ['en'], 'ja-JP': ['en'] } : {}),
       default: ['en'],
     },
     fallbackNS: 'translation',

@@ -27,6 +27,10 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 }
 
 // 系统模块
+// `tenant` / `llm` are synthetic v2 namespaces (action prefix `tenant.*` /
+// `llm.server.*`). Backend `get_audit_logs` maps them to `action LIKE '...'`
+// instead of `system_id = ?`. Keep this list in sync with backend
+// `_V2_NAMESPACE_TO_ACTION_PREFIX` in audit_log.py.
 export async function getModulesApi(): Promise<{ data: any[] }> {
     return {
         data: [
@@ -37,6 +41,8 @@ export async function getModulesApi(): Promise<{ data: any[] }> {
             { name: 'log.systemIdEnum.dashboard', value: 'dashboard' },
             { name: 'log.systemIdEnum.subscribe', value: 'subscription' },
             { name: 'log.systemIdEnum.knowledgeSpace', value: 'knowledge_space' },
+            { name: 'log.systemIdEnum.tenant', value: 'tenant' },
+            { name: 'log.systemIdEnum.llm', value: 'llm' },
         ],
 
     }
@@ -72,6 +78,17 @@ const actions = [
     { name: 'log.eventTypeEnum.delete_channel', value: 'delete_channel' },
     { name: 'log.eventTypeEnum.create_knowledge_space', value: 'create_knowledge_space' },
     { name: 'log.eventTypeEnum.delete_knowledge_space', value: 'delete_knowledge_space' },
+    // v2 structured actions surfaced to operators (2026-05-06 product call):
+    // tenant lifecycle + LLM server lifecycle only. Keep in sync with backend
+    // `_UI_VISIBLE_V2_ACTIONS`. Note: i18n keys use camelCase to avoid
+    // colliding with i18next's `.` nesting separator (the on-wire `value`
+    // keeps the dotted form expected by the audit_log.action column).
+    { name: 'log.eventTypeEnum.tenantMount', value: 'tenant.mount' },
+    { name: 'log.eventTypeEnum.tenantUnmount', value: 'tenant.unmount' },
+    { name: 'log.eventTypeEnum.tenantDisable', value: 'tenant.disable' },
+    { name: 'log.eventTypeEnum.llmServerCreate', value: 'llm.server.create' },
+    { name: 'log.eventTypeEnum.llmServerUpdate', value: 'llm.server.update' },
+    { name: 'log.eventTypeEnum.llmServerDelete', value: 'llm.server.delete' },
 ];
 
 // 全部操作行为
@@ -89,6 +106,8 @@ export async function getActionsByModuleApi(moduleId) {
         case 'dashboard': return actions.filter(a => a.value.includes('dashboard'))
         case 'subscription': return actions.filter(a => a.value.includes('channel'))
         case 'knowledge_space': return actions.filter(a => a.value.includes('knowledge_space'))
+        case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
+        case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
     }
 }
 

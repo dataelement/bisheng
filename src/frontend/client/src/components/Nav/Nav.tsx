@@ -1,6 +1,6 @@
 import type { ConversationListResponse } from '~/types/chat';
 import { PermissionTypes, Permissions } from '~/types/chat';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
@@ -29,8 +29,10 @@ const Nav = ({
   const localize = useLocalize();
   const { isAuthenticated } = useAuthContext();
 
-  const [navWidth, setNavWidth] = useState('280px');
+  const [navWidth, setNavWidth] = useState('240px');
   const [isHovering, setIsHovering] = useState(false);
+  const navPanelRef = useRef<HTMLDivElement>(null);
+  const [navPanelRightPx, setNavPanelRightPx] = useState(0);
   const isSmallScreen = usePrefersMobileLayout();
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
 
@@ -48,9 +50,31 @@ const Nav = ({
       // 移动端：与知识/订阅/应用中心侧栏统一 240px
       setNavWidth('240px');
     } else {
-      setNavWidth('280px');
+      setNavWidth('240px');
     }
   }, [isSmallScreen]);
+
+  // 折叠把手贴在会话列表右缘（分隔线右侧），需计入 MainLayout 窄轨 + main 内边距，故用测量值而非假定 left:0 + translateX
+  useLayoutEffect(() => {
+    if (isSmallScreen) {
+      return;
+    }
+    const el = navPanelRef.current;
+    if (!el) {
+      return;
+    }
+    const sync = () => {
+      setNavPanelRightPx(el.getBoundingClientRect().right);
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    window.addEventListener('resize', sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, [isSmallScreen, navVisible, navWidth]);
 
   const [showLoading, setShowLoading] = useState(false);
 
@@ -104,9 +128,11 @@ const Nav = ({
   return (
     <>
       <div
+        ref={navPanelRef}
         data-testid="nav"
         className={cn(
-          'max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[280px] bg-white border-r border-[#ececec] touch-mobile:border-r-0',
+          // 须与 usePrefersMobileLayout（max-width:767px）一致：touch-mobile 为 max-1023，误伤 768–1023 会去掉边距/边框，像「盖在内容上」
+          'max-w-[260px] max-[767px]:max-w-none min-w-0 flex-shrink-0 overflow-x-hidden bg-white border-r border-[#ececec] max-[767px]:border-r-0',
           isSmallScreen && 'fixed inset-y-0 left-0 z-[70] h-[100dvh] shadow-[4px_0_24px_rgba(0,0,0,0.06)]',
         )}
         style={{
@@ -115,7 +141,7 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[240px] touch-mobile:w-full touch-desktop:w-[280px]">
+        <div className="h-full w-[240px] max-[767px]:w-full">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
@@ -131,7 +157,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full min-h-0 w-full flex-col px-5 touch-mobile:p-0"
+                  className="flex h-full min-h-0 w-full flex-col gap-4 py-5 px-3 max-[767px]:gap-0 max-[767px]:p-0"
                 >
                   {/* 新建 */}
                   <NewChat
@@ -141,7 +167,7 @@ const Nav = ({
                   />
                   <div
                     className={cn(
-                      '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2 touch-mobile:-mr-0 touch-mobile:pr-0',
+                      '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2 max-[767px]:-mr-0 max-[767px]:pr-0',
                     )}
                     ref={containerRef}
                   >
@@ -162,16 +188,16 @@ const Nav = ({
           </div>
         </div>
       </div>
-      {!isSmallScreen && (
+      {!isSmallScreen && navPanelRightPx > 0 ? (
         <NavToggle
           navVisible={navVisible}
           onToggle={toggleNavVisible}
           isHovering={isHovering}
           setIsHovering={setIsHovering}
-          className="fixed top-1/2 z-[50]"
-          translateX={236}
+          className=""
+          anchorRightEdgePx={navPanelRightPx}
         />
-      )}
+      ) : null}
       {isSmallScreen && (
         <div
           id="mobile-nav-mask-toggle"

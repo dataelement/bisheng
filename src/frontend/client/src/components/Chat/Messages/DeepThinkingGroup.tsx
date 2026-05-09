@@ -144,7 +144,7 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         );
 
         return (
-            <>
+            <div className="flex w-full min-w-0 flex-col gap-2">
                 <button
                     type="button"
                     onClick={handleClick}
@@ -173,7 +173,7 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                         ))}
                     </div>
                 </div>
-            </>
+            </div>
         );
     },
 );

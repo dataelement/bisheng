@@ -126,7 +126,17 @@ class BaseFilePipeline(BasePipeline):
             "file_metadata": self.file_metadata,
             "file_extension": self.file_extension,
             "tmp_dir": self.tmp_dir,
+            "image_object_dir": self._get_image_object_dir(),
         }
+
+    def _get_image_object_dir(self) -> Optional[str]:
+        """MinIO object dir (relative to bucket) where loader uploads extracted images.
+
+        Returning None keeps the loader writing local file paths and disables the
+        bbox-aligned upload path — appropriate for transient pipelines that have no
+        durable document_id (e.g., temp parsing).
+        """
+        return None
 
     def _init_excel_loader(self) -> BaseBishengLoader:
         return ExcelLoader(

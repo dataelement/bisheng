@@ -55,7 +55,10 @@ export async function listApprovalRequestsApi(params?: {
   page?: number;
   page_size?: number;
 }): Promise<{ data: ApprovalRequestItem[]; total: number }> {
-  const res: any = await request.get(`/api/v1/approval/requests`, { params });
+  const res: any = await request.get(`/api/v1/approval/requests`, {
+    params,
+    paramsSerializer: request.paramsSerializer,
+  });
   const payload = res?.data ?? res ?? {};
   return {
     data: Array.isArray(payload?.data) ? payload.data : [],
@@ -79,6 +82,53 @@ export async function decideApprovalRequestApi(
   return (res?.data ?? res) as ApprovalRequestItem;
 }
 
+function fileTypeFromName(fileName: string): FileType {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "pdf":
+      return FileType.PDF;
+    case "doc":
+      return FileType.DOC;
+    case "docx":
+      return FileType.DOCX;
+    case "xls":
+      return FileType.XLS;
+    case "xlsx":
+      return FileType.XLSX;
+    case "ppt":
+      return FileType.PPT;
+    case "pptx":
+      return FileType.PPTX;
+    case "jpg":
+      return FileType.JPG;
+    case "jpeg":
+      return FileType.JPEG;
+    case "png":
+      return FileType.PNG;
+    case "html":
+    case "htm":
+      return FileType.HTML;
+    case "txt":
+      return FileType.TXT;
+    case "md":
+      return FileType.MD;
+    case "wps":
+      return FileType.WPS;
+    case "dps":
+      return FileType.DPS;
+    case "et":
+      return FileType.ET;
+    default:
+      return FileType.OTHER;
+  }
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
 export function approvalRequestToKnowledgeFiles(
   request: ApprovalRequestItem,
   spaceId: string,
@@ -86,26 +136,31 @@ export function approvalRequestToKnowledgeFiles(
   const files = Array.isArray(request.payload_json?.files)
     ? request.payload_json.files
     : [];
-  return files.map((item: any, index: number) => ({
-    id: String(-(request.id * 1000 + index + 1)),
-    name: String(item?.file_name || item?.name || `pending-${index + 1}`),
-    type: FileType.OTHER,
-    status:
-      request.status === "pending_review"
-        ? FileStatus.WAITING
-        : FileStatus.FAILED,
-    tags: [],
-    path: String(item?.file_path || item?.file_name || ""),
-    parentId:
-      request.parent_folder_id !== undefined && request.parent_folder_id !== null
-        ? String(request.parent_folder_id)
-        : undefined,
-    spaceId,
-    createdAt: request.create_time || "",
-    updatedAt: request.update_time || request.create_time || "",
-    approvalRequestId: request.id,
-    approvalStatus: request.status,
-    approvalReason: request.decision_reason || request.safety_reason || undefined,
-    isPendingApproval: request.status === "pending_review",
-  }));
+  return files.map((item: any, index: number) => {
+    const name = String(item?.file_name || item?.name || `pending-${index + 1}`);
+    const parentId = item?.parent_id ?? request.parent_folder_id;
+    return {
+      id: String(-(request.id * 1000 + index + 1)),
+      name,
+      type: fileTypeFromName(name),
+      size: numberOrUndefined(item?.file_size ?? item?.size),
+      status:
+        request.status === "pending_review"
+          ? FileStatus.WAITING
+          : FileStatus.FAILED,
+      tags: [],
+      path: String(item?.file_path || item?.file_name || ""),
+      parentId:
+        parentId !== undefined && parentId !== null
+          ? String(parentId)
+          : undefined,
+      spaceId,
+      createdAt: request.create_time || "",
+      updatedAt: request.update_time || request.create_time || "",
+      approvalRequestId: request.id,
+      approvalStatus: request.status,
+      approvalReason: request.decision_reason || request.safety_reason || undefined,
+      isPendingApproval: request.status === "pending_review",
+    };
+  });
 }

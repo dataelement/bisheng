@@ -1,23 +1,81 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import { userContext } from "@/contexts/userContext";
+import { getTenantsApi } from "@/controllers/API/tenant";
+import { useAdminScope } from "@/hooks/useAdminScope";
+import { Tenant } from "@/types/api/tenant";
 import { ArrowLeft } from "lucide-react";
-import { useMemo } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isGlobalSuperUser } from "./permissions";
+import { ScopeBanner } from "./SystemConfigBanners";
 import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
 import KnowledgeModle from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import WorkbenchModel from "./tabs/WorkbenchModel";
 
-export default function SystemModelConfig({ data, defaultTab, onBack }: { data: any; defaultTab?: string; onBack: () => void }) {
+const ROOT_TENANT_ID = 1;
+
+export default function SystemModelConfig({
+    data,
+    defaultTab,
+    onBack,
+    onTabChange,
+}: {
+    data: any;
+    defaultTab?: string;
+    onBack: () => void;
+    onTabChange?: (tab: string) => void;
+}) {
     const { t } = useTranslation('model')
+    const { user } = useContext(userContext) as any
+    const isGlobalSuper = isGlobalSuperUser(user)
+    const [activeTab, setActiveTab] = useState(defaultTab || "workbench")
+    // useAdminScope's GET /admin/tenant-scope returns HTTP 403 + 19701 for
+    // non-super callers (INV-T14). GET /tenants is also super-only
+    // (get_admin_user). Both are only needed by ScopeBanner / childTenant
+    // when a super admin switches management view; Child Admins never see
+    // a scope switcher and only ever look at their own tenant. Gate both
+    // calls so Child Admins do not trip the request.ts 403→/403 redirect.
+    const { scope } = useAdminScope({ enabled: isGlobalSuper })
+    const [tenants, setTenants] = useState<Tenant[]>([])
+
+    useEffect(() => {
+        setActiveTab(defaultTab || "workbench")
+    }, [defaultTab])
+
+    useEffect(() => {
+        if (!isGlobalSuper) {
+            return
+        }
+        let cancelled = false
+        getTenantsApi({ page: 1, page_size: 100, status: 'active' })
+            .then((res) => {
+                if (!cancelled) setTenants(res?.data || [])
+            })
+            .catch(() => {
+                if (!cancelled) setTenants([])
+            })
+        return () => { cancelled = true }
+    }, [isGlobalSuper])
+
+    const rootTenant = useMemo(
+        () => tenants.find((row) => row.id === ROOT_TENANT_ID) || null,
+        [tenants],
+    )
+    const childTenant = useMemo(() => {
+        if (scope.scope_tenant_id === null || scope.scope_tenant_id === ROOT_TENANT_ID) return null
+        return tenants.find((row) => row.id === scope.scope_tenant_id) || null
+    }, [scope.scope_tenant_id, tenants])
+
     const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
         let llmOptions = []
         let embeddings = []
         let asrModel = []
         let ttsModel = []
         const rerank = []
-        data.forEach(server => {     
+        data.forEach(server => {
             const serverEmbItem = { value: server.id, label: server.name, children: [] }
             const serverLlmItem = { value: server.id, label: server.name, children: [] }
             const serverAsrItem = { value: server.id, label: server.name, children: [] }
@@ -25,8 +83,6 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
             const rerankItem = { value: server.id, label: server.name, children: [] }
 
             server.models.forEach(model => {
-             
-                
                 const item = {
                     value: model.id,
                     label: model.model_name
@@ -66,7 +122,20 @@ export default function SystemModelConfig({ data, defaultTab, onBack }: { data: 
                 <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4">
-                <Tabs defaultValue={defaultTab || "workbench"} className="flex flex-col">
+                <ScopeBanner
+                    isGlobalSuper={isGlobalSuper}
+                    scopeTenantId={scope.scope_tenant_id ?? null}
+                    rootTenant={rootTenant}
+                    childTenant={childTenant}
+                />
+                <Tabs
+                    value={activeTab}
+                    onValueChange={(tab) => {
+                        setActiveTab(tab)
+                        onTabChange?.(tab)
+                    }}
+                    className="flex flex-col"
+                >
                     <TabsList className="w-[550px] m-auto">
                         <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>

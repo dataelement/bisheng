@@ -507,11 +507,17 @@ class LoginUser(BaseModel):
         # migrate, also serialised to /user/info & login response) read
         # one cached value instead of re-querying FGA per call. Helper
         # already has Redis caching + RBAC fallback + fail-closed.
+        # bypass_tenant_filter: aget_user_roles needs to see the user's
+        # roles across all tenants (login-time pre-tenant-context). Without
+        # this, hotfix-3's tenant-aware UserRole table trips
+        # NoTenantContextError before tenant resolution finishes.
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.utils.http_middleware import _check_is_global_super
-        user_roles, is_global_super = await asyncio.gather(
-            UserRoleDao.aget_user_roles(user_id),
-            _check_is_global_super(user_id),
-        )
+        with bypass_tenant_filter():
+            user_roles, is_global_super = await asyncio.gather(
+                UserRoleDao.aget_user_roles(user_id),
+                _check_is_global_super(user_id),
+            )
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
             user_id=user_id, user_name=user_name, user_role=role_ids,
@@ -529,7 +535,11 @@ class LoginUser(BaseModel):
         tenant_id: int = None,
         token_version: int = 0,
     ) -> Self:
-        user_roles = UserRoleDao.get_user_roles(user_id)
+        # See ``init_login_user`` — bypass is required because UserRole is
+        # tenant-aware and login-time has no tenant context yet.
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        with bypass_tenant_filter():
+            user_roles = UserRoleDao.get_user_roles(user_id)
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
             user_id=user_id, user_name=user_name, user_role=role_ids,

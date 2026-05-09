@@ -36,6 +36,7 @@ def _make_request_row(
     request_id: int = 1,
     applicant_user_id: int = 10,
     reviewer_user_ids=None,
+    payload_json=None,
 ):
     return ApprovalRequest(
         id=request_id,
@@ -50,9 +51,61 @@ def _make_request_row(
         applicant_user_name=f'user-{applicant_user_id}',
         reviewer_user_ids=list(reviewer_user_ids or []),
         file_count=1,
-        payload_json={'files': [{'file_path': '/tmp/doc.txt', 'file_name': 'doc.txt'}]},
+        payload_json=payload_json or {'files': [{'file_path': '/tmp/doc.txt', 'file_name': 'doc.txt'}]},
         safety_status=ApprovalSafetyStatusEnum.SKIPPED.value,
     )
+
+
+@pytest.mark.asyncio
+async def test_build_file_payload_includes_local_file_size(tmp_path):
+    uploaded_file = tmp_path / 'abc123_report.pdf'
+    uploaded_file.write_bytes(b'123456789')
+
+    payload = await ApprovalService._build_file_payload(
+        space_id=101,
+        file_paths=[str(uploaded_file)],
+    )
+
+    assert payload == [{
+        'file_path': str(uploaded_file),
+        'file_name': 'report.pdf',
+        'space_id': 101,
+        'file_size': 9,
+    }]
+
+
+def test_build_pending_file_responses_include_file_size():
+    request_row = _make_request_row(
+        request_id=7,
+        payload_json={
+            'files': [{
+                'file_path': '/tmp/doc.txt',
+                'file_name': 'doc.txt',
+                'file_size': 2048,
+            }],
+        },
+    )
+
+    [pending_file] = ApprovalService.build_pending_file_responses(
+        approval_request=request_row,
+    )
+
+    assert pending_file.file_name == 'doc.txt'
+    assert pending_file.file_size == 2048
+    assert pending_file.approval_request_id == 7
+
+
+def test_original_file_name_from_path_prefers_upload_name_cache(monkeypatch):
+    from bisheng.core.cache import redis_manager
+
+    class _Redis:
+        def get(self, key):
+            assert key == 'file_name:abc123'
+            return 'report.pdf'
+
+    monkeypatch.setattr(redis_manager, 'get_redis_client_sync', lambda: _Redis())
+
+    assert ApprovalService._original_file_name_from_path('/tmp/abc123.pdf') == 'report.pdf'
 
 
 @pytest.mark.asyncio

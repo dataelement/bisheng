@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional
 
 # if TYPE_CHECKING:
-from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
+from sqlalchemy import Column, DateTime, Integer, and_, delete, func, or_, text
 from sqlmodel import Field, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -23,6 +23,11 @@ class MarkTaskBase(SQLModelSerializable):
     process_users: str = Field(index=False)  # 23,2323
     mark_user: Optional[str] = Field(default=None, index=True, nullable=True)
     status: Optional[int] = Field(index=False, default=1)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

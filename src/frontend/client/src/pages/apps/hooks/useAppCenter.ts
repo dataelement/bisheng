@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { NotificationSeverity } from '~/common';
 import type { AppItem } from '~/@types/app';
@@ -11,6 +11,7 @@ import {
   filteredAppsSelector,
   recentAppsState,
 } from '~/pages/apps/store/appCenterAtoms';
+import { normalizeAppChatReturn, writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import { copyText, generateUUID } from '~/utils';
 
 /**
@@ -19,6 +20,7 @@ import { copyText, generateUUID } from '~/utils';
  */
 export function useAppCenter() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToastContext();
   const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
   const appLastOriginKey = 'app-last-origin';
@@ -60,30 +62,40 @@ export function useAppCenter() {
   const continueChat = useCallback(
     (app: AppItem) => {
       const chatId = generateUUID(32);
+      const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
+      writeAppChatOrigin(chatId, 'center');
+      if (returnTo === '/apps') writeAppChatReturnTo(chatId, returnTo);
       try {
         sessionStorage.setItem(appFlowOriginKey(String(app.id)), 'center');
         sessionStorage.setItem(appLastOriginKey, 'center');
       } catch {
         // ignore storage failures
       }
-      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center`);
+      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center&returnTo=${encodeURIComponent(returnTo)}`, {
+        state: { appSurfaceReturn: returnTo },
+      });
     },
-    [navigate],
+    [location.pathname, navigate],
   );
 
   /** Create a new conversation and navigate */
   const startChat = useCallback(
     (app: AppItem) => {
       const chatId = generateUUID(32);
+      const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
+      writeAppChatOrigin(chatId, 'center');
+      if (returnTo === '/apps') writeAppChatReturnTo(chatId, returnTo);
       try {
         sessionStorage.setItem(appFlowOriginKey(String(app.id)), 'center');
         sessionStorage.setItem(appLastOriginKey, 'center');
       } catch {
         // ignore storage failures
       }
-      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center`);
+      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center&returnTo=${encodeURIComponent(returnTo)}`, {
+        state: { appSurfaceReturn: returnTo },
+      });
     },
-    [navigate],
+    [location.pathname, navigate],
   );
 
   /** Copy share link to clipboard */

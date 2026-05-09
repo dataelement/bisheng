@@ -25,6 +25,7 @@ from bisheng.database.models.message import ChatMessageDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -33,11 +34,26 @@ from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 class WorkStationService(BaseService):
 
     @classmethod
+    def _apply_workbench_models(
+        cls,
+        config: Optional[WorkstationConfig],
+        workbench_config: Optional[WorkbenchModelConfig],
+    ) -> Optional[WorkstationConfig]:
+        models = getattr(workbench_config, 'models', None)
+        if config is None:
+            if models is None:
+                return None
+            return WorkstationConfig(models=models)
+        if models is not None:
+            config.models = models
+        return config
+
+    @classmethod
     def update_config(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            data: WorkstationConfig,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        data: WorkstationConfig,
     ) -> WorkstationConfig:
         """Update workstation default configuration."""
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
@@ -166,28 +182,32 @@ class WorkStationService(BaseService):
     def get_config(cls) -> WorkstationConfig | None:
         """Get the default workstation configuration."""
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
-        return cls.parse_config(config)
+        ret = cls.parse_config(config)
+        return cls._apply_workbench_models(ret, LLMService.get_workbench_llm_sync())
 
     @classmethod
     async def aget_config(cls) -> WorkstationConfig | None:
         """Get the default workstation configuration asynchronously."""
         config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION)
-        return cls.parse_config(config)
+        ret = cls.parse_config(config)
+        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
     async def get_daily_chat_config(cls) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION)
-        return cls.parse_config(config)
+        ret = cls.parse_config(config)
+        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
     async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:
         """Update the default workstation configuration for daily chat."""
+        workstation_payload = data.model_copy(update={'models': None})
         await ConfigDao.insert_or_update_config(
             ConfigKeyEnum.WORKSTATION.value,
-            value=json.dumps(data.model_dump(mode='json'), ensure_ascii=True),
+            value=json.dumps(workstation_payload.model_dump(mode='json'), ensure_ascii=True),
         )
-        return data
+        return await cls.get_daily_chat_config()
 
     @classmethod
     async def get_linsight_config(cls) -> Optional[LinsightConfig]:
@@ -244,11 +264,11 @@ class WorkStationService(BaseService):
 
     @classmethod
     def uploadPersonalKnowledge(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            file_path,
-            background_tasks: BackgroundTasks,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        file_path,
+        background_tasks: BackgroundTasks,
     ):
         knowledge = KnowledgeDao.get_user_knowledge(
             login_user.user_id,
@@ -278,11 +298,11 @@ class WorkStationService(BaseService):
 
     @classmethod
     async def queryKnowledgeList(
-            cls,
-            request: Request,
-            login_user: UserPayload,
-            page: int,
-            size: int,
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        page: int,
+        size: int,
     ):
         knowledge = KnowledgeDao.get_user_knowledge(
             login_user.user_id,

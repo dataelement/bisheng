@@ -39,16 +39,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
   } = sidebar;
 
   const flowData = chatState?.flow ?? currentApp;
-  // Author name may or may not be on the flow response depending on BE version;
-  // fall back through common shapes before giving up.
-  const authorName =
-    (flowData as any)?.user_name ||
-    (flowData as any)?.create_user_name ||
-    (flowData as any)?.user_id ||
-    '';
 
   return (
-    <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden px-3 pb-2 pt-3 text-[#212121]">
+    <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden py-5 px-3 text-[#212121]">
       <div className="hidden shrink-0 items-center justify-between max-[768px]:flex">
         {bsConfig?.sidebarIcon?.image ? (
           <img
@@ -73,7 +66,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
       </div>
       {/* App card：仅保留右侧大块 Tooltip；勿再套描述行的小 Tooltip（会与外层叠两层） */}
       <div className="shrink-0 pt-1">
-        {(flowData?.name || flowData?.description || authorName) ? (
+        {flowData?.name || flowData?.description ? (
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -113,31 +106,61 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   </div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="right" align="start" className="max-w-[320px] p-3">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <AppAvator
-                      className="size-[32px] min-w-[32px] rounded-[4px]"
-                      url={flowData?.logo}
-                      id={flowData?.id as any}
-                      flowType={String(flowData?.flow_type || 5)}
-                      iconClassName="w-5 h-5"
-                    />
-                    <h4 className="text-[14px] font-semibold leading-[20px] break-all">
-                      {flowData?.name || ''}
-                    </h4>
+              <TooltipContent
+                side="right"
+                align="start"
+                noArrow={isGuest}
+                sideOffset={isGuest ? 8 : 0}
+                className={cn(
+                  isGuest
+                    ? 'max-w-[min(100vw-2rem,320px)] !rounded-[20px] !border !border-[#E5E6EB] !bg-white !p-5 !text-sm !font-normal !leading-normal !text-[#1D2129] !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
+                    : 'max-w-[320px] p-3',
+                )}
+              >
+                {isGuest ? (
+                  <div className="flex flex-col gap-4 text-left text-[#1D2129]">
+                    {flowData?.name ? (
+                      <div>
+                        <p className="mb-1.5 text-[12px] leading-[18px] text-[#86909C]">
+                          {localize('com_standalone_guest_app_name_label')}
+                        </p>
+                        <p className="break-words text-[16px] font-medium leading-[24px] text-[#1D2129]">
+                          {flowData.name}
+                        </p>
+                      </div>
+                    ) : null}
+                    {flowData?.description ? (
+                      <div>
+                        <p className="mb-1.5 text-[12px] leading-[18px] text-[#86909C]">
+                          {localize('com_standalone_guest_desc_label')}
+                        </p>
+                        <p className="whitespace-pre-wrap break-words text-[14px] leading-[22px] text-[#1D2129]">
+                          {flowData.description}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
-                  {flowData?.description && (
-                    <p className="text-[12px] leading-[18px] text-[#4e5969] whitespace-pre-wrap break-words">
-                      {flowData.description}
-                    </p>
-                  )}
-                  {authorName && (
-                    <p className="text-[12px] leading-[18px] text-[#86909c]">
-                      {localize('com_app_chat_author')}: {authorName}
-                    </p>
-                  )}
-                </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <AppAvator
+                        className="size-[32px] min-w-[32px] rounded-[4px]"
+                        url={flowData?.logo}
+                        id={flowData?.id as any}
+                        flowType={String(flowData?.flow_type || 5)}
+                        iconClassName="w-5 h-5"
+                      />
+                      <h4 className="text-[14px] font-semibold leading-[20px] break-all">
+                        {flowData?.name || ''}
+                      </h4>
+                    </div>
+                    {flowData?.description && (
+                      <p className="text-[12px] leading-[18px] text-[#4e5969] whitespace-pre-wrap break-words">
+                        {flowData.description}
+                      </p>
+                    )}
+                  </div>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -181,9 +204,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
+      <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2">
         {groups.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
+          <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
             <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
               {localize('com_app_chat_sidebar_empty')}
             </p>
@@ -191,7 +214,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
         ) : (
           groups.map((group, groupIdx) => (
             <div key={groupIdx} className="flex flex-col">
-              <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
+              <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
                 {formatConversationTimeGroupLabel(group.label, localize)}
               </div>
               <div className="flex flex-col">

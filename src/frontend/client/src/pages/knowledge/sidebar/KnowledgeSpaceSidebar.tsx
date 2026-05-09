@@ -279,7 +279,7 @@ export function KnowledgeSpaceSidebar({
                     >
                         {/* Department spaces — always on top per PRD */}
                         {departmentSpaces.length > 0 && (
-                            <div className="pt-0">
+                            <div className="pt-0 pb-4">
                                 <SectionHeader
                                     title={localize("com_knowledge.department_spaces")}
                                     collapsed={departmentCollapsed}
@@ -387,7 +387,7 @@ export function KnowledgeSpaceSidebar({
                 isHovering={isToggleHovering}
                 setIsHovering={setIsToggleHovering}
                 className={`absolute top-1/2 left-0 z-[40] ${mobileDrawerMode ? "hidden" : ""}`}
-                translateX={230}
+                translateX={240}
             />
         </div>
     );

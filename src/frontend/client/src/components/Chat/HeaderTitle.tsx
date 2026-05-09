@@ -1,4 +1,5 @@
-import { useLocalize, usePrefersMobileLayout } from '~/hooks';
+import { useLocation } from 'react-router-dom';
+import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import ShareChat from '../Share/ShareChat';
 
 const types = {
@@ -10,13 +11,16 @@ const types = {
 
 export default function HeaderTitle({ conversation, readOnly, hideShare = false }) {
   const localize = useLocalize();
+  const { pathname } = useLocation();
   const isNarrowViewport = usePrefersMobileLayout();
+  const isAppChatRoute = pathname.includes('/app/');
+  const isAppChatCompact = useMediaQuery('(max-width: 1023px)');
   const normalizedTitle =
     conversation?.title != null && String(conversation.title).trim() !== ''
       ? String(conversation.title).trim()
       : localize('com_ui_new_chat');
-  // Title + share are merged into MobileNav on H5; avoid a second full-width row.
-  if (isNarrowViewport) {
+  // Title + share are merged into MobileNav on H5；应用内对话在 768–1023 同样走合并顶栏，避免与 AppRoot 悬浮钮重复一行。
+  if (isNarrowViewport || (isAppChatRoute && isAppChatCompact)) {
     return null;
   }
 

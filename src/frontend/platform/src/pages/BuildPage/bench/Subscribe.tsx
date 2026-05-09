@@ -152,7 +152,6 @@ export default function Subscribe() {
                                         className="mt-3"
                                         value={formData.maxChunkSize ?? ''}
                                         defaultValue={15000}
-                                        max={15000}
                                         onValueChange={(val) => {
                                             setFormData(prev => ({ ...prev, maxChunkSize: val }));
                                         }}
@@ -241,16 +240,20 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                 const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
                 const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
                 const feedbackTipsFromRes = cfg?.feedback_tips ?? cfg?.feedbackTips;
+                // When backend returns no saved value, seed the textarea with the
+                // localized default template so it is editable as a real value.
+                const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
+                const resolvedUserPrompt = resolveConfigString(userPromptFromRes, '');
                 return {
                     ...prev,
-                    systemPrompt: resolveConfigString(systemPromptFromRes, prev.systemPrompt),
-                    userPrompt: resolveConfigString(userPromptFromRes, prev.userPrompt),
+                    systemPrompt: resolvedSystemPrompt || t('chatConfig.aiPrompt'),
+                    userPrompt: resolvedUserPrompt || t('chatConfig.referenceAndQuestion'),
                     maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
                     feedbackTips: resolveConfigString(feedbackTipsFromRes, prev.feedbackTips),
                 };
             });
         });
-    }, []);
+    }, [t]);
 
     const [errors, setErrors] = useState<FormErrors>({
         sidebarSlogan: '',
@@ -302,20 +305,16 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             applicationCenterDescription: '',
         };
 
+        // systemPrompt / userPrompt are auto-refilled with the i18n default template
+        // in handleSave when blank, so only the length cap needs to be checked here.
         const sys = (formData.systemPrompt || '').trim();
-        if (!sys) {
-            newErrors.systemPrompt = '不可为空';
-            isValid = false;
-        } else if (sys.length > 30000) {
+        if (sys.length > 30000) {
             newErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
         }
 
         const user = (formData.userPrompt || '').trim();
-        if (!user) {
-            newErrors.userPrompt = '不可为空';
-            isValid = false;
-        } else if (user.length > 30000) {
+        if (user.length > 30000) {
             newErrors.userPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
         }
@@ -331,25 +330,20 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     };
 
     const handleSave = async () => {
+        // Refill blank prompts with the i18n default template so the empty input
+        // never reaches the server; reflect the refill in formData for the UI too.
+        const finalSystemPrompt = (formData.systemPrompt || '').trim() || t('chatConfig.aiPrompt');
+        const finalUserPrompt = (formData.userPrompt || '').trim() || t('chatConfig.referenceAndQuestion');
+        if (finalSystemPrompt !== formData.systemPrompt || finalUserPrompt !== formData.userPrompt) {
+            setFormData(prev => ({
+                ...prev,
+                systemPrompt: finalSystemPrompt,
+                userPrompt: finalUserPrompt,
+            }));
+        }
+
         if (!validateForm()) {
-            // 主要针对提示词为空的场景，给出明确的 toast
-            const sys = (formData.systemPrompt || '').trim();
-            const user = (formData.userPrompt || '').trim();
             const feedback = (formData.feedbackTips || '').trim();
-            if (!sys) {
-                toast({
-                    variant: 'error',
-                    description: '系统提示词不可为空',
-                });
-                return false;
-            }
-            if (!user) {
-                toast({
-                    variant: 'error',
-                    description: '用户提示词不可为空',
-                });
-                return false;
-            }
             if (!feedback) {
                 toast({
                     variant: 'error',
@@ -361,8 +355,8 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         const feedback = (formData.feedbackTips || '').trim();
         const feedbackTooLong = feedback.length > 1000;
         const dataToSave = {
-            system_prompt: formData.systemPrompt,
-            user_prompt: formData.userPrompt,
+            system_prompt: finalSystemPrompt,
+            user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
             feedback_tips: formData.feedbackTips,
         };

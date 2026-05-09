@@ -27,6 +27,8 @@ type MobileNavProps = {
   onNewChat?: () => void;
   preferBackButton?: boolean;
   onBack?: () => void;
+  /** 应用内对话：无合并标题时与侧栏并排展示「返回」；有会话标题时返回在侧栏内，顶栏仅抽屉 */
+  appSurfaceBackAction?: () => void;
 };
 
 /**
@@ -42,6 +44,7 @@ export default function MobileNav({
   onNewChat,
   preferBackButton = false,
   onBack,
+  appSurfaceBackAction,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
     'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]';
@@ -85,6 +88,17 @@ export default function MobileNav({
       ? shareChatTypes[chatMobileHeader.flowType as keyof typeof shareChatTypes]
       : undefined;
 
+  /** 应用内对话：有合并标题时顶栏与主站对话一致（左仅抽屉、中标题、右分享+新建）；无标题时保留「菜单+返回」 */
+  const appSurfaceShowBackWithMenu =
+    Boolean(
+      appSurfaceBackAction &&
+        !preferBackButton &&
+        !(showWorkbenchMergedBar && chatMobileHeader),
+    );
+
+  const appBackBtnClassName =
+    'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#E5E6EB] bg-white text-[#212121] shadow-sm transition-colors hover:bg-[#F7F8FA]';
+
   return (
     <div
       className={cn(
@@ -96,25 +110,53 @@ export default function MobileNav({
           'flex h-11 min-h-11 w-full flex-row items-center justify-between px-4',
         )}
       >
-        <button
-          type="button"
-          data-testid="mobile-header-left-action"
-          aria-label={preferBackButton ? localize('com_ui_go_back') : (navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar'))}
-          aria-expanded={preferBackButton ? undefined : navVisible}
-          className={mobileHeadIconBtnClassName}
-          onClick={preferBackButton ? (onBack ?? toggleSidebar) : toggleSidebar}
-        >
-          {preferBackButton ? (
-            <ChevronLeft className="size-4" strokeWidth={2} />
-          ) : navVisible ? (
-            <X className="size-4" strokeWidth={2} />
-          ) : (
-            <Menu className="size-4" strokeWidth={2} />
-          )}
-        </button>
+        {appSurfaceShowBackWithMenu ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              data-testid="mobile-header-left-action"
+              aria-label={navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')}
+              aria-expanded={navVisible}
+              className={appBackBtnClassName}
+              onClick={toggleSidebar}
+            >
+              {navVisible ? (
+                <X className="size-4" strokeWidth={2} />
+              ) : (
+                <Menu className="size-4" strokeWidth={2} />
+              )}
+            </button>
+            <button
+              type="button"
+              data-testid="mobile-header-app-back"
+              aria-label={localize('com_ui_go_back')}
+              className={appBackBtnClassName}
+              onClick={appSurfaceBackAction}
+            >
+              <ChevronLeft className="size-4" strokeWidth={2} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-testid="mobile-header-left-action"
+            aria-label={preferBackButton ? localize('com_ui_go_back') : (navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar'))}
+            aria-expanded={preferBackButton ? undefined : navVisible}
+            className={mobileHeadIconBtnClassName}
+            onClick={preferBackButton ? (onBack ?? toggleSidebar) : toggleSidebar}
+          >
+            {preferBackButton ? (
+              <ChevronLeft className="size-4" strokeWidth={2} />
+            ) : navVisible ? (
+              <X className="size-4" strokeWidth={2} />
+            ) : (
+              <Menu className="size-4" strokeWidth={2} />
+            )}
+          </button>
+        )}
         {showWorkbenchMergedBar && chatMobileHeader ? (
           <>
-            <div className="min-w-0 flex-1 px-1 flex justify-center">
+            <div className="flex min-w-0 flex-1 justify-center px-1">
               <span
                 id="app-title"
                 className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"

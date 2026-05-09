@@ -44,6 +44,8 @@ export interface DepartmentMember {
   create_time: string
   update_time?: string
   enabled: boolean
+  /** Non-empty when the account was disabled by an SSO/HR sync; only super admin may re-enable. */
+  disable_source?: string | null
   user_groups: { id: number; group_name: string }[]
   roles: { id: number; role_name: string }[]
   /** 当前部门 OpenFGA admin；用于在角色列最前展示「部门管理员」 */

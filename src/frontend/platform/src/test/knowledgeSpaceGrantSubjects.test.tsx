@@ -60,7 +60,7 @@ describe("Knowledge-space grant subject sources", () => {
         sort_order: 0,
         source: "local",
         status: "active",
-        member_count: 0,
+        member_count: 3,
         children: [],
       },
     ] as any);
@@ -78,6 +78,7 @@ describe("Knowledge-space grant subject sources", () => {
       expect(screen.getByText("研发部")).toBeInTheDocument();
     });
 
+    expect(screen.getByText("(3)")).toBeInTheDocument();
     expect(mockedGetResourceGrantDepartmentsApi).toHaveBeenCalledWith("knowledge_space", "88");
   });
 
@@ -170,6 +171,71 @@ describe("Knowledge-space grant subject sources", () => {
     const childCheckbox = within(childLabel.parentElement as HTMLElement).getByRole("checkbox");
 
     expect(childCheckbox).toBeChecked();
+  });
+
+  it("reports selected descendant names for include-children department summaries", async () => {
+    mockedGetResourceGrantDepartmentsApi.mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "BS@10",
+        name: "研发部",
+        parent_id: null,
+        path: "/10/",
+        sort_order: 0,
+        source: "local",
+        status: "active",
+        member_count: 0,
+        children: [
+          {
+            id: 11,
+            dept_id: "BS@11",
+            name: "平台组",
+            parent_id: 10,
+            path: "/10/11/",
+            sort_order: 0,
+            source: "local",
+            status: "active",
+            member_count: 0,
+            children: [],
+          },
+        ],
+      },
+    ] as any);
+    const onSelectionSummaryChange = vi.fn();
+
+    render(
+      <SubjectSearchDepartment
+        value={[
+          {
+            type: "department",
+            id: 10,
+            name: "研发部",
+            include_children: true,
+          },
+        ]}
+        onChange={vi.fn()}
+        resourceType="knowledge_space"
+        resourceId="88"
+        onSelectionSummaryChange={onSelectionSummaryChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onSelectionSummaryChange).toHaveBeenLastCalledWith([
+        {
+          type: "department",
+          id: 10,
+          name: "研发部",
+          include_children: false,
+        },
+        {
+          type: "department",
+          id: 11,
+          name: "研发部/平台组",
+          include_children: false,
+        },
+      ]);
+    });
   });
 
   it("shows already granted departments as checked and disabled in grant candidates", async () => {

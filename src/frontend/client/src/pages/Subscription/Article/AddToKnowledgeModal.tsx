@@ -1,4 +1,4 @@
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import useMediaQuery from "~/hooks/useMediaQuery";
 import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -292,6 +292,8 @@ export function AddToKnowledgeModal({
 }: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const treeScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const duplicateListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const isMax576 = useMediaQuery("(max-width: 576px)");
     const isModalMobile768 = useMediaQuery("(max-width: 768px)");
     const [viewportWidth, setViewportWidth] = useState<number>(() =>
@@ -776,11 +778,12 @@ export function AddToKnowledgeModal({
                 }
             >
                 <div
+                    ref={treeScrollRevealRef}
                     className={
                         useFlexTree
-                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover"
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-scroll"
                             : cn(
-                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover",
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-scroll",
                                 mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
                             )
                     }
@@ -973,7 +976,7 @@ export function AddToKnowledgeModal({
                             {localize("com_subscription.duplicate_files_title")}
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="px-6 pb-2 max-h-[200px] overflow-y-auto scrollbar-on-hover">
+                    <div ref={duplicateListScrollRevealRef} className="px-6 pb-2 max-h-[200px] overflow-y-auto scrollbar-on-scroll">
                         {duplicateFiles.map((file, idx) => {
                             // Truncate file name > 10 chars with ellipsis
                             const displayName = file.name.length > 10

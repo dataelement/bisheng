@@ -1,4 +1,5 @@
 import type { ChatCitation } from '~/api/chatApi';
+import { getFilePathApi } from '~/api/chat/data-service';
 
 export type CitationDisplayData = {
   label: number;
@@ -48,6 +49,24 @@ export function normalizeCitationMarkers(content: string) {
     }
     return match;
   });
+}
+
+/**
+ * Remove citation marker groups (...) from a string. Used when
+ * exporting message text to plain contexts like clipboard copy where the
+ * private-use markers have no rendered counterpart and would surface as
+ * unreadable noise.
+ */
+export function stripCitationMarkers(content: string) {
+  if (!content) return content;
+  return content
+    // Strip well-formed groups first (non-greedy across separators).
+    .replace(/[\s\S]*?/g, '')
+    // Also handle the escaped form ("...") that may slip through
+    // when a message hasn't been passed through normalizeCitationMarkers.
+    .replace(/\\u[eE]200[\s\S]*?\\u[eE]202/g, '')
+    // Drop any orphan markers (e.g. a streaming-truncated group).
+    .replace(/[]/g, '');
 }
 
 function padTimeUnit(value: number) {
@@ -192,11 +211,11 @@ export function getCitationClassName(type?: string) {
   switch (type?.toLowerCase()) {
     case 'web':
     case 'websearch':
-      return 'bg-[#F7F3FF] text-[#7224D9]';
+      return 'bg-[#F7F3FF] text-[#7224D9] transition-colors duration-150 hover:bg-[#EDE4FF] data-[state=open]:bg-[#EDE4FF]';
     case 'knowledgesearch':
-      return 'bg-[#F5F8FF] text-[#024DE3]';
+      return 'bg-[#F5F8FF] text-[#024DE3] transition-colors duration-150 hover:bg-[#D6EBFF] data-[state=open]:bg-[#D6EBFF]';
     default:
-      return 'bg-[#F5F8FF] text-[#024DE3]';
+      return 'bg-[#F5F8FF] text-[#024DE3] transition-colors duration-150 hover:bg-[#D6EBFF] data-[state=open]:bg-[#D6EBFF]';
   }
 }
 
@@ -262,12 +281,50 @@ export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   return payload?.downloadUrl || '';
 }
 
+function getCitationKnowledgeFileId(detail?: ChatCitation | null): number | null {
+  const documentId = detail?.sourcePayload?.documentId;
+  if (typeof documentId === 'number' && Number.isFinite(documentId)) return documentId;
+  if (typeof documentId === 'string' && documentId.trim() !== '' && Number.isFinite(Number(documentId))) {
+    return Number(documentId);
+  }
+  return null;
+}
+
 export function getCitationDocumentUrl(detail?: ChatCitation | null) {
+  // For knowledge-base citations with a documentId, prefer the freshly signed
+  // preview URL fetched via /api/v1/knowledge/file_share (handled by
+  // resolveCitationDocumentUrl). Returning '' here forces callers to take the
+  // async path so the cached/stale downloadUrl on sourcePayload isn't used.
+  if (getCitationKnowledgeFileId(detail) != null) return '';
   return getCitationDocumentPreviewUrl(detail);
 }
 
+let inflightFileShareCache: Record<string, Promise<string>> = {};
+
 export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
-  return getCitationDocumentUrl(detail);
+  const fileId = getCitationKnowledgeFileId(detail);
+  if (fileId != null) {
+    const cacheKey = String(fileId);
+    if (!inflightFileShareCache[cacheKey]) {
+      inflightFileShareCache[cacheKey] = (async () => {
+        try {
+          const res: any = await getFilePathApi(cacheKey);
+          const data = res?.data ?? res;
+          return data?.preview_url || data?.original_url || '';
+        } catch {
+          return '';
+        } finally {
+          // Drop after settle so a later open re-fetches a fresh signed URL
+          // (signed URLs expire and we don't want to pin a dead one).
+          setTimeout(() => { delete inflightFileShareCache[cacheKey]; }, 0);
+        }
+      })();
+    }
+    const url = await inflightFileShareCache[cacheKey];
+    if (url) return url;
+  }
+  // Legacy fallback for non-knowledge or older payloads without documentId.
+  return getCitationDocumentPreviewUrl(detail);
 }
 
 export function toAbsolutePreviewUrl(url?: string | null) {

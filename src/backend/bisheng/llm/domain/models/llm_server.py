@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
+from sqlalchemy import CHAR, JSON, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select, col
 
 from bisheng.common.errcode.llm_tenant import (
@@ -38,8 +38,11 @@ class LLMServerBase(SQLModelSerializable):
     config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
                                    description='Service Provider Public Configuration')
     user_id: int = Field(default=0, description='creatorID')
-    tenant_id: int = Field(default=_ROOT_TENANT_ID, index=True, nullable=False,
-                           description='Tenant isolation (default Root=1)')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant isolation (default Root=1)'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -58,8 +61,11 @@ class LLMModelBase(SQLModelSerializable):
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='Abnormal reason')
     online: bool = Field(default=True, description='Online')
     user_id: int = Field(default=0, description='creatorID')
-    tenant_id: int = Field(default=_ROOT_TENANT_ID, index=True, nullable=False,
-                           description='Tenant isolation (mirrors parent llm_server)')
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant isolation (mirrors parent llm_server)'),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

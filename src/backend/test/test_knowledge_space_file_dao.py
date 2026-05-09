@@ -137,7 +137,6 @@ async def test_async_list_children_status_filter_uses_nested_parent_path():
     assert "file_level_path = '/10/20'" in sql
     assert "concat('/10/20', '/', knowledgefile.id)" in sql
 
-
 @pytest.mark.asyncio
 async def test_async_count_children_status_filter_uses_nested_parent_path():
     session = _FakeAsyncSession()

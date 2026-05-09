@@ -306,6 +306,29 @@ class TestKI01SqlTemplateSchema:
             f'actual table is t_gpts_tools (t_ prefix); template must use that: {tmpl!r}'
         )
 
+    @pytest.mark.asyncio
+    async def test_storage_count_preserves_fractional_gb(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        class _Result:
+            def scalar(self):
+                return int(1.5 * 1024 * 1024 * 1024)
+
+        class _Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, *args, **kwargs):
+                return _Result()
+
+        with patch('bisheng.core.database.get_async_db_session', return_value=_Session()):
+            result = await QuotaService._count_resource('tenant_id', 1, 'storage_gb')
+
+        assert result == 1.5
+
 
 class TestValidateQuotaConfig:
     """AC-10c: quota_config validation."""
@@ -350,6 +373,7 @@ class TestValidateQuotaConfig:
         QuotaService.validate_quota_config({'knowledge_space_file': 0.1})
         QuotaService.validate_quota_config({'knowledge_space_file': 1.5})
         QuotaService.validate_quota_config({'knowledge_space_file': 999})
+        QuotaService.validate_quota_config({'knowledge_space_file': 99999})
         QuotaService.validate_quota_config({'knowledge_space_file': -1})
 
     def test_knowledge_space_file_invalid_range_or_precision(self):
@@ -361,6 +385,196 @@ class TestValidateQuotaConfig:
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'knowledge_space_file': 0.05})
         with pytest.raises(QuotaConfigInvalidError):
-            QuotaService.validate_quota_config({'knowledge_space_file': 1000})
+            QuotaService.validate_quota_config({'knowledge_space_file': 100000})
         with pytest.raises(QuotaConfigInvalidError):
             QuotaService.validate_quota_config({'knowledge_space_file': 1.55})
+
+    def test_storage_gb_one_decimal_accepted(self):
+        """storage_gb mirrors knowledge_space_file: -1 or 0.1~99999 with 1 decimal."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        QuotaService.validate_quota_config({'storage_gb': 0.1})
+        QuotaService.validate_quota_config({'storage_gb': 1.5})
+        QuotaService.validate_quota_config({'storage_gb': 100})
+        QuotaService.validate_quota_config({'storage_gb': 999})
+        QuotaService.validate_quota_config({'storage_gb': 1000})
+        QuotaService.validate_quota_config({'storage_gb': 99999})
+        QuotaService.validate_quota_config({'storage_gb': -1})
+
+    def test_storage_gb_invalid_range_or_precision(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+        from bisheng.common.errcode.role import QuotaConfigInvalidError
+
+        # 0 not allowed (0.1 minimum, mirrors knowledge_space_file)
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': 0})
+        # below 0.1 GB
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': 0.05})
+        # above 99999 GB
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': 100000})
+        # more than 1 decimal place
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': 1.55})
+        # negative (other than -1)
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': -2})
+        # boolean is not a valid number
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': True})
+        # string is not a number
+        with pytest.raises(QuotaConfigInvalidError):
+            QuotaService.validate_quota_config({'storage_gb': '1'})
+
+
+def _make_tenant_obj(tenant_id, parent_tenant_id=None):
+    t = MagicMock()
+    t.id = tenant_id
+    t.parent_tenant_id = parent_tenant_id
+    return t
+
+
+class TestGetStorageUsedGbBatch:
+    """Bug 2: tenant management UI must show real used GB.
+
+    Verifies the batch helper picks the correct counting path per row
+    (root → aggregate, leaf → strict) and shares the SQL template with the
+    quota interceptor (single source of truth, AC-04).
+    """
+
+    @pytest.mark.asyncio
+    async def test_empty_input_returns_empty_dict(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        result = await QuotaService.get_storage_used_gb_batch([])
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_root_and_leaf_mixed_picks_correct_path(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        root = _make_tenant_obj(1, parent_tenant_id=None)
+        leaf_a = _make_tenant_obj(7, parent_tenant_id=1)
+        leaf_b = _make_tenant_obj(8, parent_tenant_id=1)
+
+        with patch(
+            'bisheng.database.models.tenant.TenantDao.aget_by_ids',
+            new=AsyncMock(return_value=[root, leaf_a, leaf_b]),
+        ), patch.object(
+            QuotaService, '_aggregate_root_usage',
+            new=AsyncMock(return_value=10.5),
+        ) as agg, patch.object(
+            QuotaService, '_count_usage_strict',
+            new=AsyncMock(side_effect=[2.0, 0.0]),
+        ) as strict:
+            result = await QuotaService.get_storage_used_gb_batch([1, 7, 8])
+
+        assert result == {1: 10.5, 7: 2.0, 8: 0.0}
+        agg.assert_awaited_once_with(1, 'storage_gb')
+        assert strict.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_missing_tenant_omitted_from_result(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with patch(
+            'bisheng.database.models.tenant.TenantDao.aget_by_ids',
+            new=AsyncMock(return_value=[]),
+        ):
+            result = await QuotaService.get_storage_used_gb_batch([99, 100])
+
+        assert result == {}
+
+
+class TestTenantStorageBytesHelpers:
+    """Bug 1: write-path helpers used by KnowledgeSpaceService.add_file."""
+
+    @pytest.mark.asyncio
+    async def test_used_bytes_root_aggregates_children(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        root = _make_tenant_obj(1, parent_tenant_id=None)
+        with patch(
+            'bisheng.database.models.tenant.TenantDao.aget_by_id',
+            new=AsyncMock(return_value=root),
+        ), patch.object(
+            QuotaService, '_aggregate_root_usage',
+            new=AsyncMock(return_value=2.0),
+        ), patch.object(
+            QuotaService, '_count_usage_strict',
+            new=AsyncMock(side_effect=AssertionError('leaf path must not run')),
+        ):
+            used = await QuotaService.get_tenant_storage_used_bytes(1)
+        # 2 GB to bytes
+        assert used == 2 * (1024 ** 3)
+
+    @pytest.mark.asyncio
+    async def test_used_bytes_leaf_uses_strict(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        leaf = _make_tenant_obj(5, parent_tenant_id=1)
+        with patch(
+            'bisheng.database.models.tenant.TenantDao.aget_by_id',
+            new=AsyncMock(return_value=leaf),
+        ), patch.object(
+            QuotaService, '_count_usage_strict',
+            new=AsyncMock(return_value=0.5),
+        ), patch.object(
+            QuotaService, '_aggregate_root_usage',
+            new=AsyncMock(side_effect=AssertionError('root path must not run')),
+        ):
+            used = await QuotaService.get_tenant_storage_used_bytes(5)
+        assert used == int(round(0.5 * (1024 ** 3)))
+
+    @pytest.mark.asyncio
+    async def test_used_bytes_unknown_tenant_returns_zero(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with patch(
+            'bisheng.database.models.tenant.TenantDao.aget_by_id',
+            new=AsyncMock(return_value=None),
+        ):
+            used = await QuotaService.get_tenant_storage_used_bytes(999)
+        assert used == 0
+
+    @pytest.mark.asyncio
+    async def test_remaining_bytes_unlimited_returns_none(self):
+        """No cap on the chain → None (unlimited)."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with patch.object(
+            QuotaService, '_apply_tenant_chain_cap',
+            new=AsyncMock(return_value=(-1, None)),
+        ):
+            assert await QuotaService.get_tenant_storage_remaining_bytes(5) is None
+
+    @pytest.mark.asyncio
+    async def test_remaining_bytes_returns_bytes(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        with patch.object(
+            QuotaService, '_apply_tenant_chain_cap',
+            new=AsyncMock(return_value=(1.5, None)),
+        ):
+            remaining = await QuotaService.get_tenant_storage_remaining_bytes(5)
+        assert remaining == int(round(1.5 * (1024 ** 3)))
+
+    @pytest.mark.asyncio
+    async def test_remaining_bytes_blocker_raises_19403(self):
+        """Chain exhausted (any node remaining=0) → directly raises 19403."""
+        from bisheng.role.domain.services.quota_service import QuotaService
+        from bisheng.common.errcode.tenant_quota import TenantStorageQuotaExceededError
+
+        blocker = (5, 'tenant_limit', 1.0, 1.0, 'tenant-foo')
+        with patch.object(
+            QuotaService, '_apply_tenant_chain_cap',
+            new=AsyncMock(return_value=(0, blocker)),
+        ):
+            with pytest.raises(TenantStorageQuotaExceededError) as exc_info:
+                await QuotaService.get_tenant_storage_remaining_bytes(5)
+
+        assert exc_info.value.Code == 19403
+        assert exc_info.value.kwargs.get('used_gb') == 1.0
+        assert exc_info.value.kwargs.get('quota_gb') == 1.0
+        assert exc_info.value.kwargs.get('reason') == 'tenant_limit'

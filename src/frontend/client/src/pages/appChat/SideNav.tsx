@@ -13,6 +13,7 @@ import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropd
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { currentChatState } from '~/pages/appChat/store/atoms';
+import { resolveAppChatExitNavigateTarget } from '~/pages/appChat/appChatOrigin';
 import { cn } from '~/utils';
 
 function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
@@ -72,68 +73,10 @@ export function SideNav() {
     const location = useLocation();
     const navigate = useNavigate();
     const { conversationId, fid: flowId, type: flowType } = useParams();
-    const appOriginStorageKey = (id: string) => `app-chat-origin:${id}`;
-    const appFlowOriginKey = (id: string) => `app-flow-origin:${id}`;
-    const appLastOriginKey = 'app-last-origin';
+
     const handleGoBack = () => {
-        let fromHomeEntry = false;
-        if (conversationId) {
-            try {
-                fromHomeEntry = sessionStorage.getItem(`app-chat-entry:${conversationId}`) === 'home';
-            } catch {
-                // ignore storage failures
-            }
-        }
-        const searchParams = new URLSearchParams(location.search);
-        const from = searchParams.get('from');
-        const entry = searchParams.get('entry');
-        let persistedOrigin: 'center' | 'explore' | 'home' | null = null;
-        if (conversationId) {
-            try {
-                const origin = sessionStorage.getItem(appOriginStorageKey(conversationId));
-                if (origin === 'center' || origin === 'explore' || origin === 'home') {
-                    persistedOrigin = origin;
-                }
-            } catch {
-                // ignore storage failures
-            }
-        }
-        // App center entries (home list / explore) should always return to app center.
-        if (from === 'center' || from === 'explore' || persistedOrigin === 'center' || persistedOrigin === 'explore') {
-            navigate('/apps');
-            return;
-        }
-        let persistedFlowOrigin: string | null = null;
-        if (flowId) {
-            try {
-                persistedFlowOrigin = sessionStorage.getItem(appFlowOriginKey(flowId));
-            } catch {
-                // ignore storage failures
-            }
-        }
-        if (persistedFlowOrigin === 'center' || persistedFlowOrigin === 'explore') {
-            navigate('/apps');
-            return;
-        }
-        let persistedLastOrigin: string | null = null;
-        try {
-            persistedLastOrigin = sessionStorage.getItem(appLastOriginKey);
-        } catch {
-            // ignore storage failures
-        }
-        if (persistedLastOrigin === 'center' || persistedLastOrigin === 'explore') {
-            navigate('/apps');
-            return;
-        }
-        if (
-            fromHomeEntry ||
-            (from === 'home-recommended' && entry === 'home') ||
-            persistedOrigin === 'home'
-        ) {
-            navigate('/c/new');
-            return;
-        }
-        navigate('/apps');
+        const target = resolveAppChatExitNavigateTarget(conversationId, location);
+        navigate(target, { replace: target === '/apps' });
     };
 
     const localize = useLocalize();
@@ -167,7 +110,7 @@ export function SideNav() {
                 "relative h-full w-full overflow-hidden bg-white text-[#212121] flex flex-col",
                 isTabletOrMobile
                     ? "border-r-0 px-0 pb-0 pt-0 gap-0"
-                    : "border-r border-[#e5e6eb] px-2 pb-2 pt-2 gap-4",
+                    : "border-r border-[#e5e6eb] px-3 pb-2 pt-3 gap-4",
             )}
         >
             <div className="hidden touch-mobile:block">
@@ -196,7 +139,7 @@ export function SideNav() {
             </div>
 
             {/* App card — 应用内对话侧栏固定展示 */}
-            <div className="shrink-0 touch-mobile:px-3 touch-mobile:pt-4 touch-mobile:pb-6">
+            <div className="shrink-0 touch-mobile:px-2 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
                     style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
@@ -250,12 +193,12 @@ export function SideNav() {
             {/* Conversation list */}
             <div
                 className={cn(
-                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0',
+                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2',
                     'touch-mobile:pt-3',
                 )}
             >
                 {groups.length === 0 ? (
-                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
+                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
                         <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
@@ -264,7 +207,7 @@ export function SideNav() {
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">
                             {/* Time label */}
-                            <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
+                            <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
                                 {formatConversationTimeGroupLabel(group.label, localize)}
                             </div>
                             {/* Items */}
@@ -292,7 +235,7 @@ export function SideNav() {
                                                 } else if (flowId && flowType) {
                                                     // Last conversation deleted — land on empty state, don't auto-create
                                                     navigate(`/app/${flowId}/${flowType}`, {
-                                                        state: { fromDelete: true },
+                                                        state: { ...(location.state as object | null), fromDelete: true },
                                                     });
                                                 }
                                             }}

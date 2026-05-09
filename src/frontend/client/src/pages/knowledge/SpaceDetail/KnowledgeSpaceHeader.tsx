@@ -365,33 +365,38 @@ export function KnowledgeSpaceHeader({
 
     return (
         <>
-        <div className="space-y-4 pt-5 pb-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
-            {currentPath.length === 0 && (
-                <div className="hidden touch-mobile:flex items-end gap-3 min-h-8">
-                    <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
-                        {localize("com_knowledge.knowledge_space")}
-                    </h1>
-                    {onGoKnowledgeSquare ? (
-                        <button
-                            type="button"
-                            onClick={onGoKnowledgeSquare}
-                            className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
-                        >
-                            <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
-                            <span className="text-[12px] leading-5 font-normal text-[#212121]">
-                                前往知识广场
-                            </span>
-                        </button>
-                    ) : null}
-                </div>
-            )}
+        <div className="space-y-4 pt-5 pb-4 max-[767px]:space-y-3 max-[767px]:pt-4 max-[767px]:pb-3">
+            <div className="hidden max-[767px]:flex items-end gap-3 min-h-8">
+                {currentPath.length === 0 ? (
+                    <>
+                        <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
+                            {localize("com_knowledge.knowledge_space")}
+                        </h1>
+                        {onGoKnowledgeSquare ? (
+                            <button
+                                type="button"
+                                onClick={onGoKnowledgeSquare}
+                                className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
+                            >
+                                <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
+                                <span className="text-[12px] leading-5 font-normal text-[#212121]">
+                                    前往知识广场
+                                </span>
+                            </button>
+                        ) : null}
+                    </>
+                ) : (
+                    // Keep header block height stable between root and folder levels on mobile.
+                    <div aria-hidden className="h-8" />
+                )}
+            </div>
 
             {/* 面包屑 / 当前空间标题 */}
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex min-h-8 items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
                         <div className="flex min-w-0 flex-1 items-center gap-1">
-                            <h1 className="min-w-0 truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                            <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                 {space.name}
                             </h1>
                             {space.spaceKind === "department" && (
@@ -450,7 +455,7 @@ export function KnowledgeSpaceHeader({
                                 >
                                     <ChevronLeft className="size-4" />
                                 </button>
-                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
                                 </span>
                             </div>
@@ -523,7 +528,7 @@ export function KnowledgeSpaceHeader({
                                 onSearch={onSearch}
                             />
                         </div>
-                        <div className="touch-mobile:-mx-4 touch-mobile:sticky touch-mobile:top-0 touch-mobile:z-20 touch-mobile:bg-white touch-mobile:px-4 touch-mobile:py-2">
+                        <div className="max-[767px]:-mx-4 max-[767px]:sticky max-[767px]:top-0 max-[767px]:z-20 max-[767px]:bg-white max-[767px]:px-4 max-[767px]:py-2">
                             <div className="flex min-w-0 items-center justify-between gap-2">
                                 {viewFilterSortCluster}
                                 {batchAndAddActions}

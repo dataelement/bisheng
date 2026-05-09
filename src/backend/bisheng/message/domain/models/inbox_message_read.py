@@ -35,6 +35,11 @@ class InboxMessageRead(SQLModelSerializable, table=True):
         nullable=False,
         index=True
     )
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
     create_time: datetime = Field(
         default_factory=datetime.now,
         description='Read time',

@@ -1,10 +1,33 @@
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from pydantic import Field, BaseModel, model_validator
 
+from bisheng.api.v1.schemas import WSModel
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
 from bisheng.utils.mask_data import JsonFieldMasker
 from bisheng_langchain.linsight.const import TaskMode
+
+
+class SystemModelConfigEnvelope(BaseModel):
+    """Generic envelope for the 5 GET ``/api/v1/llm/{type}`` endpoints.
+
+    Wraps the typed config DTOs (KnowledgeLLMConfig / AssistantLLMConfig
+    / ...) with the fallback metadata needed by the frontend banner
+    system. ``inherited_from_root=True`` means the caller has no own
+    row and the value came from Root via ``share_default_to_children``;
+    ``fallback_blocked=True`` means Root has a row but opted out, so
+    the frontend should hint that Root has not enabled sharing.
+    """
+
+    data: Any = Field(default=None, description='The original typed config payload')
+    inherited_from_root: bool = Field(
+        default=False,
+        description='True when the value was inherited from Root (own row absent)',
+    )
+    fallback_blocked: bool = Field(
+        default=False,
+        description='True when Root has a row but share is disabled at Root level',
+    )
 
 
 class LLMModelInfo(LLMModelBase):
@@ -47,17 +70,15 @@ class LLMServerInfo(LLMServerBase):
         return self
 
 
-class WSModel(BaseModel):
-    key: Optional[str] = None
-    id: str
-    name: Optional[str] = None
-    displayName: Optional[str] = None
-
-
 class WorkbenchModelConfig(BaseModel):
     """
     Inspiration Model Configuration
     """
+    # Daily-chat selectable model list. Migrated from WorkstationConfig.models.
+    models: Optional[List[WSModel]] = Field(
+        default=None,
+        description='Daily-chat selectable model list',
+    )
     # Task execution model
     task_model: Optional[WSModel] = Field(default=None, description='Task execution model')
     # RetrieveembeddingModels

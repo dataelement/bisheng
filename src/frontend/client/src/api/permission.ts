@@ -163,10 +163,15 @@ export async function canOpenPermissionDialog(
 
 export async function searchUsers(
   name: string,
+  params?: { page?: number; pageSize?: number },
   config?: { signal?: AbortSignal }
 ): Promise<{ data: { user_id: number; user_name: string }[]; total: number }> {
   const res = await request.get(`/api/v1/user/list`, {
-    params: { name, page_num: 1, page_size: 200 },
+    params: {
+      name,
+      page_num: params?.page ?? 1,
+      page_size: params?.pageSize ?? 50,
+    },
     ...withPermissionRequestOptions(config),
   });
   const data = unwrap<any>(res);

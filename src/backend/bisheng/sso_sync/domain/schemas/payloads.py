@@ -63,7 +63,14 @@ class LoginSyncRequest(BaseModel):
     )
     secondary_dept_external_ids: Optional[List[str]] = Field(
         default=None,
-        description='Moonlighting / secondary memberships (is_primary=0).',
+        description=(
+            'Secondary department external_ids (is_primary=0). When this key is '
+            'present in JSON (including []), secondary memberships under '
+            'departments whose source matches the sync provider are reconciled '
+            'to exactly this set (PRD: affiliate depts — unlink missing, '
+            'revoke FGA/grants). '
+            'When omitted, bisheng only adds missing secondaries (legacy Gateway).'
+        ),
     )
     #: 企微「部门负责人」对应的部门 external_id（与 departments/sync 中 id 字符串一致）；
     #: 同步后写入 OpenFGA ``department:{id}#admin@user:{uid}``。

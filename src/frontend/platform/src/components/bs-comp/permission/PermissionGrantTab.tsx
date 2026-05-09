@@ -68,6 +68,7 @@ export function PermissionGrantTab({
   }>({ fallbackToDefault: true })
   const [selectedModelId, setSelectedModelId] = useState<string>('viewer')
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(true)
+  const [selectedDepartmentSummary, setSelectedDepartmentSummary] = useState<SelectedSubject[]>([])
   const [grantedSubjectIds, setGrantedSubjectIds] = useState<Record<SubjectType, number[]>>(
     EMPTY_GRANTED_SUBJECT_IDS,
   )
@@ -145,14 +146,14 @@ export function PermissionGrantTab({
     if (!modelSource.fallbackToDefault && modelSource.relationModels?.length) {
       return modelSource.relationModels.map((model) => ({
         id: model.id,
-        name: model.is_system ? t(`level.${model.relation}`) : model.name,
+        name: model.is_system ? t(`level.${model.relation}`, { defaultValue: model.relation }) : model.name,
         relation: model.relation as RelationLevel,
       }))
     }
 
     return DEFAULT_MODELS.map((model) => ({
       ...model,
-      name: t(`level.${model.relation}`),
+      name: t(`level.${model.relation}`, { defaultValue: model.relation }),
     }))
   }, [modelSource, t])
 
@@ -185,6 +186,7 @@ export function PermissionGrantTab({
     if (!fixedSubjectType) return
     setSubjectType(fixedSubjectType)
     setSelected([])
+    setSelectedDepartmentSummary([])
   }, [fixedSubjectType])
 
   useEffect(() => {
@@ -208,10 +210,15 @@ export function PermissionGrantTab({
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type)
     setSelected([])
+    setSelectedDepartmentSummary([])
   }
 
   const handleSubmit = async () => {
     if (selected.length === 0) return
+    if (subjectType !== 'user' && relation === 'owner') {
+      message({ title: '部门或用户组无法成为所有者', variant: 'error' })
+      return
+    }
 
     const grants: GrantItem[] = selected.map((subject) => ({
       subject_type: subject.type,
@@ -230,6 +237,7 @@ export function PermissionGrantTab({
     if (res !== false) {
       message({ title: t('success.grant'), variant: 'success' })
       setSelected([])
+      setSelectedDepartmentSummary([])
       onSuccess()
     }
   }
@@ -245,7 +253,11 @@ export function PermissionGrantTab({
 
   const showDepartmentIncludeChildrenControl =
     subjectType === 'department' && !hideDepartmentIncludeChildrenControl
-  const selectedSummaryText = selected.map((subject) => subject.name).join('、')
+  const selectedSummaryText = (
+    subjectType === 'department' && selectedDepartmentSummary.length > 0
+      ? selectedDepartmentSummary
+      : selected
+  ).map((subject) => subject.name).join('、')
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -255,11 +267,10 @@ export function PermissionGrantTab({
             {SUBJECT_TYPES.map((type) => (
               <button
                 key={type}
-                className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                  subjectType === type
-                    ? 'bg-background text-foreground shadow'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`rounded px-3 py-1.5 text-sm transition-colors ${subjectType === type
+                  ? 'bg-background text-foreground shadow'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 onClick={() => handleSubjectTypeChange(type)}
               >
                 {subjectLabel(type)}
@@ -302,6 +313,7 @@ export function PermissionGrantTab({
             resourceId={resourceId}
             includeChildren={includeChildren}
             onIncludeChildrenChange={handleIncludeChildrenChange}
+            onSelectionSummaryChange={setSelectedDepartmentSummary}
             showIncludeChildrenToggle={!hideDepartmentIncludeChildrenControl}
             disabledIds={grantedSubjectIds.department}
           />

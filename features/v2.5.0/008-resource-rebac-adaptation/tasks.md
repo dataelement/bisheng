@@ -12,6 +12,7 @@
 | spec.md | ✅ 已评审 | 用户确认通过 |
 | tasks.md | ✅ 已拆解 | 11 个任务，审查通过 |
 | 实现 | ✅ 已完成 | 10 / 11 完成，T09 N/A |
+| follow-up | ✅ 2026-05-07 补丁 | T12 修复 DAO 层 RBAC 漏网（`KnowledgeDao` + `FlowDao`），登记 INV-T19 + 双层守卫 |
 
 ---
 
@@ -531,3 +532,67 @@ T11(前端group_ids移除) ← T05,T06 完成后
 > 完成后，在此记录实现与 spec.md 的偏差，供后续参考。
 
 - **偏差 1**: _（实现时填写）_
+
+---
+
+## T12: DAO 层 RBAC 漏网修复（v2.5.1 follow-up） ✅
+
+> **状态**: ✅ 已完成（2026-05-07，作为 v2.5.1 hotfix）
+> **背景**: T03 / T05 重点改造 service 层（`KnowledgePermissionService` / `knowledge_service.py` / `knowledge_space_service.py`），但 spec.md "Replace all `RoleAccessDao.judge_role_access` 调用" 措辞不严，遗漏了同表的 `RoleAccessDao.find_role_access` / `afind_role_access` 系列以及 `RoleAccessDao.get_role_access(*, AccessType.X)` 列表型调用。漏网点位于 **DAO 层**（`/database/models/` 与 `/domain/models/`），任务列表是按 service 层组织的，跨层覆盖的盲点直到 v2.5.1 才被发现。
+
+### 漏网点
+
+| 文件 | 方法 | 消费场景 | 状态 |
+|------|------|---------|------|
+| `bisheng/knowledge/domain/models/knowledge.py:373` | `judge_knowledge_permission(user_name, knowledge_ids) -> List[Knowledge]` | 客户端日常模式 `orgKbs` 检索（`workstation_service.queryChunksFromDB`）+ 工作流通用 KB 节点（`user_auth=True` 时） | ✅ 迁移完毕 |
+| `bisheng/knowledge/domain/models/knowledge.py:412` | `ajudge_knowledge_permission(...)` 异步版 | 同上 | ✅ 迁移完毕 |
+| `bisheng/database/models/flow.py:343` | `get_user_access_online_flows(user_id, ...) -> List[Flow]` | `Assistant.get_auto_flow_info` 自动选技能 | ✅ 迁移完毕 |
+
+### 改造模板
+
+3 处统一模板（与 T03 service 层迁移同构）：
+
+1. 构造 `LoginUser.init_login_user[_sync](user_id, user_name)` —— 拿到 `is_admin` + `is_global_super`
+2. 调 `PermissionService.list_accessible_ids(relation='can_read', object_type=<X>, login_user=...)`
+3. `None` → admin 短路返回全集；否则取交集后 `aget_list_by_ids(filtered)`
+4. 清理文件级 `RoleAccessDao` / `UserRoleDao` / `AccessType` 冗余 import
+
+### 产出文件
+
+| 操作 | 文件 |
+|------|------|
+| 修改 | `src/backend/bisheng/knowledge/domain/models/knowledge.py` |
+| 修改 | `src/backend/bisheng/database/models/flow.py` |
+| 新增 | `src/backend/test/test_knowledge_dao_judge_permission_rebac.py`（10 用例）|
+| 新增 | `src/backend/test/test_flow_dao_user_access_rebac.py`（3 用例）|
+| 修改 | `features/v2.5.1/release-contract.md`（新增 INV-T19 + 变更历史条目）|
+| 修改 | `scripts/arch-guard.sh`（新增 RULE-8，per-file PostToolUse 钩子守卫）|
+| 新增 | `scripts/check-rbac-rebac-leak.sh`（仓库级 one-shot 守卫，CI/pre-commit 用）|
+
+### 单测覆盖
+
+13 用例全绿（`pytest test/test_knowledge_dao_judge_permission_rebac.py test/test_flow_dao_user_access_rebac.py`）：
+- admin 短路返全集
+- 普通用户 `accessible_ids ∩ 入参` 交集
+- 无交集返 `[]`，且不触发 DB 查询
+- 空 `knowledge_ids` 入参短路
+- `UserDao` 返回 None 短路
+- `flow_id_extra='admin'` 魔术 sentinel 在 admin 路径保留
+
+### 实际影响
+
+- **客户端日常模式 `orgKbs` 检索**：Child 用户对 Root 配置的 KB，若 Root 通过 ReBAC `shared_with: [tenant]` 共享，现在能拿到内容；之前 RBAC 路径无视 FGA 元组直接拒
+- **工作流通用 KB 节点（`user_auth=True`）/ `Assistant.get_auto_flow_info`**：同上
+- **F007 资源授权 UI**：管理员通过新版 UI 写入的 ReBAC 元组现在生效（之前写了等于没写）
+- **管理员短路语义**：保持一致（`is_admin()` 仍走 `user_role`）
+
+### 防回归
+
+- **per-file 钩子**：`scripts/arch-guard.sh` RULE-8 在 PostToolUse 时扫描 `RoleAccessDao\.(find|judge|afind|ajudge)_role_access\(|RoleAccessDao\.get_role_access\(`，命中非白名单文件即输出 VIOLATION
+- **仓库级守卫**：`scripts/check-rbac-rebac-leak.sh` 全仓扫描 + 4 类例外白名单（auth.py / `/role_access` CRUD / WEB_MENU / `permission/migration/`），CI/pre-commit 接入；当前 exit 0 clean
+- **不变量登记**：v2.5.1 release-contract.md 表 2 新增 **INV-T19**（"DAO/Model 层禁止直读 RoleAccessDao 做权限过滤"）
+
+### 备忘
+
+- F008 spec.md "Replace all `RoleAccessDao.judge_role_access` 调用" 这条措辞应升级为"Replace all `RoleAccessDao.{find,judge,afind,ajudge}_role_access` 与 `RoleAccessDao.get_role_access(*, AccessType.X)` 调用"，未来若再有同类 spec 拆任务时按此完整列表写入
+- 任务列表组织方式从纯 service 层升级为"按调用层 + 数据流"双视角拆，避免只看 service 漏掉 DAO 层（即使 DAO 不应做权限过滤，历史代码就是这么写的，迁移时必须显式覆盖）

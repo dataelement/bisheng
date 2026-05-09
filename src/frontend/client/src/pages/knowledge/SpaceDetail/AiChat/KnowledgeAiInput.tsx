@@ -14,7 +14,7 @@ import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import store from "~/store";
@@ -44,6 +44,7 @@ export function KnowledgeAiInput({
     onSend,
     onStop,
 }: KnowledgeAiInputProps) {
+    const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
     const [, setChatModel] = useRecoilState(store.chatModel);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -236,7 +237,7 @@ export function KnowledgeAiInput({
 
                 {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
                 <div className="p-3 pb-10">
-                    <div className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-hover pr-6">
+                    <div ref={outerScrollRevealRef} className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-scroll pr-6">
                         <div className="relative">
                             {selectedTag && (
                                 <span

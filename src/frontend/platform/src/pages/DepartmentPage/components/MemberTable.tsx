@@ -40,7 +40,6 @@ import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal"
-import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import type { DepartmentAdmin, DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
 import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
 import { Loader2 } from "lucide-react"
@@ -283,14 +282,21 @@ export function MemberTable({
         )
       )
       captureAndAlertRequestErrorHoc(
-        disableUserApi(m.user_id, enabled ? 0 : 1)
-      ).then((res) => {
-        if (res === null) {
-          loadMembers()
-        } else {
-          toast({ title: t("prompt"), variant: "success" })
+        disableUserApi(m.user_id, enabled ? 0 : 1).then(() => {
+          toast({
+            title: t("prompt"),
+            description: t(
+              enabled
+                ? "bs:department.accountEnabledToast"
+                : "bs:department.accountDisabledToast",
+            ),
+            variant: "success",
+          })
           onChanged()
-        }
+        })
+      ).then((res) => {
+        // HoC returns false on error — revert optimistic toggle by reloading.
+        if (res === false) loadMembers()
       })
     },
     [isArchived, loadMembers, onChanged, t]
@@ -651,7 +657,10 @@ export function MemberTable({
                 <TableCell {...mrc.getTdProps(5)}>
                   <Switch
                     checked={m.enabled}
-                    disabled={isArchived || isSyncedSource(m.source)}
+                    disabled={
+                      isArchived
+                      || (!m.enabled && !!m.disable_source && user?.role !== "admin")
+                    }
                     onCheckedChange={(checked) =>
                       handleToggleEnabled(m, Boolean(checked))
                     }

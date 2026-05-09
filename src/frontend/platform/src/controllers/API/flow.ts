@@ -292,7 +292,7 @@ export async function reloadCustom(code): Promise<any> {
  * @throws .
  */
 export async function getFlowVersions(flow_id): Promise<{ data: FlowVersionItem[], total: number }> {
-    return await axios.get(`/api/v1/flows/versions`, {
+    return await axios.get(`/api/v1/workflow/versions`, {
         params: { flow_id }
     });
 }
@@ -305,7 +305,7 @@ export async function getFlowVersions(flow_id): Promise<{ data: FlowVersionItem[
  * @throws .
  */
 export async function createFlowVersion(flow_id, versionData: { name: string, description: string, original_version_id: number, data: any }) {
-    return await axios.post(`/api/v1/flows/versions?flow_id=${flow_id}`, versionData);
+    return await axios.post(`/api/v1/workflow/versions?flow_id=${flow_id}`, versionData);
 }
 
 /**
@@ -316,7 +316,7 @@ export async function createFlowVersion(flow_id, versionData: { name: string, de
  * @throws .
  */
 export async function getVersionDetails(versionId: string) {
-    return await axios.get(`/api/v1/flows/versions/${versionId}`);
+    return await axios.get(`/api/v1/workflow/versions/${versionId}`);
 }
 
 /**
@@ -328,7 +328,7 @@ export async function getVersionDetails(versionId: string) {
  * @throws .
  */
 export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }) {
-    return await axios.put(`/api/v1/flows/versions/${versionId}`, versionData);
+    return await axios.put(`/api/v1/workflow/versions/${versionId}`, versionData);
 }
 
 /**
@@ -339,7 +339,7 @@ export async function updateVersion(versionId: string, versionData: { name: stri
  * @throws .
  */
 export async function deleteVersion(versionId: string) {
-    return await axios.delete(`/api/v1/flows/versions/${versionId}`);
+    return await axios.delete(`/api/v1/workflow/versions/${versionId}`);
 }
 
 /**
@@ -350,7 +350,7 @@ export async function deleteVersion(versionId: string) {
  * @throws .
  */
 export async function changeCurrentVersion({ flow_id, version_id }: { flow_id: string, version_id: number }) {
-    return await axios.post(`/api/v1/flows/change_version?flow_id=${flow_id}&version_id=${version_id}`);
+    return await axios.post(`/api/v1/workflow/change_version?flow_id=${flow_id}&version_id=${version_id}`);
 }
 
 /**

@@ -433,7 +433,7 @@ class LinsightStateMessageManager:
             stats = {
                 'session_version_id': self._session_version_id,
                 'message_count': await self._redis_client.allen(self._keys['messages']),
-                'has_session_info': await self._redis_client.exists(self._keys['session_version_info']),
+                'has_session_info': await self._redis_client.aexists(self._keys['session_version_info']),
                 'task_count': 0
             }
 

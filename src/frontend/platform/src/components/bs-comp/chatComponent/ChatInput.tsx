@@ -151,7 +151,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         errorMsg = data.message.status_message || 'error'
                         toast({
                             variant: 'error',
-                            description: t(`errors.${data.message.status_code}`)
+                            description: t(`errors.${data.message.status_code}`, { defaultValue: errorMsg })
                         })
                     }
                     // 异常类型处理，提示

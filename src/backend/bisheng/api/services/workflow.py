@@ -17,16 +17,16 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
-from bisheng.permission.domain.workflow_app_permission import (
-    batch_user_may_share_app,
-    object_type_for_flow_type,
-)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.permission.domain.workflow_app_permission import (
+    batch_user_may_share_app,
+    object_type_for_flow_type,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -155,27 +155,25 @@ class WorkFlowService(BaseService):
 
         query_page = page
         query_page_size = page_size
-        if flow_type is None or skip_pagination or not user.is_admin():
+        if skip_pagination:
             query_page = 0
             query_page_size = 0
 
         readable_type_ids = None
         if not user.is_admin():
             required_permission = 'edit_app' if managed else permission_id
-            required_relation = cls._relation_for_app_permission(required_permission)
-            readable_type_ids = await cls._app_type_ids_for_relation(user, required_relation, flow_type)
-            if not cls._has_any_app_type_ids(readable_type_ids):
-                readable_type_ids = None
+            readable_type_ids = await cls._app_type_ids_for_permission(user, required_permission, flow_type)
 
         # Get a list of skills visible to the user
         if user.is_admin():
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
-                                                     query_page, query_page_size, search_description=search_description)
+                                                      query_page, query_page_size,
+                                                      search_description=search_description)
         else:
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None,
-                                                     None, None, query_page, query_page_size,
-                                                     search_description=search_description,
-                                                     app_type_ids=readable_type_ids)
+                                                      None, None, query_page, query_page_size,
+                                                      search_description=search_description,
+                                                      app_type_ids=readable_type_ids)
         data = cls.filter_supported_apps(data)
         writeable_ids: Optional[set[str]] = None
         if not user.is_admin() and data:
@@ -194,14 +192,8 @@ class WorkFlowService(BaseService):
                 for app_id, permission_ids in permission_map.items()
                 if 'edit_app' in permission_ids
             }
-        if not skip_pagination:
-            total = len(data)
-            start_index = (page - 1) * page_size
-            end_index = start_index + page_size
-            data = data[start_index:end_index]
         data = cls.add_extra_field(user, data, managed, writeable_ids=writeable_ids)
-        data = await cls.aenrich_apps_can_share(user, data, managed)
-
+        # data = await cls.aenrich_apps_can_share(user, data, managed)  # because frontend not need and this cost most time
         return data, total
 
     @classmethod
@@ -209,33 +201,46 @@ class WorkFlowService(BaseService):
         return cls._APP_PERMISSION_TO_MIN_RELATION.get(permission_id, 'can_read')
 
     @classmethod
-    async def _app_type_ids_for_relation(
+    async def _app_type_ids_for_permission(
         cls,
         user: UserPayload,
-        relation: str,
+        permission_id: str,
         flow_type: Optional[int],
     ) -> Dict[int, list[str]]:
         from bisheng.permission.domain.services.permission_service import PermissionService
 
+        relation = cls._relation_for_app_permission(permission_id)
         targets: list[tuple[int, str]] = []
         if flow_type in (None, FlowType.WORKFLOW.value):
             targets.append((FlowType.WORKFLOW.value, 'workflow'))
         if flow_type in (None, FlowType.ASSISTANT.value):
             targets.append((FlowType.ASSISTANT.value, 'assistant'))
 
-        results = await asyncio.gather(*[
-            PermissionService.list_accessible_ids(
-                user_id=user.user_id,
-                relation=relation,
-                object_type=object_type,
-                login_user=user,
-            )
-            for _, object_type in targets
-        ])
-        return {
-            app_type: [str(one) for one in (ids or [])]
-            for (app_type, _), ids in zip(targets, results)
-        }
+        fga_results, binding_type_ids = await asyncio.gather(
+            asyncio.gather(*[
+                PermissionService.list_accessible_ids(
+                    user_id=user.user_id,
+                    relation=relation,
+                    object_type=object_type,
+                    login_user=user,
+                )
+                for _, object_type in targets
+            ]),
+            ApplicationPermissionService.get_bound_app_type_ids_async(
+                user,
+                [permission_id],
+                flow_type,
+            ),
+        )
+
+        app_type_ids: dict[int, list[str]] = {}
+        for (app_type, _), ids in zip(targets, fga_results):
+            merged = [
+                *(str(one) for one in (ids or [])),
+                *(str(one) for one in binding_type_ids.get(app_type, [])),
+            ]
+            app_type_ids[app_type] = list(dict.fromkeys(merged))
+        return app_type_ids
 
     @staticmethod
     def _has_any_app_type_ids(app_type_ids: Optional[Dict[int, list[str]]]) -> bool:
@@ -521,7 +526,7 @@ class WorkFlowService(BaseService):
         else:
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         data = cls.filter_supported_apps(data)
-        data = await cls.filter_apps_by_permission_id(user, data, 'use_app')
+        data = await cls.filter_apps_by_permission_id(user, data, 'view_app')
 
         # Reorder users in the order they are added to the stock
         data.sort(key=lambda x: user_link_order.get(x['id'], float('inf')))
@@ -571,12 +576,13 @@ class WorkFlowService(BaseService):
 
         # Get a list of skills visible to the user
         if user.is_admin():
-            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
+            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0,
+                                           0)
         else:
             data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, None, None,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)
-        data = await cls.filter_apps_by_permission_id(user, data, 'use_app')
+        data = await cls.filter_apps_by_permission_id(user, data, 'view_app')
         total = len(data)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size

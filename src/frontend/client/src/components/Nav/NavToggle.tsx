@@ -10,6 +10,8 @@ export default function NavToggle({
   side = 'left',
   className = '',
   translateX,
+  /** 会话列表栏右边缘的视口 x（px）；传入后与 translateX 二选一，把手落在分隔线右侧的主内容侧 */
+  anchorRightEdgePx,
 }: {
   onToggle: () => void;
   navVisible: boolean;
@@ -17,10 +19,12 @@ export default function NavToggle({
   setIsHovering: (isHovering: boolean) => void;
   side?: 'left' | 'right';
   className?: string;
-  /** Pixel offset when sidebar is visible. Pass a number (e.g. 280) to enable, or omit/0 to disable. */
+  /** Pixel offset when sidebar is visible. Pass a number (e.g. 240) to enable, or omit/0 to disable. */
   translateX?: number;
+  anchorRightEdgePx?: number;
 }) {
   const localize = useLocalize();
+  const useAnchor = typeof anchorRightEdgePx === 'number';
   const transition = {
     transition: 'transform 0.3s ease, opacity 0.2s ease',
   };
@@ -35,13 +39,21 @@ export default function NavToggle({
       className={cn(
         className,
         'transition-transform duration-300',
-        !translateX && '-translate-y-1/2',
-        !translateX && (navVisible ? 'rotate-0' : 'rotate-180'),
+        useAnchor && 'fixed top-1/2 z-[50] -translate-y-1/2',
+        useAnchor && (navVisible ? 'rotate-0' : 'rotate-180'),
+        !useAnchor && !translateX && '-translate-y-1/2',
+        !useAnchor && !translateX && (navVisible ? 'rotate-0' : 'rotate-180'),
       )}
-      style={translateX ? {
-        transition: 'transform 0.3s ease',
-        transform: `translateX(${navVisible ? translateX : 0}px) translateY(-50%) ${navVisible ? '' : 'rotate(180deg)'}`,
-      } : undefined}
+      style={
+        useAnchor
+          ? { left: anchorRightEdgePx }
+          : translateX
+            ? {
+                transition: 'transform 0.3s ease',
+                transform: `translateX(${navVisible ? translateX : 0}px) translateY(-50%) ${navVisible ? '' : 'rotate(180deg)'}`,
+              }
+            : undefined
+      }
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >

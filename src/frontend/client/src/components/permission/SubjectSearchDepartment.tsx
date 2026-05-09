@@ -22,6 +22,7 @@ interface SubjectSearchDepartmentProps {
   resourceId: string;
   includeChildren: boolean;
   onIncludeChildrenChange: (v: boolean) => void;
+  onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
 }
 
@@ -33,28 +34,29 @@ function collectExplicitDepartmentSelections(
   const out: SelectedSubject[] = [];
   const visited = new Set<number>();
 
-  const walk = (items: DepartmentNode[], ancestorSelected: boolean) => {
+  const walk = (items: DepartmentNode[], prefix: string[], ancestorSelected: boolean) => {
     for (const node of items) {
       const explicitSelection = selectedDepartmentsById.get(node.id);
       const isSelected = ancestorSelected || Boolean(explicitSelection);
+      const pathSegments = [...prefix, node.name];
       if (isSelected && !visited.has(node.id)) {
         visited.add(node.id);
         out.push({
           type: "department",
           id: node.id,
-          name: node.name,
+          name: pathSegments.join("/"),
           include_children: false,
         });
       }
 
       const nextAncestorSelected = ancestorSelected || Boolean(explicitSelection?.include_children);
       if (node.children?.length) {
-        walk(node.children, nextAncestorSelected);
+        walk(node.children, pathSegments, nextAncestorSelected);
       }
     }
   };
 
-  walk(nodes, inherited);
+  walk(nodes, [], inherited);
   return out;
 }
 
@@ -65,6 +67,7 @@ export function SubjectSearchDepartment({
   resourceId,
   includeChildren,
   onIncludeChildrenChange,
+  onSelectionSummaryChange,
   disabledIds = [],
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
@@ -99,6 +102,12 @@ export function SubjectSearchDepartment({
       ),
     [value]
   );
+
+  useEffect(() => {
+    onSelectionSummaryChange?.(
+      collectExplicitDepartmentSelections(tree, selectedDepartmentsById)
+    );
+  }, [onSelectionSummaryChange, selectedDepartmentsById, tree]);
 
   const toggle = (node: DepartmentNode) => {
     if (disabledIdSet.has(node.id)) return;
@@ -213,6 +222,7 @@ function TreeNode({
   onToggle: (n: DepartmentNode) => void;
   onExpand: (id: number) => void;
 }) {
+  const localize = useLocalize();
   if (!matchesKeyword(node)) return null;
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expanded.has(node.id);
@@ -220,7 +230,7 @@ function TreeNode({
   const isExplicitlySelected = selectedIds.has(node.id);
   const isImplicitlySelected = ancestorIncluded && !isExplicitlySelected;
   const isDisabled = disabledIds.has(node.id);
-  const isChecked = isExplicitlySelected || isImplicitlySelected || isDisabled;
+  const isChecked = isExplicitlySelected || isImplicitlySelected;
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
 
   return (
@@ -263,9 +273,14 @@ function TreeNode({
           }}
         />
         <Building2 className="h-4 w-4 text-gray-400" />
-        <span className="truncate text-sm">{node.name}</span>
+        <span className="min-w-0 truncate text-sm">{node.name}</span>
         {node.member_count != null && (
           <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>
+        )}
+        {isDisabled && (
+          <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+            {localize("com_permission.already_granted")}
+          </span>
         )}
       </div>
       {hasChildren && isExpanded && node.children!.map((child) => (
