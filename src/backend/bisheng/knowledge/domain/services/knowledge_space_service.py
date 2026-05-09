@@ -1691,6 +1691,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         user_map = {u.user_id: u for u in (creator_users or [])}
 
+        is_global_admin = False
+        is_admin = getattr(self.login_user, 'is_admin', None)
+        if callable(is_admin):
+            is_global_admin = bool(is_admin())
+
+        permission_level_map: Dict[int, Optional[str]] = {}
+        permission_probe_ids = [
+            row[0].id
+            for row in rows
+            if row[0].user_id != self.login_user.user_id
+            and self._resolve_subscription_status_from_fields(row[1], row[2])
+            != SpaceSubscriptionStatusEnum.SUBSCRIBED
+        ]
+        if permission_probe_ids and not is_global_admin:
+            permission_levels = await asyncio.gather(*[
+                PermissionService.get_permission_level(
+                    user_id=self.login_user.user_id,
+                    object_type='knowledge_space',
+                    object_id=str(space_id),
+                    login_user=self.login_user,
+                )
+                for space_id in permission_probe_ids
+            ])
+            permission_level_map = {
+                space_id: level
+                for space_id, level in zip(permission_probe_ids, permission_levels)
+            }
+
         # 4. Build response items
         result_list: list = []
         for row in rows:
@@ -1704,6 +1732,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             subscription_status = self._resolve_subscription_status_from_fields(
                 user_subscription_status, user_subscription_update_time,
             )
+            user_role = None
+            permission_level = permission_level_map.get(space.id)
+            if permission_level:
+                user_role = self._permission_level_to_space_user_role(permission_level)
+                if user_role is not None:
+                    subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
 
             result_list.append(
                 KnowledgeSpaceInfoResp(
@@ -1717,6 +1751,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "avatar": await UserService.get_avatar_share_link(creator.avatar) if creator else None,
                         "file_num": success_file_map.get(space.id, 0),
                         "follower_num": subscriber_count,
+                        "user_role": user_role,
                     }
                 )
             )

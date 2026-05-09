@@ -111,6 +111,10 @@ export function CreateKnowledgeSpaceDrawer({
             enabled: createOptions?.canCreatePersonal ?? true,
         },
     ]), [createOptions, localize]);
+    const visibleLevelOptions = useMemo(
+        () => levelOptions.filter((option) => option.enabled),
+        [levelOptions],
+    );
 
     const resetForm = () => {
         setName("");
@@ -151,11 +155,11 @@ export function CreateKnowledgeSpaceDrawer({
 
     useEffect(() => {
         if (!open || mode !== "create" || !createOptions) return;
-        if (!levelOptions.some((option) => option.value === spaceLevel && option.enabled)) {
-            const next = levelOptions.find((option) => option.enabled)?.value ?? SpaceLevel.PERSONAL;
+        if (!visibleLevelOptions.some((option) => option.value === spaceLevel)) {
+            const next = visibleLevelOptions[0]?.value ?? SpaceLevel.PERSONAL;
             setSpaceLevel(next);
         }
-    }, [createOptions, levelOptions, mode, open, spaceLevel]);
+    }, [createOptions, mode, open, spaceLevel, visibleLevelOptions]);
 
     const handleConfirm = async () => {
         // Guard against double-submit while the previous request is still in-flight.
@@ -286,17 +290,13 @@ export function CreateKnowledgeSpaceDrawer({
                                         onValueChange={(value) => setSpaceLevel(value as SpaceLevel)}
                                         className="grid grid-cols-2 gap-3 touch-mobile:grid-cols-1"
                                     >
-                                        {levelOptions.map((option) => (
+                                        {visibleLevelOptions.map((option) => (
                                             <label
                                                 key={option.value}
-                                                className={cn(
-                                                    "flex cursor-pointer items-center gap-2 rounded-[6px] border border-[#E5E6EB] px-3 py-2 text-[14px] text-[#212121]",
-                                                    !option.enabled && "cursor-not-allowed opacity-50",
-                                                )}
+                                                className="flex cursor-pointer items-center gap-2 rounded-[6px] border border-[#E5E6EB] px-3 py-2 text-[14px] text-[#212121]"
                                             >
                                                 <RadioGroup.Item
                                                     value={option.value}
-                                                    disabled={!option.enabled}
                                                     className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:border-[#165DFF] data-[state=checked]:bg-[#165DFF]"
                                                 >
                                                     <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />

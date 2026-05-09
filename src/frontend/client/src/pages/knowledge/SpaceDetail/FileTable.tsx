@@ -758,7 +758,9 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
+    const canEditTags = isAdmin && !isFolder;
+    const canRetry = isAdmin && hasRetryOption;
+    const showMoreMenu = canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = rowHovered || moreMenuOpen;
@@ -790,7 +792,7 @@ function FileRow({
                         align="end"
                         className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
                     >
-                        {isAdmin && !isFolder && (
+                        {canEditTags && (
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -812,7 +814,7 @@ function FileRow({
                                 {localize("com_knowledge.rename")}
                             </DropdownMenuItem>
                         )}
-                        {isAdmin && hasRetryOption && (
+                        {canRetry && (
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();

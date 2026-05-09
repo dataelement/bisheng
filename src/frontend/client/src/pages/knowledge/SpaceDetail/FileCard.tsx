@@ -223,7 +223,9 @@ export function FileCard({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
+    const canEditTags = isAdmin && !isFolder;
+    const canRetry = isAdmin && hasRetryOption;
+    const showMoreMenu = canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -359,7 +361,7 @@ export function FileCard({
                                             </DropdownMenuItem>
                                         )}
 
-                                        {isAdmin && !isFolder && (
+                                        {canEditTags && (
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onEditTags(); }}
                                                 className="flex items-center"
@@ -380,7 +382,7 @@ export function FileCard({
                                                 {localize("com_knowledge.rename")}
                                             </DropdownMenuItem>
                                         )}
-                                        {isAdmin && hasRetryOption && (
+                                        {canRetry && (
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
                                                 className="flex items-center"
@@ -495,7 +497,7 @@ export function FileCard({
                                     </DropdownMenuItem>
                                 )}
 
-                                {isAdmin && !isFolder && (
+                                {canEditTags && (
                                     <DropdownMenuItem
                                         onClick={(e) => { e.stopPropagation(); onEditTags(); }}
                                         className="flex items-center"
@@ -516,7 +518,7 @@ export function FileCard({
                                         {localize("com_knowledge.rename")}
                                     </DropdownMenuItem>
                                 )}
-                                {isAdmin && hasRetryOption && (
+                                {canRetry && (
                                     <DropdownMenuItem
                                         onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
                                         className="flex items-center"
