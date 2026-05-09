@@ -1144,7 +1144,6 @@ class DepartmentService:
                     .join(Group, UserGroup.group_id == Group.id)
                     .where(
                         UserGroup.user_id.in_(user_ids),
-                        UserGroup.is_group_admin == 0,
                         col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                     )
                 )
@@ -1841,6 +1840,7 @@ class DepartmentService:
     ) -> dict:
         """PRD 3.2.2：编辑人员弹窗数据（区分主属本地/第三方/兼职）。"""
         from bisheng.database.constants import AdminRole
+        from bisheng.database.models.group import GroupDao
         from bisheng.user.domain.models.user import UserDao
         from bisheng.user.domain.models.user_role import UserRoleDao
         from bisheng.database.models.user_group import UserGroupDao
@@ -1925,8 +1925,28 @@ class DepartmentService:
         context_role_ids = sorted(list(role_ids_user & ctx_assignable_ids))
 
         ug_links = await UserGroupDao.aget_user_group(user_id)
-        current_group_ids = [int(x.group_id) for x in ug_links]
+        admin_group_links = await UserGroupDao.aget_user_admin_group(user_id)
+        member_group_ids = [int(x.group_id) for x in ug_links]
+        locked_group_ids = [int(x.group_id) for x in admin_group_links]
+        current_group_ids = sorted(list(dict.fromkeys(member_group_ids + locked_group_ids)))
         manageable_groups = await cls._manageable_group_options(login_user)
+        manageable_group_ids = {
+            int(item['id'])
+            for item in manageable_groups
+            if item.get('id') is not None
+        }
+        missing_current_group_ids = [
+            group_id for group_id in current_group_ids
+            if group_id not in manageable_group_ids
+        ]
+        if missing_current_group_ids:
+            missing_groups = await GroupDao.aget_group_by_ids(missing_current_group_ids)
+            for group in missing_groups:
+                manageable_groups.append({
+                    'id': group.id,
+                    'group_name': group.group_name,
+                    'visibility': group.visibility,
+                })
 
         return {
             'edit_mode': edit_mode,
@@ -1947,6 +1967,7 @@ class DepartmentService:
             'context_role_ids': context_role_ids,
             'manageable_groups': manageable_groups,
             'current_group_ids': current_group_ids,
+            'locked_group_ids': locked_group_ids,
             'can_change_primary': edit_mode == 'local_primary',
         }
 

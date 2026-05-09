@@ -168,6 +168,7 @@ export type DepartmentMemberEditForm = {
   context_role_ids: number[]
   manageable_groups: { id: number; group_name: string; visibility?: string }[]
   current_group_ids: number[]
+  locked_group_ids: number[]
 }
 
 export async function getDepartmentMemberEditFormApi(

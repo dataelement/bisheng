@@ -102,7 +102,7 @@ class TestCreateGroupCompatibility:
             mock_group_dao.acheck_name_duplicate = AsyncMock(return_value=False)
             mock_group_dao.acreate = AsyncMock(return_value=created_group)
             mock_user_group_dao.aset_admins_batch = AsyncMock()
-            mock_change_handler.on_created.return_value = []
+            mock_change_handler.on_created.return_value = ['member-op', 'admin-op']
             mock_change_handler.execute_async = AsyncMock()
 
             await UserGroupService.acreate_group(
@@ -118,6 +118,8 @@ class TestCreateGroupCompatibility:
         mock_user_group_dao.aset_admins_batch.assert_awaited_once_with(
             25, add_ids=[mock_group_owner.user_id], remove_ids=[],
         )
+        mock_change_handler.on_created.assert_called_once_with(25, mock_group_owner.user_id)
+        mock_change_handler.execute_async.assert_awaited_once_with(['member-op', 'admin-op'])
 
 
 class TestManageableGroups:

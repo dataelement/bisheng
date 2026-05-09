@@ -757,7 +757,7 @@ class TestPermission:
         assert 'group.visibility' not in str(captured_ug_stmt).lower()
 
     @pytest.mark.asyncio
-    async def test_get_members_excludes_user_group_admin_rows_from_memberships(self):
+    async def test_get_members_includes_user_group_admin_rows_for_display(self):
         from bisheng.department.domain.services.department_service import DepartmentService
 
         dept = SimpleNamespace(id=10)
@@ -822,12 +822,13 @@ class TestPermission:
             'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
             new_callable=AsyncMock, return_value=True,
         ):
-            await DepartmentService.aget_members(
+            result = await DepartmentService.aget_members(
                 'BS@test', 1, 20, '', _NonAdminUser(is_global_super=True),
             )
 
+        assert result['data'][0]['user_groups'] == [{'id': 5, 'group_name': 'Private Group'}]
         assert captured_ug_stmt is not None
-        assert 'user_group.is_group_admin = :is_group_admin_1' in str(captured_ug_stmt).lower()
+        assert 'user_group.is_group_admin' not in str(captured_ug_stmt).lower()
 
     async def test_check_permission_raises(self):
         """_check_permission raises DepartmentPermissionDeniedError for non-admin.
