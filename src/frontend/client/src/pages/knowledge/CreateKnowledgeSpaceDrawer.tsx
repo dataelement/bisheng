@@ -307,32 +307,46 @@ export function CreateKnowledgeSpaceDrawer({
                                     </RadioGroup.Root>
                                 )}
                                 {mode === "create" && spaceLevel === SpaceLevel.DEPARTMENT && (
-                                    <select
-                                        value={departmentId ?? ""}
-                                        onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : undefined)}
-                                        className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
-                                    >
-                                        <option value="">{localize("com_knowledge.select_department")}</option>
-                                        {(createOptions?.departments || []).map((dept) => (
-                                            <option key={dept.id} value={dept.id}>
-                                                {dept.pathName || dept.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="knowledge-space-department" className="text-sm text-[#1D2129] font-medium">
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            {localize("com_knowledge.select_department")}
+                                        </Label>
+                                        <select
+                                            id="knowledge-space-department"
+                                            value={departmentId ?? ""}
+                                            onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : undefined)}
+                                            className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
+                                        >
+                                            <option value="">{localize("com_knowledge.select_space_department_placeholder")}</option>
+                                            {(createOptions?.departments || []).map((dept) => (
+                                                <option key={dept.id} value={dept.id}>
+                                                    {dept.pathName || dept.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 )}
                                 {mode === "create" && spaceLevel === SpaceLevel.TEAM && (
-                                    <select
-                                        value={userGroupId ?? ""}
-                                        onChange={(event) => setUserGroupId(event.target.value ? Number(event.target.value) : undefined)}
-                                        className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
-                                    >
-                                        <option value="">{localize("com_knowledge.select_user_group")}</option>
-                                        {(createOptions?.userGroups || []).map((group) => (
-                                            <option key={group.id} value={group.id}>
-                                                {group.groupName}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="knowledge-space-user-group" className="text-sm text-[#1D2129] font-medium">
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            {localize("com_knowledge.select_user_group")}
+                                        </Label>
+                                        <select
+                                            id="knowledge-space-user-group"
+                                            value={userGroupId ?? ""}
+                                            onChange={(event) => setUserGroupId(event.target.value ? Number(event.target.value) : undefined)}
+                                            className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
+                                        >
+                                            <option value="">{localize("com_knowledge.select_space_user_group_placeholder")}</option>
+                                            {(createOptions?.userGroups || []).map((group) => (
+                                                <option key={group.id} value={group.id}>
+                                                    {group.groupName}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 )}
                             </div>
 

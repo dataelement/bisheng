@@ -1458,6 +1458,8 @@
     "space_level": "Space level",
     "select_department": "Select department",
     "select_user_group": "Select user group",
+    "select_space_department_placeholder": "Select the department this knowledge space belongs to",
+    "select_space_user_group_placeholder": "Select the user group this knowledge space belongs to",
     "department_required": "Select a department",
     "user_group_required": "Select a user group",
     "department_badge": "Dept",
