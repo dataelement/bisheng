@@ -154,7 +154,42 @@ class DatabaseConnectionManager:
                 logger.error(f"Error creating tables: {exc}")
                 raise RuntimeError("Error creating tables") from exc
 
+        # DaMeng: ensure BEFORE UPDATE triggers for update_time columns exist.
+        # This replicates MySQL's ON UPDATE CURRENT_TIMESTAMP at the DB level
+        # and must run at startup so both fresh installs and upgrades are covered.
+        if self.async_engine.dialect.name == 'dm':
+            self._ensure_dm_triggers()
+
         logger.info('Database and tables created successfully')
+
+    def _ensure_dm_triggers(self) -> None:
+        """Create or replace BEFORE UPDATE triggers for update_time on DaMeng."""
+        from sqlalchemy import inspect as sa_inspect
+
+        with self.engine.connect() as conn:
+            insp = sa_inspect(conn)
+            for table in insp.get_table_names():
+                try:
+                    col_names = [c['name'].lower() for c in insp.get_columns(table)]
+                except Exception:
+                    continue
+
+                if 'update_time' not in col_names:
+                    continue
+
+                trigger_name = f'trg_{table}_update_time'
+                trigger_ddl = (
+                    f'CREATE OR REPLACE TRIGGER "{trigger_name}" '
+                    f'BEFORE UPDATE ON "{table}" '
+                    f'FOR EACH ROW '
+                    f'BEGIN '
+                    f'  :new.update_time := CURRENT_TIMESTAMP; '
+                    f'END'
+                )
+                try:
+                    conn.exec_driver_sql(trigger_ddl)
+                except Exception as exc:
+                    logger.warning(f'[dm] Could not create trigger {trigger_name}: {exc}')
 
     async def close(self):
         """Close database connection"""
