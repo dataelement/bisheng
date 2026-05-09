@@ -1083,6 +1083,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
                 if member_info.is_active:
                     result.user_role = member_info.user_role
+            elif has_content_permission and not self.login_user.is_admin():
+                self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             if result.user_role is None and has_content_permission:
                 level = await PermissionService.get_permission_level(
                     user_id=self.login_user.user_id,

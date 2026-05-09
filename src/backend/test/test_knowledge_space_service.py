@@ -398,7 +398,7 @@ class TestGetSpaceInfo:
         assert result.is_followed is False
 
     @pytest.mark.asyncio
-    async def test_minimal_view_space_bound_model_allows_space_info_without_membership(self, service):
+    async def test_minimal_view_space_bound_model_marks_space_info_subscribed(self, service):
         private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE, user_id=99)
         fake_fga = _FakeReadTuplesFGA({
             'knowledge_space:1': [
@@ -469,11 +469,11 @@ class TestGetSpaceInfo:
 
         assert result.id == 1
         assert result.user_role == UserRoleEnum.MEMBER
-        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-        assert result.is_followed is False
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+        assert result.is_followed is True
 
     @pytest.mark.asyncio
-    async def test_maps_direct_owner_grant_to_admin_without_marking_subscribed(self, service):
+    async def test_maps_direct_owner_grant_to_admin_and_marks_subscribed(self, service):
         private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE, user_id=99)
 
         with patch(
@@ -512,8 +512,8 @@ class TestGetSpaceInfo:
             result = await service.get_space_info(1)
 
         assert result.user_role == UserRoleEnum.ADMIN
-        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-        assert result.is_followed is False
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+        assert result.is_followed is True
 
     @pytest.mark.asyncio
     async def test_super_admin_read_shortcut_does_not_mark_space_subscribed(self, service):
