@@ -250,7 +250,9 @@ export function OrganizationMemberEditDialog({
             primaryDeptInternalId != null
               ? primaryDeptInternalId
               : undefined,
-          group_ids: Array.from(groupSel),
+          group_ids: Array.from(groupSel).filter(
+            (id) => !(form.locked_group_ids ?? []).includes(id)
+          ),
           primary_role_ids: Array.from(primaryRoles),
           affiliate_roles,
         }
@@ -341,6 +343,7 @@ export function OrganizationMemberEditDialog({
                         label: g.group_name,
                         value: String(g.id),
                       }))}
+                      lockedValues={(form.locked_group_ids ?? []).map(String)}
                       value={Array.from(groupSel).map(String)}
                       onChange={(vals) =>
                         setGroupSel(new Set((vals as string[]).map((id) => Number(id))))
