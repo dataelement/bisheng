@@ -534,29 +534,27 @@ class KnowledgeFileDao(KnowledgeFileBase):
     @classmethod
     def filter_file_by_metadata_fields(cls, knowledge_id: int, logical: Literal["and", "or"],
                                        metadata_filters: List[Dict[str, Dict[str, Any]]]) -> List[int]:
-        """
-        Filter knowledge files based on user-defined metadata fields
-        :param knowledge_id: The knowledge base uponID
-        :param logical: Logical operators, supporting "AND" OR "OR"
-        :param metadata_filters: User-defined metadata fields and their corresponding values
-          [{
-            field_a: {
-                'comparison': '=',
-                'value': 'some_value',
-                'extra_filter': [
-                    {
-                        'comparison': '!=',
-                        'value': 'other_value'
-                    }
-                ]
-            }
-          }]
-        :return: Eligible Knowledge FilesIDVertical
-        """
+        """Filter knowledge files based on user-defined metadata fields.
 
+        MySQL: builds a raw SQL WHERE clause using the sql_key from each filter,
+        which may contain MySQL JSON path expressions like JSON_UNQUOTE(JSON_EXTRACT(...)).
+
+        DaMeng/others: fetches all files for the knowledge and filters in Python
+        using the py_field tuple stored alongside each filter entry.
+        """
+        with get_sync_db_session() as session:
+            dialect = session.bind.dialect.name if session.bind else 'mysql'
+
+            if dialect == 'mysql':
+                return cls._filter_sql(session, knowledge_id, logical, metadata_filters)
+            return cls._filter_python(session, knowledge_id, logical, metadata_filters)
+
+    @classmethod
+    def _filter_sql(cls, session, knowledge_id: int, logical: str,
+                    metadata_filters: List[Dict]) -> List[int]:
+        """MySQL path: inject SQL expressions directly into the WHERE clause."""
         statement = "select id from knowledgefile where knowledge_id = :knowledge_id and "
         params = {"knowledge_id": knowledge_id}
-
         params_index = 1
         field_statement = []
         for metadata_filter in metadata_filters:
@@ -581,13 +579,80 @@ class KnowledgeFileDao(KnowledgeFileBase):
                 params_index += 1
         field_statement = f" {logical} ".join(field_statement)
         statement += f"({field_statement})"
+        file_ids = []
+        result = session.execute(text(statement), params)
+        for one in result:
+            file_ids.append(one[0])
+        return file_ids
 
-        with get_sync_db_session() as session:
-            file_ids = []
-            result = session.execute(text(statement), params)
-            for one in result:
-                file_ids.append(one[0])
-            return file_ids
+    @classmethod
+    def _filter_python(cls, session, knowledge_id: int, logical: str,
+                       metadata_filters: List[Dict]) -> List[int]:
+        """DaMeng/others: fetch all files and apply filters in Python.
+
+        Each filter entry must have a 'py_field' key in its value dict that
+        specifies how to retrieve the value from the file object:
+          - str: attribute name on KnowledgeFileDao (preset fields)
+          - tuple ('user_metadata', field_name): nested JSON lookup
+        """
+        from sqlmodel import select as _select
+        rows = session.exec(
+            _select(KnowledgeFileDao).where(KnowledgeFileDao.knowledge_id == knowledge_id)
+        ).all()
+
+        file_ids = []
+        for file in rows:
+            results = []
+            for metadata_filter in metadata_filters:
+                for key, key_info in metadata_filter.items():
+                    py_field = key_info.get('py_field', key)
+                    target_value = key_info['value']
+                    comparison = key_info['comparison']
+                    extra_filter = key_info.get('extra_filter')
+
+                    # Resolve actual value from file
+                    if isinstance(py_field, tuple) and py_field[0] == 'user_metadata':
+                        field_name = py_field[1]
+                        meta = file.user_metadata or {}
+                        field_data = meta.get(field_name, {})
+                        actual = field_data.get('field_value') if isinstance(field_data, dict) else None
+                    else:
+                        actual = getattr(file, py_field, None)
+                        if actual is not None:
+                            actual = str(actual)
+
+                    match = cls._compare(actual, comparison, target_value)
+                    if match and extra_filter:
+                        for sub_info in extra_filter:
+                            if not cls._compare(actual, sub_info['comparison'], sub_info['value']):
+                                match = False
+                                break
+                    results.append(match)
+
+            matched = all(results) if logical.lower() == 'and' else any(results)
+            if matched:
+                file_ids.append(file.id)
+        return file_ids
+
+    @staticmethod
+    def _compare(actual, op: str, target) -> bool:
+        if actual is None:
+            return op in ('!=', '<>') and target is not None
+        try:
+            a, t = float(actual), float(target)
+            if op == '=':   return a == t
+            if op == '!=':  return a != t
+            if op == '<>':  return a != t
+            if op == '>':   return a > t
+            if op == '<':   return a < t
+            if op == '>=':  return a >= t
+            if op == '<=':  return a <= t
+        except (TypeError, ValueError):
+            pass
+        s_actual, s_target = str(actual), str(target) if target is not None else ''
+        if op == '=':   return s_actual == s_target
+        if op in ('!=', '<>'):  return s_actual != s_target
+        return False
 
     @classmethod
     def update_file_updater(cls, file_id: int, updater_id: int, updater_name: str) -> None:
@@ -636,10 +701,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def get_qa_knowledge_by_name(cls, question: List[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
+        from bisheng.core.database.dialect_helpers import json_array_contains
         with get_sync_db_session() as session:
+            dialect = session.bind.dialect.name if session.bind else 'mysql'
             group_filters = []
             for one in question:
-                group_filters.append(func.json_contains(QAKnowledge.questions, json.dumps(one)))
+                group_filters.append(json_array_contains(QAKnowledge.questions, json.dumps(one), dialect))
             statement = select(QAKnowledge).where(
                 or_(*group_filters)).where(QAKnowledge.knowledge_id == knowledge_id)
             if exclude_id:

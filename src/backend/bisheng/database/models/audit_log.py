@@ -8,7 +8,16 @@ from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import json_array_contains
 from bisheng.utils import generate_uuid
+
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return 'mysql'
 
 # System Module Enumeration
 class SystemId(Enum):
@@ -233,7 +242,7 @@ class AuditLogDao(AuditLogBase):
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
 
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
@@ -309,7 +318,7 @@ class AuditLogDao(AuditLogBase):
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
             statement = statement.where(or_(*group_filters))
         if tenant_scope is not None:
             statement = statement.where(cls._visible_for_tenant(tenant_scope))

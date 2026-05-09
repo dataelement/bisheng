@@ -6,6 +6,16 @@ from loguru import logger
 from sqlalchemy import func
 from sqlmodel import col, or_, and_, select
 
+from bisheng.core.database.dialect_helpers import json_array_contains
+
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return 'mysql'
+
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
@@ -767,8 +777,9 @@ class AuditLogService:
 
         # Group membership filtering
         if search_group_ids:
+            dialect = _db_dialect()
             group_filters = [
-                func.json_contains(MessageSession.group_ids, str(gid))
+                json_array_contains(MessageSession.group_ids, str(gid), dialect)
                 for gid in search_group_ids
             ]
             conditions.append(or_(*group_filters))

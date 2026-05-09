@@ -75,10 +75,14 @@ class ConditionOne(BaseModel):
         right_value = self.convert_right_value(field_type, right_value, is_preset)
         if is_preset:
             field_key = self.convert_preset_filed()
+            py_field: str | tuple = field_key
         else:
+            # MySQL raw SQL path expression
             field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}.field_value'))"
+            # Python-side accessor for DaMeng (used by _filter_python in KnowledgeFileDao)
+            py_field = ('user_metadata', self.metadata_field)
 
-        key_info = {}
+        key_info: Dict = {'py_field': py_field}
         if self.comparison_operation == ComparisonType.EQUAL:
             key_info['comparison'] = '='
             key_info['value'] = right_value

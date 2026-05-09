@@ -7,6 +7,7 @@ from sqlalchemy import Column, Integer, Text, JSON, Boolean, Enum as SQLEnum, Da
 from sqlmodel import Field, select, col, update
 
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import json_search_exists
 from bisheng.database.base import uuid_hex
 from bisheng.common.models.base import SQLModelSerializable
 
@@ -159,8 +160,9 @@ class LinsightSessionVersionDao(object):
         :return: Inspiration Conversation Version Object
         """
         async with get_async_db_session() as session:
+            dialect = session.get_bind().dialect.name
             statement = select(LinsightSessionVersion).where(
-                func.json_search(LinsightSessionVersion.files, 'all', file_id)
+                json_search_exists(LinsightSessionVersion.files, file_id, dialect)
             )
             result = await session.exec(statement)
             return result.first()

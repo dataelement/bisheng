@@ -42,6 +42,45 @@ class JsonType(TypeDecorator):
         return value
 
 
+def json_array_contains(column, value: str, dialect_name: str):
+    """Return a SQLAlchemy WHERE expression: does JSON array column contain value?
+
+    value must be the JSON-encoded element:
+      - integer 5  → pass '5'
+      - string 'x' → pass '"x"' (with JSON quotes)
+
+    MySQL: uses func.json_contains (native, index-friendly).
+    DaMeng/others: uses LIKE against the CLOB text serialized by JsonType.
+    """
+    if dialect_name == "mysql":
+        return sa.func.json_contains(column, value)
+
+    text_col = sa.cast(column, Text())
+    v = str(value)
+    if v.startswith('"') and v.endswith('"'):
+        # JSON-quoted string — quoted form is unique enough for LIKE
+        return text_col.like(f"%{v}%")
+    # Integer — match at JSON array element boundaries
+    # JsonType serializes with Python default separator ", "
+    return sa.or_(
+        text_col == f"[{v}]",
+        text_col.like(f"[{v}, %"),
+        text_col.like(f"%, {v}]"),
+        text_col.like(f"%, {v}, %"),
+    )
+
+
+def json_search_exists(column, value: str, dialect_name: str):
+    """Return expression: does JSON column contain value anywhere (JSON_SEARCH equivalent)?
+
+    MySQL: json_search(...).isnot(None).
+    DaMeng/others: LIKE on the CLOB text.
+    """
+    if dialect_name == "mysql":
+        return sa.func.json_search(column, "all", value).isnot(None)
+    return sa.cast(column, Text()).like(f"%{value}%")
+
+
 def get_dialect_name(conn_or_engine) -> str:
     """Return the SQLAlchemy dialect name: 'mysql' | 'dm' | 'sqlite' | 'postgresql'."""
     if hasattr(conn_or_engine, "dialect"):

@@ -105,24 +105,43 @@ def upgrade() -> None:
     op.execute("UPDATE role SET role_type = 'global' WHERE id IN (1, 2)")
 
     # 6. Migrate knowledge_space_file_limit into quota_config
-    # Only for roles that have a positive limit set
+    # Only for roles that have a positive limit set.
+    # Use Python-level JSON processing so the query works on MySQL and DaMeng.
     if column_exists(conn, 'role', 'knowledge_space_file_limit'):
-        op.execute("""
-            UPDATE role
-            SET quota_config = JSON_OBJECT('knowledge_space_file', knowledge_space_file_limit)
-            WHERE knowledge_space_file_limit > 0
-              AND (quota_config IS NULL OR JSON_LENGTH(quota_config) = 0)
-        """)
+        import json as _json
+        role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+        rows = conn.execute(
+            sa.select(role_tbl.c.id, role_tbl.c.knowledge_space_file_limit, role_tbl.c.quota_config)
+            .where(role_tbl.c.knowledge_space_file_limit > 0)
+        ).fetchall()
+        for row in rows:
+            raw = row.quota_config
+            current = _json.loads(raw) if isinstance(raw, str) else raw
+            if current:  # already has config — skip
+                continue
+            conn.execute(
+                sa.update(role_tbl)
+                .where(role_tbl.c.id == row.id)
+                .values(quota_config=_json.dumps({'knowledge_space_file': row.knowledge_space_file_limit}))
+            )
 
 def downgrade() -> None:
     """Revert role table changes."""
     conn = op.get_bind()
-    # Clear migrated quota_config values
-    op.execute("""
-        UPDATE role SET quota_config = NULL
-        WHERE JSON_LENGTH(quota_config) = 1
-          AND JSON_CONTAINS_PATH(quota_config, 'one', '$.knowledge_space_file')
-    """)
+    # Clear migrated quota_config values using Python-level JSON check
+    import json as _json
+    role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+    rows = conn.execute(
+        sa.select(role_tbl.c.id, role_tbl.c.quota_config)
+        .where(role_tbl.c.quota_config.isnot(None))
+    ).fetchall()
+    for row in rows:
+        raw = row.quota_config
+        current = _json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(current, dict) and list(current.keys()) == ['knowledge_space_file']:
+            conn.execute(
+                sa.update(role_tbl).where(role_tbl.c.id == row.id).values(quota_config=None)
+            )
 
     # Revert built-in roles
     op.execute("UPDATE role SET role_type = 'tenant' WHERE id IN (1, 2)")
