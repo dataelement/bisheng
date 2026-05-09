@@ -36,6 +36,8 @@ class DatabaseConnectionManager:
             return url.replace("pymysql", "aiomysql")
         elif "psycopg2" in url:
             return url.replace("psycopg2", "asyncpg")
+        elif "dmPython" in url:
+            return url.replace("dmPython", "dmAsync")
         return url
 
     def _get_default_engine_config(self) -> Dict[str, Any]:
