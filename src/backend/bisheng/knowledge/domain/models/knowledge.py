@@ -66,6 +66,9 @@ class KnowledgeBase(SQLModelSerializable):
                                  description='value from KnowledgeState')
     level: Optional[int] = Field(index=False, default=KnowledgeLevelEnum.LEVEL_MEMBER.value,
                                  description='Knowledge Base Level, value from KnowledgeLevelEnum')
+    parent_id: Optional[int] = Field(default=None, index=True,
+                                     description='Parent Knowledge Base ID')
+
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -96,6 +99,7 @@ class KnowledgeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     level: Optional[int] = None
+    parent_id: Optional[int] = None
 
 class KnowledgeCreate(KnowledgeBase):
     is_partition: Optional[bool] = None
@@ -187,6 +191,71 @@ class KnowledgeDao(KnowledgeBase):
         async with get_async_db_session() as session:
             result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
             return result.all()
+
+    @classmethod
+    def get_granted_kbs_and_descendants(cls, explicit_ids: List[int]) -> dict:
+        """
+        Returns a dict: {kb_id: user_context_level}
+        """
+        if not explicit_ids:
+            return {}
+            
+        kb_to_level = {}
+        with get_sync_db_session() as session:
+            explicit_kbs = session.exec(select(Knowledge).where(col(Knowledge.id).in_(explicit_ids))).all()
+            
+        current_layer = explicit_kbs
+        for kb in explicit_kbs:
+            if kb.level is not None:
+                kb_to_level[kb.id] = kb.level
+                
+        for _ in range(3):
+            if not current_layer:
+                break
+            parent_ids = [kb.id for kb in current_layer]
+            with get_sync_db_session() as session:
+                children = session.exec(select(Knowledge).where(col(Knowledge.parent_id).in_(parent_ids))).all()
+                
+            for child in children:
+                if child.parent_id in kb_to_level:
+                    parent_context_level = kb_to_level[child.parent_id]
+                    if child.id not in kb_to_level or parent_context_level < kb_to_level[child.id]:
+                        kb_to_level[child.id] = parent_context_level
+            current_layer = children
+            
+        return kb_to_level
+
+    @classmethod
+    async def aget_granted_kbs_and_descendants(cls, explicit_ids: List[int]) -> dict:
+        if not explicit_ids:
+            return {}
+            
+        kb_to_level = {}
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(explicit_ids)))
+            explicit_kbs = result.all()
+            
+        current_layer = explicit_kbs
+        for kb in explicit_kbs:
+            if kb.level is not None:
+                kb_to_level[kb.id] = kb.level
+                
+        for _ in range(3):
+            if not current_layer:
+                break
+            parent_ids = [kb.id for kb in current_layer]
+            async with get_async_db_session() as session:
+                result = await session.exec(select(Knowledge).where(col(Knowledge.parent_id).in_(parent_ids)))
+                children = result.all()
+                
+            for child in children:
+                if child.parent_id in kb_to_level:
+                    parent_context_level = kb_to_level[child.parent_id]
+                    if child.id not in kb_to_level or parent_context_level < kb_to_level[child.id]:
+                        kb_to_level[child.id] = parent_context_level
+            current_layer = children
+            
+        return kb_to_level
 
     @classmethod
     def _user_knowledge_filters(
@@ -325,15 +394,34 @@ class KnowledgeDao(KnowledgeBase):
         if is_admin:
             return KnowledgeDao.get_list_by_ids(knowledge_ids)
 
-        # query role List of knowledge bases with permissions
-        role_access_list = RoleAccessDao.find_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                          AccessType.KNOWLEDGE)
+        # Non-admins go through strict knowledge base permission matching
+        explicit_ids = user_info.org_knowledge_ids or []
+        kb_to_user_level = cls.get_granted_kbs_and_descendants(explicit_ids)
+        allowed_kbs_descendants = list(kb_to_user_level.keys())
 
+        # Get the base list (including those created by the user and those in descendants)
         user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                     knowledge_id_extra=[int(access.third_id) for access in
-                                                                         role_access_list],
+                                                     knowledge_id_extra=allowed_kbs_descendants,
                                                      filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+        
+        # Apply strict level and id matching rules
+        final_list = []
+        for kb in user_knowledge_list:
+            # Rule 1: Creator can access
+            if kb.user_id == user_info.user_id:
+                final_list.append(kb)
+                continue
+            
+            if kb.id in kb_to_user_level and kb.level is not None:
+                user_level_context = kb_to_user_level[kb.id]
+                # Rule 2: User level == KB level AND KB id matches
+                if user_level_context == kb.level and kb.id in explicit_ids:
+                    final_list.append(kb)
+                # Rule 3: User level > KB level (numerically smaller is higher level)
+                elif user_level_context < kb.level:
+                    final_list.append(kb)
+
+        return final_list
 
     @classmethod
     async def ajudge_knowledge_permission(cls, user_name: str,
@@ -364,15 +452,31 @@ class KnowledgeDao(KnowledgeBase):
         # admin User has all knowledge base permissions
         if is_admin:
             return await cls.aget_list_by_ids(knowledge_ids)
-        # query role List of knowledge bases with permissions
-        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                                 AccessType.KNOWLEDGE)
+        # Non-admins go through strict knowledge base permission matching
+        explicit_ids = user_info.org_knowledge_ids or []
+        kb_to_user_level = await cls.aget_granted_kbs_and_descendants(explicit_ids)
+        allowed_kbs_descendants = list(kb_to_user_level.keys())
+
         # Query whether the knowledge base created by the user is included
         user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
-                                                            knowledge_id_extra=[int(access.third_id) for access in
-                                                                                role_access_list],
+                                                            knowledge_id_extra=allowed_kbs_descendants,
                                                             filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+        
+        # Apply strict level and id matching rules
+        final_list = []
+        for kb in user_knowledge_list:
+            if kb.user_id == user_info.user_id:
+                final_list.append(kb)
+                continue
+            
+            if kb.id in kb_to_user_level and kb.level is not None:
+                user_level_context = kb_to_user_level[kb.id]
+                if user_level_context == kb.level and kb.id in explicit_ids:
+                    final_list.append(kb)
+                elif user_level_context < kb.level:
+                    final_list.append(kb)
+
+        return final_list
 
     @classmethod
     def filter_knowledge_by_ids(cls,

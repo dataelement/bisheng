@@ -286,9 +286,17 @@ async def update(*,
                                        UserRole.user_id == user.user_id)).first()
         if admin:
             raise HTTPException(status_code=500, detail='Cannot operate admin')
-        if user.delete == db_user.delete:
+        if user.delete == db_user.delete and user.org_knowledge_id is None:
             return resp_200()
-        db_user.delete = user.delete
+        if user.delete is not None:
+            db_user.delete = user.delete
+            
+    # Modify org_knowledge_ids (Only Super Admin can do this)
+    if user.org_knowledge_ids is not None:
+        if not login_user.is_admin():
+            raise HTTPException(status_code=403, detail='只有超级管理员有权设置用户知识库访问权限')
+        db_user.org_knowledge_ids = user.org_knowledge_ids
+            
     if db_user.delete == 0:  # Enable User
         # Count of cleanup password errors
         clear_error_password_key(db_user.user_name)

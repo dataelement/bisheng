@@ -257,6 +257,8 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.description = knowledge.description
         if knowledge.level is not None:
             db_knowledge.level = knowledge.level
+        if knowledge.parent_id is not None:
+            db_knowledge.parent_id = knowledge.parent_id
         db_knowledge = KnowledgeDao.update_one(db_knowledge)
         user = UserDao.get_user(db_knowledge.user_id)
         res = KnowledgeRead(
