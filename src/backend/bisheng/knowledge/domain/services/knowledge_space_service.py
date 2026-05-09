@@ -1340,11 +1340,66 @@ class KnowledgeSpaceService(KnowledgeUtils):
         creator_ids = list({row[0].user_id for row in rows if row[0].user_id})
 
         # 3. Batch fetch creator info and file counts for the current page only
-        creator_users, success_file_map = await asyncio.gather(
-            UserDao.aget_user_by_ids(creator_ids) if creator_ids else asyncio.coroutine(lambda: [])(),
-            KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
-        )
+        creator_users_task = UserDao.aget_user_by_ids(creator_ids) if creator_ids else None
+        if self.login_user.is_admin():
+            if creator_users_task:
+                creator_users, success_file_map = await asyncio.gather(
+                    creator_users_task,
+                    KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+                )
+            else:
+                creator_users = []
+                success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
+            readable_space_ids = None
+        else:
+            if creator_users_task:
+                creator_users, success_file_map, readable_space_ids = await asyncio.gather(
+                    creator_users_task,
+                    KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+                    PermissionService.list_accessible_ids(
+                        user_id=self.login_user.user_id,
+                        relation='can_read',
+                        object_type='knowledge_space',
+                        login_user=self.login_user,
+                    ),
+                )
+            else:
+                success_file_map, readable_space_ids = await asyncio.gather(
+                    KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+                    PermissionService.list_accessible_ids(
+                        user_id=self.login_user.user_id,
+                        relation='can_read',
+                        object_type='knowledge_space',
+                        login_user=self.login_user,
+                    ),
+                )
+                creator_users = []
         user_map = {u.user_id: u for u in (creator_users or [])}
+        resolved_subscription_status = {
+            row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2])
+            for row in rows
+        }
+        readable_space_id_set = set()
+        readable_space_with_view_permission = set()
+        if readable_space_ids is not None:
+            readable_space_id_set = {
+                int(space_id) for space_id in readable_space_ids if str(space_id).isdigit()
+            }
+        readable_candidates = [
+            space_id
+            for space_id in readable_space_id_set
+            if resolved_subscription_status.get(space_id) != SpaceSubscriptionStatusEnum.SUBSCRIBED
+        ]
+        if readable_candidates:
+            effective_permission_ids = await asyncio.gather(*[
+                self._get_effective_permission_ids('knowledge_space', space_id)
+                for space_id in readable_candidates
+            ])
+            readable_space_with_view_permission = {
+                space_id
+                for space_id, permission_ids in zip(readable_candidates, effective_permission_ids)
+                if 'view_space' in permission_ids
+            }
 
         # 4. Build response items
         result_list: list = []
@@ -1356,9 +1411,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             creator = user_map.get(space.user_id)
 
-            subscription_status = self._resolve_subscription_status_from_fields(
+            subscription_status = resolved_subscription_status.get(
+                space.id) or self._resolve_subscription_status_from_fields(
                 user_subscription_status, user_subscription_update_time,
             )
+            if space.id in readable_space_with_view_permission:
+                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
 
             result_list.append(
                 KnowledgeSpaceInfoResp(
