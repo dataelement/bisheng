@@ -14,7 +14,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists
+from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists, update_time_server_default
 
 revision: str = 'f001_multi_tenant'
 down_revision: Union[str, Sequence[str], None] = '9ba42685e830'
@@ -106,7 +106,7 @@ def upgrade() -> None:
             sa.Column('create_user', sa.Integer, nullable=True, comment='Created by user ID'),
             sa.Column('create_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
             sa.Column('update_time', sa.DateTime, nullable=False,
-                      server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+                      server_default=update_time_server_default(conn)),
         )
     if not index_exists(conn, 'tenant', 'idx_tenant_status'):
         op.create_index('idx_tenant_status', 'tenant', ['status'])

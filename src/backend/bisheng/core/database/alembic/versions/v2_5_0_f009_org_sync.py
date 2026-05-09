@@ -17,7 +17,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists
+from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists, update_time_server_default
 
 revision: str = 'f009_org_sync'
 down_revision: Union[str, Sequence[str], None] = 'f005_role_menu_quota'
@@ -60,7 +60,7 @@ def upgrade() -> None:
             sa.Column('create_time', sa.DateTime, nullable=False,
                       server_default=sa.text('CURRENT_TIMESTAMP')),
             sa.Column('update_time', sa.DateTime, nullable=False,
-                      server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+                      server_default=update_time_server_default(conn)),
         )
         op.create_index('idx_osc_tenant', 'org_sync_config', ['tenant_id'])
         op.create_index('idx_osc_status', 'org_sync_config', ['status'])

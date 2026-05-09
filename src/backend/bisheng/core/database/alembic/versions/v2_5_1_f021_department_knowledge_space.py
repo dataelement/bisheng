@@ -10,7 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists
+from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists, update_time_server_default
 
 revision: str = 'f021_department_knowledge_space'
 down_revision: Union[str, Sequence[str], None] = 'f020_llm_tenant'
@@ -28,7 +28,7 @@ def upgrade() -> None:
             sa.Column('space_id', sa.Integer, sa.ForeignKey('knowledge.id', ondelete='CASCADE'), nullable=False),
             sa.Column('created_by', sa.Integer, nullable=False, server_default='0'),
             sa.Column('create_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
-            sa.Column('update_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+            sa.Column('update_time', sa.DateTime, nullable=False, server_default=update_time_server_default(conn)),
             sa.UniqueConstraint('department_id', name='uk_dks_department_id'),
             sa.UniqueConstraint('space_id', name='uk_dks_space_id'),
         )

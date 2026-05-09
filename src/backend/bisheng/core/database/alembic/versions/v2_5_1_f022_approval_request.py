@@ -10,7 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import index_exists, table_exists
+from bisheng.core.database.dialect_helpers import index_exists, table_exists, update_time_server_default
 
 revision: str = 'f022_approval_request'
 down_revision: Union[str, Sequence[str], None] = 'f021_department_knowledge_space'
@@ -43,7 +43,7 @@ def upgrade() -> None:
             sa.Column('finalized_at', sa.DateTime(), nullable=True),
             sa.Column('message_id', sa.Integer, nullable=True),
             sa.Column('create_time', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
-            sa.Column('update_time', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+            sa.Column('update_time', sa.DateTime(), nullable=False, server_default=update_time_server_default(conn)),
         )
         op.create_index('idx_approval_request_status', 'approval_request', ['status'])
         op.create_index('idx_approval_request_space_id', 'approval_request', ['space_id'])

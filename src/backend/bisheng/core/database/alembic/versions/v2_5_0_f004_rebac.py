@@ -10,7 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import index_exists, table_exists
+from bisheng.core.database.dialect_helpers import index_exists, table_exists, update_time_server_default
 
 revision: str = 'f004_rebac'
 down_revision: Union[str, Sequence[str], None] = 'f003_user_group'
@@ -41,7 +41,7 @@ def upgrade() -> None:
             sa.Column('create_time', sa.DateTime, nullable=False,
                       server_default=sa.text('CURRENT_TIMESTAMP')),
             sa.Column('update_time', sa.DateTime, nullable=False,
-                      server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+                      server_default=update_time_server_default(conn)),
         )
     if not index_exists(conn, 'failed_tuple', 'idx_status_retry'):
         op.create_index('idx_status_retry', 'failed_tuple', ['status', 'retry_count'])
