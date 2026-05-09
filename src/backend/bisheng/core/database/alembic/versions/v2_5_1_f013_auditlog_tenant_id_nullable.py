@@ -24,7 +24,7 @@ Scope:
   and the F001 constraint is correct for them. ``auditlog`` is the
   exception because it also records tenant-free system events.
 
-Idempotent: checks current nullability via information_schema before ALTER.
+Idempotent: checks current nullability via Inspector before ALTER.
 """
 
 from typing import Sequence, Union
@@ -32,63 +32,35 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, is_column_nullable
+
 revision: str = 'f013_auditlog_tenant_id_nullable'
 down_revision: Union[str, Sequence[str], None] = 'f012_merge_heads'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _is_nullable(table: str, column: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            """
-            SELECT IS_NULLABLE FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = :t
-              AND COLUMN_NAME = :c
-            """
-        ),
-        {'t': table, 'c': column},
-    )
-    row = result.first()
-    return row is not None and row[0] == 'YES'
-
-
-def _column_exists(table: str, column: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            """
-            SELECT COUNT(*) FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = :t
-              AND COLUMN_NAME = :c
-            """
-        ),
-        {'t': table, 'c': column},
-    )
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _column_exists('auditlog', 'tenant_id'):
+    conn = op.get_bind()
+    if not column_exists(conn, 'auditlog', 'tenant_id'):
         return
-    if _is_nullable('auditlog', 'tenant_id'):
+    if is_column_nullable(conn, 'auditlog', 'tenant_id'):
         return
-    op.execute(
-        sa.text('ALTER TABLE auditlog MODIFY COLUMN tenant_id INT NULL')
-    )
+    op.alter_column('auditlog', 'tenant_id', nullable=True, existing_type=sa.Integer())
 
 
 def downgrade() -> None:
-    if not _column_exists('auditlog', 'tenant_id'):
+    conn = op.get_bind()
+    if not column_exists(conn, 'auditlog', 'tenant_id'):
         return
-    # Downgrade would require the column to be NOT NULL with a default.
-    # Backfill NULL rows to 1 first, then re-add the constraint.
-    op.execute(
-        sa.text('UPDATE auditlog SET tenant_id = 1 WHERE tenant_id IS NULL')
+    # Backfill NULL rows before re-adding NOT NULL constraint.
+    auditlog = sa.Table('auditlog', sa.MetaData(), autoload_with=conn)
+    conn.execute(
+        sa.update(auditlog).where(auditlog.c.tenant_id.is_(None)).values(tenant_id=1)
     )
-    op.execute(
-        sa.text("ALTER TABLE auditlog MODIFY COLUMN tenant_id INT NOT NULL DEFAULT 1")
+    op.alter_column(
+        'auditlog', 'tenant_id',
+        nullable=False,
+        existing_type=sa.Integer(),
+        server_default=sa.text('1'),
     )
