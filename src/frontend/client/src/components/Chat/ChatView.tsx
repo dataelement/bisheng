@@ -252,7 +252,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             return (
               <div className={cn(
                 showCode ? 'hidden' : 'flex flex-col relative',
-                useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
+                useMessagesLayout ? 'h-full' : ''
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
@@ -334,9 +334,14 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {citationPanelElement}
                   </div>
                 ) : (
-                  /* Landing page branch */
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 overflow-hidden flex flex-col justify-center">
+                  /* Landing page branch — Landing+input are pinned at ~25vh
+                     from the viewport top via padding-top (independent of how
+                     tall DailyFeaturedApps below becomes), so the welcome
+                     block stays in roughly the same screen position whether
+                     apps are absent or fill multiple rows. Apps follow
+                     directly after the input with only their own mt-4 gap. */
+                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
+                    <div className="shrink-0">
                       <Landing
                         lingsi={isLingsi}
                         lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
@@ -394,6 +399,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         )}
                       </div>
                     )}
+                    <DailyFeaturedApps t={t} isLingsi={isLingsi} />
                   </div>
                 )}
               </div>
@@ -402,12 +408,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
           {/* Lingsi Cases */}
           <Cases ref={casesRef} t={t} isLingsi={isLingsi} setIsLingsi={setIsLingsi} />
-          {/* Recommended apps — welcome page only. Also suppress while a
-              sidebar-nav is loading the new conversation, otherwise the chips
-              flicker into view for one frame before messages arrive. */}
-          {!hasMessages && !(isLoading && conversationId !== 'new') && (
-            <DailyFeaturedApps t={t} isLingsi={isLingsi} />
-          )}
         </div>
 
         {/* Invitation Code */}
