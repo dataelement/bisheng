@@ -55,6 +55,36 @@ async def get_create_options(
     return resp_200(options)
 
 
+@router.get('/create-options/departments')
+async def get_create_option_departments(
+        keyword: str = Query(default=''),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=20, ge=1, le=100),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    options = await svc.get_create_departments(
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
+    return resp_200(options)
+
+
+@router.get('/create-options/user-groups')
+async def get_create_option_user_groups(
+        keyword: str = Query(default=''),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=20, ge=1, le=100),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    options = await svc.get_create_user_groups(
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
+    return resp_200(options)
+
+
 @router.get('/{space_id}/info')
 async def get_space_info(
         space_id: int,

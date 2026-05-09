@@ -17,6 +17,8 @@ interface SubjectSearchUserGroupProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
+  loadUserGroups?: (config?: { signal?: AbortSignal; keyword?: string }) => Promise<UserGroup[]>;
+  selectionMode?: "multiple" | "single";
 }
 
 export function SubjectSearchUserGroup({
@@ -25,17 +27,27 @@ export function SubjectSearchUserGroup({
   resourceType,
   resourceId,
   disabledIds = [],
+  loadUserGroups,
+  selectionMode = "multiple",
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedKeyword(keyword.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [keyword]);
 
   useEffect(() => {
     const controller = new AbortController();
     const request =
-      resourceType && resourceId
-        ? getResourceGrantUserGroups(resourceType, resourceId, undefined, { signal: controller.signal })
+      loadUserGroups
+        ? loadUserGroups({ signal: controller.signal, keyword: debouncedKeyword })
+        : resourceType && resourceId
+        ? getResourceGrantUserGroups(resourceType, resourceId, { keyword: debouncedKeyword }, { signal: controller.signal })
         : getUserGroups({ signal: controller.signal });
 
     setLoading(true);
@@ -50,7 +62,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, [resourceId, resourceType]);
+  }, [debouncedKeyword, loadUserGroups, resourceId, resourceType]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;
@@ -63,6 +75,14 @@ export function SubjectSearchUserGroup({
 
   const toggle = (group: UserGroup) => {
     if (disabledIdSet.has(group.id)) return;
+    if (selectionMode === "single") {
+      onChange(
+        selectedIds.has(group.id)
+          ? []
+          : [{ type: "user_group", id: group.id, name: group.group_name }]
+      );
+      return;
+    }
     if (selectedIds.has(group.id)) {
       onChange(value.filter((s) => s.id !== group.id));
     } else {

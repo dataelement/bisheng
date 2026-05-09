@@ -145,6 +145,31 @@ export interface KnowledgeSpaceCreateOptions {
     defaultSpaceLevel: SpaceLevel;
 }
 
+export interface KnowledgeSpaceCreateOptionDepartment {
+    id: number;
+    name: string;
+    pathName?: string;
+}
+
+export interface KnowledgeSpaceCreateDepartmentNode {
+    id: number;
+    dept_id: string;
+    name: string;
+    parent_id: number | null;
+    member_count?: number;
+    children?: KnowledgeSpaceCreateDepartmentNode[];
+}
+
+export interface KnowledgeSpaceCreateOptionUserGroup {
+    id: number;
+    groupName: string;
+}
+
+export interface KnowledgeSpaceCreateOptionPage<T> {
+    data: T[];
+    total: number;
+}
+
 export interface GroupedKnowledgeSpaces {
     publicSpaces: KnowledgeSpace[];
     departmentSpaces: KnowledgeSpace[];
@@ -709,6 +734,64 @@ export async function getCreateSpaceOptionsApi(): Promise<KnowledgeSpaceCreateOp
             groupName: String(group.group_name ?? ""),
         })),
         defaultSpaceLevel: (raw.default_space_level as SpaceLevel) || SpaceLevel.PERSONAL,
+    };
+}
+
+export async function getCreateSpaceDepartmentsApi(params?: {
+    keyword?: string;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+}): Promise<KnowledgeSpaceCreateOptionPage<KnowledgeSpaceCreateDepartmentNode>> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/create-options/departments`, {
+        params: {
+            keyword: params?.keyword ?? "",
+            page: params?.page ?? 1,
+            page_size: params?.pageSize ?? 20,
+        },
+        signal: params?.signal,
+    });
+    const raw: any = res?.data ?? {};
+    const rows = asArray<any>(raw.data);
+    return {
+        data: rows.map((dept) => mapCreateDepartmentNode(dept)),
+        total: Number(raw.total ?? rows.length),
+    };
+}
+
+function mapCreateDepartmentNode(raw: any): KnowledgeSpaceCreateDepartmentNode {
+    return {
+        id: Number(raw.id),
+        dept_id: String(raw.dept_id ?? ""),
+        name: String(raw.name ?? ""),
+        parent_id: raw.parent_id == null ? null : Number(raw.parent_id),
+        member_count: raw.member_count == null ? undefined : Number(raw.member_count),
+        children: asArray<any>(raw.children).map((child) => mapCreateDepartmentNode(child)),
+    };
+}
+
+export async function getCreateSpaceUserGroupsApi(params?: {
+    keyword?: string;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+}): Promise<KnowledgeSpaceCreateOptionPage<KnowledgeSpaceCreateOptionUserGroup>> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/create-options/user-groups`, {
+        params: {
+            keyword: params?.keyword ?? "",
+            page: params?.page ?? 1,
+            page_size: params?.pageSize ?? 20,
+        },
+        signal: params?.signal,
+    });
+    const raw: any = res?.data ?? {};
+    const rows = asArray<any>(raw.data);
+    return {
+        data: rows.map((group) => ({
+            id: Number(group.id),
+            groupName: String(group.group_name ?? ""),
+        })),
+        total: Number(raw.total ?? rows.length),
     };
 }
 

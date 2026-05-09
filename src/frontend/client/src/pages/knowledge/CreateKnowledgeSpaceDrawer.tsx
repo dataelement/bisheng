@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
@@ -15,9 +15,19 @@ import {
 } from "~/components/ui/Sheet";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
-import { KnowledgeSpace, SpaceLevel, VisibilityType, getCreateSpaceOptionsApi } from "~/api/knowledge";
+import {
+    KnowledgeSpace,
+    SpaceLevel,
+    VisibilityType,
+    getCreateSpaceDepartmentsApi,
+    getCreateSpaceOptionsApi,
+    getCreateSpaceUserGroupsApi,
+} from "~/api/knowledge";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
+import type { SelectedSubject } from "~/api/permission";
+import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permission/SubjectSearchDepartment";
+import { SubjectSearchUserGroup } from "~/components/permission/SubjectSearchUserGroup";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
@@ -73,6 +83,8 @@ export function CreateKnowledgeSpaceDrawer({
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [departmentId, setDepartmentId] = useState<number | undefined>();
     const [userGroupId, setUserGroupId] = useState<number | undefined>();
+    const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
+    const [userGroupSelection, setUserGroupSelection] = useState<SelectedSubject[]>([]);
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
@@ -88,6 +100,23 @@ export function CreateKnowledgeSpaceDrawer({
         queryFn: getCreateSpaceOptionsApi,
         enabled: open && mode === "create",
     });
+
+    const loadCreateDepartments = useCallback(async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
+        const result = await getCreateSpaceDepartmentsApi({ signal: config?.signal });
+        return result.data;
+    }, []);
+
+    const loadCreateUserGroups = useCallback(async (config?: { signal?: AbortSignal; keyword?: string }) => {
+        const result = await getCreateSpaceUserGroupsApi({
+            keyword: config?.keyword,
+            pageSize: 50,
+            signal: config?.signal,
+        });
+        return result.data.map((group) => ({
+            id: group.id,
+            group_name: group.groupName,
+        }));
+    }, []);
 
     const levelOptions = useMemo(() => ([
         {
@@ -124,8 +153,22 @@ export function CreateKnowledgeSpaceDrawer({
         setSpaceLevel(SpaceLevel.PERSONAL);
         setDepartmentId(undefined);
         setUserGroupId(undefined);
+        setDepartmentSelection([]);
+        setUserGroupSelection([]);
         setShowSuccess(false);
         setSubmitting(false);
+    };
+
+    const handleSpaceLevelChange = (value: SpaceLevel) => {
+        setSpaceLevel(value);
+        if (value !== SpaceLevel.DEPARTMENT) {
+            setDepartmentId(undefined);
+            setDepartmentSelection([]);
+        }
+        if (value !== SpaceLevel.TEAM) {
+            setUserGroupId(undefined);
+            setUserGroupSelection([]);
+        }
     };
 
     // Pre-fill form in edit mode
@@ -287,7 +330,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 ) : (
                                     <RadioGroup.Root
                                         value={spaceLevel}
-                                        onValueChange={(value) => setSpaceLevel(value as SpaceLevel)}
+                                        onValueChange={(value) => handleSpaceLevelChange(value as SpaceLevel)}
                                         className="grid grid-cols-2 gap-3 touch-mobile:grid-cols-1"
                                     >
                                         {visibleLevelOptions.map((option) => (
@@ -308,44 +351,42 @@ export function CreateKnowledgeSpaceDrawer({
                                 )}
                                 {mode === "create" && spaceLevel === SpaceLevel.DEPARTMENT && (
                                     <div className="space-y-2">
-                                        <Label htmlFor="knowledge-space-department" className="text-sm text-[#1D2129] font-medium">
+                                        <Label className="text-sm text-[#1D2129] font-medium">
                                             <span className="text-[#F53F3F] mr-1">*</span>
                                             {localize("com_knowledge.select_department")}
                                         </Label>
-                                        <select
-                                            id="knowledge-space-department"
-                                            value={departmentId ?? ""}
-                                            onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : undefined)}
-                                            className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
-                                        >
-                                            <option value="">{localize("com_knowledge.select_space_department_placeholder")}</option>
-                                            {(createOptions?.departments || []).map((dept) => (
-                                                <option key={dept.id} value={dept.id}>
-                                                    {dept.pathName || dept.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="h-[260px]">
+                                            <SubjectSearchDepartment
+                                                value={departmentSelection}
+                                                onChange={(next) => {
+                                                    setDepartmentSelection(next);
+                                                    setDepartmentId(next[0]?.id);
+                                                }}
+                                                includeChildren={false}
+                                                onIncludeChildrenChange={() => undefined}
+                                                loadDepartments={loadCreateDepartments}
+                                                selectionMode="single"
+                                            />
+                                        </div>
                                     </div>
                                 )}
                                 {mode === "create" && spaceLevel === SpaceLevel.TEAM && (
                                     <div className="space-y-2">
-                                        <Label htmlFor="knowledge-space-user-group" className="text-sm text-[#1D2129] font-medium">
+                                        <Label className="text-sm text-[#1D2129] font-medium">
                                             <span className="text-[#F53F3F] mr-1">*</span>
                                             {localize("com_knowledge.select_user_group")}
                                         </Label>
-                                        <select
-                                            id="knowledge-space-user-group"
-                                            value={userGroupId ?? ""}
-                                            onChange={(event) => setUserGroupId(event.target.value ? Number(event.target.value) : undefined)}
-                                            className="h-8 w-full rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none"
-                                        >
-                                            <option value="">{localize("com_knowledge.select_space_user_group_placeholder")}</option>
-                                            {(createOptions?.userGroups || []).map((group) => (
-                                                <option key={group.id} value={group.id}>
-                                                    {group.groupName}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="h-[260px]">
+                                            <SubjectSearchUserGroup
+                                                value={userGroupSelection}
+                                                onChange={(next) => {
+                                                    setUserGroupSelection(next);
+                                                    setUserGroupId(next[0]?.id);
+                                                }}
+                                                loadUserGroups={loadCreateUserGroups}
+                                                selectionMode="single"
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>

@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
 
-interface DepartmentNode {
+export interface DepartmentNode {
   id: number;
   dept_id: string;
   name: string;
@@ -18,12 +18,14 @@ interface DepartmentNode {
 interface SubjectSearchDepartmentProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
-  resourceType: ResourceType;
-  resourceId: string;
+  resourceType?: ResourceType;
+  resourceId?: string;
   includeChildren: boolean;
   onIncludeChildrenChange: (v: boolean) => void;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
+  loadDepartments?: (config?: { signal?: AbortSignal }) => Promise<DepartmentNode[]>;
+  selectionMode?: "multiple" | "single";
 }
 
 function collectExplicitDepartmentSelections(
@@ -69,6 +71,8 @@ export function SubjectSearchDepartment({
   onIncludeChildrenChange,
   onSelectionSummaryChange,
   disabledIds = [],
+  loadDepartments,
+  selectionMode = "multiple",
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -81,7 +85,13 @@ export function SubjectSearchDepartment({
     const controller = new AbortController();
 
     setLoading(true);
-    getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+    const request = loadDepartments
+      ? loadDepartments({ signal: controller.signal })
+      : resourceType && resourceId
+        ? getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+        : Promise.resolve([]);
+
+    request
       .then((res) => {
         if (!controller.signal.aborted && res) setTree(res);
       })
@@ -90,7 +100,7 @@ export function SubjectSearchDepartment({
       });
 
     return () => controller.abort();
-  }, [resourceId, resourceType]);
+  }, [loadDepartments, resourceId, resourceType]);
 
   const selectedIds = new Set(value.map((s) => s.id));
   const selectedDepartmentsById = useMemo(
@@ -111,6 +121,14 @@ export function SubjectSearchDepartment({
 
   const toggle = (node: DepartmentNode) => {
     if (disabledIdSet.has(node.id)) return;
+    if (selectionMode === "single") {
+      onChange(
+        selectedIds.has(node.id)
+          ? []
+          : [{ type: "department", id: node.id, name: node.name, include_children: includeChildren }]
+      );
+      return;
+    }
     if (selectedIds.has(node.id)) {
       onChange(value.filter((s) => s.id !== node.id));
     } else {
@@ -200,6 +218,7 @@ export function SubjectSearchDepartment({
               onMaterializeInheritedSelection={materializeInheritedSelection}
               onToggle={toggle}
               onExpand={toggleExpand}
+              selectionMode={selectionMode}
             />
           ))}
       </div>
@@ -208,7 +227,7 @@ export function SubjectSearchDepartment({
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand,
+  node, depth, expanded, selectedIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode,
 }: {
   node: DepartmentNode;
   depth: number;
@@ -221,6 +240,7 @@ function TreeNode({
   onMaterializeInheritedSelection: () => void;
   onToggle: (n: DepartmentNode) => void;
   onExpand: (id: number) => void;
+  selectionMode: "multiple" | "single";
 }) {
   const localize = useLocalize();
   if (!matchesKeyword(node)) return null;
@@ -297,6 +317,7 @@ function TreeNode({
           onMaterializeInheritedSelection={onMaterializeInheritedSelection}
           onToggle={onToggle}
           onExpand={onExpand}
+          selectionMode={selectionMode}
         />
       ))}
     </>

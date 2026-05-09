@@ -82,6 +82,16 @@ class KnowledgeSpaceCreateOptionsResp(BaseModel):
     default_space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
 
 
+class KnowledgeSpaceCreateOptionDepartmentsResp(BaseModel):
+    data: List[Dict] = Field(default_factory=list)
+    total: int = 0
+
+
+class KnowledgeSpaceCreateOptionUserGroupsResp(BaseModel):
+    data: List[KnowledgeSpaceCreateOptionUserGroup] = Field(default_factory=list)
+    total: int = 0
+
+
 class GroupedKnowledgeSpacesResp(BaseModel):
     public_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
     department_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)

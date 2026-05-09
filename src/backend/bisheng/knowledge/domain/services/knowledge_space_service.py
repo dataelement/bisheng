@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, TYPE_CHECKING
 
 from fastapi import Request
 from loguru import logger
+from sqlalchemy import func
 from sqlmodel import select
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
@@ -29,7 +30,7 @@ from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
 )
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
@@ -53,6 +54,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum, KnowledgeSpaceFileResponse,
     GroupedKnowledgeSpacesResp, KnowledgeSpaceCreateOptionsResp,
+    KnowledgeSpaceCreateOptionDepartmentsResp, KnowledgeSpaceCreateOptionUserGroupsResp,
     KnowledgeSpaceCreateOptionDepartment, KnowledgeSpaceCreateOptionUserGroup,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -218,6 +220,118 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if getattr(row, 'group_id', None) is not None
         }
 
+    @staticmethod
+    def _paginate_options(items: list, page: int, page_size: int) -> tuple[list, int]:
+        total = len(items)
+        safe_page = max(int(page or 1), 1)
+        safe_page_size = min(max(int(page_size or 20), 1), 100)
+        offset = (safe_page - 1) * safe_page_size
+        return items[offset:offset + safe_page_size], total
+
+    @staticmethod
+    def _department_path_name(dept, department_name_map: Dict[int, str]) -> Optional[str]:
+        path_ids = [
+            int(part)
+            for part in str(getattr(dept, 'path', '') or '').split('/')
+            if part.isdigit()
+        ]
+        names = [department_name_map.get(dept_id) for dept_id in path_ids if department_name_map.get(dept_id)]
+        if not names and getattr(dept, 'name', None):
+            names = [dept.name]
+        return '/'.join(names) if names else None
+
+    async def _department_options_for_create(self) -> list[KnowledgeSpaceCreateOptionDepartment]:
+        if self.login_user.is_admin():
+            departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+        else:
+            department_ids = await self._admin_department_ids()
+            departments = await DepartmentDao.aget_by_ids(list(department_ids)) if department_ids else []
+
+        dept_name_map = {
+            int(dept.id): dept.name
+            for dept in departments
+            if getattr(dept, 'id', None) is not None
+        }
+        options = [
+            KnowledgeSpaceCreateOptionDepartment(
+                id=int(dept.id),
+                name=dept.name,
+                path_name=self._department_path_name(dept, dept_name_map),
+            )
+            for dept in departments
+            if getattr(dept, 'id', None) is not None
+        ]
+        return sorted(options, key=lambda item: (item.path_name or item.name or '', item.id))
+
+    async def _department_tree_for_create(self) -> list[dict]:
+        if self.login_user.is_admin():
+            departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+        else:
+            department_ids = await self._admin_department_ids()
+            departments = await DepartmentDao.aget_by_ids(list(department_ids)) if department_ids else []
+        if not departments:
+            return []
+
+        dept_ids = [
+            int(dept.id)
+            for dept in departments
+            if getattr(dept, 'id', None) is not None
+        ]
+        count_map: Dict[int, int] = {}
+        async with get_async_db_session() as session:
+            count_result = await session.exec(
+                select(
+                    UserDepartment.department_id,
+                    func.count(UserDepartment.id),
+                )
+                .where(UserDepartment.department_id.in_(dept_ids))
+                .group_by(UserDepartment.department_id)
+            )
+            count_map = {
+                int(dept_id): int(count)
+                for dept_id, count in count_result.all()
+            }
+
+        nodes = {
+            int(dept.id): {
+                'id': int(dept.id),
+                'dept_id': getattr(dept, 'dept_id', '') or '',
+                'name': dept.name,
+                'parent_id': int(dept.parent_id) if getattr(dept, 'parent_id', None) is not None else None,
+                'member_count': count_map.get(int(dept.id), 0),
+                'sort_order': int(getattr(dept, 'sort_order', 0) or 0),
+                'children': [],
+            }
+            for dept in departments
+            if getattr(dept, 'id', None) is not None
+        }
+        roots: list[dict] = []
+        for node in nodes.values():
+            parent_id = node['parent_id']
+            if parent_id and parent_id in nodes:
+                nodes[parent_id]['children'].append(node)
+            else:
+                roots.append(node)
+
+        def _sort_tree(items: list[dict]) -> list[dict]:
+            items.sort(key=lambda item: (item.get('sort_order', 0), item.get('name', '')))
+            for item in items:
+                item['children'] = _sort_tree(item.get('children', []))
+                item.pop('sort_order', None)
+            return items
+
+        return _sort_tree(roots)
+
+    async def _user_group_options_for_create(self) -> list[KnowledgeSpaceCreateOptionUserGroup]:
+        user_group_ids = await self._user_group_ids_for_create()
+        groups = await GroupDao.aget_group_by_ids(list(user_group_ids)) if user_group_ids else []
+        options = [
+            KnowledgeSpaceCreateOptionUserGroup(id=int(group.id), group_name=group.group_name)
+            for group in groups
+            if getattr(group, 'id', None) is not None
+        ]
+        return sorted(options, key=lambda item: item.group_name or '')
+
     async def _resolve_space_scope_on_create(
         self,
         *,
@@ -321,56 +435,49 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
         user_group_ids = await self._user_group_ids_for_create()
-        groups = await GroupDao.aget_group_by_ids(list(user_group_ids)) if user_group_ids else []
-        group_options = [
-            KnowledgeSpaceCreateOptionUserGroup(id=int(group.id), group_name=group.group_name)
-            for group in groups
-            if getattr(group, 'id', None) is not None
-        ]
-
         if self.login_user.is_admin():
-            departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
             can_create_department = True
         else:
-            departments = await DepartmentDao.aget_user_admin_departments(self.login_user.user_id)
-            can_create_department = bool(departments)
-
-        dept_name_map = {
-            int(dept.id): dept.name
-            for dept in departments
-            if getattr(dept, 'id', None) is not None
-        }
-
-        def _path_name(dept) -> Optional[str]:
-            path_ids = [
-                int(part)
-                for part in str(getattr(dept, 'path', '') or '').split('/')
-                if part.isdigit()
-            ]
-            names = [dept_name_map.get(dept_id) for dept_id in path_ids if dept_name_map.get(dept_id)]
-            if not names and getattr(dept, 'name', None):
-                names = [dept.name]
-            return '/'.join(names) if names else None
-
-        dept_options = [
-            KnowledgeSpaceCreateOptionDepartment(
-                id=int(dept.id),
-                name=dept.name,
-                path_name=_path_name(dept),
+            can_create_department = bool(
+                await DepartmentDao.aget_user_admin_departments(self.login_user.user_id)
             )
-            for dept in departments
-            if getattr(dept, 'id', None) is not None
-        ]
 
         return KnowledgeSpaceCreateOptionsResp(
             can_create_public=bool(self.login_user.is_admin()),
             can_create_department=can_create_department,
-            can_create_team=bool(group_options),
+            can_create_team=bool(user_group_ids),
             can_create_personal=True,
-            departments=dept_options,
-            user_groups=group_options,
+            departments=[],
+            user_groups=[],
             default_space_level=KnowledgeSpaceLevelEnum.PERSONAL,
         )
+
+    async def get_create_departments(
+        self,
+        *,
+        keyword: str = '',
+        page: int = 1,
+        page_size: int = 20,
+    ) -> KnowledgeSpaceCreateOptionDepartmentsResp:
+        tree = await self._department_tree_for_create()
+        return KnowledgeSpaceCreateOptionDepartmentsResp(data=tree, total=len(tree))
+
+    async def get_create_user_groups(
+        self,
+        *,
+        keyword: str = '',
+        page: int = 1,
+        page_size: int = 20,
+    ) -> KnowledgeSpaceCreateOptionUserGroupsResp:
+        options = await self._user_group_options_for_create()
+        normalized_keyword = (keyword or '').strip().lower()
+        if normalized_keyword:
+            options = [
+                item for item in options
+                if normalized_keyword in (item.group_name or '').lower()
+            ]
+        page_items, total = self._paginate_options(options, page, page_size)
+        return KnowledgeSpaceCreateOptionUserGroupsResp(data=page_items, total=total)
 
     async def _decorate_department_metadata(
         self,
@@ -1629,7 +1736,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
         )
         space_ids.update(int(space_id) for space_id in created_ids)
-        if accessible_ids is not None:
+        if accessible_ids is None:
+            all_space_ids = await KnowledgeDao.aget_knowledge_ids_by_type(KnowledgeTypeEnum.SPACE)
+            space_ids.update(all_space_ids)
+        else:
             space_ids.update(int(space_id) for space_id in accessible_ids if str(space_id).isdigit())
 
         spaces = await self._format_accessible_spaces(

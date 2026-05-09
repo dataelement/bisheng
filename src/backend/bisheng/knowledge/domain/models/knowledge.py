@@ -252,6 +252,21 @@ class KnowledgeDao(KnowledgeBase):
         return out
 
     @classmethod
+    async def aget_knowledge_ids_by_type(cls, knowledge_type: KnowledgeTypeEnum) -> List[int]:
+        """指定类型下的全部知识库主键，用于管理员无过滤场景组装候选集。"""
+        async with get_async_db_session() as session:
+            stmt = select(Knowledge.id).where(Knowledge.type == knowledge_type.value)
+            result = await session.exec(stmt)
+            rows = result.all()
+        out: List[int] = []
+        for row in rows:
+            if row is None:
+                continue
+            rid = row[0] if isinstance(row, tuple) else row
+            out.append(int(rid))
+        return out
+
+    @classmethod
     def _user_knowledge_filters(
             cls,
             statement: Any,
