@@ -152,7 +152,10 @@ class Etl4lmLoader(BaseBishengLoader):
         cropped_img = img[y1:y2, x1:x2]
         file_name = f"{self.local_image_dir}{os.sep}{element_id}.png"
         cv2.imwrite(file_name, cropped_img)
-        return file_name
+        # Upload to MinIO immediately so that the merged document text contains the
+        # final MinIO URL when metadata.indexes are computed. This keeps chunk_bbox
+        # alignment correct after the splitter runs (see bbox-misalignment fix).
+        return self.upload_image_to_minio(file_name, f"{element_id}.png")
 
     def extract_images(self, partitions: List[Dict]) -> Dict:
         if not self.retain_images:

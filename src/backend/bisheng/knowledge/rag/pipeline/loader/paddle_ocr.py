@@ -180,8 +180,21 @@ class PaddleOcrLoader(BaseBishengLoader):
                 })
         return items
 
+    @staticmethod
+    def _substitute_image_urls(md_text: str, image_url_mapping: Optional[Dict[str, str]]) -> str:
+        """Replace API-returned image paths with final (MinIO) URLs.
+
+        Must be applied symmetrically to both the merged text and the per-page text
+        used for index computation, otherwise chunk_bbox alignment will drift.
+        """
+        if not md_text or not image_url_mapping:
+            return md_text
+        for img_path, final_url in image_url_mapping.items():
+            md_text = md_text.replace(img_path, final_url)
+        return md_text
+
     def _merge_parsing_results(
-            self, layout_results: List[Dict]
+            self, layout_results: List[Dict], image_url_mapping: Optional[Dict[str, str]] = None
     ) -> Tuple[str, Dict, List[Dict]]:
         """
         Merge parsing results from all pages.
@@ -192,7 +205,9 @@ class PaddleOcrLoader(BaseBishengLoader):
         # Collect markdown text from each page
         markdown_texts = []
         for page_result in layout_results:
-            md_text = page_result.get("markdown", {}).get("text", "")
+            md_text = self._substitute_image_urls(
+                page_result.get("markdown", {}).get("text", ""), image_url_mapping
+            )
             if self.filter_page_header_footer and md_text:
                 parsing_list = page_result.get("prunedResult", {}).get("parsing_res_list", [])
                 for item in parsing_list:
@@ -209,7 +224,9 @@ class PaddleOcrLoader(BaseBishengLoader):
         text_offset = 0
 
         for page_idx, page_result in enumerate(layout_results):
-            md_text = page_result.get("markdown", {}).get("text", "")
+            md_text = self._substitute_image_urls(
+                page_result.get("markdown", {}).get("text", ""), image_url_mapping
+            )
             parsing_list = page_result.get("prunedResult", {}).get("parsing_res_list", [])
             search_pos = 0
 
@@ -263,11 +280,16 @@ class PaddleOcrLoader(BaseBishengLoader):
             ))
 
     def _process_images(self, layout_results: List[Dict]) -> Dict[str, str]:
-        """Download and save images from API response."""
+        """Download API images, persist to MinIO when configured, return path -> final URL.
+
+        The mapping is used to substitute image references in markdown text BEFORE
+        metadata.indexes are computed, keeping chunk_bbox alignment stable through
+        the splitter.
+        """
         if not self.retain_images:
             return {}
 
-        local_image_result = {}
+        image_url_mapping = {}
         self.local_image_dir = os.path.join(self.tmp_dir, "images")
         os.makedirs(self.local_image_dir, exist_ok=True)
 
@@ -281,12 +303,14 @@ class PaddleOcrLoader(BaseBishengLoader):
                         local_path = os.path.join(self.local_image_dir, safe_name)
                         with open(local_path, "wb") as f:
                             f.write(resp.content)
-                        local_image_result[img_path] = local_path
-                        logger.debug(f"Saved image: {local_path}")
+                        image_url_mapping[img_path] = self.upload_image_to_minio(
+                            local_path, safe_name
+                        )
+                        logger.debug(f"Saved image: {local_path} -> {image_url_mapping[img_path]}")
                 except Exception as e:
                     logger.warning(f"Failed to download image {img_path}: {e}")
 
-        return local_image_result
+        return image_url_mapping
 
     def _build_documents(
             self, layout_results: List[Dict]
@@ -296,10 +320,11 @@ class PaddleOcrLoader(BaseBishengLoader):
             logger.warning(f"PaddleOCR returned empty results for {self.file_name}")
             return [Document(page_content="", metadata=self.file_metadata)]
 
+        image_url_mapping: Dict[str, str] = {}
         if self.retain_images:
-            self._process_images(layout_results)
+            image_url_mapping = self._process_images(layout_results)
 
-        content, metadata, parsing_items = self._merge_parsing_results(layout_results)
+        content, metadata, parsing_items = self._merge_parsing_results(layout_results, image_url_mapping)
         self.parse_bbox_list(parsing_items)
         metadata.update(self.file_metadata)
 

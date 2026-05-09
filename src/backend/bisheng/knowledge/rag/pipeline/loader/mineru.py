@@ -121,7 +121,13 @@ class MineruLoader(BaseBishengLoader):
         self.partitions = []
 
     def _store_images_to_local(self, images_data: Dict[str, Any], doc_id: str) -> Dict[str, str]:
-        """将 MinerU 返回的 base64 图片存储到 MinIO，返回图片路径映射"""
+        """Persist MinerU base64 images locally (and to MinIO when configured).
+
+        Returns a mapping `image_name -> final_url` (MinIO URL when image_object_dir
+        is set, otherwise local path). The merge_* helpers substitute these URLs into
+        the markdown text BEFORE computing metadata.indexes, so chunk_bbox alignment
+        survives the splitter unchanged.
+        """
         if not images_data:
             return {}
 
@@ -141,14 +147,17 @@ class MineruLoader(BaseBishengLoader):
 
                     # 解码 base64 数据
                     image_bytes = base64.b64decode(base64_data)
-                    image_url = os.path.join(self.local_image_dir, f"{image_name}.{image_format}")
-                    with open(image_url, "wb") as f:
+                    saved_file_name = f"{image_name}.{image_format}"
+                    local_path = os.path.join(self.local_image_dir, saved_file_name)
+                    with open(local_path, "wb") as f:
                         f.write(image_bytes)
 
-                    image_path_mapping[image_name] = image_url
+                    image_path_mapping[image_name] = self.upload_image_to_minio(
+                        local_path, saved_file_name
+                    )
 
                     logger.info(
-                        f"Successfully stored image {image_name} to local {image_url}")
+                        f"Successfully stored image {image_name} to {image_path_mapping[image_name]}")
 
             except Exception as e:
                 logger.error(f"Failed to store image {image_name} to local: {str(e)}")
@@ -157,21 +166,16 @@ class MineruLoader(BaseBishengLoader):
         return image_path_mapping
 
     def _replace_image_links_in_markdown(self, markdown_content: str, image_path_mapping: Dict[str, str]) -> str:
-        """替换 Markdown 中的相对图片路径为可访问的 URL"""
-        if not image_path_mapping:
-            # 如果没有图片映射（预览模式），保持原始链接
-            logger.info("No image mapping available, keeping original image links in markdown")
+        """Substitute relative `images/{name}` references with the final image URL.
+
+        Applied per-block during merge_* so metadata.indexes reflect the final text.
+        """
+        if not image_path_mapping or not markdown_content:
             return markdown_content
 
-        # 有图片映射时，替换为可访问的 URL
-        logger.info(f"Replacing {len(image_path_mapping)} image links with accessible URLs")
         for image_name, image_url in image_path_mapping.items():
-            # 匹配相对路径格式
             relative_pattern = f"images/{image_name}"
-
-            # 替换为对应的 URL
             markdown_content = markdown_content.replace(relative_pattern, image_url)
-            logger.debug(f"Replaced {relative_pattern} with: {image_url}")
 
         return markdown_content
 
@@ -219,14 +223,13 @@ class MineruLoader(BaseBishengLoader):
         # 存储图片到 MinIO 并获取路径映射
         image_path_mapping = self._store_images_to_local(images_data, doc_id)
 
+        # Image URL substitution must happen BEFORE merge_* computes metadata.indexes,
+        # otherwise the splitter's chunk_bbox alignment drifts by the length delta of
+        # every replaced reference.
         if pdf_info:
-            content, metadata = self.merge_pdf_info(pdf_info)
+            content, metadata = self.merge_pdf_info(pdf_info, image_path_mapping)
         else:
-            content, metadata = self.merge_conten_list(conten_list)
-
-        # 替换 Markdown 中的图片链接
-        if image_path_mapping:
-            content = self._replace_image_links_in_markdown(content, image_path_mapping)
+            content, metadata = self.merge_conten_list(conten_list, image_path_mapping)
 
         return [Document(page_content=content, metadata=metadata)]
 
@@ -235,13 +238,16 @@ class MineruLoader(BaseBishengLoader):
             return blocks
         return filter_repeated_header_footer_blocks(blocks)
 
-    def merge_conten_list(self, content_list) -> Tuple[str, Dict]:
+    def merge_conten_list(self, content_list, image_path_mapping: Dict[str, str] = None) -> Tuple[str, Dict]:
         self.bbox_list = []
         blocks = []
         for index, one in enumerate(content_list):
             text_type = one.get("type")
             if text_type == "image":
-                text = f"![image]({one.get('img_path')})\n"
+                img_path = one.get('img_path') or ''
+                if image_path_mapping:
+                    img_path = self._replace_image_links_in_markdown(img_path, image_path_mapping)
+                text = f"![image]({img_path})\n"
             elif text_type == "table":
                 table_content = one.get("table_content")
                 if not table_content:
@@ -289,7 +295,7 @@ class MineruLoader(BaseBishengLoader):
             "types": types,
         }
 
-    def merge_pdf_info(self, pdf_info) -> Tuple[str, Dict]:
+    def merge_pdf_info(self, pdf_info, image_path_mapping: Dict[str, str] = None) -> Tuple[str, Dict]:
         self.bbox_list = []
         blocks = []
 
@@ -317,6 +323,8 @@ class MineruLoader(BaseBishengLoader):
                                     img_path = span["image_path"]
                                     break
                     if img_path:
+                        if image_path_mapping:
+                            img_path = self._replace_image_links_in_markdown(img_path, image_path_mapping)
                         text = f"![image]({img_path})\n"
                 elif text_type == "table":
                     html_str = ""
