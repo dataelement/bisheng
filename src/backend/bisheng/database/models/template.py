@@ -2,17 +2,16 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, Integer, text, String
+from sqlalchemy import Column, DateTime, Integer, text, String
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.database.models.flow import FlowType
 
-
 class TemplateBase(SQLModelSerializable):
     name: str = Field(index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    data: Optional[Dict] = Field(default=None, sa_column=Column(JsonType))
     order_num: Optional[int] = Field(default=True, index=True)
     # 5 assistant 10 workflow
     flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value)
@@ -28,21 +27,17 @@ class TemplateBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class Template(TemplateBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-
 
 class TemplateRead(TemplateBase):
     id: int
     name: str
 
-
 class TemplateCreate(TemplateBase):
     # 5 assistant 10 workflow
     # flow_type: int = FlowType.WORKFLOW.value
     pass
-
 
 class TemplateUpdate(SQLModelSerializable):
     name: Optional[str] = None
@@ -57,3 +52,5 @@ class TemplateUpdate(SQLModelSerializable):
         if values.get("order_num", None):
             values['order_num'] = int(float(values['order_num']))
         return values
+
+from bisheng.core.database.dialect_helpers import JsonType

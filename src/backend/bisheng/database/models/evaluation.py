@@ -2,24 +2,21 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from sqlalchemy import Column, DateTime, Integer, Text, text, func, and_, JSON
+from sqlalchemy import Column, DateTime, Integer, Text, text, func, and_
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
-
 
 class ExecType(Enum):
     FLOW = 'flow'
     ASSISTANT = 'assistant'
     WORKFLOW = 'workflow'
 
-
 class EvaluationTaskStatus(Enum):
     running = 1
     failed = 2
     success = 3
-
 
 class EvaluationBase(SQLModelSerializable):
     user_id: int = Field(default=None, index=True)
@@ -33,7 +30,7 @@ class EvaluationBase(SQLModelSerializable):
                         description='Task Execution Status: 1:Executing "{0}" 2: execute fail 3:execute success')
     prompt: str = Field(default='', sa_column=Column(Text), description='Evaluation Instruction Text')
     result_file_path: str = Field(default='', description='of the assessment results minio <g id="Bold">Address:</g>')
-    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON),
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JsonType),
                                                description='Final Assessment Score')
     description: str = Field(default='', sa_column=Column(Text), description='Error description information')
     is_delete: int = Field(default=0, description='whether delete')
@@ -48,19 +45,15 @@ class EvaluationBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class Evaluation(EvaluationBase, table=True):
     id: int = Field(default=None, primary_key=True, unique=True)
-
 
 class EvaluationRead(EvaluationBase):
     id: int
     user_name: Optional[str] = None
 
-
 class EvaluationCreate(EvaluationBase):
     pass
-
 
 class EvaluationDao(EvaluationBase):
     @classmethod
@@ -106,3 +99,5 @@ class EvaluationDao(EvaluationBase):
             session.commit()
             session.refresh(evaluation)
             return evaluation
+
+from bisheng.core.database.dialect_helpers import JsonType

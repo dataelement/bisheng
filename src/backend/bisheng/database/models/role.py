@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, Computed, DateTime, Integer, JSON, String, false, text, func, delete, and_, or_, UniqueConstraint
+from sqlalchemy import Column, Computed, DateTime, Integer, String, false, text, func, delete, and_, or_, UniqueConstraint
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -9,7 +9,6 @@ from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.role_access import RoleAccess
 from bisheng.user.domain.models.user_role import UserRole
-
 
 class RoleBase(SQLModelSerializable):
     role_name: str = Field(index=False, description='Frontend Display Name')
@@ -25,7 +24,7 @@ class RoleBase(SQLModelSerializable):
     )
     quota_config: Optional[dict] = Field(
         default=None,
-        sa_column=Column(JSON, nullable=True,
+        sa_column=Column(JsonType, nullable=True,
                          comment='Resource quota config JSON'),
     )
     remark: Optional[str] = Field(default=None, index=False)
@@ -37,7 +36,6 @@ class RoleBase(SQLModelSerializable):
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
-
 
 class Role(RoleBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -70,20 +68,16 @@ class Role(RoleBase, table=True):
         ),
     )
 
-
 class RoleRead(RoleBase):
     id: Optional[int] = None
-
 
 class RoleUpdate(RoleBase):
     role_name: Optional[str] = None
     remark: Optional[str] = None
     knowledge_space_file_limit: Optional[int] = None
 
-
 class RoleCreate(RoleBase):
     pass
-
 
 class RoleDao(RoleBase):
 
@@ -333,3 +327,5 @@ class RoleDao(RoleBase):
         async with get_async_db_session() as session:
             rows = (await session.exec(stmt)).all()
             return {row[0]: row[1] for row in rows}
+
+from bisheng.core.database.dialect_helpers import JsonType

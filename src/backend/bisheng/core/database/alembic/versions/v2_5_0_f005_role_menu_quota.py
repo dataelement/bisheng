@@ -23,7 +23,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists
+from bisheng.core.database.dialect_helpers import JsonType, column_exists, index_exists
 
 revision: str = 'f005_role_menu_quota'
 down_revision: Union[str, Sequence[str], None] = 'f004_rebac'
@@ -54,7 +54,7 @@ def upgrade() -> None:
     if not column_exists(conn, 'role', 'quota_config'):
         op.add_column(
             'role',
-            sa.Column('quota_config', sa.JSON, nullable=True,
+            sa.Column('quota_config', JsonType, nullable=True,
                       comment='Resource quota config JSON'),
         )
 

@@ -14,7 +14,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists, update_time_server_default
+from bisheng.core.database.dialect_helpers import JsonType, column_exists, index_exists, table_exists, update_time_server_default
 
 revision: str = 'f001_multi_tenant'
 down_revision: Union[str, Sequence[str], None] = '9ba42685e830'
@@ -101,8 +101,8 @@ def upgrade() -> None:
             sa.Column('contact_name', sa.String(64), nullable=True, comment='Contact name'),
             sa.Column('contact_phone', sa.String(32), nullable=True, comment='Contact phone'),
             sa.Column('contact_email', sa.String(128), nullable=True, comment='Contact email'),
-            sa.Column('quota_config', sa.JSON, nullable=True, comment='Tenant-level resource quota'),
-            sa.Column('storage_config', sa.JSON, nullable=True, comment='Tenant-level storage config'),
+            sa.Column('quota_config', JsonType, nullable=True, comment='Tenant-level resource quota'),
+            sa.Column('storage_config', JsonType, nullable=True, comment='Tenant-level storage config'),
             sa.Column('create_user', sa.Integer, nullable=True, comment='Created by user ID'),
             sa.Column('create_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
             sa.Column('update_time', sa.DateTime, nullable=False,

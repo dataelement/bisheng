@@ -5,13 +5,12 @@ from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, Integer, String, or_, text, Text
+from sqlalchemy import Column, DateTime, Integer, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.base import async_get_count, get_count
-
 
 class KnowledgeFileStatus(int, Enum):
     PROCESSING = 1  # Sedang diproses
@@ -21,13 +20,11 @@ class KnowledgeFileStatus(int, Enum):
     WAITING = 5  # In queue:
     TIMEOUT = 6  # Super24Hour not parsed, parsing timeout
 
-
 class QAStatus(Enum):
     DISABLED = 0  # User manually closedQA
     ENABLED = 1  # Enabled
     PROCESSING = 2  # Sedang diproses
     FAILED = 3  # QAFailed to insert vector library
-
 
 class ParseType(Enum):
     LOCAL = 'local'  # Local mode resolution
@@ -39,17 +36,14 @@ class ParseType(Enum):
     MINERU = 'mineru'
     PADDLE_OCR = 'paddle_ocr'
 
-
 class FileSource(Enum):
     UPLOAD = 'upload'  # user upload
     CHANNEL = 'channel'
     SPACE_UPLOAD = 'space_upload'
 
-
 class FileType(int, Enum):
     DIR = 0
     FILE = 1
-
 
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
@@ -71,7 +65,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     bbox_object_name: Optional[str] = Field(default='', description='bboxFiles inminioStored object name')
     status: Optional[int] = Field(default=KnowledgeFileStatus.WAITING.value)
     object_name: Optional[str] = Field(default=None, index=False, description='Files in Stored object name')
-    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
+    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JsonType, nullable=True),
                                                     description='User-defined metadata')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
     file_encoding: Optional[str] = Field(
@@ -92,7 +86,6 @@ class KnowledgeFileBase(SQLModelSerializable):
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
-
 
 class QAKnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
@@ -137,30 +130,24 @@ class QAKnowledgeBase(SQLModelSerializable):
 
         return v
 
-
 class KnowledgeFile(KnowledgeFileBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
-
 class QAKnowledge(QAKnowledgeBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    questions: Optional[List[str]] = Field(default=None, sa_column=Column(JsonType))
     answers: Optional[str] = Field(default=None, sa_column=Column(Text))
-
 
 class KnowledgeFileRead(KnowledgeFileBase):
     id: int
 
-
 class KnowledgeFileCreate(KnowledgeFileBase):
     pass
-
 
 class QAKnowledgeUpsert(QAKnowledgeBase):
     """Support modification"""
     id: Optional[int] = None
     answers: Optional[List[str] | str] = None
-
 
 class KnowledgeFileDao(KnowledgeFileBase):
     _DUPLICATE_EXCLUDED_STATUSES: ClassVar[tuple[int, ...]] = (
@@ -619,7 +606,6 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.exec(statement)
             session.commit()
 
-
 class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
@@ -781,3 +767,5 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             session.commit()
 
 # ─── Space Folder / File helpers (Space-scoped operations on KnowledgeFile) ──
+
+from bisheng.core.database.dialect_helpers import JsonType

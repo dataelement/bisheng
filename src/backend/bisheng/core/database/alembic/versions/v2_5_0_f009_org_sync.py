@@ -17,7 +17,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists, update_time_server_default
+from bisheng.core.database.dialect_helpers import JsonType, column_exists, index_exists, table_exists, update_time_server_default
 
 revision: str = 'f009_org_sync'
 down_revision: Union[str, Sequence[str], None] = 'f005_role_menu_quota'
@@ -41,7 +41,7 @@ def upgrade() -> None:
                       comment='Auth mode: api_key/password'),
             sa.Column('auth_config', sa.Text, nullable=False,
                       comment='Fernet-encrypted JSON'),
-            sa.Column('sync_scope', sa.JSON, nullable=True,
+            sa.Column('sync_scope', JsonType, nullable=True,
                       comment='Sync scope JSON'),
             sa.Column('schedule_type', sa.String(16), nullable=False,
                       server_default='manual', comment='manual/cron'),
@@ -101,7 +101,7 @@ def upgrade() -> None:
             sa.Column('member_updated', sa.Integer, nullable=False, server_default='0'),
             sa.Column('member_disabled', sa.Integer, nullable=False, server_default='0'),
             sa.Column('member_reactivated', sa.Integer, nullable=False, server_default='0'),
-            sa.Column('error_details', sa.JSON, nullable=True,
+            sa.Column('error_details', JsonType, nullable=True,
                       comment='Error list JSON'),
             sa.Column('start_time', sa.DateTime, nullable=True),
             sa.Column('end_time', sa.DateTime, nullable=True),

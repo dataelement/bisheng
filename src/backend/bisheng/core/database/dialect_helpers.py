@@ -1,10 +1,45 @@
 """Dialect-agnostic helpers for DaMeng + MySQL dual-database support."""
 from __future__ import annotations
 
+import json as _json
+
 import sqlalchemy as sa
-from sqlalchemy import inspect, Text, CLOB
+from sqlalchemy import inspect, Text, CLOB, JSON
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.types import TypeDecorator
+
+
+class JsonType(TypeDecorator):
+    """Stores Python dicts/lists as JSON.
+
+    MySQL: delegates to native JSON type (full ORM transparency).
+    DaMeng: stores as CLOB with explicit Python-side serialize/deserialize.
+    Others (SQLite, etc.): stores as TEXT with explicit serialize/deserialize.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "mysql":
+            return dialect.type_descriptor(JSON())
+        if dialect.name == "dm":
+            return dialect.type_descriptor(CLOB())
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if dialect.name == "mysql":
+            return value  # native JSON handles serialization
+        if value is not None:
+            return _json.dumps(value, ensure_ascii=False)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if dialect.name == "mysql":
+            return value  # native JSON handles deserialization
+        if value is not None:
+            return _json.loads(value)
+        return value
 
 
 def get_dialect_name(conn_or_engine) -> str:

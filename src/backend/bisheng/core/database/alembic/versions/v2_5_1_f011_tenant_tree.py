@@ -29,7 +29,7 @@ from bisheng.core.database.alembic_helpers.f011 import (
     ensure_root_tenant_shape,
 )
 
-from bisheng.core.database.dialect_helpers import column_exists, index_exists
+from bisheng.core.database.dialect_helpers import JsonType, column_exists, index_exists
 
 revision: str = 'f011_tenant_tree'
 down_revision: Union[str, Sequence[str], None] = 'f011_backfill_create_knowledge_web_menu'
@@ -135,7 +135,7 @@ def upgrade() -> None:
     if not column_exists(conn, 'auditlog', 'metadata'):
         op.add_column(
             'auditlog',
-            sa.Column('metadata', sa.JSON, nullable=True,
+            sa.Column('metadata', JsonType, nullable=True,
                       comment='v2.5.1: extended fields'),
         )
     if not index_exists(conn, 'auditlog', 'idx_auditlog_tenant_time'):

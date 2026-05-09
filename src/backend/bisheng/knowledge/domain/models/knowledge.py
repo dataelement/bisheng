@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON, Boolean, Integer, String, collate
+from sqlalchemy import Boolean, Integer, String, collate
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -12,19 +12,16 @@ from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
 
-
 class KnowledgeTypeEnum(Enum):
     QA = 1  # QAThe knowledge base upon
     NORMAL = 0  # Docly Knowledge Base
     PRIVATE = 2  # Workbench Personal Knowledge Base
     SPACE = 3  # Knowledge Space
 
-
 class AuthTypeEnum(str, Enum):
     PUBLIC = 'public'
     PRIVATE = 'private'
     APPROVAL = 'approval'
-
 
 class KnowledgeState(Enum):
     UNPUBLISHED = 0
@@ -32,7 +29,6 @@ class KnowledgeState(Enum):
     COPYING = 2
     REBUILDING = 3  # Status in Document Knowledge Base Reconstruction
     FAILED = 4  # Status of Documentation Knowledge Base Reconstruction Failure
-
 
 class MetadataFieldType(str, Enum):
     """ Metadata field type"""
@@ -48,7 +44,6 @@ class MetadataFieldType(str, Enum):
                 if member.value.lower() == value.lower():
                     return member
         return None
-
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
@@ -77,7 +72,7 @@ class KnowledgeBase(SQLModelSerializable):
         ),
     )
 
-    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
@@ -91,10 +86,8 @@ class KnowledgeBase(SQLModelSerializable):
             v = str(v)
         return v
 
-
 class Knowledge(KnowledgeBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-
 
 class KnowledgeRead(KnowledgeBase):
     id: int
@@ -102,12 +95,10 @@ class KnowledgeRead(KnowledgeBase):
     copiable: Optional[bool] = None
     is_pinned: Optional[bool] = False
 
-
 class KnowledgeUpdate(BaseModel):
     knowledge_id: int
     name: Optional[str] = None
     description: Optional[str] = None
-
 
 class KnowledgeCreate(BaseModel):
     user_id: Optional[int] = Field(default=None, index=True)
@@ -134,7 +125,6 @@ class KnowledgeCreate(BaseModel):
         if isinstance(v, int):
             v = str(v)
         return v
-
 
 class KnowledgeDao(KnowledgeBase):
 
@@ -869,3 +859,5 @@ class KnowledgeDao(KnowledgeBase):
             return statement.order_by(Knowledge.name.asc())
         else:
             return statement.order_by(Knowledge.update_time.desc())
+
+from bisheng.core.database.dialect_helpers import JsonType

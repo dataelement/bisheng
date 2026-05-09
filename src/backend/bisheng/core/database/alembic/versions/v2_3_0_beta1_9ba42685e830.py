@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-from bisheng.core.database.dialect_helpers import column_exists
+from bisheng.core.database.dialect_helpers import JsonType, column_exists
 
 revision: str = '9ba42685e830'
 down_revision: Union[str, Sequence[str], None] = None
@@ -22,11 +22,11 @@ def upgrade() -> None:
     """Upgrade schema."""
     conn = op.get_bind()
     if not column_exists(conn, 'knowledge', 'metadata_fields'):
-        op.add_column('knowledge', sa.Column('metadata_fields', sa.JSON, nullable=True, comment='Metadata Field Configuration for Knowledge Base'))
+        op.add_column('knowledge', sa.Column('metadata_fields', JsonType, nullable=True, comment='Metadata Field Configuration for Knowledge Base'))
 
     # knowledgefile OF TABLE)extra_meta to user_metadata Data field
     if not column_exists(conn, 'knowledgefile', 'user_metadata'):
-        op.add_column('knowledgefile', sa.Column('user_metadata', sa.JSON, nullable=True, comment='User-defined metadata'))
+        op.add_column('knowledgefile', sa.Column('user_metadata', JsonType, nullable=True, comment='User-defined metadata'))
 
     # Taking the original extra_meta Data migration of fields to user_metadata Data field
     if column_exists(conn, 'knowledgefile', 'extra_meta'):

@@ -10,7 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.dialect_helpers import index_exists, table_exists, update_time_server_default
+from bisheng.core.database.dialect_helpers import JsonType, index_exists, table_exists, update_time_server_default
 
 revision: str = 'f022_approval_request'
 down_revision: Union[str, Sequence[str], None] = 'f021_department_knowledge_space'
@@ -32,9 +32,9 @@ def upgrade() -> None:
             sa.Column('parent_folder_id', sa.Integer, nullable=True),
             sa.Column('applicant_user_id', sa.Integer, nullable=False),
             sa.Column('applicant_user_name', sa.String(length=255), nullable=False, server_default=''),
-            sa.Column('reviewer_user_ids', sa.JSON(), nullable=True),
+            sa.Column('reviewer_user_ids', JsonType, nullable=True),
             sa.Column('file_count', sa.Integer, nullable=False, server_default='0'),
-            sa.Column('payload_json', sa.JSON(), nullable=False),
+            sa.Column('payload_json', JsonType, nullable=False),
             sa.Column('safety_status', sa.String(length=32), nullable=False, server_default='skipped'),
             sa.Column('safety_reason', sa.Text(), nullable=True),
             sa.Column('decision_reason', sa.Text(), nullable=True),

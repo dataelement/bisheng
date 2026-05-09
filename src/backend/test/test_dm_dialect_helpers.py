@@ -292,6 +292,95 @@ class TestUpdateTimeServerDefault:
 
 
 # ---------------------------------------------------------------------------
+# JsonType
+# ---------------------------------------------------------------------------
+
+class TestJsonType:
+    def _make_dialect(self, name: str):
+        d = MagicMock()
+        d.name = name
+        d.type_descriptor.side_effect = lambda t: t
+        return d
+
+    def test_mysql_load_dialect_returns_json(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        from sqlalchemy import JSON
+        result = JsonType().load_dialect_impl(self._make_dialect("mysql"))
+        assert isinstance(result, JSON)
+
+    def test_dm_load_dialect_returns_clob(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        from sqlalchemy import CLOB
+        result = JsonType().load_dialect_impl(self._make_dialect("dm"))
+        assert isinstance(result, CLOB)
+
+    def test_sqlite_load_dialect_returns_text(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        from sqlalchemy import Text
+        result = JsonType().load_dialect_impl(self._make_dialect("sqlite"))
+        assert isinstance(result, Text)
+
+    def test_cache_ok_is_true(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        assert JsonType.cache_ok is True
+
+    def test_dm_bind_param_serializes_dict(self):
+        import json
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "dm"
+        result = JsonType().process_bind_param({"k": "v"}, dialect)
+        assert json.loads(result) == {"k": "v"}
+
+    def test_dm_bind_param_serializes_list(self):
+        import json
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "dm"
+        result = JsonType().process_bind_param([1, 2, 3], dialect)
+        assert json.loads(result) == [1, 2, 3]
+
+    def test_dm_bind_param_none_returns_none(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "dm"
+        assert JsonType().process_bind_param(None, dialect) is None
+
+    def test_dm_result_value_deserializes_dict(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "dm"
+        result = JsonType().process_result_value('{"k": "v"}', dialect)
+        assert result == {"k": "v"}
+
+    def test_dm_result_value_none_returns_none(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "dm"
+        assert JsonType().process_result_value(None, dialect) is None
+
+    def test_mysql_bind_param_passthrough(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "mysql"
+        data = {"k": "v"}
+        assert JsonType().process_bind_param(data, dialect) is data
+
+    def test_mysql_result_value_passthrough(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "mysql"
+        data = {"k": "v"}
+        assert JsonType().process_result_value(data, dialect) is data
+
+    def test_sqlite_bind_param_serializes(self):
+        import json
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "sqlite"
+        result = JsonType().process_bind_param({"k": "v"}, dialect)
+        assert json.loads(result) == {"k": "v"}
+
+    def test_sqlite_result_value_deserializes(self):
+        from bisheng.core.database.dialect_helpers import JsonType
+        dialect = MagicMock(); dialect.name = "sqlite"
+        result = JsonType().process_result_value('{"k": "v"}', dialect)
+        assert result == {"k": "v"}
+
+
+# ---------------------------------------------------------------------------
 # DatabaseConnectionManager — URL conversion
 # ---------------------------------------------------------------------------
 

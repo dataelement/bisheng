@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, Text, and_, func, or_, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, Text, and_, func, or_, text
 from sqlmodel import Field, select, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
@@ -13,11 +13,9 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
 
-
 class AssistantStatus(Enum):
     OFFLINE = 1
     ONLINE = 2
-
 
 class AssistantBase(SQLModelSerializable):
     id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True,
@@ -33,7 +31,7 @@ class AssistantBase(SQLModelSerializable):
     system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')
     prompt: str = Field(default='', sa_column=Column(Text), description='User Visible Descriptor')
     guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='Ice Breaker ')
-    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON),
+    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JsonType),
                                            description='Facilitation Questions')
     model_name: str = Field(default='', description='Corresponds to the only model in the model managementID')
     temperature: float = Field(default=1, description='Model Temperature')
@@ -53,7 +51,6 @@ class AssistantBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class AssistantLinkBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
     assistant_id: Optional[str] = Field(default=0, index=True, description='assistantID')
@@ -70,14 +67,11 @@ class AssistantLinkBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class Assistant(AssistantBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
 
-
 class AssistantLink(AssistantLinkBase, table=True):
     pass
-
 
 class AssistantDao(AssistantBase):
 
@@ -279,7 +273,6 @@ class AssistantDao(AssistantBase):
             result = session.exec(statement).all()
             return result, session.scalar(count_statement)
 
-
 class AssistantLinkDao(AssistantLink):
 
     @classmethod
@@ -345,3 +338,5 @@ class AssistantLinkDao(AssistantLink):
                 session.add(
                     AssistantLink(assistant_id=assistant_id, knowledge_id=one, flow_id=flow_id))
             session.commit()
+
+from bisheng.core.database.dialect_helpers import JsonType

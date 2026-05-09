@@ -4,11 +4,10 @@ from enum import Enum
 from typing import List, Dict, Optional, Literal, Union, Annotated
 
 from pydantic import BaseModel, Field as PydanticField, model_validator
-from sqlalchemy import CHAR, Column, Integer, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text, Text
+from sqlalchemy import CHAR, Column, Integer, VARCHAR, Enum as SQLEnum, DateTime, Boolean, text, Text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-
 
 class ChannelVisibilityEnum(str, Enum):
     """Channel Visibility Enumeration"""
@@ -19,7 +18,6 @@ class ChannelVisibilityEnum(str, Enum):
     # Review required
     REVIEW = "review"
 
-
 # 单一Rule
 class SingleRule(BaseModel):
     """Single Rule Model"""
@@ -28,7 +26,6 @@ class SingleRule(BaseModel):
     rule_type: Literal['include', 'exclude'] = PydanticField(..., description='Rule Type: include or exclude')
     keywords: List[str] = PydanticField(..., description='List of keywords for the rule')
 
-
 # 多Rule组合
 class MultiRule(BaseModel):
     """Multi Rule Model"""
@@ -36,7 +33,6 @@ class MultiRule(BaseModel):
     type: Literal['multi'] = 'multi'
     relation: Literal['and', 'or'] = PydanticField(..., description='Relationship between rules: and or or')
     rules: List[SingleRule] = PydanticField(..., description='List of filter rules')
-
 
 class ChannelFilterRules(BaseModel):
     """Channel Filter Rules Model"""
@@ -52,7 +48,6 @@ class ChannelFilterRules(BaseModel):
             raise ValueError('Sub channel filter rules require a name')
         return self
 
-
 class Channel(SQLModelSerializable, table=True):
     """
     Channel Model
@@ -66,11 +61,11 @@ class Channel(SQLModelSerializable, table=True):
     description: Optional[str] = Field(None, description='Channel Description/Brief',
                                        sa_column=Column(Text, nullable=True))
     source_list: List[str] = Field(default_factory=list, description='Data Source List',
-                                   sa_column=Column(JSON, nullable=False))
+                                   sa_column=Column(JsonType, nullable=False))
     visibility: ChannelVisibilityEnum = Field(..., sa_column=Column(SQLEnum(ChannelVisibilityEnum)),
                                               description='Channel Visibility')
     filter_rules: List[Dict] = Field(default_factory=list, description='Filter Conditions',
-                                     sa_column=Column(JSON, nullable=False))
+                                     sa_column=Column(JsonType, nullable=False))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     latest_article_update_time: datetime = Field(None, description='Latest Article Update Time',
                                                  sa_column=Column(DateTime, nullable=True))
@@ -98,3 +93,5 @@ class Channel(SQLModelSerializable, table=True):
 
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+
+from bisheng.core.database.dialect_helpers import JsonType

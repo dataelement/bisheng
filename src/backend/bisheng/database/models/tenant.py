@@ -82,11 +82,11 @@ class Tenant(SQLModelSerializable, table=True):
     )
     quota_config: Optional[dict] = Field(
         default=None,
-        sa_column=Column(JSON, nullable=True, comment='Tenant-level resource quota'),
+        sa_column=Column(JsonType, nullable=True, comment='Tenant-level resource quota'),
     )
     storage_config: Optional[dict] = Field(
         default=None,
-        sa_column=Column(JSON, nullable=True, comment='Tenant-level storage config override'),
+        sa_column=Column(JsonType, nullable=True, comment='Tenant-level storage config override'),
     )
     create_user: Optional[int] = Field(
         default=None,
@@ -838,3 +838,5 @@ class UserTenantDao:
                 await session.commit()
                 await session.refresh(new_row)
                 return new_row
+
+from bisheng.core.database.dialect_helpers import JsonType
