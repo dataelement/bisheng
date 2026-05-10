@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import i18next from "i18next";
 import {
     FileStatus,
@@ -98,9 +98,9 @@ interface UseFileUploadOptions {
     currentFolderId: string | undefined;
     currentPath: Array<{ id?: string; name: string }>;
     files: KnowledgeFile[];
-    setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
-    setTotal: React.Dispatch<React.SetStateAction<number>>;
-    loadFiles: (page?: number) => Promise<void>;
+    setFiles: Dispatch<SetStateAction<KnowledgeFile[]>>;
+    setTotal: Dispatch<SetStateAction<number>>;
+    loadFiles: (page?: number) => Promise<unknown>;
     currentPage: number;
 }
 
@@ -125,6 +125,14 @@ export function useFileUpload({
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
 
     const { showToast } = useToastContext();
+    const activeSpaceIdRef = useRef<string | null>(activeSpace?.id ? String(activeSpace.id) : null);
+    activeSpaceIdRef.current = activeSpace?.id ? String(activeSpace.id) : null;
+
+    useEffect(() => {
+        setUploadingFiles([]);
+        setCreatingFolder(null);
+        setDuplicateFiles([]);
+    }, [activeSpace?.id]);
 
     // ─── File upload (two-step: server upload → register) ────────────────
     const handleUploadFile = useCallback(
@@ -134,6 +142,8 @@ export function useFileUpload({
                 return;
             }
 
+            const requestSpaceId = String(activeSpace.id);
+            const isCurrentSpace = () => activeSpaceIdRef.current === requestSpaceId;
             const fileArray = Array.from(fileList);
 
             // Create placeholder uploading entries for UI
@@ -167,6 +177,9 @@ export function useFileUpload({
                         reason: resolveUploadErrorReason(err),
                     });
                 }
+            }
+            if (!isCurrentSpace()) {
+                return;
             }
             if (failures.length > 0) {
                 // Render each failure with the backend reason inline (quota / dup /
@@ -203,6 +216,9 @@ export function useFileUpload({
                     file_path: uploadedPaths,
                     parent_id: currentFolderId ? Number(currentFolderId) : null,
                 });
+                if (!isCurrentSpace()) {
+                    return;
+                }
                 const dupes = extractDuplicateFileEntries(registeredFiles);
                 if (dupes.length > 0) {
                     setDuplicateFiles(dupes);
@@ -226,10 +242,16 @@ export function useFileUpload({
                 if (!hasPendingRegisteredFiles) {
                     await loadFiles(currentPage);
                 }
+                if (!isCurrentSpace()) {
+                    return;
+                }
             } catch (e) {
                 // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
             }
 
+            if (!isCurrentSpace()) {
+                return;
+            }
             // Clear placeholders after list data has been updated
             setUploadingFiles(prev =>
                 prev.filter(f => !placeholders.some(p => p.id === f.id))
@@ -241,16 +263,22 @@ export function useFileUpload({
     /** User chose to replace duplicate files */
     const handleDuplicateOverwrite = useCallback(async () => {
         if (!activeSpace || duplicateFiles.length === 0) return;
+        const requestSpaceId = String(activeSpace.id);
         const fileObjs = duplicateFiles.map(d => d.rawObj).filter(Boolean);
         try {
             await retryDuplicateFilesApi(activeSpace.id, fileObjs);
+            if (activeSpaceIdRef.current !== requestSpaceId) {
+                return;
+            }
             await loadFiles(currentPage);
         } catch {
             showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
         } finally {
-            setDuplicateFiles([]);
+            if (activeSpaceIdRef.current === requestSpaceId) {
+                setDuplicateFiles([]);
+            }
         }
-    }, [activeSpace, duplicateFiles, currentPage, loadFiles, showToast]);
+    }, [activeSpace, duplicateFiles, currentPage, loadFiles, localize, showToast]);
 
     /** User chose NOT to overwrite — just discard duplicates */
     const handleDuplicateSkip = useCallback(() => {
@@ -284,7 +312,7 @@ export function useFileUpload({
         };
 
         setCreatingFolder(newFolder);
-    }, [currentPath.length, currentFolderId, activeSpace?.id, showToast]);
+    }, [currentPath.length, currentFolderId, activeSpace?.id, localize, showToast]);
 
     const handleCancelCreateFolder = useCallback(() => {
         setCreatingFolder(null);
@@ -298,15 +326,22 @@ export function useFileUpload({
 
             // ── Confirm in-progress folder creation ──
             if (creatingFolder && fileId === creatingFolder.id) {
+                const requestSpaceId = String(activeSpace.id);
                 try {
                     const created = await createFolderApi(activeSpace.id, {
                         name: newName,
                         parent_id: currentFolderId || null,
                     });
+                    if (activeSpaceIdRef.current !== requestSpaceId) {
+                        return;
+                    }
                     setFiles(prev => [created, ...prev]);
                     setTotal(prev => prev + 1);
                     setCreatingFolder(null);
                 } catch {
+                    if (activeSpaceIdRef.current !== requestSpaceId) {
+                        return;
+                    }
                     showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
                 }
                 return;
@@ -328,7 +363,7 @@ export function useFileUpload({
                 showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.ERROR });
             }
         },
-        [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
+        [activeSpace, creatingFolder, currentFolderId, files, localize, setFiles, setTotal, showToast]
     );
 
     // ─── Delete file/folder ──────────────────────────────────────────────
@@ -358,7 +393,7 @@ export function useFileUpload({
                 showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });
             }
         },
-        [activeSpace, currentPage, files, setFiles, loadFiles, showToast, setTotal]
+        [activeSpace, currentPage, files, localize, setFiles, loadFiles, showToast, setTotal]
     );
 
     const handleEditTags = useCallback(

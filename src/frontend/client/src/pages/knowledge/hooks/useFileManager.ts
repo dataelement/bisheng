@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
     FileStatus,
     KnowledgeFile,
@@ -33,16 +33,65 @@ interface KnowledgeSpaceFilesRefreshEventDetail {
     spaceId?: number | string;
 }
 
+interface FileListState {
+    ownerKey: string | null;
+    files: KnowledgeFile[];
+    total: number;
+}
+
+interface LoadFilesOptions {
+    background?: boolean;
+}
+
+function buildFilesViewKey({
+    enabled,
+    activeSpace,
+    currentFolderId,
+    searchQuery,
+    searchTagIds,
+    searchScope,
+    statusFilter,
+    sortBy,
+    sortDirection,
+}: {
+    enabled: boolean;
+    activeSpace: KnowledgeSpace | null;
+    currentFolderId?: string;
+    searchQuery: string;
+    searchTagIds: number[];
+    searchScope: "current" | "all";
+    statusFilter: FileStatus[];
+    sortBy?: SortType;
+    sortDirection?: SortDirection;
+}) {
+    if (!enabled || !activeSpace?.id) return null;
+    return JSON.stringify({
+        spaceId: String(activeSpace.id),
+        role: activeSpace.role ?? "",
+        spaceKind: activeSpace.spaceKind ?? "",
+        folderId: currentFolderId ?? "",
+        searchQuery: searchQuery.trim(),
+        searchTagIds,
+        searchScope,
+        statusFilter,
+        sortBy: sortBy ?? "",
+        sortDirection: sortDirection ?? "",
+    });
+}
+
 /**
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
  */
 export function useFileManager({ activeSpace, initialFolderId, enabled = true }: UseFileManagerOptions) {
     const localize = useLocalize();
-    const [files, setFiles] = useState<KnowledgeFile[]>([]);
+    const [fileListState, setFileListState] = useState<FileListState>({
+        ownerKey: null,
+        files: [],
+        total: 0,
+    });
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(20);
-    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -54,13 +103,82 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
 
     const { showToast } = useToastContext();
+    const activeSpaceIdRef = useRef<string | null>(activeSpace?.id ? String(activeSpace.id) : null);
+    const currentPageRef = useRef(currentPage);
+    const foregroundSeqRef = useRef(0);
+    const foregroundInFlightRef = useRef(0);
+    const pathSeqRef = useRef(0);
+    const currentViewKey = buildFilesViewKey({
+        enabled,
+        activeSpace,
+        currentFolderId,
+        searchQuery,
+        searchTagIds,
+        searchScope,
+        statusFilter,
+        sortBy,
+        sortDirection,
+    });
+    const currentViewKeyRef = useRef<string | null>(currentViewKey);
+    currentViewKeyRef.current = currentViewKey;
+    activeSpaceIdRef.current = activeSpace?.id ? String(activeSpace.id) : null;
+    currentPageRef.current = currentPage;
+
+    const hasCurrentFileState = Boolean(currentViewKey && fileListState.ownerKey === currentViewKey);
+    const files = hasCurrentFileState ? fileListState.files : [];
+    const total = hasCurrentFileState ? fileListState.total : 0;
+    const effectiveLoading = loading || Boolean(currentViewKey && !hasCurrentFileState);
+
+    const setFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
+        setFileListState((prev) => {
+            if (!currentViewKey) {
+                return { ownerKey: null, files: [], total: 0 };
+            }
+            const currentFiles = prev.ownerKey === currentViewKey ? prev.files : [];
+            const currentTotal = prev.ownerKey === currentViewKey ? prev.total : 0;
+            const nextFiles = typeof value === "function"
+                ? (value as (prev: KnowledgeFile[]) => KnowledgeFile[])(currentFiles)
+                : value;
+            return {
+                ownerKey: currentViewKey,
+                files: nextFiles,
+                total: currentTotal,
+            };
+        });
+    }, [currentViewKey]);
+
+    const setTotal = useCallback<Dispatch<SetStateAction<number>>>((value) => {
+        setFileListState((prev) => {
+            if (!currentViewKey) {
+                return { ownerKey: null, files: [], total: 0 };
+            }
+            const currentFiles = prev.ownerKey === currentViewKey ? prev.files : [];
+            const currentTotal = prev.ownerKey === currentViewKey ? prev.total : 0;
+            const nextTotal = typeof value === "function"
+                ? (value as (prev: number) => number)(currentTotal)
+                : value;
+            return {
+                ownerKey: currentViewKey,
+                files: currentFiles,
+                total: nextTotal,
+            };
+        });
+    }, [currentViewKey]);
 
     // ─── Load file/folder list ──────────────────────────────────────────
     const loadFiles = useCallback(
-        async (page: number = 1): Promise<KnowledgeFile[]> => {
-            if (!enabled || !activeSpace?.id) return [];
+        async (page: number = 1, options: LoadFilesOptions = {}): Promise<KnowledgeFile[]> => {
+            if (!enabled || !activeSpace?.id || !currentViewKey) return [];
 
-            setLoading(true);
+            const background = options.background === true;
+            const requestViewKey = currentViewKey;
+            const foregroundSeqAtStart = foregroundSeqRef.current;
+            let requestForegroundSeq = foregroundSeqAtStart;
+            if (!background) {
+                requestForegroundSeq = ++foregroundSeqRef.current;
+                foregroundInFlightRef.current += 1;
+                setLoading(true);
+            }
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
                 const isMember = activeSpace.role === SpaceRole.MEMBER;
@@ -132,18 +250,50 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         // base file list if approval data cannot be loaded.
                     }
                 }
-                setFiles(mergedData);
-                setTotal(mergedTotal);
+                const viewStillCurrent = currentViewKeyRef.current === requestViewKey;
+                const canCommitForeground = !background && requestForegroundSeq === foregroundSeqRef.current;
+                const canCommitBackground =
+                    background &&
+                    foregroundInFlightRef.current === 0 &&
+                    foregroundSeqAtStart === foregroundSeqRef.current &&
+                    currentPageRef.current === page;
+                if (!viewStillCurrent || (!canCommitForeground && !canCommitBackground)) {
+                    return [];
+                }
+                setFileListState({
+                    ownerKey: requestViewKey,
+                    files: mergedData,
+                    total: mergedTotal,
+                });
                 setCurrentPage(page);
                 return mergedData;
             } catch {
+                const viewStillCurrent = currentViewKeyRef.current === requestViewKey;
+                const shouldNotify = !background && requestForegroundSeq === foregroundSeqRef.current;
+                if (!viewStillCurrent || !shouldNotify) {
+                    return [];
+                }
+                setFileListState({
+                    ownerKey: requestViewKey,
+                    files: [],
+                    total: 0,
+                });
                 showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
                 return [];
             } finally {
-                setLoading(false);
+                if (!background) {
+                    foregroundInFlightRef.current = Math.max(0, foregroundInFlightRef.current - 1);
+                }
+                if (
+                    !background &&
+                    requestForegroundSeq === foregroundSeqRef.current &&
+                    currentViewKeyRef.current === requestViewKey
+                ) {
+                    setLoading(false);
+                }
             }
         },
-        [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
+        [enabled, activeSpace?.id, activeSpace?.role, activeSpace?.spaceKind, currentViewKey, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast, localize]
     );
 
     // Track which initialFolderId has been consumed (value, not boolean)
@@ -155,8 +305,23 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
     // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
+        foregroundSeqRef.current += 1;
+        pathSeqRef.current += 1;
+        setFileListState({ ownerKey: null, files: [], total: 0 });
+        setCurrentPage(1);
+        setLoading(Boolean(enabled && activeSpace?.id));
+
+        if (!enabled || !activeSpace) {
+            setCurrentFolderId(undefined);
+            setCurrentPath([]);
+            setSearchQuery("");
+            setSearchTagIds([]);
+            setStatusFilter([]);
+            setLoading(false);
+            return;
+        }
+
         if (enabled && activeSpace) {
-            setCurrentPage(1);
             setSearchQuery("");
             setSearchTagIds([]);
             setStatusFilter([]);
@@ -164,6 +329,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             // If there's an unconsumed initial folder from URL, navigate there
             if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
                 consumedFolderIdRef.current = initialFolderId;
+                const requestPathSeq = ++pathSeqRef.current;
+                const requestSpaceId = String(activeSpace.id);
                 setCurrentFolderId(initialFolderId);
                 // Fetch parent chain for breadcrumb path
                 getFolderParentPathApi(activeSpace.id, initialFolderId)
@@ -179,12 +346,24 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                             page: 1,
                             page_size: 100,
                         }).then((res) => {
+                            if (
+                                requestPathSeq !== pathSeqRef.current ||
+                                activeSpaceIdRef.current !== requestSpaceId
+                            ) {
+                                return;
+                            }
                             const folder = res.data.find(f => f.id === initialFolderId);
                             const folderName = folder?.name || initialFolderId;
                             setCurrentPath([...parentPath, { id: initialFolderId, name: folderName }]);
                         });
                     })
                     .catch(() => {
+                        if (
+                            requestPathSeq !== pathSeqRef.current ||
+                            activeSpaceIdRef.current !== requestSpaceId
+                        ) {
+                            return;
+                        }
                         setCurrentPath([{ id: initialFolderId, name: initialFolderId }]);
                     });
                 // Don't call loadFiles here — the currentFolderId change watcher effect will trigger it
@@ -216,8 +395,6 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     // is still in a processing/waiting/rebuilding/uploading state.
     const loadFilesRef = useRef(loadFiles);
     loadFilesRef.current = loadFiles;
-    const currentPageRef = useRef(currentPage);
-    currentPageRef.current = currentPage;
 
     useEffect(() => {
         if (!enabled || !activeSpace?.id || typeof window === "undefined") return;
@@ -225,7 +402,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             const detail = (event as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
             if (!detail?.spaceId) return;
             if (String(detail.spaceId) !== String(activeSpace.id)) return;
-            loadFilesRef.current(currentPageRef.current);
+            loadFilesRef.current(currentPageRef.current, { background: true });
         };
         window.addEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
         return () => {
@@ -241,7 +418,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (!hasPending) return;
 
         const timer = setInterval(() => {
-            loadFilesRef.current(currentPageRef.current);
+            loadFilesRef.current(currentPageRef.current, { background: true });
         }, 5000);
 
         return () => clearInterval(timer);
@@ -271,6 +448,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     // ─── Folder navigation ───────────────────────────────────────────────
     const handleNavigateFolder = useCallback(
         async (folderId?: string) => {
+            const requestPathSeq = ++pathSeqRef.current;
             if (!folderId || !activeSpace) {
                 // Navigate back to root
                 setCurrentFolderId(undefined);
@@ -288,12 +466,25 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             }
 
             // Fetch the full parent chain from API
+            const requestSpaceId = String(activeSpace.id);
             const folder = files.find(f => f.id === folderId);
             const currentFolder = { id: folderId, name: folder?.name || folderId };
             try {
                 const parentPath = await getFolderParentPathApi(activeSpace.id, folderId);
+                if (
+                    requestPathSeq !== pathSeqRef.current ||
+                    activeSpaceIdRef.current !== requestSpaceId
+                ) {
+                    return;
+                }
                 setCurrentPath([...parentPath, currentFolder]);
             } catch {
+                if (
+                    requestPathSeq !== pathSeqRef.current ||
+                    activeSpaceIdRef.current !== requestSpaceId
+                ) {
+                    return;
+                }
                 // Fallback: append folder to current path
                 setCurrentPath(prev => [...prev, currentFolder]);
             }
@@ -308,7 +499,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         pageSize,
         total,
         setTotal,
-        loading,
+        loading: effectiveLoading,
         searchQuery,
         searchTagIds,
         searchScope,

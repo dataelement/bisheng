@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Loader2 } from "lucide-react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import {
@@ -99,10 +99,19 @@ export function KnowledgeSpaceContent({
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const displayFiles = [
+    const normalizeParentId = (id?: string | number | null) =>
+        id === undefined || id === null || id === "" ? undefined : String(id);
+    const isCurrentSpaceFile = (file: KnowledgeFile) =>
+        !file.spaceId || String(file.spaceId) === String(space.id);
+    const isCurrentFolderTransientFile = (file: KnowledgeFile) =>
+        normalizeParentId(file.parentId) === normalizeParentId(currentFolderId);
+    const transientFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
-        ...files
+    ].filter((file) => isCurrentSpaceFile(file) && isCurrentFolderTransientFile(file));
+    const displayFiles = [
+        ...transientFiles,
+        ...files.filter(isCurrentSpaceFile),
     ];
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -889,7 +898,12 @@ export function KnowledgeSpaceContent({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    {displayFiles.length === 0 ? (
+                    {loading && displayFiles.length === 0 ? (
+                        <div className="flex h-full flex-1 items-center justify-center py-10 text-[#86909C]">
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            <span className="text-[14px] leading-6">{localize("com_knowledge.loading")}</span>
+                        </div>
+                    ) : displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
                                 className="size-[120px] mb-4 object-contain opacity-90"
