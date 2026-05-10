@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, func, text
+from sqlalchemy import Column, DateTime, func, text, JSON
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
