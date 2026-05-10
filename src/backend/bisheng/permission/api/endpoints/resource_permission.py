@@ -980,6 +980,21 @@ def _filter_department_tree_by_ids(nodes: list[dict], allowed_ids: set[int]) -> 
     return filtered
 
 
+async def _resolve_child_resource_space_id_for_grant_scope(resource_type: str, resource_id: str) -> str | None:
+    if resource_type not in {'folder', 'knowledge_file'} or not str(resource_id).isdigit():
+        return None
+    try:
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
+        file_record = await KnowledgeFileDao.query_by_id(int(resource_id))
+    except Exception as e:
+        logger.debug('Could not resolve knowledge space for %s:%s grant subjects: %s', resource_type, resource_id, e)
+        return None
+    if file_record is None or getattr(file_record, 'knowledge_id', None) is None:
+        return None
+    return str(file_record.knowledge_id)
+
+
 async def _department_subtree_ids(department_id: int) -> set[int]:
     from bisheng.database.models.department import DepartmentDao
 
@@ -1637,11 +1652,32 @@ async def get_grant_subject_departments(
     )
     if tenant_id is None:
         return resp_200([])
+    scope_space_id = await _resolve_child_resource_space_id_for_grant_scope(resource_type, resource_id)
+    if resource_type in {'folder', 'knowledge_file'} and scope_space_id is None:
+        return resp_200([])
+    scope_space_level = None
+    if scope_space_id is not None:
+        scope_space_level = await _get_knowledge_space_level(scope_space_id)
+        if (
+            scope_space_level is not None
+            and 'department' not in _allowed_subject_types_for_space_level(scope_space_level)
+        ):
+            return resp_200([])
     if resource_type == 'knowledge_space':
         level = await _get_knowledge_space_level(resource_id)
         if level is not None and 'department' not in _allowed_subject_types_for_space_level(level):
             return resp_200([])
-    return resp_200(await _list_knowledge_space_grant_departments(tenant_id=tenant_id))
+    tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
+    if scope_space_id is not None:
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+        if scope_space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+            allowed_ids = await _knowledge_space_grant_department_ids(
+                resource_id=scope_space_id,
+                login_user=login_user,
+            )
+            return resp_200(_filter_department_tree_by_ids(tree, allowed_ids))
+    return resp_200(tree)
 
 
 @router.get('/resources/{resource_type}/{resource_id}/grant-subjects/user-groups')
@@ -1666,15 +1702,39 @@ async def get_grant_subject_user_groups(
     )
     if tenant_id is None:
         return resp_200([])
+    scope_space_id = await _resolve_child_resource_space_id_for_grant_scope(resource_type, resource_id)
+    if resource_type in {'folder', 'knowledge_file'} and scope_space_id is None:
+        return resp_200([])
+    scope_space_level = None
+    if scope_space_id is not None:
+        scope_space_level = await _get_knowledge_space_level(scope_space_id)
+        if (
+            scope_space_level is not None
+            and 'user_group' not in _allowed_subject_types_for_space_level(scope_space_level)
+        ):
+            return resp_200([])
     if resource_type == 'knowledge_space':
         level = await _get_knowledge_space_level(resource_id)
         if level is not None and 'user_group' not in _allowed_subject_types_for_space_level(level):
             return resp_200([])
-    return resp_200(await _list_knowledge_space_grant_user_groups(
+    groups = await _list_knowledge_space_grant_user_groups(
         tenant_id=tenant_id,
         keyword=keyword,
         login_user=login_user,
-    ))
+    )
+    if scope_space_id is not None:
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+        if scope_space_level == KnowledgeSpaceLevelEnum.TEAM:
+            allowed_ids = await _knowledge_space_grant_user_group_ids(
+                resource_id=scope_space_id,
+                login_user=login_user,
+            )
+            return resp_200([
+                group for group in groups
+                if int(group['id']) in allowed_ids
+            ])
+    return resp_200(groups)
 
 
 @router.get('/knowledge-spaces/{space_id}/grant-subjects/departments')
