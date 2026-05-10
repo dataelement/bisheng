@@ -57,6 +57,14 @@ interface PermissionRequestConfig {
   signal?: AbortSignal;
 }
 
+const PERMISSION_CHECK_CACHE_TTL_MS = 5_000;
+const permissionCheckCache = new Map<string, {
+  expiresAt: number;
+  result: { allowed: boolean };
+}>();
+const permissionCheckInFlight = new Map<string, Promise<{ allowed: boolean }>>();
+let permissionCheckCacheRevision = 0;
+
 // ── Helpers ──────────────────────────────────────────
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
@@ -85,6 +93,54 @@ function withPermissionRequestOptions(config?: PermissionRequestConfig) {
   };
 }
 
+function permissionCheckKey(
+  objectType: string,
+  objectId: string,
+  relation: string,
+  permissionId?: string,
+) {
+  return [objectType, objectId, relation, permissionId ?? ""].join(":");
+}
+
+function createAbortError() {
+  if (typeof DOMException !== "undefined") {
+    return new DOMException("The operation was aborted.", "AbortError");
+  }
+  const error = new Error("The operation was aborted.");
+  error.name = "AbortError";
+  return error;
+}
+
+function withCallerAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(createAbortError());
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(createAbortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", onAbort);
+    });
+  });
+}
+
+function clearPermissionCheckCacheForResource(resourceType: string, resourceId: string) {
+  permissionCheckCacheRevision += 1;
+  const prefix = `${resourceType}:${resourceId}:`;
+  for (const key of Array.from(permissionCheckCache.keys())) {
+    if (key.startsWith(prefix)) permissionCheckCache.delete(key);
+  }
+  for (const key of Array.from(permissionCheckInFlight.keys())) {
+    if (key.startsWith(prefix)) permissionCheckInFlight.delete(key);
+  }
+}
+
+export function __clearPermissionCheckCacheForTests() {
+  permissionCheckCacheRevision += 1;
+  permissionCheckCache.clear();
+  permissionCheckInFlight.clear();
+}
+
 // ── Permission APIs ──────────────────────────────────
 
 export async function getResourcePermissions(
@@ -111,7 +167,9 @@ export async function authorizeResource(
     { grants, revokes },
     withPermissionRequestOptions(config)
   );
-  return unwrap(res);
+  const data = unwrap<null>(res);
+  clearPermissionCheckCacheForResource(resourceType, resourceId);
+  return data;
 }
 
 export async function checkPermission(
@@ -125,13 +183,47 @@ export async function checkPermission(
     typeof permissionIdOrConfig === "string" ? permissionIdOrConfig : undefined;
   const requestConfig =
     typeof permissionIdOrConfig === "string" ? config : permissionIdOrConfig;
-  const res = await request.post(`/api/v1/permissions/check`, {
-    object_type: objectType,
-    object_id: objectId,
-    relation,
-    permission_id: permissionId,
-  }, withPermissionRequestOptions(requestConfig));
-  return unwrap(res);
+  if (requestConfig?.signal?.aborted) {
+    throw createAbortError();
+  }
+  const key = permissionCheckKey(objectType, objectId, relation, permissionId);
+  const cached = permissionCheckCache.get(key);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.result;
+  }
+  if (cached) {
+    permissionCheckCache.delete(key);
+  }
+
+  let requestPromise = permissionCheckInFlight.get(key);
+  if (!requestPromise) {
+    const requestRevision = permissionCheckCacheRevision;
+    requestPromise = request.post(`/api/v1/permissions/check`, {
+      object_type: objectType,
+      object_id: objectId,
+      relation,
+      permission_id: permissionId,
+    }, withPermissionRequestOptions())
+      .then((res) => {
+        const result = unwrap<{ allowed: boolean }>(res);
+        if (requestRevision === permissionCheckCacheRevision) {
+          permissionCheckCache.set(key, {
+            expiresAt: Date.now() + PERMISSION_CHECK_CACHE_TTL_MS,
+            result,
+          });
+        }
+        return result;
+      })
+      .finally(() => {
+        if (permissionCheckInFlight.get(key) === requestPromise) {
+          permissionCheckInFlight.delete(key);
+        }
+      });
+    permissionCheckInFlight.set(key, requestPromise);
+  }
+
+  return withCallerAbort(requestPromise, requestConfig?.signal);
 }
 
 export async function getGrantableRelationModels(

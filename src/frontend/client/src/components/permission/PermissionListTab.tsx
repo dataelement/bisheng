@@ -230,9 +230,18 @@ export function PermissionListTab({
     });
   }, [getEntryDisplayName, localize, normalizedSearchQuery, subjectEntries]);
 
+  const getEntryGrantableModels = useCallback(
+    (entry: PermissionEntry) => {
+      if (entry.subject_type === "user") return grantableModelOptions;
+      return grantableModelOptions.filter((model) => model.relation !== "owner");
+    },
+    [grantableModelOptions],
+  );
+
   const handleModify = async (entry: PermissionEntry, modelId: string) => {
-    const model = grantableModelOptions.find((item) => item.id === modelId);
+    const model = getEntryGrantableModels(entry).find((item) => item.id === modelId);
     const newLevel = (model?.relation || "viewer") as RelationLevel;
+    if (!model || (newLevel === "owner" && entry.subject_type !== "user")) return;
     if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return;
     try {
       await authorizeResource(
@@ -498,7 +507,8 @@ export function PermissionListTab({
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
-                const canModifyEntry = canManageEntry(entry) && grantableModelOptions.length > 0;
+                const entryGrantableModels = getEntryGrantableModels(entry);
+                const canModifyEntry = canManageEntry(entry) && entryGrantableModels.length > 0;
                 const canDeleteEntrySubject = canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
@@ -566,7 +576,7 @@ export function PermissionListTab({
                             align="end"
                             className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
                           >
-                            {grantableModelOptions.map((model) => {
+                            {entryGrantableModels.map((model) => {
                               const active = model.id === currentModelId;
                               return (
                                 <DropdownMenuItem

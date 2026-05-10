@@ -200,12 +200,9 @@ export function PermissionGrantTab({
   }, [models, selectedModelId]);
 
   const availableModels = useMemo(() => {
-    if (resourceType === "knowledge_space") {
-      return models.filter((model) => model.relation !== "owner");
-    }
     if (subjectType === "user") return models;
     return models.filter((model) => model.relation !== "owner");
-  }, [models, resourceType, subjectType]);
+  }, [models, subjectType]);
 
   useEffect(() => {
     if (!availableModels.length) return;

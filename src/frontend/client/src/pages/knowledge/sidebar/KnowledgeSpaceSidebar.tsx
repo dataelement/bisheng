@@ -131,7 +131,21 @@ export function KnowledgeSpaceSidebar({
         ])),
         [publicSpaces, departmentSpaces, teamSpaces, personalSpaces],
     );
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
+    const fullAccessSpaceIds = useMemo(
+        () => [
+            ...publicSpaces,
+            ...departmentSpaces,
+            ...teamSpaces,
+            ...personalSpaces,
+        ]
+            .filter((space) => space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN)
+            .map((space) => space.id),
+        [publicSpaces, departmentSpaces, teamSpaces, personalSpaces],
+    );
+    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
+        permissionSpaceIds,
+        { fullAccessSpaceIds },
+    );
 
     const getItemPermissions = (space: KnowledgeSpace) => {
         const isCreator = space.role === SpaceRole.CREATOR;

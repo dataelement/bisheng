@@ -190,7 +190,10 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
+    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
+        [space.id],
+        { fullAccessSpaceIds: isAdmin ? [space.id] : [] },
+    );
     const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
@@ -218,6 +221,12 @@ export function KnowledgeSpaceContent({
     const confirm = useConfirm();
 
     useEffect(() => {
+        if (isAdmin) {
+            setCanCreateFolder(true);
+            setCanUploadFile(true);
+            return;
+        }
+
         let cancelled = false;
         const controller = new AbortController();
 
@@ -258,7 +267,7 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [currentFolderId, space.id]);
+    }, [currentFolderId, isAdmin, space.id]);
 
     useEffect(() => {
         let cancelled = false;

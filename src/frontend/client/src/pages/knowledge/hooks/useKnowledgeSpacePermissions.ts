@@ -32,12 +32,27 @@ export function hasKnowledgeSpacePermission(
     return permissions[String(spaceId)]?.includes(permissionId) ?? false;
 }
 
-export function useKnowledgeSpaceActionPermissions(spaceIds: string[]) {
+interface KnowledgeSpaceActionPermissionsOptions {
+    fullAccessSpaceIds?: Array<string | number>;
+}
+
+export function useKnowledgeSpaceActionPermissions(
+    spaceIds: Array<string | number>,
+    options: KnowledgeSpaceActionPermissionsOptions = {},
+) {
     const { user } = useAuthContext();
     const [permissions, setPermissions] = useState<Record<string, KnowledgeSpaceActionPermission[]>>({});
     const [loading, setLoading] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
-    const stableSpaceIds = useMemo(() => Array.from(new Set(spaceIds)).sort(), [spaceIds.join(",")]);
+    const stableSpaceIds = useMemo(
+        () => Array.from(new Set(spaceIds.map(String))).sort(),
+        [spaceIds.map(String).join(",")],
+    );
+    const fullAccessSpaceIdsKey = (options.fullAccessSpaceIds ?? []).map(String).sort().join(",");
+    const fullAccessSpaceIdSet = useMemo(
+        () => new Set(fullAccessSpaceIdsKey ? fullAccessSpaceIdsKey.split(",") : []),
+        [fullAccessSpaceIdsKey],
+    );
 
     useEffect(() => {
         if (!stableSpaceIds.length) {
@@ -65,6 +80,10 @@ export function useKnowledgeSpaceActionPermissions(spaceIds: string[]) {
         const resolveSpacePermissions = async (
             spaceId: string,
         ): Promise<[string, KnowledgeSpaceActionPermission[]]> => {
+            if (fullAccessSpaceIdSet.has(spaceId)) {
+                return [spaceId, [...KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS]];
+            }
+
             const allowedPermissions: KnowledgeSpaceActionPermission[] = [];
             for (const permissionId of KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS) {
                 if (controller.signal.aborted) return [spaceId, allowedPermissions];
@@ -100,7 +119,7 @@ export function useKnowledgeSpaceActionPermissions(spaceIds: string[]) {
         return () => {
             controller.abort();
         };
-    }, [stableSpaceIds.join(","), user?.role]);
+    }, [fullAccessSpaceIdSet, stableSpaceIds.join(","), user?.role]);
 
     return { permissions, loading };
 }
