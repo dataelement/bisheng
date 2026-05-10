@@ -270,6 +270,109 @@ def _normalize_binding_include_children(subject_type: str, include_children) -> 
     return bool(include_children)
 
 
+def _space_member_role_for_direct_relations(relations: set[str]):
+    if not relations:
+        return None
+
+    from bisheng.common.models.space_channel_member import UserRoleEnum
+
+    if relations & {'owner', 'manager'}:
+        return UserRoleEnum.ADMIN
+    if relations & {'editor', 'viewer'}:
+        return UserRoleEnum.MEMBER
+    return None
+
+
+async def _sync_knowledge_space_direct_user_memberships(
+    *,
+    resource_type: str,
+    resource_id: str,
+    request: AuthorizeRequest,
+    bindings_map: dict,
+) -> None:
+    """同步直接用户 ReBAC 授权与知识广场加入关系。
+
+    知识广场加入会同时写 `space_channel_member` 和直接 ReBAC 授权。
+    因此 ReBAC 授权页对“用户”主体做授权/撤权时，也需要反向维护
+    `space_channel_member`，避免权限页已移除但广场仍显示“已加入”。
+    部门/用户组授权不展开写成员表，保持 ReBAC 群体授权语义。
+    """
+    if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
+        return
+
+    direct_user_ids = {
+        int(item.subject_id)
+        for item in [*(request.grants or []), *(request.revokes or [])]
+        if item.subject_type == 'user'
+    }
+    if not direct_user_ids:
+        return
+
+    from bisheng.common.models.space_channel_member import (
+        BusinessTypeEnum,
+        MembershipStatusEnum,
+        SpaceChannelMember,
+        SpaceChannelMemberDao,
+        UserRoleEnum,
+    )
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+    space_id = int(resource_id)
+    space = await KnowledgeDao.aquery_by_id(space_id)
+    if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        return
+
+    creator_user_id = int(getattr(space, 'user_id', 0) or 0)
+    direct_grant_relations: dict[int, set[str]] = {}
+    for grant in request.grants or []:
+        if grant.subject_type != 'user':
+            continue
+        direct_grant_relations.setdefault(int(grant.subject_id), set()).add(grant.relation)
+
+    for user_id in direct_user_ids:
+        if user_id == creator_user_id:
+            continue
+
+        relations = {
+            binding.get('relation')
+            for binding in bindings_map.values()
+            if binding.get('resource_type') == 'knowledge_space'
+            and str(binding.get('resource_id')) == str(space_id)
+            and binding.get('subject_type') == 'user'
+            and int(binding.get('subject_id') or 0) == user_id
+            and binding.get('relation')
+        }
+        relations.update(direct_grant_relations.get(user_id, set()))
+        role = _space_member_role_for_direct_relations(relations)
+
+        if role is None:
+            await SpaceChannelMemberDao.delete_space_member(space_id=space_id, user_id=user_id)
+            continue
+
+        member = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
+        if member is None:
+            await SpaceChannelMemberDao.async_insert_member(
+                SpaceChannelMember(
+                    business_id=str(space_id),
+                    business_type=BusinessTypeEnum.SPACE,
+                    user_id=user_id,
+                    user_role=role,
+                    status=MembershipStatusEnum.ACTIVE,
+                    membership_source='rebac',
+                )
+            )
+            continue
+
+        if member.user_role == UserRoleEnum.CREATOR:
+            continue
+
+        changed = member.user_role != role or member.status != MembershipStatusEnum.ACTIVE
+        member.user_role = role
+        member.status = MembershipStatusEnum.ACTIVE
+        if changed:
+            await SpaceChannelMemberDao.update(member)
+
+
 def _binding_key_with_scope(
     resource_type: str,
     resource_id: str,
@@ -1460,6 +1563,19 @@ async def authorize_resource(
             'model_id': grant.model_id,
         }
     await _save_bindings(list(bindings_map.values()))
+    try:
+        await _sync_knowledge_space_direct_user_memberships(
+            resource_type=resource_type,
+            resource_id=str(resource_id),
+            request=request,
+            bindings_map=bindings_map,
+        )
+    except Exception as e:
+        logger.error(
+            'resource_authorize membership sync failed actor=%s resource=%s:%s error=%s',
+            login_user.user_id, resource_type, resource_id, e,
+        )
+        return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
     logger.info(
         'resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d',
         login_user.user_id, resource_type, resource_id, len(request.grants or []), len(request.revokes or []),

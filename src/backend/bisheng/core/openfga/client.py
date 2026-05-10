@@ -49,6 +49,7 @@ class FGAClient:
         self._http = httpx.AsyncClient(
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
+            trust_env=False,
             event_hooks={'response': [self._log_response]},
         )
 
@@ -325,6 +326,7 @@ class FGAClient:
             with httpx.Client(
                 base_url=self._api_url,
                 timeout=httpx.Timeout(self._timeout),
+                trust_env=False,
                 event_hooks={'response': [self._log_response_sync]},
             ) as client:
                 resp = client.post(path, json=body)

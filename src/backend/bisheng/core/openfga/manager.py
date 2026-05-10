@@ -34,7 +34,11 @@ class FGAManager(BaseContextManager[FGAClient]):
         api_url = config.api_url
 
         # Temporary client without store_id for bootstrap
-        temp_http = httpx.AsyncClient(base_url=api_url, timeout=httpx.Timeout(config.timeout))
+        temp_http = httpx.AsyncClient(
+            base_url=api_url,
+            timeout=httpx.Timeout(config.timeout),
+            trust_env=False,
+        )
 
         try:
             # 1. Resolve store_id
