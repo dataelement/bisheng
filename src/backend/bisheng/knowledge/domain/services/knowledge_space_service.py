@@ -651,6 +651,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     continue
                 result.user_role = member_conf.user_role
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_conf))
+                result.can_unsubscribe = await self._can_unsubscribe_space(space, member_conf)
             else:
                 if (
                     required_permission_id
@@ -958,6 +959,103 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and binding.get('subject_type') == 'user'
             and str(binding.get('subject_id')) == str(user_id)
         )
+
+    @staticmethod
+    def _is_default_join_relation_mirror(
+        binding: dict,
+        membership: SpaceChannelMember,
+    ) -> bool:
+        expected_relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(membership.user_role)
+        if expected_relation not in {'viewer', 'manager'}:
+            return False
+        return (
+            binding.get('subject_type') == 'user'
+            and binding.get('relation') == expected_relation
+            and (binding.get('model_id') or expected_relation) == expected_relation
+        )
+
+    def _binding_grants_view_space(
+        self,
+        binding: dict,
+        models: Dict[str, dict],
+    ) -> bool:
+        model_id = binding.get('model_id')
+        model = models.get(model_id) if model_id else None
+        permission_ids = self._permission_ids_for_relation(
+            binding.get('relation') or '',
+            model,
+        )
+        return 'view_space' in permission_ids
+
+    async def _has_unsubscribe_rebac_coverage(
+        self,
+        space_id: int,
+        membership: SpaceChannelMember,
+    ) -> bool:
+        bindings = [
+            binding for binding in await self._get_relation_bindings()
+            if (
+                binding.get('resource_type') == 'knowledge_space'
+                and str(binding.get('resource_id')) == str(space_id)
+            )
+        ]
+        if not bindings:
+            return False
+
+        models: Optional[Dict[str, dict]] = None
+        user_subject_strings: Optional[set[str]] = None
+        binding_department_paths: Optional[Dict[int, str]] = None
+        user_department_paths: Optional[Dict[int, str]] = None
+
+        for binding in bindings:
+            subject_type = binding.get('subject_type')
+            if subject_type == 'user':
+                if not self._is_direct_space_user_binding(binding, space_id, self.login_user.user_id):
+                    continue
+                if self._is_default_join_relation_mirror(binding, membership):
+                    continue
+                if models is None:
+                    models = await self._get_relation_models_map()
+                if self._binding_grants_view_space(binding, models):
+                    return True
+                continue
+
+            if subject_type not in {'department', 'user_group'}:
+                continue
+            if user_subject_strings is None:
+                user_subject_strings = await self._get_current_user_subject_strings()
+            if binding_department_paths is None:
+                binding_department_paths = await self._get_binding_department_paths(bindings)
+            if user_department_paths is None:
+                user_department_paths = await FineGrainedPermissionService.get_current_user_department_paths(
+                    user_subject_strings,
+                )
+            if not FineGrainedPermissionService._binding_matches_current_user(
+                binding,
+                user_subject_strings,
+                binding_department_paths,
+                user_department_paths,
+            ):
+                continue
+            if models is None:
+                models = await self._get_relation_models_map()
+            if self._binding_grants_view_space(binding, models):
+                return True
+
+        return False
+
+    async def _can_unsubscribe_space(
+        self,
+        space: Knowledge,
+        membership: Optional[SpaceChannelMember],
+    ) -> bool:
+        if not membership or not membership.is_active:
+            return False
+        if space.user_id == self.login_user.user_id or membership.user_role == UserRoleEnum.CREATOR:
+            return False
+        if (membership.membership_source or 'manual') != 'manual':
+            return False
+        return not await self._has_unsubscribe_rebac_coverage(int(space.id), membership)
 
     @classmethod
     async def sync_direct_space_user_permissions(
@@ -1480,6 +1578,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
         total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
         result = KnowledgeSpaceInfoResp(**space.model_dump())
+        member_info = None
         if space.user_id != self.login_user.user_id:
             create_user = await UserDao.aget_user(space.user_id)
             result.user_name = create_user.user_name if create_user else str(space.user_id)
@@ -1517,6 +1616,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.user_role = UserRoleEnum.MEMBER
         result.follower_num = follower_num
         result.file_num = total_file_num
+        result.can_unsubscribe = await self._can_unsubscribe_space(space, member_info)
         await self._decorate_department_metadata([result])
 
         if space.state != KnowledgeState.PUBLISHED.value:
@@ -1639,6 +1739,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             member_conf = members_map.get(one.id)
             if not member_conf:
                 continue
+            can_unsubscribe = await self._can_unsubscribe_space(one, member_conf)
 
             if member_conf.is_pinned:
                 pinned_spaces.append(
@@ -1648,6 +1749,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         user_role=member_conf.user_role,
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
+                        can_unsubscribe=can_unsubscribe,
                     ))
             else:
                 normal_spaces.append(
@@ -1657,6 +1759,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         user_role=member_conf.user_role,
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
+                        can_unsubscribe=can_unsubscribe,
                     ))
         return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
 
@@ -1848,6 +1951,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2])
             for row in rows
         }
+        square_members = await SpaceChannelMemberDao.async_get_all_members_for_spaces(
+            self.login_user.user_id,
+            [str(space_id) for space_id in space_ids_int],
+        )
+        square_member_map = {
+            int(member.business_id): member
+            for member in square_members
+            if str(member.business_id).isdigit()
+        }
         readable_space_id_set = set()
         readable_space_with_view_permission = set()
         if readable_space_ids is not None:
@@ -1920,6 +2032,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
             if space.id in readable_space_with_view_permission:
                 subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
+            member_info = square_member_map.get(int(space.id))
 
             result_list.append(
                 KnowledgeSpaceInfoResp(
@@ -1934,6 +2047,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_num": success_file_map.get(space.id, 0),
                         "follower_num": subscriber_count,
                         "user_role": user_role,
+                        "can_unsubscribe": await self._can_unsubscribe_space(space, member_info),
                     }
                 )
             )
@@ -3164,10 +3278,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
 
         current_membership = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        if (
-            space.user_id == self.login_user.user_id
-            or (current_membership and current_membership.user_role == UserRoleEnum.CREATOR)
-        ):
+        if not await self._can_unsubscribe_space(space, current_membership):
             raise SpacePermissionDeniedError()
 
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)

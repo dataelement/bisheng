@@ -122,6 +122,8 @@ export interface KnowledgeSpace {
 
     /** Optional subscription status (e.g. "subscribed") from detail APIs */
     subscriptionStatus?: string;
+    /** 当前用户是否可以退出该知识空间 */
+    canUnsubscribe?: boolean;
 
     /** "department" when bound to a department, "normal" otherwise */
     spaceKind?: "normal" | "department";
@@ -263,6 +265,7 @@ interface RawKnowledgeSpace {
     is_pending?: boolean;
     is_followed?: boolean;
     subscription_status?: string;
+    can_unsubscribe?: boolean;
     space_level?: string;
     owner_type?: string;
     owner_id?: number;
@@ -361,6 +364,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).subscription_status ??
             (raw as any).subscriptionStatus ??
             undefined,
+        canUnsubscribe: Boolean((raw as any).can_unsubscribe ?? (raw as any).canUnsubscribe ?? false),
         spaceKind: (raw as any).space_kind || "normal",
         departmentId: (raw as any).department_id ?? undefined,
         departmentName: (raw as any).department_name ?? undefined,
@@ -910,6 +914,13 @@ export async function getSquareSpacesApi(params?: {
                 itemAny?.follower_num ?? rawAny?.follower_num ?? rawAny?.followerNum ?? itemAny?.followerNum ?? 0;
 
             const iconOrAvatar = itemAny?.avatar ?? rawAny?.avatar ?? rawAny?.icon ?? itemAny?.icon ?? "";
+            const canUnsubscribe = Boolean(
+                itemAny?.can_unsubscribe ??
+                rawAny?.can_unsubscribe ??
+                itemAny?.canUnsubscribe ??
+                rawAny?.canUnsubscribe ??
+                false
+            );
 
             const createdAt = rawAny?.create_time ?? itemAny?.create_time ?? "";
             const updatedAt = rawAny?.update_time ?? itemAny?.update_time ?? "";
@@ -937,6 +948,7 @@ export async function getSquareSpacesApi(params?: {
                 isPending,
                 squareStatus,
                 subscriptionStatus: subscriptionStatus || undefined,
+                canUnsubscribe,
                 spaceLevel: (rawAny?.space_level as SpaceLevel) || SpaceLevel.PERSONAL,
                 ownerType: rawAny?.owner_type as SpaceOwnerType | undefined,
                 ownerId: rawAny?.owner_id ?? undefined,

@@ -60,6 +60,7 @@ export default function KnowledgeSpaceItem({
     const [menuOpen, setMenuOpen] = useState(false);
     const { showToast } = useToastContext();
     const confirm = useConfirm()
+    const showDangerAction = canDeleteSpace || Boolean(space.canUnsubscribe);
 
     const rename = (e) => {
         const newName = e.target.value.trim();
@@ -179,7 +180,7 @@ export default function KnowledgeSpaceItem({
 
                         <SidebarListMoreMenuDivider />
 
-                        {(canDeleteSpace || space.role !== SpaceRole.CREATOR) && (
+                        {showDangerAction && (
                             <DropdownMenuItem
                                 onClick={async () => {
                                     const actionName = canDeleteSpace ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Menu, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -22,6 +23,7 @@ import {
     createSpaceApi,
     updateSpaceApi,
 } from "~/api/knowledge";
+import { checkPermission } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
@@ -37,6 +39,13 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
+
+function reloadKnowledgePage() {
+    if (typeof window === "undefined") return;
+    window.setTimeout(() => {
+        window.location.reload();
+    }, 0);
+}
 
 export default function Knowledge() {
     const localize = useLocalize();
@@ -89,6 +98,51 @@ export default function Knowledge() {
         setSpacePermissionDialogSpace(space);
         setSpacePermissionDialogOpen(true);
     };
+
+    const handleSpacePermissionChanged = useCallback(async () => {
+        const targetSpace = spacePermissionDialogSpace ?? activeSpace;
+        const targetSpaceId = targetSpace?.id;
+        if (!targetSpaceId) return;
+
+        queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+
+        let latestSpace: KnowledgeSpace | null = null;
+        try {
+            const detail = await getSpaceInfoApi(targetSpaceId);
+            latestSpace = { ...targetSpace, ...detail, id: targetSpaceId };
+            setSpacePermissionDialogSpace((prev) =>
+                prev?.id === targetSpaceId && latestSpace ? latestSpace : prev,
+            );
+            setActiveSpace((prev) =>
+                prev?.id === targetSpaceId && latestSpace ? { ...prev, ...latestSpace } : prev,
+            );
+        } catch {
+            latestSpace = null;
+        }
+
+        const currentRole = latestSpace?.role ?? targetSpace.role;
+        if (currentRole === SpaceRole.CREATOR) return;
+
+        try {
+            const result = await checkPermission(
+                "knowledge_space",
+                targetSpaceId,
+                "can_manage",
+                "manage_space_relation",
+            );
+            if (!result?.allowed) {
+                flushSync(() => {
+                    setSpacePermissionDialogOpen(false);
+                });
+                reloadKnowledgePage();
+            }
+        } catch {
+            flushSync(() => {
+                setSpacePermissionDialogOpen(false);
+            });
+            reloadKnowledgePage();
+        }
+    }, [activeSpace, queryClient, spacePermissionDialogSpace]);
 
     /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
     const knowledgePluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
@@ -827,6 +881,7 @@ export default function Knowledge() {
                 showShareTab={false}
                 showMembersTab={false}
                 showPermissionTab
+                onPermissionChanged={handleSpacePermissionChanged}
             />
 
             <KnowledgeSpacePreviewDrawer

@@ -46,6 +46,7 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
         description="Current user subscription status",
     )
+    can_unsubscribe: bool = Field(default=False, description="Whether current user can unsubscribe from this space")
     user_role: Optional[UserRoleEnum] = Field(default=None, description="Knowledge Space user role")
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
     department_id: Optional[int] = Field(default=None, description="Bound department id for department spaces")

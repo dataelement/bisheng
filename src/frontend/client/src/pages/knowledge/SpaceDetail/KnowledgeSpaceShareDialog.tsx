@@ -56,6 +56,7 @@ interface KnowledgeSpaceShareDialogProps {
     showMembersTab?: boolean;
     showPermissionTab: boolean;
     spaceLevel?: SpaceLevel;
+    onPermissionChanged?: () => void;
 }
 
 export function KnowledgeSpaceShareDialog({
@@ -69,6 +70,7 @@ export function KnowledgeSpaceShareDialog({
     showMembersTab = false,
     showPermissionTab,
     spaceLevel,
+    onPermissionChanged,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -140,7 +142,8 @@ export function KnowledgeSpaceShareDialog({
         setCurrentSubjectType(grantSubjectType);
         setGrantDialogOpen(false);
         setActiveTab(PERMISSION_TAB);
-    }, [grantSubjectType]);
+        onPermissionChanged?.();
+    }, [grantSubjectType, onPermissionChanged]);
 
     const handleCopyLink = useCallback(async () => {
         try {
@@ -237,6 +240,7 @@ export function KnowledgeSpaceShareDialog({
                     prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                     prefetchedUseDefaultModels={useDefaultModels}
                     skipGrantableModelsRequest
+                    onPermissionChanged={onPermissionChanged}
                 />
             </TabsContent>
         </Tabs>

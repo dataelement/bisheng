@@ -47,6 +47,7 @@ interface PermissionListTabProps {
   // UI-only: when provided, hides the internal subject type switcher
   // and locks the list to the given subject type.
   fixedSubjectType?: ListSubjectType;
+  onPermissionChanged?: () => void;
 }
 
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -65,6 +66,7 @@ export function PermissionListTab({
   prefetchedUseDefaultModels = false,
   skipGrantableModelsRequest = false,
   fixedSubjectType,
+  onPermissionChanged,
 }: PermissionListTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
@@ -270,7 +272,8 @@ export function PermissionListTab({
         ],
       );
       showToast({ message: localize("com_permission.success_modify"), status: "success" });
-      loadData();
+      await loadData();
+      onPermissionChanged?.();
     } catch {
       showToast({
         message: entry.relation === "owner"
@@ -362,7 +365,8 @@ export function PermissionListTab({
         revokes,
       );
       showToast({ message: localize("com_permission.success_revoke"), status: "success" });
-      loadData();
+      await loadData();
+      onPermissionChanged?.();
     } catch {
       showToast({
         message: entry.relation === "owner"

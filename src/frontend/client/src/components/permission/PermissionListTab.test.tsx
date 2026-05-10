@@ -139,6 +139,7 @@ describe("Client PermissionListTab", () => {
   });
 
   it("deletes all relations for the selected subject", async () => {
+    const onPermissionChanged = jest.fn();
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "user",
@@ -172,6 +173,7 @@ describe("Client PermissionListTab", () => {
         resourceId="file-1"
         refreshKey={0}
         fixedSubjectType="user"
+        onPermissionChanged={onPermissionChanged}
       />,
     );
 
@@ -198,6 +200,59 @@ describe("Client PermissionListTab", () => {
           },
         ],
       );
+      expect(onPermissionChanged).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("notifies parent after modifying a subject relation", async () => {
+    const onPermissionChanged = jest.fn();
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+        onPermissionChanged={onPermissionChanged}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "com_permission.level_editor" }));
+
+    await waitFor(() => {
+      expect(mockedAuthorizeResource).toHaveBeenCalledWith(
+        "knowledge_space",
+        "space-1",
+        [
+          {
+            subject_type: "user",
+            subject_id: 2,
+            relation: "editor",
+            model_id: "editor",
+          },
+        ],
+        [
+          {
+            subject_type: "user",
+            subject_id: 2,
+            relation: "viewer",
+          },
+        ],
+      );
+      expect(onPermissionChanged).toHaveBeenCalledTimes(1);
     });
   });
 

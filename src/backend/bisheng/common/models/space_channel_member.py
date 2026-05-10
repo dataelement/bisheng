@@ -51,7 +51,7 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
     )
     membership_source: str = Field(
         default='manual',
-        description='manual | department_admin',
+        description='manual | rebac | department_admin',
         sa_column=Column(
             String(32),
             nullable=False,
