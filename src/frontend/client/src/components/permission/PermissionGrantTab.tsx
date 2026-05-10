@@ -53,6 +53,7 @@ interface PermissionGrantTabProps {
   onIncludeChildrenChange?: (value: boolean) => void;
   hideDepartmentIncludeChildrenControl?: boolean;
   allowedSubjectTypes?: SubjectType[];
+  grantSubjectScopeSpaceId?: string;
 }
 
 export function PermissionGrantTab({
@@ -68,6 +69,7 @@ export function PermissionGrantTab({
   onIncludeChildrenChange,
   hideDepartmentIncludeChildrenControl = false,
   allowedSubjectTypes,
+  grantSubjectScopeSpaceId,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
@@ -84,6 +86,8 @@ export function PermissionGrantTab({
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
   const effectiveSubjectType = fixedSubjectType ?? subjectType;
+  const grantSubjectScopeResourceId =
+    grantSubjectScopeSpaceId || (resourceType === "knowledge_space" ? resourceId : undefined);
 
   const applyRelationModels = useCallback((
     relationModels: RelationModel[] | undefined,
@@ -219,13 +223,18 @@ export function PermissionGrantTab({
   };
 
   const loadKnowledgeSpaceDepartments = useCallback(
-    (config?: { signal?: AbortSignal }) => getKnowledgeSpaceGrantDepartments(resourceId, config),
-    [resourceId]
+    (config?: { signal?: AbortSignal }) =>
+      getKnowledgeSpaceGrantDepartments(grantSubjectScopeResourceId || resourceId, config),
+    [grantSubjectScopeResourceId, resourceId]
   );
   const loadKnowledgeSpaceUserGroups = useCallback(
     (config?: { signal?: AbortSignal; keyword?: string }) =>
-      getKnowledgeSpaceGrantUserGroups(resourceId, { keyword: config?.keyword }, { signal: config?.signal }),
-    [resourceId]
+      getKnowledgeSpaceGrantUserGroups(
+        grantSubjectScopeResourceId || resourceId,
+        { keyword: config?.keyword },
+        { signal: config?.signal },
+      ),
+    [grantSubjectScopeResourceId, resourceId]
   );
 
   const handleSubmit = async () => {
@@ -333,7 +342,7 @@ export function PermissionGrantTab({
             onIncludeChildrenChange={handleIncludeChildrenChange}
             onSelectionSummaryChange={setSelectedDepartmentSummary}
             disabledIds={grantedSubjectIds.department}
-            loadDepartments={resourceType === "knowledge_space" ? loadKnowledgeSpaceDepartments : undefined}
+            loadDepartments={grantSubjectScopeResourceId ? loadKnowledgeSpaceDepartments : undefined}
           />
         )}
         {effectiveSubjectType === "user_group" && (
@@ -343,7 +352,7 @@ export function PermissionGrantTab({
             resourceType={resourceType}
             resourceId={resourceId}
             disabledIds={grantedSubjectIds.user_group}
-            loadUserGroups={resourceType === "knowledge_space" ? loadKnowledgeSpaceUserGroups : undefined}
+            loadUserGroups={grantSubjectScopeResourceId ? loadKnowledgeSpaceUserGroups : undefined}
           />
         )}
       </div>

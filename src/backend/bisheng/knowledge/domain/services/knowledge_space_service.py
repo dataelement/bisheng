@@ -34,7 +34,6 @@ from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
@@ -212,12 +211,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return ids
 
     async def _user_group_ids_for_create(self) -> set[int]:
-        member_rows = await UserGroupDao.aget_user_group(self.login_user.user_id)
-        admin_rows = await UserGroupDao.aget_user_admin_group(self.login_user.user_id)
+        if self.login_user.is_admin():
+            groups, _ = await GroupDao.aget_all_groups(1, 2000, '')
+        else:
+            groups, _ = await GroupDao.aget_visible_groups(self.login_user.user_id, 1, 2000, '')
         return {
-            int(row.group_id)
-            for row in [*(member_rows or []), *(admin_rows or [])]
-            if getattr(row, 'group_id', None) is not None
+            int(group.id)
+            for group in groups or []
+            if getattr(group, 'id', None) is not None
         }
 
     @staticmethod

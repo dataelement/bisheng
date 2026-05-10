@@ -1065,6 +1065,7 @@ export function KnowledgeSpaceContent({
                     showShareTab={false}
                     showMembersTab={false}
                     showPermissionTab
+                    grantSubjectScopeSpaceId={space.id}
                 />
             )}
         </div>

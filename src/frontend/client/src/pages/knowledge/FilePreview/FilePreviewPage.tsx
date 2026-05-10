@@ -240,6 +240,7 @@ export default function FilePreviewPage() {
                     resourceType="knowledge_file"
                     resourceId={fileId}
                     resourceName={fileName}
+                    grantSubjectScopeSpaceId={spaceId || undefined}
                 />
             )}
 

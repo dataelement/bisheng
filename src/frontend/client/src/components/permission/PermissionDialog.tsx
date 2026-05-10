@@ -7,6 +7,7 @@ interface PermissionDialogProps {
   resourceType: ResourceType;
   resourceId: string;
   resourceName: string;
+  grantSubjectScopeSpaceId?: string;
 }
 
 export function PermissionDialog({
@@ -15,6 +16,7 @@ export function PermissionDialog({
   resourceType,
   resourceId,
   resourceName,
+  grantSubjectScopeSpaceId,
 }: PermissionDialogProps) {
   return (
     <KnowledgeSpaceShareDialog
@@ -27,6 +29,7 @@ export function PermissionDialog({
       showShareTab={false}
       showMembersTab={false}
       showPermissionTab
+      grantSubjectScopeSpaceId={grantSubjectScopeSpaceId}
     />
   );
 }

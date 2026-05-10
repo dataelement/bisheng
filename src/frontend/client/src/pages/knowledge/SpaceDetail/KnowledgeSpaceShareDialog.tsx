@@ -57,6 +57,7 @@ interface KnowledgeSpaceShareDialogProps {
     showPermissionTab: boolean;
     spaceLevel?: SpaceLevel;
     onPermissionChanged?: () => void;
+    grantSubjectScopeSpaceId?: string;
 }
 
 export function KnowledgeSpaceShareDialog({
@@ -71,6 +72,7 @@ export function KnowledgeSpaceShareDialog({
     showPermissionTab,
     spaceLevel,
     onPermissionChanged,
+    grantSubjectScopeSpaceId,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -323,6 +325,7 @@ export function KnowledgeSpaceShareDialog({
                                 includeChildren={grantIncludeChildren}
                                 onIncludeChildrenChange={setGrantIncludeChildren}
                                 hideDepartmentIncludeChildrenControl
+                                grantSubjectScopeSpaceId={grantSubjectScopeSpaceId}
                             />
                         </div>
                     </div>

@@ -1014,9 +1014,17 @@ async def _knowledge_space_grant_department_ids(
 ) -> set[int]:
     from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceOwnerTypeEnum
-    from bisheng.database.models.department import DepartmentDao
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 
     ids: set[int] = set()
+
+    user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
+    ids.update(
+        int(row.department_id)
+        for row in user_departments or []
+        if getattr(row, 'department_id', None) is not None
+    )
+
     admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
     for dept in admin_departments:
         if getattr(dept, 'id', None) is None:
@@ -1042,12 +1050,13 @@ async def _knowledge_space_grant_user_group_ids(
     login_user: UserPayload,
 ) -> set[int]:
     from bisheng.database.models.group import GroupDao
-    from bisheng.database.models.user_group import UserGroupDao
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceOwnerTypeEnum
 
+    visible_groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 2000, '')
     ids = {
-        int(row[0]) if isinstance(row, tuple) else int(row)
-        for row in await UserGroupDao.aget_user_visible_group_ids(login_user.user_id)
+        int(group.id)
+        for group in visible_groups or []
+        if getattr(group, 'id', None) is not None
     }
 
     scope = await _get_knowledge_space_scope(resource_id)
@@ -1058,14 +1067,21 @@ async def _knowledge_space_grant_user_group_ids(
     ):
         ids.add(int(scope.owner_id))
 
-    groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 2000, '')
-    ids.update(
-        int(group.id)
-        for group in groups
-        if getattr(group, 'id', None) is not None
-        and int(getattr(group, 'create_user', 0) or 0) == int(login_user.user_id)
-    )
     return ids
+
+
+async def _can_view_all_grant_subject_departments(login_user: UserPayload) -> bool:
+    if login_user.is_admin():
+        return True
+    from bisheng.department.domain.services.department_service import _is_tenant_admin
+
+    return await _is_tenant_admin(login_user)
+
+
+async def _can_view_all_grant_subject_user_groups(login_user: UserPayload) -> bool:
+    from bisheng.user_group.domain.services.user_group_service import _can_view_all_groups
+
+    return await _can_view_all_groups(login_user)
 
 
 async def _resolve_grant_subject_tenant_id(
@@ -1148,12 +1164,6 @@ async def _validate_knowledge_space_authorize_scope(
         SpaceAuthorizeScopeDeniedError,
         SpaceAuthorizeSubjectDeniedError,
     )
-    from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
-    from bisheng.knowledge.domain.models.knowledge_space_scope import (
-        KnowledgeSpaceLevelEnum,
-        KnowledgeSpaceOwnerTypeEnum,
-    )
-    from bisheng.database.models.department import DepartmentDao
 
     level = await _get_knowledge_space_level(resource_id)
     if level is None:
@@ -1166,59 +1176,23 @@ async def _validate_knowledge_space_authorize_scope(
     if login_user.is_admin():
         return None
 
-    if level == KnowledgeSpaceLevelEnum.DEPARTMENT:
-        department_items = [item for item in items if item.subject_type == 'department']
-        if department_items:
-            admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
-            allowed_department_ids: set[int] = set()
-            for dept in admin_departments:
-                if getattr(dept, 'id', None) is None:
-                    continue
-                allowed_department_ids.add(int(dept.id))
-                if getattr(dept, 'path', None):
-                    allowed_department_ids.update(
-                        int(i) for i in await DepartmentDao.aget_subtree_ids(dept.path)
-                    )
-            unresolved_department_ids = {
-                int(item.subject_id)
-                for item in department_items
-                if int(item.subject_id) not in allowed_department_ids
-            }
-            if unresolved_department_ids:
-                scope = await _get_knowledge_space_scope(resource_id)
-                if scope is not None and scope.owner_type in {
-                    KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
-                    KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
-                }:
-                    owner_dept = await DepartmentDao.aget_by_id(int(scope.owner_id))
-                    if owner_dept is not None and getattr(owner_dept, 'id', None) is not None:
-                        allowed_department_ids.add(int(owner_dept.id))
-                        if getattr(owner_dept, 'path', None):
-                            allowed_department_ids.update(
-                                int(i) for i in await DepartmentDao.aget_subtree_ids(owner_dept.path)
-                            )
-                elif scope is None and str(resource_id).isdigit():
-                    binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id))
-                    if binding is not None:
-                        owner_dept = await DepartmentDao.aget_by_id(int(binding.department_id))
-                        if owner_dept is not None and getattr(owner_dept, 'id', None) is not None:
-                            allowed_department_ids.add(int(owner_dept.id))
-                            if getattr(owner_dept, 'path', None):
-                                allowed_department_ids.update(
-                                    int(i) for i in await DepartmentDao.aget_subtree_ids(owner_dept.path)
-                                )
-            if any(int(item.subject_id) not in allowed_department_ids for item in department_items):
-                return SpaceAuthorizeScopeDeniedError
+    department_items = [item for item in items if item.subject_type == 'department']
+    if department_items and not await _can_view_all_grant_subject_departments(login_user):
+        allowed_department_ids = await _knowledge_space_grant_department_ids(
+            resource_id=resource_id,
+            login_user=login_user,
+        )
+        if any(int(item.subject_id) not in allowed_department_ids for item in department_items):
+            return SpaceAuthorizeScopeDeniedError
 
-    if level == KnowledgeSpaceLevelEnum.TEAM:
-        group_items = [item for item in items if item.subject_type == 'user_group']
-        if group_items:
-            allowed_group_ids = await _knowledge_space_grant_user_group_ids(
-                resource_id=resource_id,
-                login_user=login_user,
-            )
-            if any(int(item.subject_id) not in allowed_group_ids for item in group_items):
-                return SpaceAuthorizeScopeDeniedError
+    group_items = [item for item in items if item.subject_type == 'user_group']
+    if group_items and not await _can_view_all_grant_subject_user_groups(login_user):
+        allowed_group_ids = await _knowledge_space_grant_user_group_ids(
+            resource_id=resource_id,
+            login_user=login_user,
+        )
+        if any(int(item.subject_id) not in allowed_group_ids for item in group_items):
+            return SpaceAuthorizeScopeDeniedError
 
     return None
 
@@ -1655,6 +1629,7 @@ async def get_grant_subject_departments(
     scope_space_id = await _resolve_child_resource_space_id_for_grant_scope(resource_type, resource_id)
     if resource_type in {'folder', 'knowledge_file'} and scope_space_id is None:
         return resp_200([])
+    grant_scope_space_id = scope_space_id or (resource_id if resource_type == 'knowledge_space' else None)
     scope_space_level = None
     if scope_space_id is not None:
         scope_space_level = await _get_knowledge_space_level(scope_space_id)
@@ -1668,15 +1643,12 @@ async def get_grant_subject_departments(
         if level is not None and 'department' not in _allowed_subject_types_for_space_level(level):
             return resp_200([])
     tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
-    if scope_space_id is not None:
-        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
-
-        if scope_space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
-            allowed_ids = await _knowledge_space_grant_department_ids(
-                resource_id=scope_space_id,
-                login_user=login_user,
-            )
-            return resp_200(_filter_department_tree_by_ids(tree, allowed_ids))
+    if grant_scope_space_id is not None and not await _can_view_all_grant_subject_departments(login_user):
+        allowed_ids = await _knowledge_space_grant_department_ids(
+            resource_id=grant_scope_space_id,
+            login_user=login_user,
+        )
+        return resp_200(_filter_department_tree_by_ids(tree, allowed_ids))
     return resp_200(tree)
 
 
@@ -1705,6 +1677,7 @@ async def get_grant_subject_user_groups(
     scope_space_id = await _resolve_child_resource_space_id_for_grant_scope(resource_type, resource_id)
     if resource_type in {'folder', 'knowledge_file'} and scope_space_id is None:
         return resp_200([])
+    grant_scope_space_id = scope_space_id or (resource_id if resource_type == 'knowledge_space' else None)
     scope_space_level = None
     if scope_space_id is not None:
         scope_space_level = await _get_knowledge_space_level(scope_space_id)
@@ -1722,18 +1695,15 @@ async def get_grant_subject_user_groups(
         keyword=keyword,
         login_user=login_user,
     )
-    if scope_space_id is not None:
-        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
-
-        if scope_space_level == KnowledgeSpaceLevelEnum.TEAM:
-            allowed_ids = await _knowledge_space_grant_user_group_ids(
-                resource_id=scope_space_id,
-                login_user=login_user,
-            )
-            return resp_200([
-                group for group in groups
-                if int(group['id']) in allowed_ids
-            ])
+    if grant_scope_space_id is not None and not await _can_view_all_grant_subject_user_groups(login_user):
+        allowed_ids = await _knowledge_space_grant_user_group_ids(
+            resource_id=grant_scope_space_id,
+            login_user=login_user,
+        )
+        return resp_200([
+            group for group in groups
+            if int(group['id']) in allowed_ids
+        ])
     return resp_200(groups)
 
 
@@ -1761,9 +1731,7 @@ async def get_knowledge_space_grant_subject_departments(
         return resp_200([])
 
     tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
-    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
-
-    if level != KnowledgeSpaceLevelEnum.DEPARTMENT:
+    if await _can_view_all_grant_subject_departments(login_user):
         return resp_200(tree)
 
     allowed_ids = await _knowledge_space_grant_department_ids(
@@ -1802,9 +1770,7 @@ async def get_knowledge_space_grant_subject_user_groups(
         keyword=keyword,
         login_user=login_user,
     )
-    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
-
-    if level != KnowledgeSpaceLevelEnum.TEAM:
+    if await _can_view_all_grant_subject_user_groups(login_user):
         return resp_200(groups)
 
     allowed_ids = await _knowledge_space_grant_user_group_ids(
