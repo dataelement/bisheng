@@ -83,6 +83,7 @@ export function PermissionGrantTab({
   const [submitting, setSubmitting] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
+  const effectiveSubjectType = fixedSubjectType ?? subjectType;
 
   const applyRelationModels = useCallback((
     relationModels: RelationModel[] | undefined,
@@ -195,14 +196,14 @@ export function PermissionGrantTab({
     skipGrantableModelsRequest,
   ]);
 
-  const relation = useMemo<RelationLevel>(() => {
-    return models.find((m) => m.id === selectedModelId)?.relation || "viewer";
-  }, [models, selectedModelId]);
-
   const availableModels = useMemo(() => {
-    if (subjectType === "user") return models;
+    if (effectiveSubjectType === "user") return models;
     return models.filter((model) => model.relation !== "owner");
-  }, [models, subjectType]);
+  }, [effectiveSubjectType, models]);
+  const selectedGrantModel = useMemo(() => {
+    return availableModels.find((model) => model.id === selectedModelId) ?? availableModels[0];
+  }, [availableModels, selectedModelId]);
+  const relation = selectedGrantModel?.relation || "viewer";
 
   useEffect(() => {
     if (!availableModels.length) return;
@@ -233,7 +234,7 @@ export function PermissionGrantTab({
       subject_type: s.type,
       subject_id: s.id,
       relation,
-      model_id: selectedModelId,
+      model_id: selectedGrantModel?.id ?? selectedModelId,
       ...(s.type === "department"
         ? { include_children: includeChildren }
         : {}),
@@ -269,9 +270,9 @@ export function PermissionGrantTab({
   };
 
   const showDepartmentIncludeChildrenControl =
-    subjectType === "department" && !hideDepartmentIncludeChildrenControl;
+    effectiveSubjectType === "department" && !hideDepartmentIncludeChildrenControl;
   const selectedSummaryText = (
-    subjectType === "department" && selectedDepartmentSummary.length > 0
+    effectiveSubjectType === "department" && selectedDepartmentSummary.length > 0
       ? selectedDepartmentSummary
       : selected
   ).map((subject) => subject.name).join("、");
@@ -284,7 +285,7 @@ export function PermissionGrantTab({
             {SUBJECT_TYPES.filter((type) => !allowedSubjectTypes || allowedSubjectTypes.includes(type)).map((type) => (
               <button
                 key={type}
-                className={`rounded px-3 py-1.5 text-sm transition-colors ${subjectType === type
+                className={`rounded px-3 py-1.5 text-sm transition-colors ${effectiveSubjectType === type
                     ? "bg-white text-gray-900 shadow"
                     : "text-gray-500 hover:text-gray-700"
                   }`}
@@ -313,7 +314,7 @@ export function PermissionGrantTab({
           !fixedSubjectType && "mt-4"
         )}
       >
-        {subjectType === "user" && (
+        {effectiveSubjectType === "user" && (
           <SubjectSearchUser
             value={selected}
             onChange={setSelected}
@@ -322,7 +323,7 @@ export function PermissionGrantTab({
             disabledIds={grantedSubjectIds.user}
           />
         )}
-        {subjectType === "department" && (
+        {effectiveSubjectType === "department" && (
           <SubjectSearchDepartment
             value={selected}
             onChange={setSelected}
@@ -335,7 +336,7 @@ export function PermissionGrantTab({
             loadDepartments={resourceType === "knowledge_space" ? loadKnowledgeSpaceDepartments : undefined}
           />
         )}
-        {subjectType === "user_group" && (
+        {effectiveSubjectType === "user_group" && (
           <SubjectSearchUserGroup
             value={selected}
             onChange={setSelected}
@@ -350,7 +351,7 @@ export function PermissionGrantTab({
       <div className="mt-4 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
         <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
           <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
-            {`${localize("com_permission.selected_prefix")}${subjectLabel(subjectType)}:`}
+            {`${localize("com_permission.selected_prefix")}${subjectLabel(effectiveSubjectType)}:`}
           </span>
           <span className="truncate text-[14px] leading-[22px] text-[#4E5969]">
             {selectedSummaryText}

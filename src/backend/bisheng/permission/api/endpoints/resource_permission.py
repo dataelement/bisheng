@@ -497,6 +497,46 @@ def _management_permission_ids(resource_type: str) -> set[str]:
     return set(tier_map.values())
 
 
+async def _get_caller_grant_permission_ids(
+    *,
+    login_user: UserPayload,
+    resource_type: str,
+    resource_id: str,
+    management_permission_ids: set[str],
+) -> set[str]:
+    if not management_permission_ids:
+        return set()
+
+    from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+
+    caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+        login_user,
+        resource_type,
+        resource_id,
+        nearest_binding_wins=_lineage_binding_can_override(resource_type),
+    )
+
+    try:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        implicit_level = await PermissionService.get_implicit_permission_level(
+            user_id=login_user.user_id,
+            object_type=resource_type,
+            object_id=str(resource_id),
+            login_user=login_user,
+        )
+    except Exception:
+        implicit_level = None
+
+    implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
+    if implicit_relation:
+        caller_permission_ids.update(
+            _default_permission_ids_for_relation(resource_type, implicit_relation),
+        )
+
+    return caller_permission_ids
+
+
 def _lineage_binding_can_override(resource_type: str) -> bool:
     return resource_type in {'folder', 'knowledge_file'}
 
@@ -1276,13 +1316,11 @@ async def authorize_resource(
         management_permission_ids = _management_permission_ids(resource_type)
         caller_permission_ids = set()
         if management_permission_ids:
-            from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
-
-            caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-                login_user,
-                resource_type,
-                resource_id,
-                nearest_binding_wins=_lineage_binding_can_override(resource_type),
+            caller_permission_ids = await _get_caller_grant_permission_ids(
+                login_user=login_user,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                management_permission_ids=management_permission_ids,
             )
 
         if management_permission_ids and not (management_permission_ids & caller_permission_ids):
@@ -1697,13 +1735,11 @@ async def get_grantable_relation_models(
     management_permission_ids = _management_permission_ids(object_type)
     caller_permission_ids = set()
     if management_permission_ids:
-        from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
-
-        caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            login_user,
-            object_type,
-            object_id,
-            nearest_binding_wins=_lineage_binding_can_override(object_type),
+        caller_permission_ids = await _get_caller_grant_permission_ids(
+            login_user=login_user,
+            resource_type=object_type,
+            resource_id=object_id,
+            management_permission_ids=management_permission_ids,
         )
     if management_permission_ids and not (management_permission_ids & caller_permission_ids):
         return resp_200([])
