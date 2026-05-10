@@ -6,7 +6,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Shield } from "lucide-react";
-import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import { getFileDownloadApi, getFilePreviewApi, getSpaceInfoApi } from "~/api/knowledge";
+import type { SpaceLevel } from "~/api/knowledge";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import { Button } from "~/components";
 import { AiChatIcon } from "~/components/icons";
@@ -54,6 +55,8 @@ export default function FilePreviewPage() {
     const [canDownload, setCanDownload] = useState(false);
     const [canManagePermission, setCanManagePermission] = useState(false);
     const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+    const [spaceLevel, setSpaceLevel] = useState<SpaceLevel | undefined>();
+    const [spaceLevelLoaded, setSpaceLevelLoaded] = useState(false);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
@@ -88,6 +91,35 @@ export default function FilePreviewPage() {
             .catch((err) => console.error("Failed to load preview URL:", err))
             .finally(() => setLoading(false));
     }, [fileId, spaceId]);
+
+    useEffect(() => {
+        if (!spaceId) {
+            setSpaceLevel(undefined);
+            setSpaceLevelLoaded(true);
+            return;
+        }
+
+        let cancelled = false;
+        setSpaceLevel(undefined);
+        setSpaceLevelLoaded(false);
+        getSpaceInfoApi(spaceId)
+            .then((space) => {
+                if (!cancelled) {
+                    setSpaceLevel(space.spaceLevel);
+                    setSpaceLevelLoaded(true);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setSpaceLevel(undefined);
+                    setSpaceLevelLoaded(true);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [spaceId]);
 
     useEffect(() => {
         if (!fileId) {
@@ -191,7 +223,7 @@ export default function FilePreviewPage() {
     // Extra actions injected into FilePreview's TopBar slot.
     const topBarActions = (
         <>
-            {canManagePermission && (
+            {canManagePermission && spaceLevelLoaded && (
                 <Button
                     variant="outline"
                     onClick={() => setPermissionDialogOpen(true)}
@@ -233,7 +265,7 @@ export default function FilePreviewPage() {
 
     return (
         <div ref={splitContainerRef} className="h-screen flex bg-white overflow-hidden">
-            {fileId && (
+            {fileId && spaceLevelLoaded && (
                 <PermissionDialog
                     open={permissionDialogOpen}
                     onOpenChange={setPermissionDialogOpen}
@@ -241,6 +273,7 @@ export default function FilePreviewPage() {
                     resourceId={fileId}
                     resourceName={fileName}
                     grantSubjectScopeSpaceId={spaceId || undefined}
+                    spaceLevel={spaceLevel}
                 />
             )}
 

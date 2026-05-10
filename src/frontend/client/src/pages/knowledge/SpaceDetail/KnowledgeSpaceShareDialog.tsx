@@ -34,8 +34,7 @@ const SUBJECT_TABS: Array<{
     { value: "user_group", labelKey: "com_permission.subject_user_group" },
 ];
 
-function getAllowedSubjectTabs(resourceType: ResourceType, spaceLevel?: SpaceLevel) {
-    if (resourceType !== "knowledge_space") return SUBJECT_TABS;
+function getAllowedSubjectTabs(spaceLevel?: SpaceLevel) {
     if (spaceLevel === SpaceLevel.DEPARTMENT) {
         return SUBJECT_TABS.filter((tab) => tab.value !== "user_group");
     }
@@ -92,7 +91,7 @@ export function KnowledgeSpaceShareDialog({
         if (open) {
             setActiveTab(showShareTab ? SHARE_TAB : showMembersTab ? MEMBERS_TAB : PERMISSION_TAB);
             setCopied(false);
-            const firstSubject = getAllowedSubjectTabs(resourceType, spaceLevel)[0]?.value ?? "user";
+            const firstSubject = getAllowedSubjectTabs(spaceLevel)[0]?.value ?? "user";
             setCurrentSubjectType(firstSubject);
             setGrantSubjectType(firstSubject);
             setGrantIncludeChildren(true);
@@ -106,7 +105,7 @@ export function KnowledgeSpaceShareDialog({
     }, [grantIncludeChildren, grantSubjectType]);
 
     useEffect(() => {
-        const allowed = getAllowedSubjectTabs(resourceType, spaceLevel);
+        const allowed = getAllowedSubjectTabs(spaceLevel);
         if (!allowed.some((tab) => tab.value === currentSubjectType)) {
             setCurrentSubjectType(allowed[0]?.value ?? "user");
         }
@@ -195,7 +194,7 @@ export function KnowledgeSpaceShareDialog({
         </div>
     );
 
-    const allowedSubjectTabs = getAllowedSubjectTabs(resourceType, spaceLevel);
+    const allowedSubjectTabs = getAllowedSubjectTabs(spaceLevel);
 
     const permissionPanel = (
         <Tabs

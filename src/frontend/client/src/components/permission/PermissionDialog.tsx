@@ -1,3 +1,4 @@
+import type { SpaceLevel } from "~/api/knowledge";
 import type { ResourceType } from "~/api/permission";
 import { KnowledgeSpaceShareDialog } from "~/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog";
 
@@ -8,6 +9,7 @@ interface PermissionDialogProps {
   resourceId: string;
   resourceName: string;
   grantSubjectScopeSpaceId?: string;
+  spaceLevel?: SpaceLevel;
 }
 
 export function PermissionDialog({
@@ -17,6 +19,7 @@ export function PermissionDialog({
   resourceId,
   resourceName,
   grantSubjectScopeSpaceId,
+  spaceLevel,
 }: PermissionDialogProps) {
   return (
     <KnowledgeSpaceShareDialog
@@ -29,6 +32,7 @@ export function PermissionDialog({
       showShareTab={false}
       showMembersTab={false}
       showPermissionTab
+      spaceLevel={spaceLevel}
       grantSubjectScopeSpaceId={grantSubjectScopeSpaceId}
     />
   );
