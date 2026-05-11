@@ -1,8 +1,8 @@
 """FileEncodingTransformer generates a standardized file encoding for
 shougang deployments.
 
-Encoding format: PREFIX-DOCTYPE-DOMAIN-YYYYMMNNNNNNNN
-Example: GF-STD-SC-20260500000001
+Encoding format: COMPANY-DOCTYPE-DOMAIN-YYYYMMNNNNNNNN
+Example: SGGF-RPT-PP-20260500000001
 """
 from __future__ import annotations
 
@@ -73,7 +73,6 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.llm.domain.services.llm import LLMService
 
 CLASSIFY_PROMPT = """# 角色
 你是一个企业文件编码分类助手。你的任务是根据给定的文件标题、摘要或正文内容,为文件生成标准化的文件编码。
@@ -85,7 +84,7 @@ CLASSIFY_PROMPT = """# 角色
 
 然后按以下格式输出文件编码:
 文档类型编码-业务域编码
-例如: STD-SC
+例如: RPT-PP
 
 # 编码规则
 ## 一、文档类型(必须且只能从以下枚举中选择一个)
@@ -95,15 +94,15 @@ CLASSIFY_PROMPT = """# 角色
   - 适用于国际标准、国家标准、行业标准、企业技术标准、产品标准、操作规程、安全规程、设计规范等文件。
 - 流程方法 = PRO
   - 适用于管理流程、业务流程、工艺流程图、分析方法、实验方法、项目管理方法论等文件。
-- 技术诀窍 = SPC
+- 技术规程与诀窍 = SPC
   - 适用于最佳操作法、工艺优化参数、故障处理经验、设备调试心得、节能降耗小改小革等核心隐性知识文件。
-- 报告总结 = REP
+- 报告 = RPT
   - 适用于科研报告、质量分析报告、事故分析报告、项目总结、对标报告、市场分析报告等文件。
-- 设计资产 = DGN
-  - 适用于工程设计图纸、工艺布局图、设备三维模型、PLC 程序、仿真模型等文件。
 - 案例库 = CAS
   - 适用于典型生产事故案例、设备故障案例、质量问题案例、工程项目案例、成功谈判/合作案例等文件。
-- 知识产权 = PAT
+- 设计资产 = DGN
+  - 适用于工程设计图纸、工艺布局图、设备三维模型、PLC 程序、仿真模型等文件。
+- 专利与知识产权 = PAT
   - 适用于专利文书、技术秘密认定文件、软件著作权、商标等文件。
 - 培训资源 = TRN
   - 适用于培训课程、课件、教学视频、操作仿真软件、入职学习地图、技能认证题库等文件。
@@ -111,20 +110,34 @@ CLASSIFY_PROMPT = """# 角色
   - 适用于竞争对手动态、新技术跟踪、市场趋势分析、原材料价格情报、政策解读等文件。
 
 ## 二、业务域(必须且只能从以下枚举中选择一个)
-- 生产 = SC
-- 投资 = TZ
-- 研发 = YF
-- 采购 = CG
-- 营销 = YX
-- 财务 = CW
-- 设备 = SB
-- 安全 = AQ
-- 环保 = HB
-- 质量 = ZL
-- 人力 = RL
-- 信息 = XX
-- 能源 = NY
-- 管理 = GL
+- 生产 = PP
+  - 适用于涵盖从原料处理到成品产出的全流程核心生产运营活动,包括烧结、炼铁、炼钢、连铸、热轧、冷轧等各工序的工艺技术、生产组织、调度操作、产线平衡、效率提升以及生产直接相关内容。
+- 质量 = QM
+  - 适用于从原料到成品的全流程质量控制、检测技术、实验室管理、质量体系等内容。
+- 设备 = PM
+  - 适用于通用设备管理,以及机械、电气、仪表、液压、传动等所有设备专业内容。
+- 能源 = EM
+  - 适用于水、电、风、气(汽)等能源介质的生产、输送、调度与高效利用。
+- 安全 = SA
+  - 适用于安全生产、消防安全、危险源管控、安全设施、职业健康。
+- 环保 = EN
+  - 适用于三废(气、水、固)治理、超低排放、节能技术、碳排放管理。
+- 投资 = IM
+  - 适用于战略规划、固定资产投资、股权投资、技改项目立项、可行性研究及后评价。
+- 研发 = RD
+  - 适用于新技术、新工艺、新产品、新材料的探索、实验与开发过程。
+- 采购 = MM
+  - 适用于原燃料(矿石、煤、焦)、备品备件、工程及服务类的采购寻源、供应商管理与招标。
+- 营销 = SD
+  - 适用于市场调研与开发、产品销售、客户服务、渠道管理、价格策略及合同物流管理。
+- 财务 = FI
+  - 适用于成本、预算、核算、税务、资金管理。
+- 人力 = HR
+  - 适用于招聘、培训、绩效、薪酬、劳动关系。
+- 信息 = IT
+  - 适用于软件、硬件、网络、数据中心、工业互联网、大数据、人工智能应用。
+- 管理 = AD
+  - 适用于战略、法务、审计、企管、行政、党群、宣传等通用管理知识。
 
 # 判定原则
 ## 1. 总体要求
@@ -136,13 +149,14 @@ CLASSIFY_PROMPT = """# 角色
 - 只输出最终编码
 - 不要输出解释
 - 不要输出多余文字
-- 输出格式必须严格为: 文档类型编码-业务域编码, 例如: STD-SC"""
+- 输出格式必须严格为: 文档类型编码-业务域编码, 例如: RPT-PP"""
 
 VALID_PATTERN = re.compile(
-    r'^(POL|STD|PRO|SPC|REP|DGN|CAS|PAT|TRN|NEW)-'
-    r'(SC|TZ|YF|CG|YX|CW|SB|AQ|HB|ZL|RL|XX|NY|GL)$'
+    r'^(POL|STD|PRO|SPC|RPT|CAS|DGN|PAT|TRN|NEW)-'
+    r'(PP|QM|PM|EM|SA|EN|IM|RD|MM|SD|FI|HR|IT|AD)$'
 )
-FALLBACK = "STD-SC"
+DEFAULT_COMPANY_CODE = "SGGF"
+FALLBACK = "STD-PP"
 SEQ_CAP = 99999999
 
 
@@ -176,8 +190,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     async def _do_work(self) -> None:
         shougang_conf = await bisheng_settings.aget_shougang_conf()
-        if not shougang_conf.enabled:
-            return
+        company_code = self._resolve_company_code(shougang_conf)
 
         if self.knowledge_file.file_encoding:
             return
@@ -186,7 +199,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             type_business_code = await self._classify_with_llm()
             seq = await self._compute_seq()
             self.knowledge_file.file_encoding = self._compose_encoding(
-                shougang_conf.prefix, type_business_code,
+                company_code, type_business_code,
                 self.knowledge_file.create_time, seq,
             )
             logger.info(
@@ -200,7 +213,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             try:
                 seq = await self._compute_seq()
                 self.knowledge_file.file_encoding = self._compose_encoding(
-                    shougang_conf.prefix, FALLBACK,
+                    company_code, FALLBACK,
                     self.knowledge_file.create_time, seq,
                 )
                 logger.warning(
@@ -215,6 +228,8 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     async def _classify_with_llm(self) -> str:
         try:
+            from bisheng.llm.domain.services.llm import LLMService
+
             # F022 INV-T18: classify against the KnowledgeFile's owner tenant
             # so the workbench config row resolves to that tenant's row (or
             # Root via share fallback) rather than the worker's empty
@@ -298,6 +313,13 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         if count > SEQ_CAP:
             return SEQ_CAP
         return count
+
+    @staticmethod
+    def _resolve_company_code(shougang_conf: Any) -> str:
+        prefix = getattr(shougang_conf, 'prefix', None)
+        if isinstance(prefix, str) and prefix.strip():
+            return prefix.strip()
+        return DEFAULT_COMPANY_CODE
 
     @staticmethod
     def _compose_encoding(prefix: str, type_business: str,
