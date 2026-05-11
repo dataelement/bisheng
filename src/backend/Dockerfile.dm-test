@@ -1,0 +1,27 @@
+FROM dataelement/bisheng-backend:base.v8
+
+WORKDIR /app
+
+# Install only what's needed to test DaMeng connectivity
+RUN pip install --no-cache-dir \
+    dmPython \
+    dmSQLAlchemy \
+    dmAsync \
+    sqlalchemy \
+    sqlmodel
+
+# dmPython installs 'dmssl' which bundles the native .so files.
+# Move them into bin/ so DM_HOME resolves the library path correctly.
+RUN site=$(python -c "import site; print(site.getsitepackages()[0])") && \
+    dmssl_dir="$site/dmssl" && \
+    echo "dmssl dir: $dmssl_dir" && \
+    ls "$dmssl_dir" && \
+    mkdir -p "$dmssl_dir/bin" && \
+    mv "$dmssl_dir"/*.so "$dmssl_dir/bin/" 2>/dev/null || true && \
+    ls "$dmssl_dir/bin/"
+
+ENV DM_HOME="/usr/local/lib/python3.10/site-packages/dmssl/"
+
+COPY scripts/test_dm_connection.py /app/test_dm_connection.py
+
+CMD ["python", "/app/test_dm_connection.py"]

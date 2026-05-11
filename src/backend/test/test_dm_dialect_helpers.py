@@ -402,3 +402,14 @@ class TestConnectionManagerUrlConversion:
         mgr = DatabaseConnectionManager.__new__(DatabaseConnectionManager)
         url = "sqlite:///./bisheng.db"
         assert mgr._convert_to_async_url(url) == url
+
+    def test_dm_sync_url_strips_schema(self):
+        from bisheng.core.database.connection import DatabaseConnectionManager
+        url = "dm+dmPython://SYSDBA:pass@192.168.107.9:5236/BISHENG"
+        result = DatabaseConnectionManager._dm_sync_url(url)
+        assert result == "dm+dmPython://SYSDBA:pass@192.168.107.9:5236"
+
+    def test_dm_sync_url_no_schema_unchanged(self):
+        from bisheng.core.database.connection import DatabaseConnectionManager
+        url = "dm+dmPython://SYSDBA:pass@192.168.107.9:5236"
+        assert DatabaseConnectionManager._dm_sync_url(url) == url
