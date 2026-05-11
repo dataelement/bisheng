@@ -6,42 +6,35 @@ WORKDIR /app
 #
 # dmPython / dmAsync Python packages are installed automatically from PyPI
 # (see pyproject.toml).  They also need DaMeng's DPI shared libraries (.so)
-# at runtime.  Two ways to provide them:
+# at runtime.
 #
-# Mode A — build-time inclusion (fully self-contained image):
-#   1. Download the DaMeng DPI driver package from https://eco.dameng.com
-#      and rename / place it as  dm_dpi_driver.tar.gz  next to this Dockerfile.
-#      Expected layout inside the archive: bin/libdmdpi.so  (and siblings).
-#   2. Build:  docker build --build-arg WITH_DAMENG=true -t bisheng:dm .
+# To build a DaMeng-capable image in CI/CD:
+#   1. Upload the DaMeng DPI driver archive to your artifact storage
+#      (S3 / MinIO / Nexus / etc.).  The archive must unpack to a directory
+#      whose bin/ sub-folder contains libdmdpi.so and siblings.
+#   2. Pass the download URL as a build arg:
 #
-# Mode B — runtime mount (keeps the base image database-agnostic):
-#   docker run \
-#     -v /path/to/dameng/driver/bin:/opt/dmdbms/bin \
-#     -e BISHENG_DATABASE_URL="dm+dmPython://..." \
-#     bisheng:latest
+#      docker build \
+#        --build-arg DM_DRIVER_URL=https://your-storage/dm_dpi_driver.tar.gz \
+#        -t bisheng-backend:dm .
 #
-# In both modes the env vars below are pre-set so the driver is found once
-# the .so files are present.
+# Leave DM_DRIVER_URL empty (default) for a standard MySQL-only build.
 # ─────────────────────────────────────────────────────────────────────────────
 
-ARG WITH_DAMENG=false
+ARG DM_DRIVER_URL=""
 
-# Always configure the expected library path; harmless when DaMeng is unused.
+# Pre-configure library paths; harmless when DaMeng is not used.
 ENV DM_HOME=/opt/dmdbms
 ENV LD_LIBRARY_PATH=/opt/dmdbms/bin:${LD_LIBRARY_PATH}
 
-# Mode A only: extract DPI libs from the archive placed in the build context.
-RUN --mount=type=bind,source=.,target=/build_ctx \
-    if [ "$WITH_DAMENG" = "true" ]; then \
-        archive=/build_ctx/dm_dpi_driver.tar.gz; \
-        if [ ! -f "$archive" ]; then \
-            echo "ERROR: WITH_DAMENG=true but dm_dpi_driver.tar.gz not found beside Dockerfile" >&2; \
-            exit 1; \
-        fi; \
+RUN if [ -n "$DM_DRIVER_URL" ]; then \
+        echo "Downloading DaMeng DPI driver from $DM_DRIVER_URL ..." && \
+        wget -q -O /tmp/dm_dpi_driver.tar.gz "$DM_DRIVER_URL" && \
         mkdir -p /opt/dmdbms && \
-        tar -xzf "$archive" -C /opt/dmdbms && \
+        tar -xzf /tmp/dm_dpi_driver.tar.gz -C /opt/dmdbms && \
         echo "/opt/dmdbms/bin" > /etc/ld.so.conf.d/dameng.conf && \
         ldconfig && \
+        rm -f /tmp/dm_dpi_driver.tar.gz && \
         echo "DaMeng DPI libraries installed."; \
     fi
 
