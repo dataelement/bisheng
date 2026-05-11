@@ -60,10 +60,12 @@ dependencies = [
     "pymongo>=4.15.3",
     "pymupdf>=1.26.5",
     "pymysql>=1.1.2",
-    # DaMeng database drivers — installed from the DaMeng client package,
-    # not available on PyPI. Declare here as documentation of the requirement.
-    # "dmPython",
-    # "dmAsync",
+    # DaMeng database drivers — available on PyPI (Linux x86_64/aarch64, Windows).
+    # Runtime prerequisite: DM_HOME env var and DPI native libraries must be
+    # present on the host (installed with the DaMeng client package).
+    # macOS has no wheel, so the marker excludes it for local development.
+    "dmPython; sys_platform != 'darwin'",
+    "dmAsync; sys_platform != 'darwin'",
     "pypandoc>=1.15",
     "python-docx>=1.2.0",
     "python-pptx>=1.0.2",
