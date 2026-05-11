@@ -89,7 +89,7 @@ export function PermissionDialog({
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="flex items-center justify-between gap-3">
-        <TabsList className="w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
+        <TabsList className="h-auto w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
           {SUBJECT_TABS.map((tab) => (
             <TabsTrigger
               key={tab.value}
@@ -188,7 +188,7 @@ export function PermissionDialog({
               )}
             </div>
 
-            <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+            <div className="mt-3 min-h-0 flex-1 overflow-hidden">
               <PermissionGrantTab
                 resourceType={resourceType}
                 resourceId={resourceId}

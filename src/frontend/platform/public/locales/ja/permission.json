@@ -21,7 +21,8 @@
     "revoke": "取消",
     "confirmRevoke": "この権限を取り消しますか？",
     "submit": "送信",
-    "modify": "権限を変更"
+    "modify": "権限を変更",
+    "remove": "削除"
   },
   "search": {
     "user": "ユーザーを検索...",

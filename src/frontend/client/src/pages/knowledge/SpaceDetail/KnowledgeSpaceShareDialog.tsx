@@ -280,7 +280,7 @@ export function KnowledgeSpaceShareDialog({
                             )}
                         </div>
 
-                        <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+                        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
                             <PermissionGrantTab
                                 resourceType={resourceType}
                                 resourceId={resourceId}
