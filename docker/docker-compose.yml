@@ -40,7 +40,9 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.4.0-beta1-fix
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
     ports:
       - "7860:7860"
     environment:
@@ -60,7 +62,6 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
-      - ../src/backend/bisheng:/app/bisheng
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh api  # 启动api服务
@@ -79,7 +80,9 @@ services:
   
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.4.0-beta1-fix
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
@@ -97,7 +100,6 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
-      - ../src/backend/bisheng:/app/bisheng
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
@@ -111,7 +113,9 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v2.4.0-beta1-fix
+    build:
+      context: ../src/frontend
+      dockerfile: Dockerfile
     ports:
       - "3001:3001"
     environment:
