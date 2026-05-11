@@ -443,6 +443,7 @@ dependencies = [
     { name = "datasets" },
     { name = "dmasync", marker = "sys_platform != 'darwin'" },
     { name = "dmpython", marker = "sys_platform != 'darwin'" },
+    { name = "dmsqlalchemy", marker = "sys_platform != 'darwin'" },
     { name = "e2b-code-interpreter" },
     { name = "emoji" },
     { name = "fastapi" },
@@ -543,6 +544,7 @@ requires-dist = [
     { name = "datasets", specifier = ">=4.3.0" },
     { name = "dmasync", marker = "sys_platform != 'darwin'" },
     { name = "dmpython", marker = "sys_platform != 'darwin'" },
+    { name = "dmsqlalchemy", marker = "sys_platform != 'darwin'" },
     { name = "e2b-code-interpreter", specifier = "==1.5.2" },
     { name = "emoji", specifier = ">=2.15.0" },
     { name = "fakeredis", extras = ["lua"], marker = "extra == 'test'", specifier = ">=2.21" },
@@ -1656,6 +1658,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/13/4e/804176a7059e5f0c3b3b2196d7f23a4b09c28514f4b491428d7e38364262/dmpython-2.5.32-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:4bde0e3b32b011cd1573f941e7680acebd2dda206962603373cff082aa3197d0", size = 11575994, upload-time = "2026-04-13T09:35:36.915Z" },
     { url = "https://files.pythonhosted.org/packages/0e/53/c7d89a1f73289fef39eb82bab230a1a976d03277d031bf2320d87e4055e2/dmpython-2.5.32-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:2d54c3b0daf9e3196bc7a85d1d1237a5e897fe5153cfaf9734b116c922e9dc82", size = 10876690, upload-time = "2026-04-13T09:06:13.867Z" },
     { url = "https://files.pythonhosted.org/packages/4f/38/eb0c774a826b2feff3096bcb24942ac45a92fcdb18dd35c80200a6cebc68/dmpython-2.5.32-cp314-cp314-win_amd64.whl", hash = "sha256:b0fdef9ef37fadf2d9a0548a54d58c4efafa6f59ceac0404e0a1d6a7069a45d3", size = 8670385, upload-time = "2026-04-13T09:26:41.859Z" },
+]
+
+[[package]]
+name = "dmsqlalchemy"
+version = "2.0.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dmpython" },
+    { name = "sqlalchemy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/aa/b5154b3d0555c9bde5cd1b494514793bc2755df327b03e050232e02b6f59/dmsqlalchemy-2.0.12-py3-none-any.whl", hash = "sha256:e20a9fa4120e681c9ff660ae8abdcd51ecb6e86fab6837924a5e86a8a94fdbb3", size = 59252, upload-time = "2026-04-27T06:32:58.27Z" },
 ]
 
 [[package]]
