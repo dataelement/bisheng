@@ -58,7 +58,7 @@ def fake_msg():
 @patch("bisheng.notification.forwarder._fire_and_forget")
 @patch("bisheng.notification.forwarder.settings")
 def test_forward_skipped_when_disabled(mock_settings, mock_fire, fake_msg):
-    mock_settings.in_app_message_forwarding.cofco.enabled = False
+    mock_settings.get_cofco_forwarding_conf.return_value.enabled = False
     maybe_forward_external(fake_msg)
     mock_fire.assert_not_called()
 
@@ -66,7 +66,7 @@ def test_forward_skipped_when_disabled(mock_settings, mock_fire, fake_msg):
 @patch("bisheng.notification.forwarder._fire_and_forget")
 @patch("bisheng.notification.forwarder.settings")
 def test_forward_skipped_when_action_code_not_forwardable(mock_settings, mock_fire, fake_msg):
-    mock_settings.in_app_message_forwarding.cofco.enabled = True
+    mock_settings.get_cofco_forwarding_conf.return_value.enabled = True
     fake_msg.action_code = "some_other_code"
     maybe_forward_external(fake_msg)
     mock_fire.assert_not_called()
@@ -78,7 +78,7 @@ def test_forward_skipped_when_action_code_not_forwardable(mock_settings, mock_fi
 def test_forward_skipped_when_all_recipients_unresolved(
     mock_settings, mock_resolve, mock_fire, fake_msg,
 ):
-    mock_settings.in_app_message_forwarding.cofco.enabled = True
+    mock_settings.get_cofco_forwarding_conf.return_value.enabled = True
     mock_resolve.return_value = (None, "external_id_empty")
     maybe_forward_external(fake_msg)
     mock_fire.assert_not_called()
@@ -92,10 +92,10 @@ def test_forward_skipped_when_all_recipients_unresolved(
 def test_forward_schedules_fire_and_forget(
     mock_settings, mock_resolve, mock_extract, mock_fire, mock_payload_settings, fake_msg,
 ):
-    mock_settings.in_app_message_forwarding.cofco.enabled = True
+    mock_settings.get_cofco_forwarding_conf.return_value.enabled = True
     mock_resolve.return_value = ("EMP001", "")
     mock_extract.return_value = ("张三", "技术频道")
-    mock_payload_settings.in_app_message_forwarding.cofco.bisheng_inbox_url = "https://bisheng.cofco.com"
+    mock_payload_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
 
     maybe_forward_external(fake_msg)
 
@@ -114,7 +114,7 @@ def test_skipped_logs_include_message_id_and_reason(
     """Skipped-path logs must contain forward.skipped + key fields for troubleshooting."""
     import logging
     caplog.set_level(logging.INFO)
-    mock_settings.in_app_message_forwarding.cofco.enabled = True
+    mock_settings.get_cofco_forwarding_conf.return_value.enabled = True
     mock_resolve.return_value = (None, "external_id_empty")
 
     maybe_forward_external(fake_msg)

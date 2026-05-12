@@ -455,7 +455,8 @@ export async function searchManagerSourcesApi(params: {
 }
 
 export async function getFeedbackTips(): Promise<any> {
-    return await request.get(`/api/v1/workstation/config/subscription`);
+    const res: any = await request.get(`/api/v1/workstation/config/subscription`);
+    return res?.data ?? res;
 }
 /**
  * POST /api/v1/channel/manager/add_website_source

@@ -1,5 +1,5 @@
 """Build E+ textcard payloads from InboxMessage action_codes."""
-from bisheng.core.config import settings
+from bisheng.common.services.config_service import settings
 
 
 FORWARDABLE_ACTION_CODES: set[str] = {
@@ -48,7 +48,7 @@ _TEMPLATES: dict[str, dict[str, str]] = {
 
 def build_textcard_url(message_id: int) -> str:
     """Return the BiSheng callback URL for a textcard button."""
-    base = settings.in_app_message_forwarding.cofco.bisheng_inbox_url.rstrip("/")
+    base = settings.get_cofco_forwarding_conf().bisheng_inbox_url.rstrip("/")
     return f"{base}/?open-notifications=1&message-id={message_id}"
 
 

@@ -38,6 +38,7 @@ from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_admin_scope_tenant_id, get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
@@ -66,7 +67,6 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.llm.domain.const import LLMModelType
-from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.share_fallback import (
     get_model_by_id_with_share_fallback,
 )
@@ -196,6 +196,16 @@ class KnowledgeService(KnowledgeUtils):
         return KnowledgeDao.get_first_knowledge()
 
     @classmethod
+    def _is_scoped_super_admin(cls, login_user: UserPayload) -> bool:
+        current_tid = get_current_tenant_id()
+        return bool(
+            getattr(login_user, 'is_global_super', False)
+            and get_admin_scope_tenant_id() is not None
+            and current_tid is not None
+            and current_tid != DEFAULT_TENANT_ID
+        )
+
+    @classmethod
     async def get_knowledge(
         cls,
         request: Request,
@@ -208,9 +218,11 @@ class KnowledgeService(KnowledgeUtils):
         permission_id: str = 'use_kb',
         preferred_ids: Optional[List[int]] = None,
     ) -> Tuple[List[KnowledgeRead], int]:
+        scoped_super_admin = cls._is_scoped_super_admin(login_user)
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
         # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
-        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_library')
+        accessible_ids = None if scoped_super_admin else await login_user.rebac_list_accessible('can_read',
+                                                                                                'knowledge_library')
         if accessible_ids is not None:
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
                 login_user.user_id, knowledge_type,

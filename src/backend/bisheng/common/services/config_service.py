@@ -9,7 +9,7 @@ from bisheng.common.repositories.implementations.config_repository_impl import C
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
     WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf, \
-    DailyChatConf, ShougangConf
+    DailyChatConf, ShougangConf, CofcoForwardingConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -272,6 +272,23 @@ class ConfigService(Settings):
         # Get all of them firstkey
         all_config = self.get_all_config()
         return all_config.get(key, {})
+
+    def get_cofco_forwarding_conf(self) -> CofcoForwardingConf:
+        """Hot-reload E+ forwarding config from DB; fall back to YAML boot value.
+
+        Save via POST /api/v1/config/save invalidates the redis cache and the
+        next call here picks up the new value without a process restart.
+        """
+        all_config = self.get_all_config()
+        db_block = (all_config.get('in_app_message_forwarding') or {}).get('cofco') or {}
+        if db_block:
+            try:
+                return CofcoForwardingConf.model_validate(db_block)
+            except Exception as exc:
+                logger.warning(
+                    'Invalid cofco forwarding config in DB: %s; falling back to YAML', exc,
+                )
+        return self.in_app_message_forwarding.cofco
 
     async def aget_from_db(self, key: str):
         # Get all of them firstkey

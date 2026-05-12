@@ -3,7 +3,6 @@ from typing import Optional
 from fastapi import APIRouter, Body
 
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
 from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponseModel, UsedAppPin, resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
@@ -13,10 +12,10 @@ from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
-
+from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
+from bisheng.workstation.domain.services.constants import USED_APP_PIN_TYPE
+from bisheng.workstation.domain.services.workstation_service import WorkStationService
 from ..dependencies import LoginUserDep
-from ...domain.services.workstation_service import WorkStationService
-from ...domain.services.constants import USED_APP_PIN_TYPE
 
 router = APIRouter()
 
@@ -29,7 +28,7 @@ async def get_recommended_apps(login_user=LoginUserDep):
       even if an app later went offline.
     - Regular users (chat landing): filter to online apps the user can access.
     """
-    config = WorkStationService.get_config()
+    config = await WorkStationService.aget_config()
     if not config or not config.recommendedApps:
         return resp_200(data=[])
 

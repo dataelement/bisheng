@@ -1,38 +1,41 @@
-from bisheng.api.v1.assistant import router as assistant_router
-from bisheng.api.v1.audit import router as audit_router
-from bisheng.api.v1.chat import router as chat_router
-from bisheng.api.v1.endpoints import router as endpoints_router
-from bisheng.api.v1.evaluation import router as evaluation_router
-from bisheng.api.v1.flows import router as flows_router
-from bisheng.api.v1.invite_code import router as invite_code_router
-from bisheng.api.v1.mark_task import router as mark_router
-from bisheng.api.v1.report import router as report_router
-from bisheng.api.v1.skillcenter import router as skillcenter_router
-from bisheng.api.v1.tag import router as tag_router
-from bisheng.api.v1.usergroup import router as group_router
-from bisheng.api.v1.variable import router as variable_router
-from bisheng.api.v1.workflow import router as workflow_router
-from bisheng.tool.api.tool import router as tool_router
-from bisheng.user.api.user import router as user_router
-from bisheng.workstation.api import router as workstation_router
+"""Lazy exports for v1 routers.
 
-__all__ = [
-    'chat_router',
-    'endpoints_router',
-    'flows_router',
-    'skillcenter_router',
-    'user_router',
-    'variable_router',
-    'report_router',
-    'assistant_router',
-    'evaluation_router',
-    'group_router',
-    'audit_router',
-    'tag_router',
-    'workflow_router',
-    'mark_router',
-    "tool_router",
-    "invite_code_router",
-    "workstation_router",
-]
+Importing nested schema modules under ``bisheng.api.v1`` should not
+eagerly initialize the entire v1 router tree. Keep router construction
+lazy so domain/service scripts can safely import schema definitions.
+"""
 
+from __future__ import annotations
+
+from typing import Any
+
+_ROUTER_EXPORTS = {
+    'assistant_router': ('bisheng.api.v1.assistant', 'router'),
+    'audit_router': ('bisheng.api.v1.audit', 'router'),
+    'chat_router': ('bisheng.api.v1.chat', 'router'),
+    'endpoints_router': ('bisheng.api.v1.endpoints', 'router'),
+    'evaluation_router': ('bisheng.api.v1.evaluation', 'router'),
+    'flows_router': ('bisheng.api.v1.flows', 'router'),
+    'invite_code_router': ('bisheng.api.v1.invite_code', 'router'),
+    'mark_router': ('bisheng.api.v1.mark_task', 'router'),
+    'report_router': ('bisheng.api.v1.report', 'router'),
+    'skillcenter_router': ('bisheng.api.v1.skillcenter', 'router'),
+    'tag_router': ('bisheng.api.v1.tag', 'router'),
+    'group_router': ('bisheng.api.v1.usergroup', 'router'),
+    'variable_router': ('bisheng.api.v1.variable', 'router'),
+    'workflow_router': ('bisheng.api.v1.workflow', 'router'),
+    'tool_router': ('bisheng.tool.api.tool', 'router'),
+    'user_router': ('bisheng.user.api.user', 'router'),
+    'workstation_router': ('bisheng.workstation.api', 'router'),
+}
+
+__all__ = list(_ROUTER_EXPORTS.keys())
+
+
+def __getattr__(name: str) -> Any:
+    target = _ROUTER_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(name)
+    module_name, attr_name = target
+    module = __import__(module_name, fromlist=[attr_name])
+    return getattr(module, attr_name)
