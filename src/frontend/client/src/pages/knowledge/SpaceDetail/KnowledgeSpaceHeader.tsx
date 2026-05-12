@@ -228,6 +228,13 @@ export function KnowledgeSpaceHeader({
                             {localize("com_knowledge.fail")}
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.VIOLATION)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.VIOLATION, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.violation")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
                             checked={statusFilter.includes(FileStatus.TIMEOUT)}
                             onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
                             onSelect={(e) => e.preventDefault()}

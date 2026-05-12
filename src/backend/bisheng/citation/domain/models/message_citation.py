@@ -5,6 +5,7 @@ from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.dialect_helpers import JsonType
 
 class MessageCitationBase(SQLModelSerializable):
     citation_id: str = Field(index=True, unique=True, max_length=128)
@@ -22,5 +23,3 @@ class MessageCitation(MessageCitationBase, table=True):
     __tablename__ = "message_citation"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-
-from bisheng.core.database.dialect_helpers import JsonType

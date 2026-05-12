@@ -7,6 +7,7 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 
 class ExecType(Enum):
     FLOW = 'flow'
@@ -99,5 +100,3 @@ class EvaluationDao(EvaluationBase):
             session.commit()
             session.refresh(evaluation)
             return evaluation
-
-from bisheng.core.database.dialect_helpers import JsonType

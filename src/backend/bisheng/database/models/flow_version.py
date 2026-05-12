@@ -9,6 +9,7 @@ from sqlalchemy import func, Integer, String
 from sqlmodel import Field, select, update, text, Column, DateTime
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.database.models.flow import Flow, FlowType
 
@@ -235,5 +236,3 @@ class FlowVersionDao(FlowVersionBase):
             await session.commit()
 
             return True
-
-from bisheng.core.database.dialect_helpers import JsonType

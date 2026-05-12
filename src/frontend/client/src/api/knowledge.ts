@@ -19,7 +19,8 @@ export enum FileStatus {
     FAILED = "failed",
     REBUILDING = "rebuilding",
     WAITING = "waiting",
-    TIMEOUT = "timeout"
+    TIMEOUT = "timeout",
+    VIOLATION = "violation"
 }
 
 /** File / folder type used for UI rendering */
@@ -146,6 +147,16 @@ export interface FileTag {
     name: string;
 }
 
+export interface SensitiveWordHit {
+    word: string;
+    count: number;
+}
+
+export interface KnowledgeFileSensitiveCheck {
+    autoReply?: string;
+    hits: SensitiveWordHit[];
+}
+
 export interface KnowledgeFile {
     id: string;
     name: string;
@@ -160,6 +171,7 @@ export interface KnowledgeFile {
     updatedAt: string;           // mapped from update_time
     thumbnail?: string;
     errorMessage?: string;
+    sensitiveCheck?: KnowledgeFileSensitiveCheck;
     /** Number of successfully parsed files (folders only) */
     successFileNum?: number;
     /** Total number of files (folders only) */
@@ -390,6 +402,19 @@ function deriveFileType(raw: any): FileType {
     }
 }
 
+function formatSensitiveViolationMessage(hits: any[]): string {
+    const words = hits
+        .map((item) => String(item?.word ?? "").trim())
+        .filter(Boolean)
+        .filter((word, index, arr) => arr.indexOf(word) === index);
+
+    if (!words.length) {
+        return "您上传的文件包含违规内容，请修改后重试";
+    }
+
+    return `您上传的文件包含违规内容：{${words.join(",")}}，请修改后重试`;
+}
+
 export function extractKnowledgeFileError(raw: any): string | undefined {
     const directMessage = raw?.error_message;
     if (typeof directMessage === "string" && directMessage.trim()) {
@@ -404,6 +429,10 @@ export function extractKnowledgeFileError(raw: any): string | undefined {
     const trimmedRemark = remark.trim();
     try {
         const parsed = JSON.parse(trimmedRemark);
+        if (parsed?.reason === "sensitive_check") {
+            return formatSensitiveViolationMessage(Array.isArray(parsed?.hits) ? parsed.hits : []);
+        }
+
         const statusMessage = parsed?.status_message;
         if (typeof statusMessage === "string" && statusMessage.trim()) {
             const replacedMessage = statusMessage.replace(/\{([^{}]+)\}/g, (placeholder, key) => {
@@ -440,6 +469,33 @@ export function extractKnowledgeFileError(raw: any): string | undefined {
     }
 
     return undefined;
+}
+
+export function extractKnowledgeFileSensitiveCheck(raw: any): KnowledgeFileSensitiveCheck | undefined {
+    const remark = raw?.remark;
+    if (typeof remark !== "string" || !remark.trim()) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(remark.trim());
+        if (parsed?.reason !== "sensitive_check") {
+            return undefined;
+        }
+        const hits = Array.isArray(parsed?.hits)
+            ? parsed.hits
+                .map((item: any) => ({
+                    word: String(item?.word ?? ""),
+                    count: Number(item?.count ?? 0),
+                }))
+                .filter((item: SensitiveWordHit) => item.word && item.count > 0)
+            : [];
+        return {
+            autoReply: typeof parsed?.auto_reply === "string" ? parsed.auto_reply : undefined,
+            hits,
+        };
+    } catch {
+        return undefined;
+    }
 }
 
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
@@ -485,6 +541,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         updatedAt: raw?.update_time ?? "",
         thumbnail: raw?.thumbnail ?? raw?.thumbnails,
         errorMessage: extractKnowledgeFileError(raw),
+        sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
         fileSource: raw?.file_source,
@@ -527,6 +584,7 @@ function mapFileStatus(status: number): FileStatus {
         case 4: return FileStatus.REBUILDING;
         case 5: return FileStatus.WAITING;
         case 6: return FileStatus.TIMEOUT;
+        case 7: return FileStatus.VIOLATION;
         default: return FileStatus.WAITING;
     }
 }
@@ -540,12 +598,13 @@ export function fileStatusToNumber(status: FileStatus): number {
         case FileStatus.REBUILDING: return 4;
         case FileStatus.WAITING: return 5;
         case FileStatus.TIMEOUT: return 6;
+        case FileStatus.VIOLATION: return 7;
         default: return 0;
     }
 }
 
-/** Backend `/children` filter: all statuses except FAILED (3). Used when joined members browse the file list. */
-export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6];
+/** Backend `/children` filter for members: keep violation visible, exclude generic failed files. */
+export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6, 7];
 
 /** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
 export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
@@ -567,6 +626,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         updatedAt: raw.update_time || "",
         thumbnail: raw.thumbnails || undefined,
         errorMessage: extractKnowledgeFileError(raw),
+        sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw.success_file_num,
         fileNum: raw.file_num,
     };

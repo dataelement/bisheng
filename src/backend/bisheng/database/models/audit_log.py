@@ -2,13 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, String, JSON
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import json_array_contains
+from bisheng.core.database.dialect_helpers import JsonType, json_array_contains
 from bisheng.utils import generate_uuid
 
 
@@ -466,5 +466,3 @@ class AuditLogDao(AuditLogBase):
                 )
                 rows = (await session.exec(stmt)).all()
                 return list(rows), total
-
-from bisheng.core.database.dialect_helpers import JsonType

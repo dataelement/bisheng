@@ -1058,6 +1058,7 @@
     "customWordList": "Custom Word List",
     "autoReplyContent": "Auto-reply Content",
     "useNewlineToSeparate": "Use newline to separate, each line one item",
+    "useCommaToSeparate": "Use English commas to separate words, e.g. word1,word2,word3",
     "txtFile": "txt file",
     "sensitiveWordMatch": "Sensitive Word Match",
     "defaultAutoReply": "Enter the auto-reply content for when the safety review is triggered, e.g., 'The current conversation content violates relevant regulations, please modify and re-enter.'",

@@ -14,6 +14,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_llm_info_async
 from bisheng.utils.http_middleware import _check_is_global_super
@@ -484,5 +485,3 @@ class LLMDao:
             if tail.isdigit():
                 result.append(int(tail))
         return result
-
-from bisheng.core.database.dialect_helpers import JsonType

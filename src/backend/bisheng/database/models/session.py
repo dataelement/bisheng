@@ -7,6 +7,7 @@ from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.database.models.user_group import UserGroupDao
 
 class SensitiveStatus(Enum):
@@ -368,5 +369,3 @@ class MessageSessionDao(MessageSessionBase):
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
-
-from bisheng.core.database.dialect_helpers import JsonType

@@ -8,6 +8,7 @@ from sqlalchemy import CHAR, Column, Integer, VARCHAR, Enum as SQLEnum, DateTime
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.dialect_helpers import JsonType
 
 class ChannelVisibilityEnum(str, Enum):
     """Channel Visibility Enumeration"""
@@ -93,5 +94,3 @@ class Channel(SQLModelSerializable, table=True):
 
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
-
-from bisheng.core.database.dialect_helpers import JsonType

@@ -6,6 +6,7 @@ from sqlalchemy import Column, DateTime, Integer, text, String
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.database.models.flow import FlowType
 
 class TemplateBase(SQLModelSerializable):
@@ -52,5 +53,3 @@ class TemplateUpdate(SQLModelSerializable):
         if values.get("order_num", None):
             values['order_num'] = int(float(values['order_num']))
         return values
-
-from bisheng.core.database.dialect_helpers import JsonType

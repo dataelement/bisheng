@@ -17,6 +17,7 @@ from sqlmodel import Field, select
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 
 logger = logging.getLogger(__name__)
 
@@ -838,5 +839,3 @@ class UserTenantDao:
                 await session.commit()
                 await session.refresh(new_row)
                 return new_row
-
-from bisheng.core.database.dialect_helpers import JsonType

@@ -9,6 +9,7 @@ from sqlmodel import Field, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 
 class ApprovalRequestTypeEnum(str, Enum):
     DEPARTMENT_KNOWLEDGE_SPACE_FILE_UPLOAD = 'department_knowledge_space_file_upload'
@@ -239,5 +240,3 @@ class ApprovalRequestDao(ApprovalRequestBase):
                     count_stmt = count_stmt.where(cond)
             total = await session.scalar(count_stmt)
         return rows, int(total or 0)
-
-from bisheng.core.database.dialect_helpers import JsonType

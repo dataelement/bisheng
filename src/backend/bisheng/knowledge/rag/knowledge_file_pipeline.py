@@ -9,6 +9,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
+from bisheng.knowledge.rag.pipeline.transformer.content_safety import ContentSafetyTransformer
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
@@ -18,6 +19,8 @@ from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransfor
 from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.user.domain.models.user import UserDao
+from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.utils.file import download_minio_file
 
 
@@ -72,8 +75,18 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             return []
         return [AbstractTransformer(self.invoke_user_id, file_metadata=self.file_metadata, knowledge_file=self.db_file)]
 
+    def _init_content_safety_transformers(self) -> List[BaseDocumentTransformer]:
+        tenant_id = self.db_file.tenant_id or 1
+        if not SensitiveWordPolicyService.is_effective(
+            tenant_id=tenant_id,
+            business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        ):
+            return []
+        return [ContentSafetyTransformer(tenant_id=tenant_id)]
+
     def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
-        abstract_transformers = self._init_abstract_transformers()
+        abstract_transformers = self._init_content_safety_transformers()
+        abstract_transformers.extend(self._init_abstract_transformers())
         # FileEncodingTransformer runs right after AbstractTransformer (in _init_abstract_transformers),
         # using the abstract field for LLM classification. When shougang is disabled it skips internally.
         abstract_transformers.append(FileEncodingTransformer(
@@ -113,7 +126,8 @@ class KnowledgeFilePipeline(BaseFilePipeline):
         return abstract_transformers
 
     def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
-        abstract_transformers = self._init_abstract_transformers()
+        abstract_transformers = self._init_content_safety_transformers()
+        abstract_transformers.extend(self._init_abstract_transformers())
         abstract_transformers.append(ExtraFileTransformer(
             loader=self.loader,
             document_id=str(self.db_file.id),

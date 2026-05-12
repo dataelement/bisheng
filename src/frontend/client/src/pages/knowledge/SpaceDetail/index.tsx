@@ -9,6 +9,12 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
@@ -121,6 +127,7 @@ export function KnowledgeSpaceContent({
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
+    const [violationFile, setViolationFile] = useState<KnowledgeFile | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -639,6 +646,10 @@ export function KnowledgeSpaceContent({
 
     const handlePreviewFile = (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
+        if (file?.status === FileStatus.VIOLATION) {
+            setViolationFile(file);
+            return;
+        }
         const fileName = file?.name || localize("com_knowledge.unknown_file");
         // Use extension from filename for preview viewer dispatch instead of API type field
         const ext = fileName.split('.').pop()?.toLowerCase() || "";
@@ -738,6 +749,7 @@ export function KnowledgeSpaceContent({
         const retryIds = displayFiles
             .filter(f => selectedFiles.has(f.id) && (
                 f.status === FileStatus.FAILED ||
+                f.status === FileStatus.VIOLATION ||
                 (f.successFileNum !== undefined && f.fileNum !== undefined && f.successFileNum < f.fileNum)
             ))
             .map(f => Number(f.id));
@@ -785,6 +797,7 @@ export function KnowledgeSpaceContent({
     const hasFailedFiles = displayFiles.some(f =>
         selectedFiles.has(f.id) && (
             f.status === FileStatus.FAILED ||
+            f.status === FileStatus.VIOLATION ||
             (f.type === FileType.FOLDER && f.successFileNum! < f.fileNum!)
         )
     );
@@ -1026,6 +1039,23 @@ export function KnowledgeSpaceContent({
                         : []
                 }
             />
+
+            <Dialog open={!!violationFile} onOpenChange={(open) => {
+                if (!open) setViolationFile(null);
+            }}>
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {localize("com_knowledge.sensitive_violation_title")}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="text-sm text-[#1d2129]">
+                        <div className="rounded-md bg-[#fff2f0] px-3 py-2 text-[#f53f3f]">
+                            {violationFile?.errorMessage || localize("com_knowledge.sensitive_violation_message")}
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {permTarget && (
                 <KnowledgeSpaceShareDialog

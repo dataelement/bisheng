@@ -2328,10 +2328,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
         all_file_level_path = set()
+        retryable_status = {
+            KnowledgeFileStatus.FAILED.value,
+            KnowledgeFileStatus.VIOLATION.value,
+        }
         for file in retry_files:
             if file.knowledge_id != space_id:
                 continue
-            if file.file_type == FileType.FILE.value and file.status == KnowledgeFileStatus.FAILED.value:
+            if file.file_type == FileType.FILE.value and file.status in retryable_status:
                 await self._require_resource_permission('can_edit', 'knowledge_file', file.id)
                 retry_knowledge_file_celery.delay(file.id)
                 all_file_ids.append(file.id)
@@ -2339,10 +2343,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             elif file.file_type == FileType.DIR.value:
                 await self._require_resource_permission('can_edit', 'folder', file.id)
                 all_failed_files = await SpaceFileDao.get_children_by_prefix(knowledge_id=space_id,
-                                                                             prefix=file.file_level_path + f"/{file.id}",
-                                                                             file_status=KnowledgeFileStatus.FAILED)
+                                                                             prefix=file.file_level_path + f"/{file.id}")
                 for item in all_failed_files:
-                    if item.status == KnowledgeFileStatus.FAILED.value and item.file_type == FileType.FILE:
+                    if item.status in retryable_status and item.file_type == FileType.FILE.value:
                         await self._require_resource_permission('can_edit', 'knowledge_file', item.id)
                         retry_knowledge_file_celery.delay(item.id)
                         all_file_ids.append(item.id)

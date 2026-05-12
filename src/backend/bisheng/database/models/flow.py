@@ -13,6 +13,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.role_access import AccessType, RoleAccess
@@ -721,5 +722,3 @@ class FlowDao(FlowBase):
                     'update_time': one[8]
                 })
             return data[0] if data else None
-
-from bisheng.core.database.dialect_helpers import JsonType

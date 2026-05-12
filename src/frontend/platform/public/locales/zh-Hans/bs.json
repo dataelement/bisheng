@@ -1048,6 +1048,7 @@
     "customWordList": "自定义词表",
     "autoReplyContent": "自动回复内容",
     "useNewlineToSeparate": "使用换行符进行分隔，每行一个",
+    "useCommaToSeparate": "使用英文逗号分隔，例如：词1,词2,词3",
     "txtFile": "txt文件",
     "sensitiveWordMatch": "敏感词匹配",
     "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。",

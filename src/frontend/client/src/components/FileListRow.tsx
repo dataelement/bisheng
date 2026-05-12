@@ -80,6 +80,8 @@ export function FileListRow({
                 return <span className="text-[#165dff]">处理中</span>;
             case FileStatus.FAILED:
                 return <span className="text-[#f53f3f]">失败</span>;
+            case FileStatus.VIOLATION:
+                return <span className="text-[#f53f3f]">违规</span>;
             default:
                 return null;
         }
@@ -190,7 +192,7 @@ export function FileListRow({
                                         <Edit className="size-4 mr-2" />
                                         重命名
                                     </DropdownMenuItem>
-                                    {file.status === FileStatus.FAILED && onRetry && (
+                                    {(file.status === FileStatus.FAILED || file.status === FileStatus.VIOLATION) && onRetry && (
                                         <DropdownMenuItem onClick={onRetry}>
                                             <Circle className="size-4 mr-2" />
                                             重试

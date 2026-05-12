@@ -10,6 +10,7 @@ from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.database.base import async_get_count, get_count
 
 class KnowledgeFileStatus(int, Enum):
@@ -19,6 +20,7 @@ class KnowledgeFileStatus(int, Enum):
     REBUILDING = 4  # Rebuilding
     WAITING = 5  # In queue:
     TIMEOUT = 6  # Super24Hour not parsed, parsing timeout
+    VIOLATION = 7  # Content safety violation
 
 class QAStatus(Enum):
     DISABLED = 0  # User manually closedQA
@@ -153,6 +155,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     _DUPLICATE_EXCLUDED_STATUSES: ClassVar[tuple[int, ...]] = (
         KnowledgeFileStatus.FAILED.value,
         KnowledgeFileStatus.TIMEOUT.value,
+        KnowledgeFileStatus.VIOLATION.value,
     )
 
     @classmethod
@@ -834,5 +837,3 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             session.commit()
 
 # ─── Space Folder / File helpers (Space-scoped operations on KnowledgeFile) ──
-
-from bisheng.core.database.dialect_helpers import JsonType

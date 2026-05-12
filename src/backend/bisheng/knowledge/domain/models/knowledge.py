@@ -9,6 +9,7 @@ from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
 
@@ -859,5 +860,3 @@ class KnowledgeDao(KnowledgeBase):
             return statement.order_by(Knowledge.name.asc())
         else:
             return statement.order_by(Knowledge.update_time.desc())
-
-from bisheng.core.database.dialect_helpers import JsonType

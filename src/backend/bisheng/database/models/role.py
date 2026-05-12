@@ -6,6 +6,7 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.role_access import RoleAccess
 from bisheng.user.domain.models.user_role import UserRole
@@ -327,5 +328,3 @@ class RoleDao(RoleBase):
         async with get_async_db_session() as session:
             rows = (await session.exec(stmt)).all()
             return {row[0]: row[1] for row in rows}
-
-from bisheng.core.database.dialect_helpers import JsonType

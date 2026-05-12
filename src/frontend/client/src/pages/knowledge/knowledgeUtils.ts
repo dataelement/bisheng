@@ -1,10 +1,10 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
 
-/** 列表/卡片：可点击「查看详情」——文件夹，或解析成功（SUCCESS）的文件 */
+/** 列表/卡片：可点击文件夹、解析成功文件，或查看违规详情。 */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
     if (file.type === FileType.FOLDER) return true;
-    return file.status === FileStatus.SUCCESS;
+    return file.status === FileStatus.SUCCESS || file.status === FileStatus.VIOLATION;
 }
 
 export function getKnowledgeApprovalStatusLabel(file: KnowledgeFile): string | null {
