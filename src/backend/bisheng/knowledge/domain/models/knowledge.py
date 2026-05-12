@@ -11,7 +11,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
-from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 
 
@@ -19,6 +19,13 @@ class KnowledgeTypeEnum(Enum):
     QA = 1  # QAThe knowledge base upon
     NORMAL = 0  # Docly Knowledge Base
     PRIVATE = 2  # Workbench Personal Knowledge Base
+
+
+class KnowledgeLevelEnum(Enum):
+    LEVEL_ORG_1 = 0  # Top-level Organization
+    LEVEL_ORG_2 = 1  # Second-level Organization
+    LEVEL_ORG_3 = 2  # Third-level Organization
+    LEVEL_MEMBER = 3  # Member
 
 
 class KnowledgeState(Enum):
@@ -57,6 +64,10 @@ class KnowledgeBase(SQLModelSerializable):
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
+    level: Optional[int] = Field(index=False, default=KnowledgeLevelEnum.LEVEL_MEMBER.value,
+                                 description='Knowledge Base Level, value from KnowledgeLevelEnum')
+    parent_id: Optional[int] = Field(default=None, index=True,
+                                     description='Parent Knowledge Base ID')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -87,7 +98,8 @@ class KnowledgeUpdate(BaseModel):
     knowledge_id: int
     name: Optional[str] = None
     description: Optional[str] = None
-
+    level: Optional[int] = None
+    parent_id: Optional[int] = None
 
 class KnowledgeCreate(KnowledgeBase):
     is_partition: Optional[bool] = None
@@ -179,6 +191,71 @@ class KnowledgeDao(KnowledgeBase):
         async with get_async_db_session() as session:
             result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
             return result.all()
+
+    @classmethod
+    def get_granted_kbs_and_descendants(cls, explicit_ids: List[int]) -> dict:
+        """
+        Returns a dict: {kb_id: user_context_level}
+        """
+        if not explicit_ids:
+            return {}
+            
+        kb_to_level = {}
+        with get_sync_db_session() as session:
+            explicit_kbs = session.exec(select(Knowledge).where(col(Knowledge.id).in_(explicit_ids))).all()
+            
+        current_layer = explicit_kbs
+        for kb in explicit_kbs:
+            if kb.level is not None:
+                kb_to_level[kb.id] = kb.level
+                
+        for _ in range(3):
+            if not current_layer:
+                break
+            parent_ids = [kb.id for kb in current_layer]
+            with get_sync_db_session() as session:
+                children = session.exec(select(Knowledge).where(col(Knowledge.parent_id).in_(parent_ids))).all()
+                
+            for child in children:
+                if child.parent_id in kb_to_level:
+                    parent_context_level = kb_to_level[child.parent_id]
+                    if child.id not in kb_to_level or parent_context_level < kb_to_level[child.id]:
+                        kb_to_level[child.id] = parent_context_level
+            current_layer = children
+            
+        return kb_to_level
+
+    @classmethod
+    async def aget_granted_kbs_and_descendants(cls, explicit_ids: List[int]) -> dict:
+        if not explicit_ids:
+            return {}
+            
+        kb_to_level = {}
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(explicit_ids)))
+            explicit_kbs = result.all()
+            
+        current_layer = explicit_kbs
+        for kb in explicit_kbs:
+            if kb.level is not None:
+                kb_to_level[kb.id] = kb.level
+                
+        for _ in range(3):
+            if not current_layer:
+                break
+            parent_ids = [kb.id for kb in current_layer]
+            async with get_async_db_session() as session:
+                result = await session.exec(select(Knowledge).where(col(Knowledge.parent_id).in_(parent_ids)))
+                children = result.all()
+                
+            for child in children:
+                if child.parent_id in kb_to_level:
+                    parent_context_level = kb_to_level[child.parent_id]
+                    if child.id not in kb_to_level or parent_context_level < kb_to_level[child.id]:
+                        kb_to_level[child.id] = parent_context_level
+            current_layer = children
+            
+        return kb_to_level
 
     @classmethod
     def _user_knowledge_filters(
@@ -289,82 +366,134 @@ class KnowledgeDao(KnowledgeBase):
             return session.scalar(select(Knowledge.id).where(*filters))
 
     @classmethod
+    def get_authorized_knowledge_ids(cls, user_info: User) -> List[int]:
+        """
+        Synchronous core operator to calculate authorized knowledge base IDs.
+        """
+        role_list = UserRoleDao.get_user_roles(user_info.user_id)
+        is_admin = False
+        if role_list:
+            for role in role_list:
+                if role.role_id == 1:
+                    is_admin = True
+        if is_admin:
+            return []
+
+        explicit_ids = user_info.org_knowledge_ids or []
+        kb_to_user_level = cls.get_granted_kbs_and_descendants(explicit_ids)
+        allowed_kbs_descendants = list(kb_to_user_level.keys())
+
+        candidate_kbs = cls.get_user_knowledge(user_info.user_id,
+                                               knowledge_id_extra=allowed_kbs_descendants)
+        
+        authorized_ids = []
+        for kb in candidate_kbs:
+            if kb.user_id == user_info.user_id:
+                authorized_ids.append(kb.id)
+                continue
+            if kb.id in kb_to_user_level and kb.level is not None:
+                user_level_context = kb_to_user_level[kb.id]
+                if user_level_context == kb.level and kb.id in explicit_ids:
+                    authorized_ids.append(kb.id)
+                elif user_level_context < kb.level:
+                    authorized_ids.append(kb.id)
+        return authorized_ids
+
+    @classmethod
     def judge_knowledge_permission(cls, user_name: str,
                                    knowledge_ids: List[int]) -> List[Knowledge]:
         """
-        Based on username and knowledge baseIDList to get a list of knowledge bases that the user has permission to view
-        :param user_name: Username
-        :param knowledge_ids: The knowledge base uponIDVertical
-        :return: Returns a list of knowledge bases that the user has permissions
+        Based on username and knowledge base ID list, get a list of knowledge bases that the user has permission to view.
+        Delegates core computation to get_authorized_knowledge_ids to achieve full symmetry.
         """
-        # get user info
         user_info = UserDao.get_user_by_username(user_name)
         if not user_info:
             return []
 
-        # Query the role the user belongs to
         role_list = UserRoleDao.get_user_roles(user_info.user_id)
-        if not role_list:
-            return []
-
-        role_id_list = []
         is_admin = False
-        for role in role_list:
-            role_id_list.append(role.role_id)
-            if role.role_id == 1:
-                is_admin = True
-        # admin User has all knowledge base permissions
+        if role_list:
+            for role in role_list:
+                if role.role_id == 1:
+                    is_admin = True
         if is_admin:
             return KnowledgeDao.get_list_by_ids(knowledge_ids)
 
-        # query role List of knowledge bases with permissions
-        role_access_list = RoleAccessDao.find_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                          AccessType.KNOWLEDGE)
+        authorized_ids = cls.get_authorized_knowledge_ids(user_info)
+        valid_ids = [kid for kid in knowledge_ids if kid in authorized_ids]
+        if not valid_ids:
+            return []
+            
+        return KnowledgeDao.get_list_by_ids(valid_ids)
 
-        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                     knowledge_id_extra=[int(access.third_id) for access in
-                                                                         role_access_list],
-                                                     filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+    @classmethod
+    async def aget_authorized_knowledge_ids(cls, user_info: User) -> List[int]:
+        """
+        Calculate the precise list of knowledge base IDs the user is authorized to access,
+        including created KBs and those granted via hierarchy rules.
+        """
+        # Fetch roles via robust async DAO to avoid lazy loading DetachedInstanceError
+        role_list = await UserRoleDao.aget_user_roles(user_info.user_id)
+        is_admin = False
+        if role_list:
+            for role in role_list:
+                if role.role_id == 1:
+                    is_admin = True
+        
+        if is_admin:
+            return []
+
+        explicit_ids = user_info.org_knowledge_ids or []
+        kb_to_user_level = await cls.aget_granted_kbs_and_descendants(explicit_ids)
+        allowed_kbs_descendants = list(kb_to_user_level.keys())
+
+        candidate_kbs = await cls.aget_user_knowledge(user_info.user_id,
+                                                       knowledge_id_extra=allowed_kbs_descendants)
+        
+        authorized_ids = []
+        for kb in candidate_kbs:
+            if kb.user_id == user_info.user_id:
+                authorized_ids.append(kb.id)
+                continue
+            
+            if kb.id in kb_to_user_level and kb.level is not None:
+                user_level_context = kb_to_user_level[kb.id]
+                if user_level_context == kb.level and kb.id in explicit_ids:
+                    authorized_ids.append(kb.id)
+                elif user_level_context < kb.level:
+                    authorized_ids.append(kb.id)
+        
+        return authorized_ids
 
     @classmethod
     async def ajudge_knowledge_permission(cls, user_name: str,
                                           knowledge_ids: List[int]) -> List[Knowledge]:
         """
-        By Username and Knowledge BaseIDlist, asynchronously get a list of knowledge bases that the user has permission to view
-        Args:
-            user_name:
-            knowledge_ids:
-
-        Returns:
-
+        By username and requested knowledge base IDs, asynchronously get the authorized list of knowledge bases.
+        Delegates core computation to aget_authorized_knowledge_ids to eliminate redundancy.
         """
-        # get user info
         user_info = await UserDao.aget_user_by_username(user_name)
         if not user_info:
             return []
-        # Query the role the user belongs to
+
         role_list = await UserRoleDao.aget_user_roles(user_info.user_id)
-        if not role_list:
-            return []
-        role_id_list = []
         is_admin = False
-        for role in role_list:
-            role_id_list.append(role.role_id)
-            if role.role_id == 1:
-                is_admin = True
-        # admin User has all knowledge base permissions
+        if role_list:
+            for role in role_list:
+                if role.role_id == 1:
+                    is_admin = True
         if is_admin:
             return await cls.aget_list_by_ids(knowledge_ids)
-        # query role List of knowledge bases with permissions
-        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, [str(one) for one in knowledge_ids],
-                                                                 AccessType.KNOWLEDGE)
-        # Query whether the knowledge base created by the user is included
-        user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
-                                                            knowledge_id_extra=[int(access.third_id) for access in
-                                                                                role_access_list],
-                                                            filter_knowledge=knowledge_ids)
-        return user_knowledge_list
+
+        # Delegate to the unified authorized ID operator
+        authorized_ids = await cls.aget_authorized_knowledge_ids(user_info)
+        
+        # Intersect requested IDs with authorized whitelist
+        valid_ids = [kid for kid in knowledge_ids if kid in authorized_ids]
+        if not valid_ids:
+            return []
+            
+        return await cls.aget_list_by_ids(valid_ids)
 
     @classmethod
     def filter_knowledge_by_ids(cls,

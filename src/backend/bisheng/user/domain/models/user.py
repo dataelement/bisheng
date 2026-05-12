@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, func, text
+from sqlalchemy import Column, DateTime, func, text, JSON
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -20,6 +20,7 @@ class UserBase(SQLModelSerializable):
     email: Optional[str] = Field(default=None, index=True)
     phone_number: Optional[str] = Field(default=None, index=True)
     dept_id: Optional[str] = Field(default=None, index=True)
+    org_knowledge_ids: Optional[List[int]] = Field(default=[], sa_column=Column(JSON), description='List of Organization Knowledge Base IDs')
     remark: Optional[str] = Field(default=None, index=False)
     delete: int = Field(default=0, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -77,6 +78,7 @@ class UserCreate(UserBase):
 class UserUpdate(SQLModelSerializable):
     user_id: int
     delete: Optional[int] = 0
+    org_knowledge_ids: Optional[List[int]] = None
 
 
 class UserDao(UserBase):
