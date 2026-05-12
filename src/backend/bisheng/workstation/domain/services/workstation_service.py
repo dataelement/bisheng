@@ -269,6 +269,8 @@ class WorkStationService(BaseService):
         login_user: UserPayload,
         file_path,
         background_tasks: BackgroundTasks,
+        *,
+        upload_limit_bytes: Optional[int] = None,
     ):
         knowledge = KnowledgeDao.get_user_knowledge(
             login_user.user_id,
@@ -294,7 +296,10 @@ class WorkStationService(BaseService):
             _ = LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
         except Exception as exc:
             raise EmbeddingModelStatusError(exception=exc)
-        return KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
+        return KnowledgeService.process_knowledge_file(
+            request, login_user, background_tasks, req_data,
+            upload_limit_bytes=upload_limit_bytes,
+        )
 
     @classmethod
     async def queryKnowledgeList(

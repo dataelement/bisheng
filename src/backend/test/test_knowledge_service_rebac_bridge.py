@@ -201,10 +201,6 @@ def test_save_knowledge_file_rejects_upload_batch_over_role_space_file_quota():
     ), patch.object(
         KnowledgeService.permission_service,
         'ensure_knowledge_write_sync',
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_service.QuotaService.get_knowledge_space_upload_limit_bytes',
-        new_callable=AsyncMock,
-        return_value=10,
     ), patch.object(
         service_module.KnowledgeFileDao,
         'get_user_upload_total_file_size',
@@ -223,7 +219,9 @@ def test_save_knowledge_file_rejects_upload_batch_over_role_space_file_quota():
         'delete_batch',
     ) as mock_delete:
         with pytest.raises(SpaceFileSizeLimitError):
-            KnowledgeService.save_knowledge_file(login_user, _make_file_process_req())
+            KnowledgeService.save_knowledge_file(
+                login_user, _make_file_process_req(), upload_limit_bytes=10,
+            )
 
     mock_delete.assert_called_once_with([81])
 
@@ -247,10 +245,6 @@ def test_save_knowledge_file_allows_upload_batch_within_role_space_file_quota():
     ), patch.object(
         KnowledgeService.permission_service,
         'ensure_knowledge_write_sync',
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_service.QuotaService.get_knowledge_space_upload_limit_bytes',
-        new_callable=AsyncMock,
-        return_value=10,
     ), patch.object(
         service_module.KnowledgeFileDao,
         'get_user_upload_total_file_size',
@@ -276,6 +270,7 @@ def test_save_knowledge_file_allows_upload_batch_within_role_space_file_quota():
         _, failed_files, process_files, preview_cache_keys = KnowledgeService.save_knowledge_file(
             login_user,
             _make_file_process_req(),
+            upload_limit_bytes=10,
         )
 
     assert failed_files == []

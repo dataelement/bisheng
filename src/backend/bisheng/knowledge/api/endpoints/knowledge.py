@@ -42,9 +42,10 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
-from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, calc_data_sha256
+from bisheng.utils.util import sync_func_to_async
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -208,14 +209,18 @@ def delete_preview_file_chunk(*,
 
 
 @router.post('/process')
-def process_knowledge_file(*,
-                           request: Request,
-                           login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           background_tasks: BackgroundTasks,
-                           req_data: KnowledgeFileProcess):
+async def process_knowledge_file(*,
+                                 request: Request,
+                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
+                                 background_tasks: BackgroundTasks,
+                                 req_data: KnowledgeFileProcess):
     """ Uploading Files to the Knowledge Base """
 
-    res = KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
+    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+    res = await sync_func_to_async(KnowledgeService.process_knowledge_file)(
+        request, login_user, background_tasks, req_data,
+        upload_limit_bytes=upload_limit_bytes,
+    )
     return resp_200(res)
 
 
