@@ -40,7 +40,7 @@ class CofcoEPlusClient:
             )
             return
 
-        conf = settings.in_app_message_forwarding.cofco
+        conf = settings.get_cofco_forwarding_conf()
         url = f"{conf.api_base.rstrip('/')}/v2/message/send"
         headers = {"appId": conf.app_id, "secret": conf.secret}
         body: dict = {

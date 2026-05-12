@@ -6,13 +6,13 @@ from bisheng.notification.external.cofco_eplus_client import CofcoEPlusClient
 @pytest.fixture
 def mock_settings():
     with patch("bisheng.notification.external.cofco_eplus_client.settings") as m:
-        m.in_app_message_forwarding.cofco.api_base = "http://10.28.64.30:8070/qwmsg-ui"
-        m.in_app_message_forwarding.cofco.app_id = "bisheng"
-        m.in_app_message_forwarding.cofco.secret = "secret123"
-        m.in_app_message_forwarding.cofco.agentid = 1
-        m.in_app_message_forwarding.cofco.timeout_seconds = 5.0
-        m.in_app_message_forwarding.cofco.enable_duplicate_check = 0
-        m.in_app_message_forwarding.cofco.duplicate_check_interval = 1800
+        m.get_cofco_forwarding_conf.return_value.api_base = "http://10.28.64.30:8070/qwmsg-ui"
+        m.get_cofco_forwarding_conf.return_value.app_id = "bisheng"
+        m.get_cofco_forwarding_conf.return_value.secret = "secret123"
+        m.get_cofco_forwarding_conf.return_value.agentid = 1
+        m.get_cofco_forwarding_conf.return_value.timeout_seconds = 5.0
+        m.get_cofco_forwarding_conf.return_value.enable_duplicate_check = 0
+        m.get_cofco_forwarding_conf.return_value.duplicate_check_interval = 1800
         yield m
 
 

@@ -16,21 +16,21 @@ def test_forwardable_set_has_six_codes():
 
 @patch("bisheng.notification.external._payload.settings")
 def test_build_textcard_url_basic(mock_settings):
-    mock_settings.in_app_message_forwarding.cofco.bisheng_inbox_url = "https://bisheng.cofco.com/"
+    mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com/"
     url = build_textcard_url(message_id=12345)
     assert url == "https://bisheng.cofco.com/?open-notifications=1&message-id=12345"
 
 
 @patch("bisheng.notification.external._payload.settings")
 def test_build_textcard_url_strips_trailing_slash(mock_settings):
-    mock_settings.in_app_message_forwarding.cofco.bisheng_inbox_url = "https://bisheng.cofco.com"
+    mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
     url = build_textcard_url(message_id=999)
     assert url == "https://bisheng.cofco.com/?open-notifications=1&message-id=999"
 
 
 @patch("bisheng.notification.external._payload.settings")
 def test_build_textcard_request_channel(mock_settings):
-    mock_settings.in_app_message_forwarding.cofco.bisheng_inbox_url = "https://bisheng.cofco.com"
+    mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
     card = build_textcard(
         message_id=1,
         action_code="request_channel",
@@ -48,7 +48,7 @@ def test_build_textcard_request_channel(mock_settings):
 
 @patch("bisheng.notification.external._payload.settings")
 def test_build_textcard_approved_knowledge_space(mock_settings):
-    mock_settings.in_app_message_forwarding.cofco.bisheng_inbox_url = "https://bisheng.cofco.com"
+    mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
     card = build_textcard(
         message_id=2, action_code="approved_knowledge_space",
         applicant_name="李四", resource_name="研发知识空间", triggered_at="2026-05-13 11:00",
@@ -69,7 +69,7 @@ def test_build_textcard_unknown_action_code_raises():
 @patch("bisheng.notification.external._payload.settings")
 def test_build_textcard_truncates_long_title(mock_settings):
     """E+ API requires title ≤128 bytes and description ≤512 bytes."""
-    mock_settings.in_app_message_forwarding.cofco.bisheng_inbox_url = "https://bisheng.cofco.com"
+    mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
     long_name = "X" * 1000
     card = build_textcard(
         message_id=4, action_code="request_channel",
