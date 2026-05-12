@@ -63,28 +63,33 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
     // Priority: any localStorage entry (including empty) wins so the user's
     // explicit clear is preserved across refresh; admin-configured
-    // default_checked only applies on first session (key absent). When the
-    // KB feature is disabled by admin, clear the state regardless.
+    // default_checked only applies on first session (key absent).
+    // When org-KB is disabled by admin, keep knowledge-space selections and
+    // only drop org KB entries.
     try {
-      if ((bsConfig as any)?.knowledgeBase?.enabled === false) {
-        setSelectedOrgKbs([]);
+      const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
+      let saved: any[] | null = null;
+      if (raw !== null) {
+        try {
+          const v = JSON.parse(raw);
+          if (Array.isArray(v)) saved = v;
+        } catch { /* ignore parse errors */ }
+      }
+
+      const orgKbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
+      if (saved !== null) {
+        setSelectedOrgKbs(
+          orgKbDisabled
+            ? saved.filter((item: any) => item?.type !== 'org')
+            : saved
+        );
       } else {
-        const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
-        let saved: any[] | null = null;
-        if (raw !== null) {
-          try {
-            const v = JSON.parse(raw);
-            if (Array.isArray(v)) saved = v;
-          } catch { /* ignore parse errors */ }
-        }
-        if (saved !== null) {
-          setSelectedOrgKbs(saved);
-        } else {
-          const defaults = ((bsConfig as any)?.orgKbs || [])
+        const defaults = orgKbDisabled
+          ? []
+          : ((bsConfig as any)?.orgKbs || [])
             .filter((k: any) => k.default_checked)
             .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
-          setSelectedOrgKbs(defaults);
-        }
+        setSelectedOrgKbs(defaults);
       }
     } catch { /* ignore */ }
 

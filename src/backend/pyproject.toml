@@ -44,7 +44,7 @@ dependencies = [
     "markdown>=3.9",
     "markdownify>=1.2.0",
     "matplotlib>=3.10.7",
-    "mcp>=1.20.0",
+    "mcp>=1.27.0",
     "minio==7.2.18",
     "miniopy-async>=1.23.4",
     "openai>=1.68.2,<2.0.0",
