@@ -1,5 +1,47 @@
 import request from "./request";
 
+function logKnowledgeMutationStart(action: string, details: Record<string, unknown>): number {
+    const startedAt = Date.now();
+    console.info(`[knowledge:${action}] start`, details);
+    return startedAt;
+}
+
+function logKnowledgeMutationSuccess(action: string, details: Record<string, unknown>, startedAt: number): void {
+    console.info(`[knowledge:${action}] success`, {
+        ...details,
+        duration_ms: Date.now() - startedAt,
+    });
+}
+
+function logKnowledgeMutationError(
+    action: string,
+    details: Record<string, unknown>,
+    startedAt: number,
+    error: unknown
+): void {
+    console.error(`[knowledge:${action}] failed`, {
+        ...details,
+        duration_ms: Date.now() - startedAt,
+        error,
+    });
+}
+
+async function withKnowledgeMutationLog<T>(
+    action: string,
+    details: Record<string, unknown>,
+    task: () => Promise<T>
+): Promise<T> {
+    const startedAt = logKnowledgeMutationStart(action, details);
+    try {
+        const result = await task();
+        logKnowledgeMutationSuccess(action, details, startedAt);
+        return result;
+    } catch (error) {
+        logKnowledgeMutationError(action, details, startedAt, error);
+        throw error;
+    }
+}
+
 // Standard backend response wrapper
 interface ApiResponse<T> {
     status_code: number;
@@ -1106,12 +1148,16 @@ export async function addSpaceTagApi(space_id: string, tag_name: string): Promis
 
 /**
  * Delete a space tag.
- * Backend: DELETE /api/v1/knowledge/space/{space_id}/tag
+ * Backend: POST /api/v1/knowledge/space/{space_id}/tag/delete
  */
 export async function deleteSpaceTagApi(space_id: string, tag_id: number): Promise<void> {
-    await request.deleteWithOptions(`/api/v1/knowledge/space/${space_id}/tag`, {
-        data: { tag_id },
-    });
+    return withKnowledgeMutationLog(
+        "delete-space-tag",
+        { method: "POST", space_id, tag_id },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/tag/delete`, { tag_id });
+        }
+    );
 }
 
 /**
@@ -1119,7 +1165,13 @@ export async function deleteSpaceTagApi(space_id: string, tag_id: number): Promi
  * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
  */
 export async function updateFileTagsApi(space_id: string, file_id: string, tag_ids: number[]): Promise<void> {
-    await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, { tag_ids });
+    return withKnowledgeMutationLog(
+        "update-file-tags",
+        { method: "POST", space_id, file_id, tag_ids },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, { tag_ids });
+        }
+    );
 }
 
 /**
@@ -1130,7 +1182,13 @@ export async function batchUpdateTagsApi(
     space_id: string,
     data: { file_ids: number[]; tag_ids: number[] }
 ): Promise<void> {
-    await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag`, data);
+    return withKnowledgeMutationLog(
+        "batch-update-tags",
+        { method: "POST", space_id, file_ids: data.file_ids, tag_ids: data.tag_ids },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag`, data);
+        }
+    );
 }
 
 /**
@@ -1313,31 +1371,45 @@ export async function createFolderApi(
 
 /**
  * Rename a folder
+ * Backend: POST /api/v1/knowledge/space/{space_id}/folders/{folder_id}/rename
  */
 export async function renameFolderApi(
     space_id: string,
     folder_id: string,
     name: string
 ): Promise<void> {
-    const res = await request.put(
-        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`,
-        { name }
-    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
-    if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "rename folder failed");
-    }
+    return withKnowledgeMutationLog(
+        "rename-folder",
+        { method: "POST", space_id, folder_id, name },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/folders/${folder_id}/rename`,
+                { name }
+            ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(res.status_message || res.message || res.msg || "rename folder failed");
+            }
+        }
+    );
 }
 
 /**
  * Delete a folder (recursively deletes all children)
+ * Backend: POST /api/v1/knowledge/space/{space_id}/folders/{folder_id}/delete
  */
 export async function deleteFolderApi(space_id: string, folder_id: string): Promise<void> {
-    const res = await request.delete(
-        `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`
-    ) as ApiResponse<null> & { message?: string; msg?: string };
-    if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "delete folder failed");
-    }
+    return withKnowledgeMutationLog(
+        "delete-folder",
+        { method: "POST", space_id, folder_id },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/folders/${folder_id}/delete`
+            ) as ApiResponse<null> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(res.status_message || res.message || res.msg || "delete folder failed");
+            }
+        }
+    );
 }
 
 // ─────────────────────────────────────────────
@@ -1421,20 +1493,34 @@ export async function addArticleToKnowledgeApi(
 
 /**
  * Rename a file
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/rename
  */
 export async function renameFileApi(
     space_id: string,
     file_id: string,
     name: string
 ): Promise<void> {
-    return request.put(`/api/v1/knowledge/space/${space_id}/files/${file_id}`, { name });
+    return withKnowledgeMutationLog(
+        "rename-file",
+        { method: "POST", space_id, file_id, name },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/rename`, { name });
+        }
+    );
 }
 
 /**
  * Delete a single file
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/delete
  */
 export async function deleteFileApi(space_id: string, file_id: string): Promise<void> {
-    return request.delete(`/api/v1/knowledge/space/${space_id}/files/${file_id}`);
+    return withKnowledgeMutationLog(
+        "delete-file",
+        { method: "POST", space_id, file_id },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/delete`);
+        }
+    );
 }
 
 // ─────────────────────────────────────────────
@@ -1448,13 +1534,19 @@ export async function batchDeleteApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
 ): Promise<void> {
-    const res = await request.post(
-        `/api/v1/knowledge/space/${space_id}/files/batch-delete`,
-        data
-    ) as ApiResponse<null> & { message?: string; msg?: string };
-    if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "batch delete failed");
-    }
+    return withKnowledgeMutationLog(
+        "batch-delete",
+        { method: "POST", space_id, file_ids: data.file_ids, folder_ids: data.folder_ids },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/files/batch-delete`,
+                data
+            ) as ApiResponse<null> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(res.status_message || res.message || res.msg || "batch delete failed");
+            }
+        }
+    );
 }
 
 /**

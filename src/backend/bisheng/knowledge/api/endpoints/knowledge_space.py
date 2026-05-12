@@ -329,6 +329,16 @@ async def delete_space_tags(
     return resp_200(result)
 
 
+@router.post('/{space_id}/tag/delete')
+async def delete_space_tags_by_post(
+        space_id: int,
+        tag_id: int = Body(..., embed=True, description='标签ID'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.delete_space_tag(space_id, tag_id)
+    return resp_200(result)
+
+
 # ──────────────────────────── Folders ─────────────────────────────────────────
 
 @router.post('/{space_id}/folders')
@@ -356,8 +366,29 @@ async def rename_folder(
     return resp_200(folder)
 
 
+@router.post('/{space_id}/folders/{folder_id}/rename')
+async def rename_folder_by_post(
+        space_id: int,
+        folder_id: int,
+        req: FolderRenameReq,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    folder = await svc.rename_folder(folder_id, req.name)
+    return resp_200(folder)
+
+
 @router.delete('/{space_id}/folders/{folder_id}')
 async def delete_folder(
+        space_id: int,
+        folder_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    await svc.delete_folder(space_id, folder_id)
+    return resp_200()
+
+
+@router.post('/{space_id}/folders/{folder_id}/delete')
+async def delete_folder_by_post(
         space_id: int,
         folder_id: int,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
@@ -403,6 +434,17 @@ async def rename_file(
     return resp_200(file_record)
 
 
+@router.post('/{space_id}/files/{file_id}/rename')
+async def rename_file_by_post(
+        space_id: int,
+        file_id: int,
+        req: FileRenameReq,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    file_record = await svc.rename_file(file_id, req.name)
+    return resp_200(file_record)
+
+
 @router.put('/{space_id}/files/{file_id}/encoding')
 async def update_file_encoding(
         space_id: int,
@@ -416,6 +458,16 @@ async def update_file_encoding(
 
 @router.delete('/{space_id}/files/{file_id}')
 async def delete_file(
+        space_id: int,
+        file_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    await svc.delete_file(file_id)
+    return resp_200()
+
+
+@router.post('/{space_id}/files/{file_id}/delete')
+async def delete_file_by_post(
         space_id: int,
         file_id: int,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
