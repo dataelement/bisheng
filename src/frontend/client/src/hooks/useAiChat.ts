@@ -43,10 +43,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // emits the new ChatResponse SSE format). Empty array keeps us on the
     // legacy flow so existing tests / old clients aren't disrupted.
     const [selectedAgentTools] = useRecoilState(store.selectedAgentTools);
-    // Admin-level KB toggle. When disabled we strip both org-KB and knowledge-
-    // space ids from the outbound payload — defensive, in case stale state
-    // restored from localStorage still has entries even after the UI menu is
-    // hidden by ChatKnowledge.
+    // Admin-level org-KB toggle. Knowledge spaces remain available even when
+    // the org knowledge base feature is disabled, so we only strip org ids.
     const { data: bsConfig } = useGetBsConfig();
 
     const queryClient = useQueryClient();
@@ -168,15 +166,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             // Build SSE payload (same structure as useChatFunctions.ask).
             // Backend expects List[int] for both id fields; atom holds strings
             // so we coerce via Number here.
-            // When admin disables knowledgeBase, strip both id lists regardless
-            // of local state so nothing leaks to the backend.
-            const kbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
-            const orgKbs = kbDisabled
+            const orgKbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
+            const orgKbs = orgKbDisabled
                 ? []
                 : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id));
-            const spaceKbs = kbDisabled
-                ? []
-                : selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id));
+            const spaceKbs = selectedOrgKbs
+                .filter((kb) => kb.type === 'space')
+                .map((kb) => Number(kb.id));
             const payload = {
                 text: text.trim(),
                 clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
@@ -445,9 +441,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     organization_knowledge_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
                         ? []
                         : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id)),
-                    knowledge_space_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
-                        ? []
-                        : selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
+                    knowledge_space_ids: selectedOrgKbs
+                        .filter((kb) => kb.type === 'space')
+                        .map((kb) => Number(kb.id)),
                 },
                 isContinued: false,
                 isRegenerate: true,
