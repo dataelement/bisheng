@@ -24,11 +24,26 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
   const [citationPanelPayload, setCitationPanelPayload] = useState<CitationReferencesDesktopPayload | null>(null);
   const [citationPanelOpen, setCitationPanelOpen] = useState(false);
   const [inlineCitationPortalReady, setInlineCitationPortalReady] = useState(false);
+  // Tracks the active view inside CitationReferencesDrawer so we can widen the
+  // outer container when the user opens a document preview inside the panel.
+  const [panelView, setPanelView] = useState<'list' | 'document-preview'>('list');
+  const isDocumentPreview = panelView === 'document-preview';
+  const widthTransitionClass = 'transition-[width] duration-200 ease-out';
   const citationPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setInlineCitationPortalReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!citationPanelOpen) {
+      setPanelView('list');
+    }
+  }, [citationPanelOpen]);
+
+  useEffect(() => {
+    setPanelView('list');
+  }, [citationPanelPayload?.messageId]);
 
   const handleCloseCitationPanel = useCallback(() => {
     setCitationPanelOpen(false);
@@ -103,6 +118,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
       referenceItems={citationPanelPayload?.referenceItems ?? []}
       initialDocumentPreview={citationPanelPayload?.initialDocumentPreview}
       desktopPreviewVariant="standard"
+      onDesktopViewChange={setPanelView}
     />
   );
 
@@ -156,7 +172,10 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
             className={cn(
               'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
               'rounded-tl-xl',
-              useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
+              widthTransitionClass,
+              isDocumentPreview
+                ? 'w-[min(640px,calc(100vw-24px))]'
+                : useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
             )}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -177,7 +196,11 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
           data-citation-popover-surface
           className={cn(
             'flex h-full min-w-0 shrink-0 border-l border-[#ECECEC] bg-white animate-in slide-in-from-right duration-300',
-            useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
+            widthTransitionClass,
+            // Preview mode: wide for readability, leave ~560px for chat column on smaller screens
+            isDocumentPreview
+              ? 'w-[clamp(480px,calc(100vw-560px),640px)]'
+              : useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
           )}
         >
           <CitationReferencesDrawer
@@ -196,6 +219,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
             citations={citationPanelPayload.citations}
             referenceItems={citationPanelPayload.referenceItems}
             initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
+            onDesktopViewChange={setPanelView}
           />
         </div>
       );
@@ -212,7 +236,13 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
         <div
           ref={citationPanelRef}
           data-citation-popover-surface
-          className="relative z-10 flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300 [height:100dvh]"
+          className={cn(
+            'relative z-10 flex min-h-0 min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300 [height:100dvh]',
+            widthTransitionClass,
+            isDocumentPreview
+              ? 'w-[min(640px,calc(100vw-24px))]'
+              : 'w-[min(520px,calc(100vw-24px))]',
+          )}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
@@ -233,6 +263,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
             referenceItems={citationPanelPayload.referenceItems}
             initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
             desktopPreviewVariant="standard"
+            onDesktopViewChange={setPanelView}
           />
         </div>
       </div>
@@ -243,6 +274,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
     handleCloseCitationPanel,
     inlineCitationPortalReady,
     isCitationMobile,
+    isDocumentPreview,
     isPhoneViewport,
     useExpandedCitationPanel,
     useInlineCitationPanel,
