@@ -66,6 +66,24 @@ def get_env():
     env['enable_etl4lm'] = bool(etl_for_lm_url)
     env['multi_tenant_enabled'] = bisheng_settings.multi_tenant.enabled
 
+    # Expose selected initdb_config YAML keys to the client (public, no admin auth).
+    # Currently used by:
+    #   - knowledge_space.tree_structured_directory_display: client toggles
+    #     left-side directory tree in SpaceDetail.
+    try:
+        db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
+        if db_config and db_config.value:
+            initdb_data = yaml.safe_load(db_config.value) or {}
+            ks_config = initdb_data.get('knowledge_space')
+            if isinstance(ks_config, dict):
+                env['knowledge_space'] = {
+                    'tree_structured_directory_display': bool(
+                        ks_config.get('tree_structured_directory_display', True)
+                    ),
+                }
+    except Exception as exc:
+        logger.warning('failed to load knowledge_space flag from initdb_config: %s', exc)
+
     return resp_200(env)
 
 

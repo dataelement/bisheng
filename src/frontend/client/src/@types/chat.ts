@@ -118,4 +118,15 @@ export type BishengConfig = {
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
   enable_etl4lm: boolean;
+  /**
+   * Knowledge-space feature flags forwarded from the YAML `knowledge_space` section.
+   * When absent from the server response (legacy deployments), defaults apply.
+   */
+  knowledge_space?: {
+    /**
+     * Show the left-side directory tree in the space detail view.
+     * Default: true. Set to false in deployments that prefer the original flat layout (e.g. cofco).
+     */
+    tree_structured_directory_display?: boolean;
+  };
 };

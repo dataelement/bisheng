@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Menu, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useRecoilValue } from "recoil";
 import { useActivate, useUnactivate } from "react-activation";
 import {
     Button,
@@ -24,9 +25,11 @@ import {
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
+import { KnowledgeTree } from "./SpaceDetail/KnowledgeTree";
 import { KnowledgeAiPanel } from "./SpaceDetail/AiChat/KnowledgeAiPanel";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
@@ -42,6 +45,11 @@ export default function Knowledge() {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const MAX_USER_SPACES = 30;
+    // Feature flag: show left-side directory tree in space detail.
+    // Falls back to true when the server omits the field (most deployments).
+    const bishengConfig = useRecoilValue(bishengConfState);
+    const showDirectoryTree =
+        bishengConfig?.knowledge_space?.tree_structured_directory_display ?? true;
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
@@ -698,40 +706,64 @@ export default function Knowledge() {
                                             </div>
                                         </div>
                                     ) : null}
-                                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                                    <KnowledgeSpaceContent
-                                        space={activeSpace}
-                                        files={fileManager.files}
-                                        currentPage={fileManager.currentPage}
-                                        pageSize={fileManager.pageSize}
-                                        total={fileManager.total}
-                                        onPageChange={fileManager.handlePageChange}
-                                        loading={fileManager.loading}
-                                        onSearch={fileManager.handleSearch}
-                                        onFilterStatus={fileManager.setStatusFilter}
-                                        onSort={(sortBy, direction) => {
-                                            if (!sortBy || !direction) return;
-                                            fileManager.handleSort(sortBy, direction);
-                                        }}
-                                        onNavigateFolder={fileManager.handleNavigateFolder}
-                                        onUploadFile={fileUpload.handleUploadFile}
-                                        onCreateFolder={fileUpload.handleCreateFolder}
-                                        onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
-                                        onRenameFile={fileUpload.handleRenameFile}
-                                        onDeleteFile={fileUpload.handleDeleteFile}
-                                        onEditTags={fileUpload.handleEditTags}
-                                        onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
-                                        currentPath={fileManager.currentPath}
-                                        currentFolderId={fileManager.currentFolderId}
-                                        onDragStateChange={handleDragStateChange}
-                                        uploadingFiles={fileUpload.uploadingFiles}
-                                        creatingFolder={fileUpload.creatingFolder}
-                                        onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
-                                        onToggleAiAssistant={aiPane.handleToggleAiAssistant}
-                                        isAiAssistantOpen={aiPane.showAiAssistant}
-                                        onCreateSpace={handleCreateSpace}
-                                        onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                                    />
+                                    <div className="flex min-h-0 flex-1 overflow-hidden">
+                                        {/* Directory tree — desktop only, hidden on mobile, feature-flagged */}
+                                        {!isH5 && showDirectoryTree && (
+                                            <div className="flex h-full w-56 shrink-0 flex-col overflow-y-auto border-r border-[#e5e6eb] bg-white scrollbar-on-scroll">
+                                                <div className="shrink-0 px-3 pb-1 pt-3 text-xs font-medium text-[#8D93A0]">
+                                                    {localize("com_knowledge.folder") || "Folders"}
+                                                </div>
+                                                <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-3 scrollbar-on-scroll">
+                                                    <KnowledgeTree
+                                                        knowledgeId={activeSpace.id}
+                                                        currentFolderId={fileManager.currentFolderId}
+                                                        onSelectFolder={(folder) => {
+                                                            if (folder) {
+                                                                fileManager.handleNavigateFolder(folder.id);
+                                                            } else {
+                                                                fileManager.handleNavigateFolder(undefined);
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* File list */}
+                                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                                        <KnowledgeSpaceContent
+                                            space={activeSpace}
+                                            files={fileManager.files}
+                                            currentPage={fileManager.currentPage}
+                                            pageSize={fileManager.pageSize}
+                                            total={fileManager.total}
+                                            onPageChange={fileManager.handlePageChange}
+                                            loading={fileManager.loading}
+                                            onSearch={fileManager.handleSearch}
+                                            onFilterStatus={fileManager.setStatusFilter}
+                                            onSort={(sortBy, direction) => {
+                                                if (!sortBy || !direction) return;
+                                                fileManager.handleSort(sortBy, direction);
+                                            }}
+                                            onNavigateFolder={fileManager.handleNavigateFolder}
+                                            onUploadFile={fileUpload.handleUploadFile}
+                                            onCreateFolder={fileUpload.handleCreateFolder}
+                                            onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
+                                            onRenameFile={fileUpload.handleRenameFile}
+                                            onDeleteFile={fileUpload.handleDeleteFile}
+                                            onEditTags={fileUpload.handleEditTags}
+                                            onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
+                                            currentPath={fileManager.currentPath}
+                                            currentFolderId={fileManager.currentFolderId}
+                                            onDragStateChange={handleDragStateChange}
+                                            uploadingFiles={fileUpload.uploadingFiles}
+                                            creatingFolder={fileUpload.creatingFolder}
+                                            onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
+                                            onToggleAiAssistant={aiPane.handleToggleAiAssistant}
+                                            isAiAssistantOpen={aiPane.showAiAssistant}
+                                            onCreateSpace={handleCreateSpace}
+                                            onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                                        />
+                                        </div>
                                     </div>
                                 </div>
 
