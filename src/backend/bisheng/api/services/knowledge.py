@@ -83,15 +83,8 @@ class KnowledgeService(KnowledgeUtils):
             limit: int = 10,
     ) -> (List[KnowledgeRead], int):
         if not login_user.is_admin():
-            knowledge_id_extra = []
-            user_role = await UserRoleDao.aget_user_roles(login_user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
-                role_access = await RoleAccessDao.aget_role_access(role_ids, AccessType.KNOWLEDGE)
-                if role_access:
-                    knowledge_id_extra = [
-                        int(access.third_id) for access in role_access
-                    ]
+            user_info = await UserDao.aget_user(login_user.user_id)
+            knowledge_id_extra = await KnowledgeDao.aget_authorized_knowledge_ids(user_info)
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
