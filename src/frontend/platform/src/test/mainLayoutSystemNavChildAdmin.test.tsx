@@ -163,6 +163,11 @@ describe("MainLayout system / tenant nav for Child Admin (PRD §3.3)", () => {
     expect(screen.getByText("menu.system")).toBeInTheDocument();
   });
 
+  it("Child Admin sees the build entry for workstation config", () => {
+    renderLayout({ is_child_admin: true });
+    expect(screen.getByText("menu.skills")).toBeInTheDocument();
+  });
+
   it("Child Admin does NOT see the tenant management entry (super-only until backend is opened up)", () => {
     renderLayout({ is_child_admin: true });
     expect(screen.queryByText("tenant.management")).toBeNull();

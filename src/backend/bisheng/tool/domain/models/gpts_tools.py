@@ -316,6 +316,35 @@ class GptsToolsDao(GptsToolsBase):
             return result.all()
 
     @classmethod
+    async def aget_tenant_tool_type(
+        cls,
+        tenant_id: int,
+        include_preset: bool = True,
+        is_preset: ToolPresetType = None,
+    ) -> List[GptsToolsType]:
+        """Get all tool categories under the current tenant.
+
+        Used by admin-scope management views where a global super admin needs
+        the scoped tenant's tool list instead of the operator's own user_id
+        owned tools.
+        """
+        statement = select(GptsToolsType).where(
+            GptsToolsType.is_delete == 0,
+            GptsToolsType.tenant_id == tenant_id,
+        )
+        if is_preset is not None:
+            statement = statement.where(GptsToolsType.is_preset == is_preset.value)
+        elif not include_preset:
+            statement = statement.where(GptsToolsType.is_preset != ToolPresetType.PRESET.value)
+        statement = statement.order_by(
+            func.field(GptsToolsType.is_preset, ToolPresetType.PRESET.value).desc(),
+            GptsToolsType.update_time.desc(),
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
                                  limit: int = 0, include_preset: bool = False) -> (List[GptsToolsType], int):
         """

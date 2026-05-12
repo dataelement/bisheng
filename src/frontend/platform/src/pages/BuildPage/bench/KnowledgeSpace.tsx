@@ -11,8 +11,8 @@ import {
 import { userContext } from "@/contexts/userContext";
 import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { NonNegativeInput, Textarea } from "@/components/bs-ui/input";
+import { canManageModelSettings, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useState } from "react";
@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DepartmentKnowledgeSpaceApprovalDialog } from "./DepartmentKnowledgeSpaceApprovalDialog";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { KnowledgeSpaceSensitivePolicy } from "./KnowledgeSpaceSensitivePolicy";
 
 interface KnowledgeConfigForm {
@@ -31,9 +32,9 @@ interface KnowledgeConfigForm {
     maxChunkSize: number;
 }
 
-export default function KnowledgeSpace() {
+export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { t } = useTranslation();
-    const { formData, setFormData, errors, setErrors, handleSave } = useKnowledgeConfig();
+    const { formData, setFormData, errors, setErrors, handleSave, configMeta } = useKnowledgeConfig(scopeVersion);
     const [managerOpen, setManagerOpen] = useState(false);
     const [approvalTarget, setApprovalTarget] = useState<DepartmentKnowledgeSpaceSummary | null>(null);
     const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([]);
@@ -41,6 +42,8 @@ export default function KnowledgeSpace() {
     const { user } = useContext(userContext);
     const navigate = useNavigate();
     const showSensitiveCheckControl = false;
+    const canManageWorkbench = canManageModelSettings(user);
+    const isGlobalSuper = isGlobalSuperUser(user);
 
     const loadDepartmentSpaces = async () => {
         setDepartmentSpacesLoading(true);
@@ -53,18 +56,17 @@ export default function KnowledgeSpace() {
         setDepartmentSpacesLoading(false);
     };
 
-    // 非 admin 角色跳回应用列表
     useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
+        if (user.user_id && !canManageWorkbench) {
             navigate('/build/apps');
         }
-    }, [user, navigate]);
+    }, [canManageWorkbench, navigate, user.user_id]);
 
     useEffect(() => {
-        if (user.user_id && user.role === 'admin') {
+        if (user.user_id && isGlobalSuper) {
             loadDepartmentSpaces();
         }
-    }, [user.user_id, user.role]);
+    }, [isGlobalSuper, user.user_id]);
 
     const handleDepartmentSpaceSettingsSaved = (
         spaceId: number,
@@ -94,6 +96,7 @@ export default function KnowledgeSpace() {
             <div className="pt-4 relative">
                 <CardContent className="p-0 pt-4 relative">
                     <div className="w-full max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         <div className="mb-6">
                             <div className="p-5 bg-gray-50 rounded-lg">
                                 <div className="flex items-center mb-2">
@@ -176,136 +179,142 @@ export default function KnowledgeSpace() {
 
                             <KnowledgeSpaceSensitivePolicy />
 
-                            <div className="p-5 rounded-lg">
-                                <div className="mt-8 border-t border-[#ECECEC] pt-6">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div>
-                                            <p className="text-lg font-bold">
-                                                {t("bench.departmentKnowledgeSpace", "部门知识空间")}
-                                            </p>
-                                            <p className="mt-1 text-sm text-[#86909C]">
-                                                {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，以及每个部门知识空间单独的上传审批策略。")}
-                                            </p>
-                                        </div>
-                                        <Button
-                                            variant="outline"
-                                            className="bg-gray-50"
-                                            onClick={() => setManagerOpen(true)}
-                                        >
-                                            {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
-                                        </Button>
-                                    </div>
-                                    <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                            {isGlobalSuper && (
+                                <div className="p-5 rounded-lg">
+                                    <div className="mt-8 border-t border-[#ECECEC] pt-6">
                                         <div className="flex items-center justify-between gap-4">
                                             <div>
-                                                <p className="text-sm font-medium text-[#1D2129]">
-                                                    {t("bench.departmentKnowledgeSpaceCreatedList", "已创建知识空间")}
+                                                <p className="text-lg font-bold">
+                                                    {t("bench.departmentKnowledgeSpace", "部门知识空间")}
                                                 </p>
                                                 <p className="mt-1 text-sm text-[#86909C]">
-                                                    {t("bench.departmentKnowledgeSpaceCreatedListDesc", "已绑定部门的知识空间会统一展示在这里。")}
+                                                    {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，以及每个部门知识空间单独的上传审批策略。")}
                                                 </p>
                                             </div>
-                                            <span className="rounded bg-white px-2.5 py-1 text-xs text-[#4E5969] border border-[#E5E6EB]">
-                                                {departmentSpaces.length}
-                                            </span>
+                                            <Button
+                                                variant="outline"
+                                                className="bg-gray-50"
+                                                onClick={() => setManagerOpen(true)}
+                                            >
+                                                {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
+                                            </Button>
                                         </div>
-                                        <div className="mt-4 space-y-3">
-                                            {departmentSpacesLoading ? (
-                                                <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                                                    {t("loading")}
+                                        <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div>
+                                                    <p className="text-sm font-medium text-[#1D2129]">
+                                                        {t("bench.departmentKnowledgeSpaceCreatedList", "已创建知识空间")}
+                                                    </p>
+                                                    <p className="mt-1 text-sm text-[#86909C]">
+                                                        {t("bench.departmentKnowledgeSpaceCreatedListDesc", "已绑定部门的知识空间会统一展示在这里。")}
+                                                    </p>
                                                 </div>
-                                            ) : !departmentSpaces.length ? (
-                                                <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                                                    {t("bench.departmentKnowledgeSpaceCreatedEmpty", "暂无已创建的部门知识空间")}
-                                                </div>
-                                            ) : (
-                                                departmentSpaces.map((space) => (
-                                                    <div
-                                                        key={space.id}
-                                                        className="rounded-lg border border-[#E5E6EB] bg-white px-4 py-3"
-                                                    >
-                                                        <div className="flex items-start justify-between gap-4">
-                                                            <div className="min-w-0">
-                                                                <div className="flex items-center gap-2">
-                                                                    <p className="truncate text-sm font-medium text-[#1D2129]">
-                                                                        {space.name}
+                                                <span className="rounded bg-white px-2.5 py-1 text-xs text-[#4E5969] border border-[#E5E6EB]">
+                                                    {departmentSpaces.length}
+                                                </span>
+                                            </div>
+                                            <div className="mt-4 space-y-3">
+                                                {departmentSpacesLoading ? (
+                                                    <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
+                                                        {t("loading")}
+                                                    </div>
+                                                ) : !departmentSpaces.length ? (
+                                                    <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
+                                                        {t("bench.departmentKnowledgeSpaceCreatedEmpty", "暂无已创建的部门知识空间")}
+                                                    </div>
+                                                ) : (
+                                                    departmentSpaces.map((space) => (
+                                                        <div
+                                                            key={space.id}
+                                                            className="rounded-lg border border-[#E5E6EB] bg-white px-4 py-3"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-4">
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <p className="truncate text-sm font-medium text-[#1D2129]">
+                                                                            {space.name}
+                                                                        </p>
+                                                                        <span className="rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]">
+                                                                            {space.department_name || "--"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="mt-2 text-xs text-[#86909C]">
+                                                                        {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
                                                                     </p>
-                                                                    <span className="rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]">
-                                                                        {space.department_name || "--"}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="mt-2 text-xs text-[#86909C]">
-                                                                    {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
-                                                                </p>
-                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                                    <span
-                                                                        className={
-                                                                            space.approval_enabled
-                                                                                ? "rounded bg-[#E6EDFC] px-2 py-0.5 text-xs text-[#165DFF]"
-                                                                                : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
-                                                                        }
-                                                                    >
-                                                                        {space.approval_enabled
-                                                                            ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
-                                                                            : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
-                                                                    </span>
-                                                                    {showSensitiveCheckControl && (
+                                                                    <div className="mt-2 flex flex-wrap items-center gap-2">
                                                                         <span
                                                                             className={
-                                                                                space.sensitive_check_enabled
-                                                                                    ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
+                                                                                space.approval_enabled
+                                                                                    ? "rounded bg-[#E6EDFC] px-2 py-0.5 text-xs text-[#165DFF]"
                                                                                     : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
                                                                             }
                                                                         >
-                                                                            {space.sensitive_check_enabled
-                                                                                ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
-                                                                                : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
+                                                                            {space.approval_enabled
+                                                                                ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
+                                                                                : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
                                                                         </span>
-                                                                    )}
+                                                                        {showSensitiveCheckControl && (
+                                                                            <span
+                                                                                className={
+                                                                                    space.sensitive_check_enabled
+                                                                                        ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
+                                                                                        : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
+                                                                                }
+                                                                            >
+                                                                                {space.sensitive_check_enabled
+                                                                                    ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
+                                                                                    : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        className="h-7 px-3 bg-gray-50"
+                                                                        onClick={() => setApprovalTarget(space)}
+                                                                    >
+                                                                        {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
+                                                                    </Button>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    className="h-7 px-3 bg-gray-50"
-                                                                    onClick={() => setApprovalTarget(space)}
-                                                                >
-                                                                    {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
-                                                                </Button>
-                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))
-                                            )}
+                                                    ))
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </CardContent>
             </div>
 
-            <DepartmentKnowledgeSpaceManagerDialog
-                open={managerOpen}
-                onOpenChange={setManagerOpen}
-                onCreated={loadDepartmentSpaces}
-            />
-            <DepartmentKnowledgeSpaceApprovalDialog
-                open={!!approvalTarget}
-                onOpenChange={(open) => {
-                    if (!open) setApprovalTarget(null);
-                }}
-                space={approvalTarget}
-                onSaved={handleDepartmentSpaceSettingsSaved}
-                showSensitiveCheckControl={showSensitiveCheckControl}
-            />
+            {isGlobalSuper && (
+                <>
+                    <DepartmentKnowledgeSpaceManagerDialog
+                        open={managerOpen}
+                        onOpenChange={setManagerOpen}
+                        onCreated={loadDepartmentSpaces}
+                    />
+                    <DepartmentKnowledgeSpaceApprovalDialog
+                        open={!!approvalTarget}
+                        onOpenChange={(open) => {
+                            if (!open) setApprovalTarget(null);
+                        }}
+                        space={approvalTarget}
+                        onSaved={handleDepartmentSpaceSettingsSaved}
+                        showSensitiveCheckControl={showSensitiveCheckControl}
+                    />
+                </>
+            )}
         </div>
     );
 }
 
 // 只负责加载/保存系统提示词、用户提示词、max_chunk_size 的 hook
-const useKnowledgeConfig = () => {
+const useKnowledgeConfig = (scopeVersion = 0) => {
     const { t } = useTranslation();
     const [formData, setFormData] = useState<KnowledgeConfigForm>({
         systemPrompt: '',
@@ -317,12 +326,15 @@ const useKnowledgeConfig = () => {
         systemPrompt: '',
         userPrompt: '',
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
 
     // 初始化时从后台读取配置
     useEffect(() => {
+        setConfigMeta(null);
         getKnowledgeConfigApi().then((res) => {
-            // Interceptor returns response.data.data — null when no config row exists yet.
-            const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
+            const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res);
+            setConfigMeta(meta);
+            const cfg = envData != null && typeof envData === 'object' ? envData : null;
             const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
             const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
@@ -337,7 +349,7 @@ const useKnowledgeConfig = () => {
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
             }));
         });
-    }, [t]);
+    }, [scopeVersion, t]);
 
     const { toast } = useToast();
     const { reloadConfig } = useContext(locationContext);
@@ -381,6 +393,10 @@ const useKnowledgeConfig = () => {
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));
         if (res) {
+            setConfigMeta({
+                inherited_from_root: false,
+                has_override: true,
+            });
             toast({
                 variant: 'success',
                 description: t('chatConfig.saveSuccess'),
@@ -396,6 +412,7 @@ const useKnowledgeConfig = () => {
         setFormData,
         errors,
         setErrors,
+        configMeta,
         handleSave,
     };
 };

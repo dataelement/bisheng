@@ -69,6 +69,7 @@ export default function MainLayout() {
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
     const isDeptAdmin = Boolean(user.is_department_admin)
     const isChildAdmin = Boolean(user.is_child_admin)
+    const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
     // 侧栏：数据集 / 日志 — 超管与部门管理员
     const isFullAdminShell = isSuperAdmin || isDeptAdmin
     // 侧栏：系统管理 — 超管 / 部门管理员 / Child Admin。SystemPage 内部按
@@ -85,7 +86,7 @@ export default function MainLayout() {
         if (menu === 'workstation') {
             return user.web_menu?.includes('workstation')
                 || user.web_menu?.includes('frontend')
-                || isSuperAdmin
+                || canManageWorkbenchConfig
         }
         return user.web_menu?.includes(menu) || isSuperAdmin
     }
@@ -174,8 +175,8 @@ export default function MainLayout() {
                             </>
                         }
                         {
-                            showAdminNav('build') &&
-                            <NavLink to={isMenu('build') ? '/build' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
+                            (showAdminNav('build') || canManageWorkbenchConfig) &&
+                            <NavLink to={isMenu('build') ? '/build' : (canManageWorkbenchConfig ? '/build/client' : '/menu-pending')} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
                                 <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                             </NavLink>
                         }
@@ -321,4 +322,3 @@ const useLanguage = (user: User) => {
         t
     }
 }
-

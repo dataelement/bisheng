@@ -119,6 +119,11 @@ class TenantService:
                 action='grant',
             )
 
+            # Step 5: Child/root tenant bootstrap — copy builtin tools so
+            # workstation config inheritance can remap by tool_key.
+            from bisheng.workstation.domain.services import WorkStationService
+            await WorkStationService.acopy_root_builtin_tools_to_tenant(tenant.id)
+
             return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:

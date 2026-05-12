@@ -72,6 +72,14 @@ describe("resolveRoutePermissions", () => {
     expect(perms).toContain("model")
   })
 
+  it("injects workstation for Child Admin so /build/client is reachable", () => {
+    const perms = resolveRoutePermissions({
+      web_menu: ["knowledge"],
+      is_child_admin: true,
+    })
+    expect(perms).toContain("workstation")
+  })
+
   it("does not inject model when the user is not a Child Admin", () => {
     const perms = resolveRoutePermissions({
       web_menu: ["build"],
@@ -93,6 +101,7 @@ describe("resolveRoutePermissions", () => {
     expect(resolveRoutePermissions({ is_child_admin: true })).toEqual([
       "sys",
       "model",
+      "workstation",
     ])
   })
 
@@ -106,6 +115,7 @@ describe("resolveRoutePermissions", () => {
       is_child_admin: true,
     })
     expect(perms).toContain("sys")
+    expect(perms).toContain("workstation")
     expect(perms).not.toContain("create_app")
   })
 })

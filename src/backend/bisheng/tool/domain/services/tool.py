@@ -15,6 +15,7 @@ from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatEr
     ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
     ToolMcpSchemaError, ToolMcpStdioError
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.database.models.role_access import AccessType
 from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
@@ -35,12 +36,43 @@ class ToolServices(BaseModel):
     request: Optional[Request] = None
     login_user: Optional[UserPayload] = None
 
+    def _is_scoped_super_admin(self) -> bool:
+        current_tid = get_current_tenant_id()
+        return bool(
+            getattr(self.login_user, 'is_global_super', False)
+            and current_tid is not None
+            and current_tid != DEFAULT_TENANT_ID
+        )
+
     async def get_tool_list(
         self,
         is_preset: Optional[int] = None,
         permission_id: str = 'use_tool',
     ) -> List[GptsToolsTypeRead]:
         """ Get a list of tools visible to users """
+        if self._is_scoped_super_admin():
+            current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+            scoped_preset = ToolPresetType(is_preset) if is_preset is not None else None
+            all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+                current_tid,
+                include_preset=is_preset is None,
+                is_preset=scoped_preset,
+            )
+            tool_type_id = [one.id for one in all_tool_type]
+            res: List[GptsToolsTypeRead] = []
+            tool_type_children = {one.id: [] for one in all_tool_type}
+            for one in all_tool_type:
+                res.append(GptsToolsTypeRead.model_validate(one))
+            tool_list = await GptsToolsDao.aget_list_by_type(tool_type_id)
+            for one in tool_list:
+                tool_type_children[one.type].append(one)
+            for one in res:
+                one.write = True
+                one.delete = True
+                one.children = tool_type_children.get(one.id, [])
+                one.mask_sensitive_data()
+            return res
+
         # Get Tool Categories Visible to Users
         tool_type_ids_extra = []
         if is_preset != ToolPresetType.PRESET.value:

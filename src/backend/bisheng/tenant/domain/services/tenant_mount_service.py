@@ -199,6 +199,9 @@ class TenantMountService:
             await session.commit()
             await session.refresh(new_tenant)
 
+        from bisheng.workstation.domain.services import WorkStationService
+        await WorkStationService.acopy_root_builtin_tools_to_tenant(new_tenant.id)
+
         # F017 hook: fan out the Root ``shared_to`` relation + snapshot the
         # resources that are now reachable. Failures are swallowed to keep
         # mount idempotent — the FGA write is retryable via failed_tuples

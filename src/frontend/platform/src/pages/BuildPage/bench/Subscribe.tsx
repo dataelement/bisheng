@@ -10,12 +10,14 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getSubConfigApi, setSubConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 
 
 export interface FormErrors {
@@ -40,7 +42,7 @@ export interface ChatConfigForm {
     maxChunkSize: number;
     feedbackTips: string;
 }
-export default function Subscribe() {
+export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const sidebarSloganRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,7 @@ export default function Subscribe() {
         errors,
         setErrors,
         setFormData,
+        configMeta,
         handleInputChange,
         toggleFeature,
         handleSave
@@ -74,22 +77,23 @@ export default function Subscribe() {
         appCenterWelcomeRef,
         appCenterDescriptionRef,
         modelManagementContainerRef,
-    });
+    }, scopeVersion);
 
 
     const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
+        if (user.user_id && !canManageModelSettings(user)) {
             navigate('/build/apps')
         }
-    }, [user])
+    }, [navigate, user])
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">
@@ -221,7 +225,7 @@ interface UseChatConfigProps {
     modelManagementContainerRef: React.RefObject<HTMLDivElement>;
 }
 
-const useChatConfig = (refs: UseChatConfigProps) => {
+const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
     const { t } = useTranslation()
 
     const [formData, setFormData] = useState<ChatConfigForm>({
@@ -230,11 +234,14 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
 
     useEffect(() => {
+        setConfigMeta(null);
         getSubConfigApi().then((res) => {
-            // Interceptor returns response.data.data — null when no config row exists yet.
-            const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
+            const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res);
+            setConfigMeta(meta);
+            const cfg = envData != null && typeof envData === 'object' ? envData : null;
             setFormData((prev) => {
                 const systemPromptFromRes = cfg?.systemPrompt ?? cfg?.system_prompt;
                 const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
@@ -253,7 +260,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                 };
             });
         });
-    }, [t]);
+    }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
         sidebarSlogan: '',
@@ -363,6 +370,10 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
         captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave)).then((res) => {
             if (res) {
+                setConfigMeta({
+                    inherited_from_root: false,
+                    has_override: true,
+                });
                 if (feedbackTooLong) {
                     toast({
                         variant: 'warning',
@@ -386,6 +397,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         errors,
         setFormData,
         setErrors,
+        configMeta,
         handleInputChange,
         toggleFeature,
         handleSave
