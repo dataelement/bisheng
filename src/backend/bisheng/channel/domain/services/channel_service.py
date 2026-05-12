@@ -10,7 +10,14 @@ from bisheng.channel.domain.repositories.implementations.channel_repository_impl
 from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
-from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
+from bisheng.channel.domain.schemas.article_schema import (
+    ArticleDetailResponse,
+    ArticleFullDocument,
+    ArticleSearchPageResponse,
+    ArticleSearchResultItem,
+    ArticleSensitiveHit,
+    ArticleSensitiveReview,
+)
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     AddArticlesToKnowledgeSpaceRequest,
     CreateChannelRequest,
@@ -46,6 +53,7 @@ from bisheng.common.errcode.channel import (
     ChannelPermissionDeniedError,
     ChannelCreateLimitExceededError,
     ChannelAdminLimitExceededError,
+    ArticleSensitiveViolationError,
 )
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
 from bisheng.common.models.space_channel_member import (
@@ -62,6 +70,8 @@ from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaS
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
+from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 
@@ -115,6 +125,104 @@ class ChannelService:
         if membership is None:
             return SubscriptionStatusEnum.NOT_SUBSCRIBED
         return cls._resolve_subscription_status(membership.status, membership.update_time)
+
+    @staticmethod
+    def _current_tenant_id(login_user: UserPayload) -> int:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        return get_current_tenant_id() or login_user.tenant_id
+
+    @staticmethod
+    async def _can_view_sensitive_article(login_user: UserPayload) -> bool:
+        from bisheng.utils.http_middleware import _check_is_global_super
+
+        if await _check_is_global_super(login_user.user_id):
+            return True
+        tenant_id = ChannelService._current_tenant_id(login_user)
+        return bool(tenant_id and await login_user.has_tenant_admin(tenant_id))
+
+    @staticmethod
+    def _article_review_text(article: ArticleSearchResultItem | ArticleFullDocument) -> str:
+        return '\n'.join([
+            getattr(article, 'title', '') or '',
+            getattr(article, 'review_content', '') or getattr(article, 'content', '') or '',
+        ])
+
+    @classmethod
+    def _to_sensitive_review(
+        cls,
+        *,
+        enabled: bool,
+        hits: List[Any],
+        auto_reply: Optional[str],
+        can_view_sensitive: bool,
+    ) -> ArticleSensitiveReview:
+        violated = bool(hits)
+        return ArticleSensitiveReview(
+            enabled=enabled,
+            violated=violated,
+            hits=[
+                ArticleSensitiveHit(word=hit.word, count=hit.count)
+                for hit in hits
+            ],
+            can_view=(not violated) or can_view_sensitive,
+            auto_reply=auto_reply,
+        )
+
+    @classmethod
+    async def apply_article_sensitive_reviews(
+        cls,
+        articles: List[ArticleSearchResultItem | ArticleFullDocument],
+        login_user: UserPayload,
+    ) -> None:
+        if not articles:
+            return
+        tenant_id = cls._current_tenant_id(login_user)
+        can_view_sensitive = await cls._can_view_sensitive_article(login_user)
+        results = SensitiveWordPolicyService.check_texts(
+            tenant_id=tenant_id,
+            business_type=SensitiveWordBusinessType.CHANNEL_ARTICLE,
+            texts=[cls._article_review_text(article) for article in articles],
+        )
+        for article, result in zip(articles, results):
+            article.sensitive_review = cls._to_sensitive_review(
+                enabled=result.enabled,
+                hits=result.hits,
+                auto_reply=result.auto_reply,
+                can_view_sensitive=can_view_sensitive,
+            )
+
+    @classmethod
+    async def ensure_article_sensitive_view_allowed(
+        cls,
+        article: ArticleFullDocument,
+        login_user: UserPayload,
+    ) -> ArticleSensitiveReview:
+        await cls.apply_article_sensitive_reviews([article], login_user)
+        review = article.sensitive_review or ArticleSensitiveReview()
+        if review.violated and not review.can_view:
+            raise ArticleSensitiveViolationError(
+                msg=review.auto_reply or ArticleSensitiveViolationError.Msg,
+            )
+        return review
+
+    @staticmethod
+    def _to_article_detail_response(article: ArticleFullDocument) -> ArticleDetailResponse:
+        return ArticleDetailResponse(
+            doc_id=article.doc_id,
+            source_type=article.source_type,
+            source_id=article.source_id,
+            source_info=article.source_info,
+            title=article.title,
+            content_html=article.content_html,
+            cover_image=article.cover_image,
+            publish_time=article.publish_time,
+            source_url=article.source_url,
+            create_time=article.create_time,
+            update_time=article.update_time,
+            is_read=article.is_read,
+            sensitive_review=article.sensitive_review,
+        )
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload, request=None):
         """Create a new channel based on the provided data and the logged-in user."""
@@ -1362,7 +1470,8 @@ class ChannelService:
             filter_rules=effective_rule_groups if effective_rule_groups else None,
             page=page,
             page_size=page_size,
-            exclude_article_ids=exclude_article_ids
+            exclude_article_ids=exclude_article_ids,
+            include_content=True,
         )
 
         source_ids_in_result = [item.source_id for item in article_search_response.data]
@@ -1387,16 +1496,42 @@ class ChannelService:
             # Set read status
             item.is_read = item.doc_id in read_ids_set
 
+        await self.apply_article_sensitive_reviews(article_search_response.data, login_user)
+
         return article_search_response
 
-    async def get_article_detail(self, article_id: str, login_user: UserPayload):
+    async def get_article_detail(self, article_id: str, channel_id: str, login_user: UserPayload):
         """
         Get article details by ID and record reading status.
         """
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ChannelNotFoundError()
+        channel = channels[0]
+
+        current_membership = await self.space_channel_member_repository.find_membership(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id,
+        )
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
+            raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
+
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)
         if not article:
             raise ValueError("Article not found")
+
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+        matched_count = await self.article_es_service.count_articles(
+            source_ids=channel.source_list or [],
+            filter_rules=main_rule_groups if main_rule_groups else None,
+            include_article_ids=[article_id],
+        )
+        if matched_count == 0:
+            raise ChannelAccessDeniedError(msg="You do not have permission to view this article")
+
+        await self.ensure_article_sensitive_view_allowed(article, login_user)
 
         # 2. Check read record
         if self.article_read_repository:
@@ -1422,10 +1557,10 @@ class ChannelService:
                     "source_name": source.source_name,
                     "source_icon": source.source_icon,
                     "source_type": source.source_type,
-                    "description": source.description
-                }
+                "description": source.description
+            }
 
-        return article
+        return self._to_article_detail_response(article)
 
     # ──────────────────────────────────────────
     #  Channel latest article update time methods
@@ -1655,6 +1790,7 @@ class ChannelService:
                     )
                     continue
                 raise ValueError(f"Article not found: {article_id}")
+            await self.ensure_article_sensitive_view_allowed(article, login_user)
             articles.append(article)
         if not articles:
             # Nothing to do (all were missing and we're in skip-mode).

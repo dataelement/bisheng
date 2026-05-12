@@ -24,6 +24,7 @@ from bisheng.api.v1.schemas import resp_200, ChatResponse
 from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleChatRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_chat_service import ChannelChatService
+from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelChatConversationNotFoundError
@@ -126,6 +127,7 @@ async def chat_completions(
         # 1. Fetch article content
         article_es_service = ArticleEsService()
         article = await ChannelChatService.get_article_content(article_es_service, data.article_doc_id)
+        await ChannelService.ensure_article_sensitive_view_allowed(article, login_user)
         article_title = article.title
         article_content = article.content
 

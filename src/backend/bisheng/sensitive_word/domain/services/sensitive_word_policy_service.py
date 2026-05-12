@@ -240,6 +240,23 @@ class SensitiveWordPolicyService:
         scope_type: SensitiveWordScopeType = SensitiveWordScopeType.TENANT,
         scope_id: Optional[str] = None,
     ) -> SensitiveWordCheckResult:
+        return cls.check_texts(
+            tenant_id=tenant_id,
+            business_type=business_type,
+            texts=[text],
+            scope_type=scope_type,
+            scope_id=scope_id,
+        )[0]
+
+    @classmethod
+    def check_texts(
+        cls,
+        tenant_id: int,
+        business_type: SensitiveWordBusinessType,
+        texts: List[str],
+        scope_type: SensitiveWordScopeType = SensitiveWordScopeType.TENANT,
+        scope_id: Optional[str] = None,
+    ) -> List[SensitiveWordCheckResult]:
         final_scope_id = scope_id or str(tenant_id)
         policy = SensitiveWordPolicyDao.get_policy(
             tenant_id=tenant_id,
@@ -248,8 +265,11 @@ class SensitiveWordPolicyService:
             scope_id=final_scope_id,
         )
         words = cls._resolve_words(policy)
-        if policy is None or not words or not text:
-            return SensitiveWordCheckResult(enabled=False, hits=[], auto_reply=DEFAULT_AUTO_REPLY)
+        if policy is None or not words:
+            return [
+                SensitiveWordCheckResult(enabled=False, hits=[], auto_reply=DEFAULT_AUTO_REPLY)
+                for _ in texts
+            ]
 
         extra_config = policy.extra_config or {}
         case_sensitive = bool(extra_config.get('case_sensitive', False))
@@ -263,17 +283,20 @@ class SensitiveWordPolicyService:
             words,
             case_sensitive,
         )
-        scan_text = text if case_sensitive else text.lower()
-        counter = automaton.find_all(scan_text)
 
-        hits: List[SensitiveWordHit] = [
-            SensitiveWordHit(word=normalized_map.get(word, word), count=count)
-            for word, count in counter.items()
-        ]
-        if isinstance(max_hits, int) and max_hits > 0:
-            hits = hits[:max_hits]
-        return SensitiveWordCheckResult(
-            enabled=True,
-            hits=hits,
-            auto_reply=policy.auto_reply or DEFAULT_AUTO_REPLY,
-        )
+        results: List[SensitiveWordCheckResult] = []
+        for text in texts:
+            scan_text = '' if text is None else str(text)
+            counter = automaton.find_all(scan_text if case_sensitive else scan_text.lower()) if scan_text else {}
+            hits: List[SensitiveWordHit] = [
+                SensitiveWordHit(word=normalized_map.get(word, word), count=count)
+                for word, count in counter.items()
+            ]
+            if isinstance(max_hits, int) and max_hits > 0:
+                hits = hits[:max_hits]
+            results.append(SensitiveWordCheckResult(
+                enabled=True,
+                hits=hits,
+                auto_reply=policy.auto_reply or DEFAULT_AUTO_REPLY,
+            ))
+        return results

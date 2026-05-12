@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
+import { SubscriptionSensitivePolicy } from "./SubscriptionSensitivePolicy";
 
 
 export interface FormErrors {
@@ -90,6 +91,7 @@ export default function Subscribe() {
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <SubscriptionSensitivePolicy />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">

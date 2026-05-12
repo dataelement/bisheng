@@ -58,17 +58,17 @@ export function ChannelLayout({
         setDetailLoading(true);
 
         try {
-            const detail = await getArticleDetailApi(article.id);
+            const detail = await getArticleDetailApi(article.id, article.channelId);
             // 用详情数据更新已选文章（保留列表中的显示字段）
             setSelectedArticle(prev => {
                 if (prev?.id !== article.id) return prev; // 已经切换了
                 return {
                     ...prev,
-                    content: detail.content || prev.content,
                     content_html: detail.content_html || prev.content_html || "",
                     url: detail.source_url || prev.url,
                     coverImage: detail.cover_image || prev.coverImage,
                     publishedAt: detail.publish_time || prev.publishedAt,
+                    sensitiveReview: detail.sensitive_review || prev.sensitiveReview,
                 };
             });
         } catch (e) {

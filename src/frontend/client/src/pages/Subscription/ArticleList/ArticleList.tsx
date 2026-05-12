@@ -19,6 +19,8 @@ import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import { cn } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NotificationSeverity } from "~/common";
+import { useToastContext } from "~/Providers";
 
 interface ArticleListProps {
     channel: Channel;
@@ -50,7 +52,7 @@ export function mapToArticle(item: ArticleSearchResultItem, channelId: string): 
         id: item.doc_id,
         title: item.title,
         url: item.source_url || "",
-        content: stripHtmlTags(item.content || ""),
+        content: stripHtmlTags(item.content_preview || ""),
         content_html: item.content_html || "",
         coverImage: item.cover_image || undefined,
         sourceName: item.source_info?.source_name || "",
@@ -62,6 +64,7 @@ export function mapToArticle(item: ArticleSearchResultItem, channelId: string): 
         createdAt: item.create_time || "",
         highlight: item.highlight,
         source_type: item.source_type,
+        sensitiveReview: item.sensitive_review,
     };
 }
 
@@ -90,6 +93,7 @@ export function ArticleList({
     const [tabsScrollShadow, setTabsScrollShadow] = useState({ left: false, right: false });
     const searchQuery = useDebounce(searchKey, 500);
     const queryClient = useQueryClient();
+    const { showToast } = useToastContext();
 
 
     // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
@@ -195,6 +199,13 @@ export function ArticleList({
     // Optimistically mark the article as read in local state when selected.
     // The backend already marks it read when the detail API is called.
     const handleArticleClick = useCallback((article: Article | null) => {
+        if (article?.sensitiveReview?.can_view === false) {
+            showToast({
+                message: article.sensitiveReview.auto_reply || localize("com_subscription.sensitive_review_blocked"),
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
         if (article && !article.isRead) {
             setArticles(prev =>
                 prev.map(a => a.id === article.id ? { ...a, isRead: true } : a)
@@ -219,7 +230,7 @@ export function ArticleList({
             );
         }
         onArticleSelect(article);
-    }, [onArticleSelect, channel.id, queryClient]);
+    }, [onArticleSelect, channel.id, queryClient, showToast, localize]);
 
     const handleSourcesChange = (newValue: string[]) => {
         setSelectedSources(newValue);
