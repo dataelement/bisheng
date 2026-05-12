@@ -440,7 +440,7 @@ export default function apps() {
         {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
+        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10 z-20">
             <div className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             </div>

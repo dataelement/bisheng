@@ -14,6 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import JsonType, column_exists, index_exists, table_exists, update_time_server_default
+
 revision: str = 'f001_multi_tenant'
 down_revision: Union[str, Sequence[str], None] = '9ba42685e830'
 branch_labels: Union[str, Sequence[str], None] = None
@@ -81,50 +83,12 @@ TENANT_TABLES = [
     'userrole',
 ]
 
-
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT COUNT(*) FROM information_schema.TABLES "
-            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
-        ),
-        {"t": table_name},
-    )
-    return result.scalar() > 0
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT COUNT(*) FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-        ),
-        {"t": table_name, "c": column_name},
-    )
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT COUNT(*) FROM information_schema.STATISTICS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = :t AND INDEX_NAME = :i"
-        ),
-        {"t": table_name, "i": index_name},
-    )
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
     """Create tenant infrastructure and add tenant_id to business tables."""
+    conn = op.get_bind()
 
     # 1. Create tenant table
-    if not _table_exists('tenant'):
+    if not table_exists(conn, 'tenant'):
         op.create_table(
             'tenant',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -137,18 +101,18 @@ def upgrade() -> None:
             sa.Column('contact_name', sa.String(64), nullable=True, comment='Contact name'),
             sa.Column('contact_phone', sa.String(32), nullable=True, comment='Contact phone'),
             sa.Column('contact_email', sa.String(128), nullable=True, comment='Contact email'),
-            sa.Column('quota_config', sa.JSON, nullable=True, comment='Tenant-level resource quota'),
-            sa.Column('storage_config', sa.JSON, nullable=True, comment='Tenant-level storage config'),
+            sa.Column('quota_config', JsonType, nullable=True, comment='Tenant-level resource quota'),
+            sa.Column('storage_config', JsonType, nullable=True, comment='Tenant-level storage config'),
             sa.Column('create_user', sa.Integer, nullable=True, comment='Created by user ID'),
             sa.Column('create_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
             sa.Column('update_time', sa.DateTime, nullable=False,
-                      server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+                      server_default=update_time_server_default(conn)),
         )
-    if not _index_exists('tenant', 'idx_tenant_status'):
+    if not index_exists(conn, 'tenant', 'idx_tenant_status'):
         op.create_index('idx_tenant_status', 'tenant', ['status'])
 
     # 2. Create user_tenant table
-    if not _table_exists('user_tenant'):
+    if not table_exists(conn, 'user_tenant'):
         op.create_table(
             'user_tenant',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -161,25 +125,25 @@ def upgrade() -> None:
             sa.Column('last_access_time', sa.DateTime, nullable=True, comment='Last access time'),
             sa.Column('join_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         )
-    if not _index_exists('user_tenant', 'idx_user_tenant_user_id'):
+    if not index_exists(conn, 'user_tenant', 'idx_user_tenant_user_id'):
         op.create_index('idx_user_tenant_user_id', 'user_tenant', ['user_id'])
-    if not _index_exists('user_tenant', 'idx_user_tenant_tenant_id'):
+    if not index_exists(conn, 'user_tenant', 'idx_user_tenant_tenant_id'):
         op.create_index('idx_user_tenant_tenant_id', 'user_tenant', ['tenant_id'])
-    if not _index_exists('user_tenant', 'uk_user_tenant') and not _index_exists('user_tenant', 'uk_user_active'):
+    if not index_exists(conn, 'user_tenant', 'uk_user_tenant') and not index_exists(conn, 'user_tenant', 'uk_user_active'):
         op.create_unique_constraint('uk_user_tenant', 'user_tenant', ['user_id', 'tenant_id'])
 
     # 3. Add tenant_id to all business tables
     for table_name in TENANT_TABLES:
         try:
-            if not _table_exists(table_name):
+            if not table_exists(conn, table_name):
                 continue
-            if not _column_exists(table_name, 'tenant_id'):
+            if not column_exists(conn, table_name, 'tenant_id'):
                 op.add_column(
                     table_name,
                     sa.Column('tenant_id', sa.Integer, nullable=False, server_default='1',
                               comment='Tenant ID'),
                 )
-            if not _index_exists(table_name, f'idx_{table_name}_tenant_id'):
+            if not index_exists(conn, table_name, f'idx_{table_name}_tenant_id'):
                 op.create_index(f'idx_{table_name}_tenant_id', table_name, ['tenant_id'])
         except Exception as e:
             # Table may not exist in this deployment (e.g. linsight tables)
@@ -201,24 +165,24 @@ def upgrade() -> None:
         ")"
     )
 
-
 def downgrade() -> None:
     """Remove tenant infrastructure. WARNING: loses tenant_id>1 data context."""
+    conn = op.get_bind()
 
     # 1. Remove tenant_id from business tables (reverse order)
     for table_name in reversed(TENANT_TABLES):
         try:
-            if _index_exists(table_name, f'idx_{table_name}_tenant_id'):
+            if index_exists(conn, table_name, f'idx_{table_name}_tenant_id'):
                 op.drop_index(f'idx_{table_name}_tenant_id', table_name=table_name)
-            if _column_exists(table_name, 'tenant_id'):
+            if column_exists(conn, table_name, 'tenant_id'):
                 op.drop_column(table_name, 'tenant_id')
         except Exception as e:
             print(f'WARNING: Failed to remove tenant_id from {table_name}: {e}')
 
     # 2. Drop user_tenant table
-    if _table_exists('user_tenant'):
+    if table_exists(conn, 'user_tenant'):
         op.drop_table('user_tenant')
 
     # 3. Drop tenant table
-    if _table_exists('tenant'):
+    if table_exists(conn, 'tenant'):
         op.drop_table('tenant')

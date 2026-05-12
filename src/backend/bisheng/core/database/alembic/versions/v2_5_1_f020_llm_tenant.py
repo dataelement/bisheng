@@ -39,6 +39,8 @@ from typing import List, Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import index_exists
+
 revision: str = 'f020_llm_tenant'
 down_revision: Union[str, Sequence[str], None] = (
     'f015_reconcile_log_fields',
@@ -68,15 +70,6 @@ def _find_duplicates(conn) -> List[sa.engine.Row]:
     return result.fetchall()
 
 
-def _index_exists(conn, index_name: str) -> bool:
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.STATISTICS '
-        'WHERE TABLE_SCHEMA = DATABASE() '
-        '  AND TABLE_NAME = :t AND INDEX_NAME = :i'
-    ), {'t': _TABLE, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
     conn = op.get_bind()
 
@@ -97,10 +90,10 @@ def upgrade() -> None:
     # ``Field(name, unique=True)`` column is the column name itself on
     # MySQL. Be defensive: only drop if present, so a DB that never had
     # the legacy index (fresh install at v2.5.1) upgrades cleanly.
-    if _index_exists(conn, _OLD_UNIQUE_INDEX_NAME):
+    if index_exists(conn, _TABLE, _OLD_UNIQUE_INDEX_NAME):
         op.drop_index(_OLD_UNIQUE_INDEX_NAME, table_name=_TABLE)
 
-    if not _index_exists(conn, _NEW_UNIQUE_INDEX_NAME):
+    if not index_exists(conn, _TABLE, _NEW_UNIQUE_INDEX_NAME):
         op.create_index(
             _NEW_UNIQUE_INDEX_NAME,
             _TABLE,
@@ -112,13 +105,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
 
-    if _index_exists(conn, _NEW_UNIQUE_INDEX_NAME):
+    if index_exists(conn, _TABLE, _NEW_UNIQUE_INDEX_NAME):
         op.drop_index(_NEW_UNIQUE_INDEX_NAME, table_name=_TABLE)
 
     # Recreate the old global UNIQUE(name) — only safe if no two tenants
     # share the same llm_server name. If they do, the downgrade caller
     # must dedupe first; we do not silently rename rows.
-    if not _index_exists(conn, _OLD_UNIQUE_INDEX_NAME):
+    if not index_exists(conn, _TABLE, _OLD_UNIQUE_INDEX_NAME):
         op.create_index(
             _OLD_UNIQUE_INDEX_NAME,
             _TABLE,

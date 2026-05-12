@@ -23,12 +23,11 @@ Usage Sample:
 """
 
 import logging
-import os
-import tempfile
+from html import escape
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional, Union
-
-from bisheng.common.utils.markdown_cmpnt.md_to_docx.parser.ext_md_syntax import ExtMdSyntax
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +35,8 @@ logger = logging.getLogger(__name__)
 try:
     import markdown
 except ImportError as e:
-    logger.error("Required dependency is missing: %s", e)
-    raise ImportError("Please Install 'markdown' Package: pip install markdown") from e
+    markdown = None
+    logger.warning("Markdown package is unavailable: %s", e)
 
 try:
     from playwright.sync_api import sync_playwright
@@ -179,6 +178,185 @@ class MarkdownToPdfError(Exception):
     pass
 
 
+DISALLOWED_HTML_TAGS = {
+    'base', 'embed', 'frame', 'iframe', 'link', 'meta', 'object', 'script', 'style'
+}
+URL_ATTRS = {'action', 'cite', 'data', 'formaction', 'href', 'poster', 'src', 'srcset', 'xlink:href'}
+RESOURCE_URL_ATTRS = {'action', 'data', 'formaction', 'poster', 'src', 'srcset', 'xlink:href'}
+SAFE_LINK_SCHEMES = {'http', 'https', 'mailto', 'tel'}
+SAFE_RESOURCE_SCHEMES = {'http', 'https', 'data'}
+VOID_HTML_TAGS = {
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+    'meta', 'param', 'source', 'track', 'wbr'
+}
+
+
+def _sanitize_url_attr_value(value: str, *, allow_anchor_only: bool, allow_data_uri: bool) -> Optional[str]:
+    """Return a sanitized URL value or None when the value is unsafe."""
+    if not value:
+        return None
+
+    normalized_value = value.strip()
+    if not normalized_value:
+        return None
+
+    if any(ord(char) < 32 for char in normalized_value):
+        return None
+
+    if allow_anchor_only and normalized_value.startswith('#'):
+        return normalized_value
+
+    parsed = urlparse(normalized_value)
+    scheme = parsed.scheme.lower()
+
+    if not scheme:
+        return None
+
+    if allow_data_uri and scheme == 'data':
+        if normalized_value.lower().startswith('data:image/'):
+            return normalized_value
+        return None
+
+    allowed_schemes = SAFE_LINK_SCHEMES if allow_anchor_only else SAFE_RESOURCE_SCHEMES
+    if scheme in allowed_schemes:
+        return normalized_value
+
+    return None
+
+
+class _PdfHtmlSanitizer(HTMLParser):
+    """HTML sanitizer that strips active content and unsafe URL-based resources."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.result: list[str] = []
+        self.blocked_tag_stack: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        self._handle_tag(tag, attrs, is_self_closing=False)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        self._handle_tag(tag, attrs, is_self_closing=True)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag_lower = tag.lower()
+        if self.blocked_tag_stack:
+            if tag_lower == self.blocked_tag_stack[-1]:
+                self.blocked_tag_stack.pop()
+            return
+
+        if tag_lower in VOID_HTML_TAGS:
+            return
+
+        self.result.append(f'</{tag_lower}>')
+
+    def handle_data(self, data: str) -> None:
+        if not self.blocked_tag_stack:
+            self.result.append(escape(data, quote=False))
+
+    def handle_entityref(self, name: str) -> None:
+        if not self.blocked_tag_stack:
+            self.result.append(f'&{name};')
+
+    def handle_charref(self, name: str) -> None:
+        if not self.blocked_tag_stack:
+            self.result.append(f'&#{name};')
+
+    def handle_comment(self, data: str) -> None:
+        if not self.blocked_tag_stack:
+            self.result.append(f'<!--{data}-->')
+
+    def handle_decl(self, decl: str) -> None:
+        if not self.blocked_tag_stack:
+            self.result.append(f'<!{decl}>')
+
+    def handle_pi(self, data: str) -> None:
+        if not self.blocked_tag_stack:
+            self.result.append(f'<?{data}>')
+
+    def _handle_tag(
+            self,
+            tag: str,
+            attrs: list[tuple[str, Optional[str]]],
+            *,
+            is_self_closing: bool,
+    ) -> None:
+        tag_lower = tag.lower()
+        if self.blocked_tag_stack:
+            if not is_self_closing and tag_lower in DISALLOWED_HTML_TAGS:
+                self.blocked_tag_stack.append(tag_lower)
+            return
+
+        if tag_lower in DISALLOWED_HTML_TAGS:
+            if not is_self_closing:
+                self.blocked_tag_stack.append(tag_lower)
+            return
+
+        sanitized_attrs: list[str] = []
+        for attr_name, attr_value in attrs:
+            attr_name_lower = attr_name.lower()
+
+            if attr_name_lower.startswith('on') or attr_name_lower == 'style':
+                continue
+
+            if attr_name_lower in URL_ATTRS:
+                sanitized_value = self._sanitize_url_attr(attr_name_lower, attr_value)
+                if not sanitized_value:
+                    continue
+                attr_value = sanitized_value
+
+            if attr_value is None:
+                sanitized_attrs.append(attr_name_lower)
+            else:
+                sanitized_attrs.append(f'{attr_name_lower}="{escape(attr_value, quote=True)}"')
+
+        attrs_str = f" {' '.join(sanitized_attrs)}" if sanitized_attrs else ''
+        closing = ' /' if is_self_closing else ''
+        self.result.append(f'<{tag_lower}{attrs_str}{closing}>')
+
+    @staticmethod
+    def _sanitize_url_attr(attr_name: str, attr_value: Optional[str]) -> Optional[str]:
+        if attr_value is None:
+            return None
+
+        if attr_name == 'srcset':
+            sanitized_candidates = []
+            for candidate in str(attr_value).split(','):
+                candidate = candidate.strip()
+                if not candidate:
+                    continue
+
+                parts = candidate.split()
+                sanitized_url = _sanitize_url_attr_value(
+                    parts[0],
+                    allow_anchor_only=False,
+                    allow_data_uri=True,
+                )
+                if not sanitized_url:
+                    continue
+
+                descriptor = f" {' '.join(parts[1:])}" if len(parts) > 1 else ''
+                sanitized_candidates.append(f'{sanitized_url}{descriptor}')
+
+            if sanitized_candidates:
+                return ', '.join(sanitized_candidates)
+            return None
+
+        return _sanitize_url_attr_value(
+            str(attr_value),
+            allow_anchor_only=attr_name == 'href',
+            allow_data_uri=attr_name in RESOURCE_URL_ATTRS,
+        )
+
+
+def sanitize_html_for_pdf(html_body: str) -> str:
+    """Remove HTML constructs that can trigger local file reads during PDF rendering."""
+    sanitizer = _PdfHtmlSanitizer()
+    sanitizer.feed(html_body)
+    sanitizer.close()
+    return ''.join(sanitizer.result)
+
+
 class MarkdownToPdfConverter:
     """
     Has Typora The power of style rendering Markdown Transfer PDF Converter
@@ -188,7 +366,6 @@ class MarkdownToPdfConverter:
     """
 
     SUPPORTED_PAGE_FORMATS = {'A4', 'A3', 'A5', 'Letter', 'Legal', 'Tabloid'}
-    DEFAULT_MARKDOWN_EXTENSIONS = [ExtMdSyntax(), 'extra', 'codehilite', 'toc', 'tables', 'sane_lists', 'fenced_code']
     DEFAULT_TIMEOUT = 60000  # ms
 
     def __init__(self,
@@ -274,6 +451,16 @@ class MarkdownToPdfConverter:
         except (OSError, UnicodeDecodeError) as e:
             raise MarkdownToPdfError(f'read out CSS Doc. {css_path} Kalah: {e}') from e
 
+    @staticmethod
+    def _get_markdown_extensions() -> list:
+        """Return markdown extensions lazily so the sanitizer can be tested without markdown installed."""
+        if markdown is None:
+            raise MarkdownToPdfError("Please Install 'markdown' Package: pip install markdown")
+
+        from bisheng.common.utils.markdown_cmpnt.md_to_docx.parser.ext_md_syntax import ExtMdSyntax
+
+        return [ExtMdSyntax(), 'extra', 'codehilite', 'toc', 'tables', 'sane_lists', 'fenced_code']
+
     def render_markdown_to_html(self,
                                 markdown_text: str,
                                 custom_css: Optional[str] = None,
@@ -302,8 +489,9 @@ class MarkdownToPdfConverter:
             # Using the extension will Markdown Convert To HTML
             html_body = markdown.markdown(
                 markdown_text,
-                extensions=self.DEFAULT_MARKDOWN_EXTENSIONS
+                extensions=self._get_markdown_extensions()
             )
+            html_body = sanitize_html_for_pdf(html_body)
 
             # OK CSS And MathJax Pengaturan
             css_content = custom_css or self.default_css
@@ -350,35 +538,14 @@ class MarkdownToPdfConverter:
         if format_to_use not in self.SUPPORTED_PAGE_FORMATS:
             raise MarkdownToPdfError(f'Unsupported page format: {format_to_use}')
 
-        # Create Temporary HTML Doc.
-        temp_html_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.html',
-                    delete=False,
-                    encoding='utf-8'
-            ) as temp_file:
-                temp_html_path = temp_file.name
-                temp_file.write(html_content)
-
-            logger.debug("Temporary Created HTML Doc.: %s", temp_html_path)
-
             # Use Playwright Convert To PDF
-            self._render_pdf_with_playwright(temp_html_path, output_file, format_to_use, margin_to_use)
+            self._render_pdf_with_playwright(html_content, output_file, format_to_use, margin_to_use)
 
             logger.info("Slider Created Successfully. PDF: %s", output_file)
 
         except Exception as e:
             raise MarkdownToPdfError(f'will be HTML Convert To PDF Kalah: {e}') from e
-        finally:
-            # Clean Up Temp Files
-            if temp_html_path and os.path.exists(temp_html_path):
-                try:
-                    os.unlink(temp_html_path)
-                    logger.debug("Temporary files cleaned: %s", temp_html_path)
-                except OSError as e:
-                    logger.warning("Clean Up Temp Files %s Kalah: %s", temp_html_path, e)
 
     def convert_html_to_pdf_bytes(self,
                                   html_content: str,
@@ -407,39 +574,18 @@ class MarkdownToPdfConverter:
         if format_to_use not in self.SUPPORTED_PAGE_FORMATS:
             raise MarkdownToPdfError(f'Unsupported page format: {format_to_use}')
 
-        # Create Temporary HTML Doc.
-        temp_html_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.html',
-                    delete=False,
-                    encoding='utf-8'
-            ) as temp_file:
-                temp_html_path = temp_file.name
-                temp_file.write(html_content)
-
-            logger.debug("Temporary Created HTML Doc.: %s", temp_html_path)
-
             # Use Playwright Convert To PDF Bytes of data
-            pdf_bytes = self._render_pdf_bytes_with_playwright(temp_html_path, format_to_use, margin_to_use)
+            pdf_bytes = self._render_pdf_bytes_with_playwright(html_content, format_to_use, margin_to_use)
 
             logger.debug("Successfully Generated! PDF bytes data, size: %d bytes", len(pdf_bytes))
             return pdf_bytes
 
         except Exception as e:
             raise MarkdownToPdfError(f'will be HTML Convert To PDF Byte Data Failure: {e}') from e
-        finally:
-            # Clean Up Temp Files
-            if temp_html_path and os.path.exists(temp_html_path):
-                try:
-                    os.unlink(temp_html_path)
-                    logger.debug("Temporary files cleaned: %s", temp_html_path)
-                except OSError as e:
-                    logger.warning("Clean Up Temp Files %s Kalah: %s", temp_html_path, e)
 
     def _render_pdf_with_playwright(self,
-                                    html_file_path: str,
+                                    html_content: str,
                                     output_path: Path,
                                     page_format: str,
                                     margin_mm: int) -> None:
@@ -449,10 +595,8 @@ class MarkdownToPdfConverter:
                 browser = playwright.chromium.launch()
                 try:
                     page = browser.new_page()
-                    file_url = f'file:///{html_file_path.replace(os.sep, "/")}'
-
-                    logger.debug("Load in browser HTML: %s", file_url)
-                    page.goto(file_url, timeout=self.DEFAULT_TIMEOUT)
+                    page.route('file://*', lambda route: route.abort())
+                    page.set_content(html_content, wait_until='load', timeout=self.DEFAULT_TIMEOUT)
 
                     # If enabled MathJax, waiting for typesetting to complete
                     if self.enable_math:
@@ -480,7 +624,7 @@ class MarkdownToPdfConverter:
             raise MarkdownToPdfError(f'Playwright PDF Generation Failed: {e}') from e
 
     def _render_pdf_bytes_with_playwright(self,
-                                          html_file_path: str,
+                                          html_content: str,
                                           page_format: str,
                                           margin_mm: int) -> bytes:
         """<g id="Bold">Medical Treatment:</g> Playwright PDF Internal method for byte data generation."""
@@ -489,10 +633,8 @@ class MarkdownToPdfConverter:
                 browser = playwright.chromium.launch()
                 try:
                     page = browser.new_page()
-                    file_url = f'file:///{html_file_path.replace(os.sep, "/")}'
-
-                    logger.debug("Load in browser HTML: %s", file_url)
-                    page.goto(file_url, timeout=self.DEFAULT_TIMEOUT)
+                    page.route('file://*', lambda route: route.abort())
+                    page.set_content(html_content, wait_until='load', timeout=self.DEFAULT_TIMEOUT)
 
                     # If enabled MathJax, waiting for typesetting to complete
                     if self.enable_math:

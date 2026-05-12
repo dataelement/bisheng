@@ -85,4 +85,20 @@ describe("useFileUpload helpers", () => {
 
     expect(extractKnowledgeFileError({ remark })).toBe("File parsing failed: rebuild error");
   });
+
+  test("extractKnowledgeFileError formats sensitive check hits for violation detail", () => {
+    const remark = JSON.stringify({
+      reason: "sensitive_check",
+      auto_reply: "不展示这段话",
+      hits: [
+        { word: "违禁词A", count: 2 },
+        { word: "违禁词B", count: 1 },
+        { word: "违禁词A", count: 1 },
+      ],
+    });
+
+    expect(extractKnowledgeFileError({ remark })).toBe(
+      "您上传的文件包含违规内容：{违禁词A,违禁词B}，请修改后重试",
+    );
+  });
 });

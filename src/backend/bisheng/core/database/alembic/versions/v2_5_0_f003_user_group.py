@@ -13,35 +13,19 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, index_exists
+
 revision: str = 'f003_user_group'
 down_revision: Union[str, Sequence[str], None] = 'f001_multi_tenant'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.STATISTICS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
     """Add visibility column and change unique constraint on group table."""
+    conn = op.get_bind()
 
     # 1. Add visibility column (default 'public' backfills existing rows)
-    if not _column_exists('group', 'visibility'):
+    if not column_exists(conn, 'group', 'visibility'):
         op.add_column(
             'group',
             sa.Column('visibility', sa.String(16), nullable=False,
@@ -56,14 +40,14 @@ def upgrade() -> None:
         pass  # Index may not exist or have a different name
 
     # 3. Add composite unique constraint (tenant_id + group_name)
-    if not _index_exists('group', 'uk_tenant_group_name'):
+    if not index_exists(conn, 'group', 'uk_tenant_group_name'):
         op.create_unique_constraint(
             'uk_tenant_group_name', 'group', ['tenant_id', 'group_name'],
         )
 
-
 def downgrade() -> None:
     """Reverse: remove composite unique, restore global unique, drop visibility."""
+    conn = op.get_bind()
 
     op.drop_constraint('uk_tenant_group_name', 'group', type_='unique')
 

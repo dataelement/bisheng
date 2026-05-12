@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate';
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 
@@ -25,7 +26,7 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
 
         const ext = parts.pop()?.toLowerCase() || "";
 
-        const validExtensions = ['csv', 'xlsx', 'xls', 'txt'];
+        const validExtensions = ['csv', 'xlsx', 'xls', 'et', 'txt'];
         if (validExtensions.includes(ext)) {
             return ext;
         }
@@ -36,8 +37,8 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
     // Prefer fileExt prop (from parent); fallback to URL-based extraction
     const fileExt = fileExtProp || getFileExtension(filePath);
     const isCSV = fileExt === "csv";
-    const isExcel = ["xlsx", "xls"].includes(fileExt);
-    const isXLSX = fileExt === "xlsx"; // 用于图片提取
+    const isExcel = ["xlsx", "xls", "et"].includes(fileExt);
+    const isXLSX = fileExt === "xlsx" || fileExt === "et"; // 用于图片提取
 
     // ---------------------- Screen Size Detection (Adapt to Small/Large Screens) ----------------------
     const [screenSize, setScreenSize] = useState("medium"); // small/medium/large
@@ -54,15 +55,6 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
         window.addEventListener("resize", handleResize);
         return () => window.removeEventListener("resize", handleResize);
     }, []);
-
-    // ---------------------- Get Max Width for Table Container ----------------------
-    const getTableContainerMaxWidth = () => {
-        switch (screenSize) {
-            case "small": return "600px";
-            case "large": return "1300px";
-            default: return "900px";
-        }
-    };
 
     // ---------------------- 辅助函数：根据文件扩展名获取MIME类型 ----------------------
     const getMimeType = (ext) => {
@@ -245,31 +237,42 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
 
                 } else if (isXLSX || fileExt === "xls") {
                     // ---------------- Excel ----------------
-                    let workbook;
+                    // 1. Use SheetJS as primary parser (handles .xls binary, WPS files,
+                    //    and non-conformant .xlsx that xlsx-populate chokes on).
+                    let wb;
                     try {
-                        workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
+                        wb = XLSX.read(arrayBuffer, { type: "array" });
                     } catch (e) {
-                        console.error("XlsxPopulate解析失败:", e);
+                        console.error("SheetJS解析失败:", e);
                         throw new Error(t('excelParseFailed'));
                     }
 
-                    // 解析表格数据
-                    const sheetNames = workbook.sheets().map((s: any) => s.name());
+                    const sheetNames = wb.SheetNames;
                     const parsedData: Record<string, any[][]> = {};
                     sheetNames.forEach(sheetName => {
-                        const sheet = workbook.sheet(sheetName);
-                        const usedRange = sheet.usedRange();
-                        parsedData[sheetName] = cleanData(usedRange?.value() || [[]]);
+                        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+                            header: 1,
+                            defval: "",
+                        }) as any[][];
+                        parsedData[sheetName] = cleanData(aoa);
                     });
                     setExcelData(parsedData);
                     setSheets(sheetNames);
                     setActiveSheet(sheetNames[0] || "");
 
-                    // 提取图片
-                    const { images, imagePositions } = await extractImagesWithPositions(workbook);
-                    setImages(images);
-                    setImagePositions(imagePositions);
-                    console.log(`[ExcelPreview] 提取到 ${images.length} 张图片`);
+                    // 2. Image extraction is best-effort; failure must not block table rendering.
+                    //    Only attempt for .xlsx/.et — xlsx-populate cannot read legacy .xls.
+                    if (isXLSX) {
+                        try {
+                            const workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
+                            const { images, imagePositions } = await extractImagesWithPositions(workbook);
+                            setImages(images);
+                            setImagePositions(imagePositions);
+                            console.log(`[ExcelPreview] 提取到 ${images.length} 张图片`);
+                        } catch (e) {
+                            console.warn("[ExcelPreview] 图片提取失败,跳过:", e);
+                        }
+                    }
 
                 } else {
                     throw new Error(t('unsupportedType', { type: fileExt }));
@@ -450,12 +453,7 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
         const sheetData = excelData[activeSheet];
         if (!Array.isArray(sheetData) || sheetData.length === 0) {
             return (
-                <div
-                    className="flex items-center justify-center text-gray-500"
-                    style={{
-                        minHeight: screenSize === "small" ? "520px" : "684px"
-                    }}
-                >
+                <div className="flex flex-1 min-h-0 items-center justify-center text-gray-500">
                     {t('currentSheetNoData')}
                 </div>
             );
@@ -494,15 +492,12 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
         const columnWidths = calculateColumnWidths();
 
         return (
-            <div className={`flex flex-col relative`}>
+            <div className="flex flex-col relative flex-1 min-h-0">
                 <div
                     ref={tableContainerRef}
-                    className="flex-1 border border-gray-200 bg-white relative overflow-auto"
+                    className="flex-1 min-h-0 border border-gray-200 bg-white relative overflow-auto"
                     style={{
-                        minHeight: screenSize === "small" ? "480px" : "684px",
-                        maxHeight: "calc(100vh - 300px)",
                         width: "100%",
-                        maxWidth: getTableContainerMaxWidth(),
                         overflowX: "auto",
                     }}
                 >
@@ -741,11 +736,11 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
     }
 
     return (
-        <div className="border border-gray-200 rounded-lg bg-white h-full flex flex-col shadow-sm">
-            <div className="flex-1 flex flex-col">
+        <div className="border border-gray-200 rounded-lg bg-white h-full flex flex-col shadow-sm overflow-hidden">
+            <div className="flex-1 flex flex-col min-h-0">
 
                 {/* Table content area */}
-                <div className="flex-1 p-4">
+                <div className="flex-1 min-h-0 flex flex-col p-4">
                     {error ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center p-8">
                             <div className="text-red-500 mb-4 p-4 bg-red-50 rounded-lg border border-red-200 max-w-md">

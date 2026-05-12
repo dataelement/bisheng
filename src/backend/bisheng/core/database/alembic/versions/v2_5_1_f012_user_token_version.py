@@ -19,24 +19,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists
+
 revision: str = 'f012_user_token_version'
 down_revision: Union[str, Sequence[str], None] = 'f011_tenant_tree'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _column_exists(table: str, column: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS '
-        'WHERE TABLE_SCHEMA = DATABASE() '
-        '  AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-    ), {'t': table, 'c': column})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _column_exists('user', 'token_version'):
+    conn = op.get_bind()
+    if not column_exists(conn, 'user', 'token_version'):
         op.add_column(
             'user',
             sa.Column(
@@ -48,7 +40,7 @@ def upgrade() -> None:
             ),
         )
 
-
 def downgrade() -> None:
-    if _column_exists('user', 'token_version'):
+    conn = op.get_bind()
+    if column_exists(conn, 'user', 'token_version'):
         op.drop_column('user', 'token_version')

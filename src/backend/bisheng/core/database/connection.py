@@ -36,6 +36,8 @@ class DatabaseConnectionManager:
             return url.replace("pymysql", "aiomysql")
         elif "psycopg2" in url:
             return url.replace("psycopg2", "asyncpg")
+        elif "dmPython" in url:
+            return url.replace("dmPython", "dmAsync")
         return url
 
     def _get_default_engine_config(self) -> Dict[str, Any]:
@@ -64,6 +66,33 @@ class DatabaseConnectionManager:
 
         return config
 
+    @staticmethod
+    def _dm_sync_url(url: str) -> str:
+        """Strip the schema/path from a DaMeng sync URL.
+
+        dmPython.connect() takes (user, password, "host:port") and does NOT
+        accept a 'database' keyword argument.  The dmSQLAlchemy sync dialect
+        maps the URL path component to that keyword, causing a connection error.
+        Dropping the path lets the dialect build the correct DSN.
+
+        The dmAsync dialect handles the path correctly, so async URLs are left
+        unchanged.
+
+        Note: urlparse lowercases the scheme, so we strip the path manually
+        using string operations to preserve the original case (dm+dmPython).
+        """
+        # Find the path by locating the host:port section and stripping what follows
+        # URL format: dm+dmPython://user:pass@host:port/schema?query
+        # We want:    dm+dmPython://user:pass@host:port
+        at_idx = url.find("@")
+        if at_idx == -1:
+            return url
+        after_at = url[at_idx + 1:]          # host:port/schema?query
+        slash_idx = after_at.find("/")
+        if slash_idx == -1:
+            return url                         # no path — nothing to strip
+        return url[:at_idx + 1 + slash_idx]   # trim /schema and beyond
+
     @property
     def engine(self) -> Engine:
         """Get Synchronization Database Engine"""
@@ -71,11 +100,15 @@ class DatabaseConnectionManager:
             config = self._get_default_engine_config()
             config.update(self.engine_kwargs)
 
+            sync_url = self.database_url
+            if "dm+dmPython" in sync_url:
+                sync_url = self._dm_sync_url(sync_url)
+
             self._engine = create_engine(
-                self.database_url,
+                sync_url,
                 **config
             )
-            logger.debug(f"Created sync database engine for {self.database_url}")
+            logger.debug(f"Created sync database engine for {sync_url}")
 
         return self._engine
 
@@ -152,7 +185,42 @@ class DatabaseConnectionManager:
                 logger.error(f"Error creating tables: {exc}")
                 raise RuntimeError("Error creating tables") from exc
 
+        # DaMeng: ensure BEFORE UPDATE triggers for update_time columns exist.
+        # This replicates MySQL's ON UPDATE CURRENT_TIMESTAMP at the DB level
+        # and must run at startup so both fresh installs and upgrades are covered.
+        if self.async_engine.dialect.name == 'dm':
+            self._ensure_dm_triggers()
+
         logger.info('Database and tables created successfully')
+
+    def _ensure_dm_triggers(self) -> None:
+        """Create or replace BEFORE UPDATE triggers for update_time on DaMeng."""
+        from sqlalchemy import inspect as sa_inspect
+
+        with self.engine.connect() as conn:
+            insp = sa_inspect(conn)
+            for table in insp.get_table_names():
+                try:
+                    col_names = [c['name'].lower() for c in insp.get_columns(table)]
+                except Exception:
+                    continue
+
+                if 'update_time' not in col_names:
+                    continue
+
+                trigger_name = f'trg_{table}_update_time'
+                trigger_ddl = (
+                    f'CREATE OR REPLACE TRIGGER "{trigger_name}" '
+                    f'BEFORE UPDATE ON "{table}" '
+                    f'FOR EACH ROW '
+                    f'BEGIN '
+                    f'  :new.update_time := CURRENT_TIMESTAMP; '
+                    f'END'
+                )
+                try:
+                    conn.exec_driver_sql(trigger_ddl)
+                except Exception as exc:
+                    logger.warning(f'[dm] Could not create trigger {trigger_name}: {exc}')
 
     async def close(self):
         """Close database connection"""

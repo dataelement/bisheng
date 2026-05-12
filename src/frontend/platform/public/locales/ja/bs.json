@@ -1043,6 +1043,7 @@
     "customWordList": "カスタムワードリスト",
     "autoReplyContent": "自動返信内容",
     "useNewlineToSeparate": "改行で区切り、1行に1つ入力してください",
+    "useCommaToSeparate": "英語のカンマで区切って入力してください。例：word1,word2,word3",
     "txtFile": "txtファイル",
     "sensitiveWordMatch": "センシティブワードマッチング",
     "defaultAutoReply": "セキュリティ審査に抵触した場合の自動返信内容を入力してください。例：「現在の会話内容は関連規則に違反しています。内容を修正してから再度入力してください。」",

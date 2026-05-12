@@ -4,19 +4,17 @@ from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
 from sqlalchemy import Integer
-from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
+from bisheng.core.database.dialect_helpers import JsonType, LargeText
+from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_, 
                       select, text, update, col)
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
-
 class LikedType(Enum):
     UNRATED = 0  # Not assessed
     LIKED = 1  # Love
     DISLIKED = 2  # don't like}
-
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='Chat Role')
@@ -24,8 +22,8 @@ class MessageBase(SQLModelSerializable):
     mark_status: Optional[int] = Field(index=False, default=1, description='Tag status')
     mark_user: Optional[int] = Field(default=None, index=False, description='Flagging User')
     mark_user_name: Optional[str] = Field(default=None, index=False, description='Flagging User')
-    message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='Chat Message')
-    extra: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='Connection information, etc.')
+    message: Optional[str] = Field(default=None, sa_column=Column(LargeText), description='Chat Message')
+    extra: Optional[str] = Field(default=None, sa_column=Column(LargeText), description='Connection information, etc.')
     type: str = Field(index=False, description='Type of Message')
     category: str = Field(index=False, max_length=32, description='Message category, questionetc.')
     flow_id: str = Field(index=True, description='Corresponding Skillsid')
@@ -53,7 +51,7 @@ class MessageBase(SQLModelSerializable):
     sender: Optional[str] = Field(index=False, default='', description='autogen Sender')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen Sender')
     intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='Process Log')
-    files: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT),
+    files: Optional[str] = Field(default=None, sa_column=Column(LargeText),
                                  description='Uploaded documents, etc.')
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
                                   description='Note. break_answer: Interrupted response inactionhistoryPass to Model')
@@ -62,10 +60,9 @@ class MessageBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class ChatMessage(MessageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    receiver: Optional[Dict] = Field(default=None, sa_column=Column(JsonType))
 
     # Key: Set table level character set to utf8mb4
     __table_args__ = {
@@ -73,19 +70,15 @@ class ChatMessage(MessageBase, table=True):
         "mysql_collate": "utf8mb4_unicode_ci"
     }
 
-
 class ChatMessageRead(MessageBase):
     id: Optional[int] = None
-
 
 class ChatMessageQuery(MessageBase):
     id: Optional[int] = None
     receiver: Optional[Dict] = None
 
-
 class ChatMessageCreate(MessageBase):
     pass
-
 
 class MessageDao(MessageBase):
 
@@ -155,7 +148,6 @@ class MessageDao(MessageBase):
                 res_list]
             logger.info(res_list)
             return dict_res, total_count
-
 
 class ChatMessageDao(MessageBase):
 

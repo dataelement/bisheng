@@ -17,6 +17,7 @@ from sqlmodel import Field, select
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +83,11 @@ class Tenant(SQLModelSerializable, table=True):
     )
     quota_config: Optional[dict] = Field(
         default=None,
-        sa_column=Column(JSON, nullable=True, comment='Tenant-level resource quota'),
+        sa_column=Column(JsonType, nullable=True, comment='Tenant-level resource quota'),
     )
     storage_config: Optional[dict] = Field(
         default=None,
-        sa_column=Column(JSON, nullable=True, comment='Tenant-level storage config override'),
+        sa_column=Column(JsonType, nullable=True, comment='Tenant-level storage config override'),
     )
     create_user: Optional[int] = Field(
         default=None,

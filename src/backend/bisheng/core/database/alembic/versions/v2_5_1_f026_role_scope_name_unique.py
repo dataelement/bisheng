@@ -21,25 +21,19 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import constraint_exists
+
 revision: str = 'f026_role_scope_name_unique'
 down_revision: Union[str, Sequence[str], None] = 'f025_merge_f024_heads'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _constraint_exists(table_name: str, constraint_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND CONSTRAINT_NAME = :c"
-    ), {'t': table_name, 'c': constraint_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if _constraint_exists('role', 'uk_tenant_roletype_rolename'):
+    conn = op.get_bind()
+    if constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename'):
         op.drop_constraint('uk_tenant_roletype_rolename', 'role', type_='unique')
-    if not _constraint_exists('role', 'uk_tenant_roletype_rolename_scope'):
+    if not constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename_scope'):
         op.create_unique_constraint(
             'uk_tenant_roletype_rolename_scope',
             'role',
@@ -48,9 +42,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if _constraint_exists('role', 'uk_tenant_roletype_rolename_scope'):
+    conn = op.get_bind()
+    if constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename_scope'):
         op.drop_constraint('uk_tenant_roletype_rolename_scope', 'role', type_='unique')
-    if not _constraint_exists('role', 'uk_tenant_roletype_rolename'):
+    if not constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename'):
         op.create_unique_constraint(
             'uk_tenant_roletype_rolename',
             'role',

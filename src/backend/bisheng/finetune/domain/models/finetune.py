@@ -4,19 +4,17 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, BaseModel, model_validator
 from sqlalchemy import Integer, Select
-from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update, col
+from bisheng.core.database.dialect_helpers import JsonType, LargeText
+from sqlmodel import Column, DateTime, Field, func, select, text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 from bisheng.utils import generate_uuid
 
-
 class TrainMethod(Enum):
     FULL = 'full'
     FREEZE = 'freeze'
     LORA = 'lora'
-
 
 class FinetuneStatus(Enum):
     # Training
@@ -30,7 +28,6 @@ class FinetuneStatus(Enum):
     # Publication complete
     PUBLISHED = 5
 
-
 class FinetuneBase(SQLModelSerializable):
     id: str = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
     server: int = Field(default=0, index=True, description='RelatedRTSERVICESID')
@@ -43,13 +40,13 @@ class FinetuneBase(SQLModelSerializable):
     model_id: int = Field(default=0, index=True, description='Published Training ModelsID')
     model_name: str = Field(index=True, max_length=50, description='Name of the training model')
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='Training Methods')
-    extra_params: Dict = Field(sa_column=Column(JSON), description='Additional parameters required for training tasks')
-    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Personal Training Dataset Information')
-    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Preset training dataset information')
+    extra_params: Dict = Field(sa_column=Column(JsonType), description='Additional parameters required for training tasks')
+    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType), description='Personal Training Dataset Information')
+    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType), description='Preset training dataset information')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='Status of the training task')
-    reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='Task Failure Reason')
+    reason: Optional[str] = Field(default='', sa_column=Column(LargeText), description='Task Failure Reason')
     log_path: Optional[str] = Field(default='', max_length=512, description='Training log inminioPath on')
-    report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Assessment report data for training tasks')
+    report: Optional[Dict] = Field(default=None, sa_column=Column(JsonType), description='Assessment report data for training tasks')
     user_id: int = Field(default=None, index=True, description='creatorID')
     user_name: str = Field(default=None, description='creatorName')
     tenant_id: Optional[int] = Field(
@@ -88,10 +85,8 @@ class FinetuneBase(SQLModelSerializable):
         cls.validate_train(preset_data)
         return values
 
-
 class Finetune(FinetuneBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
-
 
 class FinetuneList(BaseModel):
     server: Optional[int] = Field(None, description='RelatedRTSERVICESID')
@@ -126,11 +121,9 @@ class FinetuneList(BaseModel):
             statement = statement.offset(offset).limit(self.limit).order_by(col(Finetune.create_time).desc())
         return statement, count_statement
 
-
 class FinetuneChangeModelName(BaseModel):
     id: str = Field(description='Training Mission UniqueID')
     model_name: str
-
 
 class FinetuneExtraParams(BaseModel):
     gpus: str = Field(..., description='Needs to be usedGPUCard #')
@@ -171,7 +164,6 @@ class FinetuneExtraParams(BaseModel):
             return gpus
         except Exception as e:
             raise ValueError(f'gpus must be an str {e}')
-
 
 class FinetuneDao(FinetuneBase):
 

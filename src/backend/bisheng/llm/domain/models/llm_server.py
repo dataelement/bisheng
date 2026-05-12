@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import CHAR, JSON, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
+from sqlalchemy import CHAR, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select, col
 
 from bisheng.common.errcode.llm_tenant import (
@@ -14,6 +14,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_llm_info_async
 from bisheng.utils.http_middleware import _check_is_global_super
@@ -23,7 +24,6 @@ _LOG = logging.getLogger(__name__)
 # to avoid an import cycle (tenant.py depends on models.base which
 # bootstraps before ORM table registration).
 _ROOT_TENANT_ID = 1
-
 
 class LLMServerBase(SQLModelSerializable):
     # Uniqueness is scoped to tenant via the composite ``uk_llm_server_
@@ -35,7 +35,7 @@ class LLMServerBase(SQLModelSerializable):
     type: str = Field(sa_column=Column(CHAR(20)), description='Service Provider Type')
     limit_flag: bool = Field(default=False, description='Whether to turn on the daily call limit')
     limit: int = Field(default=0, description='Daily call limit')
-    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
+    config: Optional[Dict] = Field(default=None, sa_column=Column(JsonType),
                                    description='Service Provider Public Configuration')
     user_id: int = Field(default=0, description='creatorID')
     tenant_id: Optional[int] = Field(
@@ -48,14 +48,13 @@ class LLMServerBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class LLMModelBase(SQLModelSerializable):
     server_id: Optional[int] = Field(default=None, nullable=False, index=True, description='SERVICESID')
     name: str = Field(default='', description='Model Display Name')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='Model Description')
     model_name: str = Field(default='', description='Model name, parameters used when instantiating components')
     model_type: str = Field(sa_column=Column(CHAR(20)), description='model type')
-    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
+    config: Optional[Dict] = Field(default=None, sa_column=Column(JsonType),
                                    description='Service Provider Public Configuration')
     status: int = Field(default=2, description='Model status.0Normal1abnormal:, 2: Unknown')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='Abnormal reason')
@@ -71,7 +70,6 @@ class LLMModelBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-
 class LLMServer(LLMServerBase, table=True):
     __tablename__ = 'llm_server'
     __table_args__ = (
@@ -80,13 +78,11 @@ class LLMServer(LLMServerBase, table=True):
 
     id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Service UniqueID')
 
-
 class LLMModel(LLMModelBase, table=True):
     __tablename__ = 'llm_model'
     __table_args__ = (UniqueConstraint('server_id', 'model_name', name='server_model_uniq'),)
 
     id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Model UniqueID')
-
 
 class LLMDao:
 

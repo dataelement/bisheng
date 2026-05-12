@@ -6,26 +6,24 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import field_validator
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, false, func, or_, text
-from sqlmodel import JSON, Field, select, update, col
+from sqlmodel import Field, select, update, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
 
-
 # if TYPE_CHECKING:
-
 
 class FlowStatus(Enum):
     OFFLINE = 1
     ONLINE = 2
-
 
 class FlowType(Enum):
     ASSISTANT = 5
@@ -35,16 +33,13 @@ class FlowType(Enum):
     CHANNEL_ARTICLE = 25  # Channel Article AI Assistant
     KNOLEDGE_SPACE = 30
 
-
 class AppEnum(Enum):
     Flow = 'flow'
     ASSISTANT = 'assistant'
     WORKFLOW = 'workflow'
 
-
 class UserLinkType(Enum):
     app = AppEnum
-
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
@@ -88,11 +83,9 @@ class FlowBase(SQLModelSerializable):
 
         return v
 
-
 class Flow(FlowBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-
+    data: Optional[Dict] = Field(default=None, sa_column=Column(JsonType))
 
 class FlowCreate(SQLModelSerializable):
     name: str = Field(index=True)
@@ -125,17 +118,14 @@ class FlowCreate(SQLModelSerializable):
 
         return v
 
-
 class FlowRead(FlowBase):
     id: str
     user_name: Optional[str] = None
     version_id: Optional[int] = None
 
-
 class FlowReadWithStyle(FlowRead):
     # style: Optional['FlowStyleRead'] = None
     total: Optional[int] = None
-
 
 class FlowUpdate(SQLModelSerializable):
     name: Optional[str] = None
@@ -144,7 +134,6 @@ class FlowUpdate(SQLModelSerializable):
     data: Optional[Dict] = None
     status: Optional[int] = None
     guide_word: Optional[str] = None
-
 
 class FlowDao(FlowBase):
 

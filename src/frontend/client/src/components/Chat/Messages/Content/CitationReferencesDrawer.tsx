@@ -46,6 +46,8 @@ type CitationReferencesDrawerProps = {
   panelClassName?: string;
   initialDocumentPreview?: CitationDocumentPreviewState | null;
   desktopPreviewVariant?: 'auto' | 'standard' | 'expanded';
+  /** Notifies parent of inline-panel view changes so the outer container can resize for document preview. */
+  onDesktopViewChange?: (view: CitationDesktopView) => void;
 };
 
 export type CitationReferencesDesktopPayload = {
@@ -214,6 +216,7 @@ export default function CitationReferencesDrawer({
   panelClassName,
   initialDocumentPreview,
   desktopPreviewVariant = 'auto',
+  onDesktopViewChange,
 }: CitationReferencesDrawerProps) {
   const localize = useLocalize();
   // <=768: 走抽屉（不内联分栏）；<=576: 抽屉全屏覆盖
@@ -418,6 +421,11 @@ export default function CitationReferencesDrawer({
   }, [isOpen, panelOnly]);
 
   useEffect(() => {
+    if (!isDesktopInlinePanel) return;
+    onDesktopViewChange?.(desktopView);
+  }, [desktopView, isDesktopInlinePanel, onDesktopViewChange]);
+
+  useEffect(() => {
     if (!isOpen || panelOnly || isFullBleedMobile || isDesktopInlinePanel) return;
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -528,9 +536,15 @@ export default function CitationReferencesDrawer({
       null,
     )
     : { name: '文档预览', extension: '' };
-  // 非 expanded：侧栏内预览区横向铺满，避免 max-w + items-center 在侧栏中留出左右大空白
-  const desktopPanelMaxWidth = useExpandedDesktopPreview ? 'max-w-[480px]' : 'max-w-full';
-  const desktopHeaderPadding = 'px-4';
+  // The "centered reading card" layout (max-w-[464/480]) only makes sense for the
+  // citation list. When previewing a document, both header and body fill the
+  // panel so they line up flush — capping the header alone leaves the body
+  // sticking out wider than the title bar.
+  const useReadingCardLayout = useExpandedDesktopPreview && !isDesktopPreviewInline;
+  const desktopPanelMaxWidth = useReadingCardLayout ? 'max-w-[480px]' : 'max-w-full';
+  // Preview is rendered edge-to-edge in the panel, so the header sits flush
+  // against the panel sides; list view keeps its 16px inset.
+  const desktopHeaderPadding = isDesktopPreviewInline ? '' : 'px-4';
   const desktopHeaderHeight = 'h-10';
   const desktopHeaderGap = 'gap-2';
   const desktopButtonSize = 'size-6 rounded-[6px]';
@@ -541,10 +555,10 @@ export default function CitationReferencesDrawer({
   const desktopCloseButtonClass = useExpandedDesktopPreview
     ? 'text-[#333333] hover:bg-[#F7F8FA]'
     : 'text-[#A9AEB8] hover:bg-[#F7F8FA]';
-  const desktopContentOuterClass = useExpandedDesktopPreview
+  const desktopContentOuterClass = useReadingCardLayout
     ? 'items-center justify-between gap-6 p-2'
     : 'w-full min-w-0 items-stretch gap-0';
-  const desktopBodyWrapperClass = useExpandedDesktopPreview
+  const desktopBodyWrapperClass = useReadingCardLayout
     ? 'max-w-[464px] rounded-[12px] bg-[#F7F8FA]'
     : 'w-full min-w-0 max-w-full overflow-hidden bg-[#F7F8FA]';
   const desktopBodyClass = useExpandedDesktopPreview
@@ -618,11 +632,11 @@ export default function CitationReferencesDrawer({
   );
 
   const documentPreviewContent = (
-    <div className={cn('flex min-h-0 flex-1 flex-col bg-white', desktopContentOuterClass)}>
+    <div className={cn('flex min-h-0 flex-1 flex-col bg-white p-2', desktopContentOuterClass)}>
       <div
         className={cn(
           'flex shrink-0 flex-col',
-          useExpandedDesktopPreview ? 'w-full max-w-[464px] gap-4' : 'w-full max-w-full gap-0',
+          useReadingCardLayout ? 'w-full max-w-[464px] gap-4' : 'w-full max-w-full gap-0',
         )}
       >
         <div

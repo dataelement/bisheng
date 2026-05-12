@@ -1,5 +1,4 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import { Input } from "~/components/ui/Input";
 import { getResourceGrantUsers, searchUsers } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
@@ -193,19 +192,20 @@ export function SubjectSearchUser({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <Input
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <input
+          type="text"
           placeholder={localize("com_permission.search_user")}
           value={keyword}
           onChange={handleInput}
-          className="h-8 pl-8"
+          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
         />
       </div>
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto rounded-md border"
+        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]"
       >
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">

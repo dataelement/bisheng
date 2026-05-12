@@ -62,6 +62,7 @@ from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
     convert_ppt_to_pdf, convert_ppt_to_pptx,
 )
 from bisheng.llm.domain.services import LLMService
+from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
 from bisheng.utils.exceptions import EtlException, FileParseException
@@ -260,6 +261,13 @@ def addEmbedding(
             else:
                 db_file.remark = KnowledgeFileFailedError(exception=e).to_json_str()
             status = 'parse_failed'
+        except ContentSafetyViolation as e:
+            logger.warning(
+                f"process_file_sensitive_violation file_id={db_file.id} file_name={db_file.file_name}"
+            )
+            db_file.status = KnowledgeFileStatus.VIOLATION.value
+            db_file.remark = json.dumps(e.to_remark(), ensure_ascii=False)
+            status = 'failed'
         except BaseErrorCode as e:
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.remark = e.to_json_str()

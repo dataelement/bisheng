@@ -23,34 +23,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import JsonType, column_exists, index_exists
+
 revision: str = 'f005_role_menu_quota'
 down_revision: Union[str, Sequence[str], None] = 'f004_rebac'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.STATISTICS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
     """Extend role table for policy-role model (F005)."""
     # 1. Add role_type column
-    if not _column_exists('role', 'role_type'):
+    if not column_exists(conn, 'role', 'role_type'):
         op.add_column(
             'role',
             sa.Column('role_type', sa.String(16), nullable=False, server_default='tenant',
@@ -58,25 +41,25 @@ def upgrade() -> None:
         )
 
     # 2. Add department_id column with index
-    if not _column_exists('role', 'department_id'):
+    if not column_exists(conn, 'role', 'department_id'):
         op.add_column(
             'role',
             sa.Column('department_id', sa.Integer, nullable=True,
                       comment='Department scope ID; NULL = no scope restriction'),
         )
-    if not _index_exists('role', 'idx_role_department_id'):
+    if not index_exists(conn, 'role', 'idx_role_department_id'):
         op.create_index('idx_role_department_id', 'role', ['department_id'])
 
     # 3. Add quota_config JSON column
-    if not _column_exists('role', 'quota_config'):
+    if not column_exists(conn, 'role', 'quota_config'):
         op.add_column(
             'role',
-            sa.Column('quota_config', sa.JSON, nullable=True,
+            sa.Column('quota_config', JsonType, nullable=True,
                       comment='Resource quota config JSON'),
         )
 
     # 4. Drop old unique constraint and create new one
-    if _index_exists('role', 'group_role_name_uniq'):
+    if index_exists(conn, 'role', 'group_role_name_uniq'):
         op.drop_index('group_role_name_uniq', table_name='role')
 
     # 4a. Pre-dedupe legacy collisions so the new UNIQUE can be built.
@@ -84,7 +67,7 @@ def upgrade() -> None:
     # ``<role_name>-dup-<id>`` (id is globally unique, so the new names
     # will not collide with each other). Idempotent: runs only when the
     # target unique index is not yet present.
-    if not _index_exists('role', 'uk_tenant_roletype_rolename'):
+    if not index_exists(conn, 'role', 'uk_tenant_roletype_rolename'):
         conn = op.get_bind()
         conflicts = conn.execute(sa.text("""
             SELECT tenant_id, role_type, role_name, COUNT(*) AS cnt
@@ -122,24 +105,43 @@ def upgrade() -> None:
     op.execute("UPDATE role SET role_type = 'global' WHERE id IN (1, 2)")
 
     # 6. Migrate knowledge_space_file_limit into quota_config
-    # Only for roles that have a positive limit set
-    if _column_exists('role', 'knowledge_space_file_limit'):
-        op.execute("""
-            UPDATE role
-            SET quota_config = JSON_OBJECT('knowledge_space_file', knowledge_space_file_limit)
-            WHERE knowledge_space_file_limit > 0
-              AND (quota_config IS NULL OR JSON_LENGTH(quota_config) = 0)
-        """)
-
+    # Only for roles that have a positive limit set.
+    # Use Python-level JSON processing so the query works on MySQL and DaMeng.
+    if column_exists(conn, 'role', 'knowledge_space_file_limit'):
+        import json as _json
+        role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+        rows = conn.execute(
+            sa.select(role_tbl.c.id, role_tbl.c.knowledge_space_file_limit, role_tbl.c.quota_config)
+            .where(role_tbl.c.knowledge_space_file_limit > 0)
+        ).fetchall()
+        for row in rows:
+            raw = row.quota_config
+            current = _json.loads(raw) if isinstance(raw, str) else raw
+            if current:  # already has config — skip
+                continue
+            conn.execute(
+                sa.update(role_tbl)
+                .where(role_tbl.c.id == row.id)
+                .values(quota_config=_json.dumps({'knowledge_space_file': row.knowledge_space_file_limit}))
+            )
 
 def downgrade() -> None:
     """Revert role table changes."""
-    # Clear migrated quota_config values
-    op.execute("""
-        UPDATE role SET quota_config = NULL
-        WHERE JSON_LENGTH(quota_config) = 1
-          AND JSON_CONTAINS_PATH(quota_config, 'one', '$.knowledge_space_file')
-    """)
+    conn = op.get_bind()
+    # Clear migrated quota_config values using Python-level JSON check
+    import json as _json
+    role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+    rows = conn.execute(
+        sa.select(role_tbl.c.id, role_tbl.c.quota_config)
+        .where(role_tbl.c.quota_config.isnot(None))
+    ).fetchall()
+    for row in rows:
+        raw = row.quota_config
+        current = _json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(current, dict) and list(current.keys()) == ['knowledge_space_file']:
+            conn.execute(
+                sa.update(role_tbl).where(role_tbl.c.id == row.id).values(quota_config=None)
+            )
 
     # Revert built-in roles
     op.execute("UPDATE role SET role_type = 'tenant' WHERE id IN (1, 2)")

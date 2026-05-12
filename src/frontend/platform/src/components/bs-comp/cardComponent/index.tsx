@@ -1,17 +1,15 @@
 import { cname } from "@/components/bs-ui/utils";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import { AppNumType, AppType } from "@/types/app";
-import { Copy, Shield } from "lucide-react";
+import { Copy, FilePlus, Settings, Shield, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SkillIcon } from "../../bs-icons";
-import { AddToIcon } from "../../bs-icons/addTo";
-import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
 import { PlusIcon } from "../../bs-icons/plus";
 import { SettingIcon } from "../../bs-icons/setting";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../bs-ui/dropdownMenu";
 import { Switch } from "../../bs-ui/switch";
 import i18next from "i18next";
 
@@ -106,6 +104,7 @@ export default function CardComponent<T>({
 }: IProps<T>) {
 
   const [_checked, setChecked] = useState(checked)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const { t, i18n } = useTranslation()
 
@@ -206,21 +205,44 @@ export default function CardComponent<T>({
           <span className="text-sm font-medium overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>
         {showActionBar && (
-          <div className="hidden group-hover:flex gap-1 items-center">
-            {/* {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>} */}
-            {onPermission && <div className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1" onClick={(e) => { e.stopPropagation(); onPermission(data) }}><Shield className="w-4 h-4" /></div>}
-            {edit && isAdmin && type !== 'assistant' && onAddTemp && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
-            {showCopy && onCopy && (
-              <Tip content={i18n.t('copy', { ns: 'flow' })} side="top">
-                <div
-                  className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1"
-                  onClick={(e) => { e.stopPropagation(); onCopy(data); }}
+          <div className={`${menuOpen ? 'flex' : 'hidden group-hover:flex'} gap-1 items-center`}>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1 inline-flex items-center justify-center"
+                  aria-label={t('more')}
                 >
-                  <Copy className="w-4 h-4" />
-                </div>
-              </Tip>
-            )}
-            {!checked && onDelete && <div className="hover:bg-[#24272d] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
+                  <Settings className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {onPermission && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPermission(data); }}>
+                    <Shield className="w-4 h-4" />
+                    {t('system.managePermission')}
+                  </DropdownMenuItem>
+                )}
+                {edit && isAdmin && type !== 'assistant' && onAddTemp && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAddTemp(data); }}>
+                    <FilePlus className="w-4 h-4" />
+                    {t('skills.createTemplate')}
+                  </DropdownMenuItem>
+                )}
+                {showCopy && onCopy && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopy(data); }}>
+                    <Copy className="w-4 h-4" />
+                    {i18n.t('copy', { ns: 'flow' })}
+                  </DropdownMenuItem>
+                )}
+                {!checked && onDelete && (
+                  <DropdownMenuItem variant="destructive" onClick={(e) => { e.stopPropagation(); onDelete(data); }}>
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                    {i18n.t('delete', { ns: 'flow' })}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>

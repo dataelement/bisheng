@@ -32,37 +32,30 @@ target_metadata = SQLModelSerializable.metadata
 
 
 def ensure_alembic_version_table(connection) -> None:
-    """Ensure long local revision ids fit into Alembic's version table."""
+    """Ensure long local revision ids fit into Alembic's version table.
+
+    Uses SQLAlchemy Inspector — dialect-agnostic, works on MySQL and DaMeng.
+    """
+    from bisheng.core.database.dialect_helpers import table_exists, get_version_num_length
+
     dialect_name = connection.dialect.name
-    if dialect_name != "mysql":
+    if dialect_name not in ("mysql", "dm"):
         return
 
-    table_exists = connection.execute(
-        text(
-            "SELECT COUNT(*) FROM information_schema.TABLES "
-            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'alembic_version'"
-        )
-    ).scalar()
-    if not table_exists:
+    if not table_exists(connection, "alembic_version"):
         connection.execute(
             text(
                 "CREATE TABLE alembic_version ("
-                "version_num VARCHAR(255) NOT NULL, "
-                "PRIMARY KEY (version_num)"
+                "version_num VARCHAR(255) NOT NULL PRIMARY KEY"
                 ")"
             )
         )
         return
 
-    column_len = connection.execute(
-        text(
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = 'alembic_version' "
-            "AND COLUMN_NAME = 'version_num'"
-        )
-    ).scalar()
-    if column_len is not None and int(column_len) < 255:
+    length = get_version_num_length(connection)
+    if length is not None and int(length) < 255:
+        # Column resize has no dialect-agnostic Alembic API outside a migration
+        # context. Both MySQL and DaMeng support MODIFY syntax for ALTER TABLE.
         connection.execute(
             text("ALTER TABLE alembic_version MODIFY version_num VARCHAR(255) NOT NULL")
         )

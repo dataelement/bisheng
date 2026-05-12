@@ -2,9 +2,9 @@ import { cn } from "@/utils";
 import { useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 
-export function SelectHoverItem({ children, ...props }) {
+export function SelectHoverItem({ children, className, ...props }) {
 
-    return <div {...props} className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-[#EBF0FF] dark:text-gray-50 dark:hover:bg-gray-700">
+    return <div {...props} className={cn("relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-[#EBF0FF] dark:text-gray-50 dark:hover:bg-gray-700", className)}>
         {children}
     </div>
 }

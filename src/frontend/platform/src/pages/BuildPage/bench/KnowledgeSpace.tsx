@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DepartmentKnowledgeSpaceApprovalDialog } from "./DepartmentKnowledgeSpaceApprovalDialog";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
+import { KnowledgeSpaceSensitivePolicy } from "./KnowledgeSpaceSensitivePolicy";
 
 interface KnowledgeConfigForm {
     /** 系统提示词，对应接口 system_prompt */
@@ -172,6 +173,8 @@ export default function KnowledgeSpace() {
                                     <Button onClick={handleSave}>{t('save')}</Button>
                                 </div>
                             </div>
+
+                            <KnowledgeSpaceSensitivePolicy />
 
                             <div className="p-5 rounded-lg">
                                 <div className="mt-8 border-t border-[#ECECEC] pt-6">

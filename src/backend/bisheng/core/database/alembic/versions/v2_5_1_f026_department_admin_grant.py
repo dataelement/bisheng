@@ -13,32 +13,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import index_exists, table_exists
+
 revision: str = 'f026_department_admin_grant'
 down_revision: Union[str, Sequence[str], None] = 'f025_merge_f024_heads'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.TABLES '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t'
-    ), {'t': name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.STATISTICS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i'
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _table_exists('department_admin_grant'):
+    conn = op.get_bind()
+    if not table_exists(conn, 'department_admin_grant'):
         op.create_table(
             'department_admin_grant',
             sa.Column(
@@ -63,24 +47,24 @@ def upgrade() -> None:
                 name='uk_dept_admin_grant_user_dept',
             ),
         )
-    if not _index_exists('department_admin_grant', 'idx_dag_user_id'):
+    if not index_exists(conn, 'department_admin_grant', 'idx_dag_user_id'):
         op.create_index(
             'idx_dag_user_id', 'department_admin_grant', ['user_id'],
         )
-    if not _index_exists('department_admin_grant', 'idx_dag_department_id'):
+    if not index_exists(conn, 'department_admin_grant', 'idx_dag_department_id'):
         op.create_index(
             'idx_dag_department_id', 'department_admin_grant',
             ['department_id'],
         )
 
-
 def downgrade() -> None:
-    if _table_exists('department_admin_grant'):
-        if _index_exists('department_admin_grant', 'idx_dag_user_id'):
+    conn = op.get_bind()
+    if table_exists(conn, 'department_admin_grant'):
+        if index_exists(conn, 'department_admin_grant', 'idx_dag_user_id'):
             op.drop_index(
                 'idx_dag_user_id', table_name='department_admin_grant',
             )
-        if _index_exists('department_admin_grant', 'idx_dag_department_id'):
+        if index_exists(conn, 'department_admin_grant', 'idx_dag_department_id'):
             op.drop_index(
                 'idx_dag_department_id', table_name='department_admin_grant',
             )

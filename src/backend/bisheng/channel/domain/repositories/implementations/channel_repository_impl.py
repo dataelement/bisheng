@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple, Any
 
 from sqlalchemy import case, func, or_
+from bisheng.core.database.dialect_helpers import json_array_contains
 from sqlmodel import select, col, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -138,8 +139,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         """Find channels whose source_list contains the specified source_id."""
         if not source_id:
             return []
-        # Use json_contains to check if source_list (JSON array) contains the source_id
-        query = select(Channel).where(func.json_contains(Channel.source_list, f'"{source_id}"'))
+        dialect = self.session.get_bind().dialect.name
+        query = select(Channel).where(
+            json_array_contains(Channel.source_list, f'"{source_id}"', dialect)
+        )
         result = await self.session.exec(query)
         return list(result.all())
 

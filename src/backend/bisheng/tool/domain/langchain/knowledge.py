@@ -76,7 +76,7 @@ class KnowledgeRetrieverTool(BaseTool):
         rrf_rerank = RRFRerank(retrievers=[self.vector_retriever, self.elastic_retriever],
                                weights=self.rrf_weights,
                                remove_zero_score=self.rrf_remove_zero_score)
-        finally_docs = rrf_rerank.compress_documents(documents=[es_docs, milvus_docs], query=query)
+        finally_docs = rrf_rerank.compress_documents(documents=[milvus_docs, es_docs], query=query)
 
         # limit by max_chunk_size
         doc_num, doc_content_sum = 0, 0

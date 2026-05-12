@@ -76,7 +76,9 @@ export function FileCard({
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const failureMessage = (
-        file.status === FileStatus.FAILED || file.status === FileStatus.TIMEOUT
+        file.status === FileStatus.FAILED ||
+        file.status === FileStatus.TIMEOUT ||
+        file.status === FileStatus.VIOLATION
     ) && file.errorMessage?.trim()
         ? file.errorMessage.trim()
         : null;
@@ -137,6 +139,7 @@ export function FileCard({
                 [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
                 [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
                 [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
             };
             const item = config[file.status];
             if (!item) return null;
@@ -160,7 +163,7 @@ export function FileCard({
         return (
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help">
+                    <span className="inline-flex">
                         {badge}
                     </span>
                 </TooltipTrigger>
@@ -220,6 +223,7 @@ export function FileCard({
     const hasRetryOption = Boolean(
         onRetry && (
             file.status === FileStatus.FAILED ||
+            file.status === FileStatus.VIOLATION ||
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );

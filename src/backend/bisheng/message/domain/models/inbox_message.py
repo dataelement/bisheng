@@ -2,24 +2,22 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Any
 
-from sqlalchemy import Column, Integer, JSON, DateTime, text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, DateTime, text, Enum as SQLEnum
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-
+from bisheng.core.database.dialect_helpers import JsonType
 
 class MessageTypeEnum(str, Enum):
     """Message Type Enumeration"""
     NOTIFY = "notify"
     APPROVE = "approve"
 
-
 class MessageStatusEnum(str, Enum):
     """Message Status Enumeration"""
     WAIT_APPROVE = "wait_approve"
     APPROVED = "approved"
     REJECTED = "rejected"
-
 
 class InboxMessage(SQLModelSerializable, table=True):
     """
@@ -36,7 +34,7 @@ class InboxMessage(SQLModelSerializable, table=True):
     content: List[Any] = Field(
         default_factory=list,
         description='Message content in JSON array format',
-        sa_column=Column(JSON, nullable=False)
+        sa_column=Column(JsonType, nullable=False)
     )
     sender: int = Field(
         ...,
@@ -51,7 +49,7 @@ class InboxMessage(SQLModelSerializable, table=True):
     receiver: List[int] = Field(
         default_factory=list,
         description='Receiver user ID list',
-        sa_column=Column(JSON, nullable=False)
+        sa_column=Column(JsonType, nullable=False)
     )
     status: MessageStatusEnum = Field(
         default=MessageStatusEnum.WAIT_APPROVE,

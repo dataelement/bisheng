@@ -26,6 +26,9 @@ export function PdfViewer({
     const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
     const renderingPages = useRef<Set<number>>(new Set());
     const [pageSizes, setPageSizes] = useState<Record<number, { width: number; height: number; originalWidth: number }>>({});
+    // Measured width of the scroll viewport — used to fit-to-width when a PDF
+    // page is wider than the container (e.g., a 1440px page in a 640px panel).
+    const [containerWidth, setContainerWidth] = useState(0);
 
     const getPageNumber = useCallback((page: number) => {
         if (!pdfDoc) return Math.max(1, page);
@@ -53,25 +56,32 @@ export function PdfViewer({
     const renderPage = useCallback(
         async (pageNum: number) => {
             if (!pdfDoc || renderingPages.current.has(pageNum)) return;
+            if (containerWidth === 0) return;
             const canvas = canvasRefs.current.get(pageNum);
             if (!canvas) return;
 
             renderingPages.current.add(pageNum);
             try {
                 const page = await pdfDoc.getPage(pageNum);
-                const scale = zoomLevel / 100;
-                const viewport = page.getViewport({ scale: scale * 1.5 });
+                const userScale = zoomLevel / 100;
                 const baseViewport = page.getViewport({ scale: 1 });
+                // Default scale: always fit to the container width — both shrink
+                // wide pages and upscale narrow ones so the page consistently
+                // matches the panel. User zoom multiplies on top.
+                const fitScale = containerWidth / baseViewport.width;
+                const displayScale = fitScale * userScale;
+                const oversample = 1.5;
+                const viewport = page.getViewport({ scale: displayScale * oversample });
 
                 canvas.width = viewport.width;
                 canvas.height = viewport.height;
-                canvas.style.width = `${viewport.width / 1.5}px`;
-                canvas.style.height = `${viewport.height / 1.5}px`;
+                canvas.style.width = `${viewport.width / oversample}px`;
+                canvas.style.height = `${viewport.height / oversample}px`;
                 setPageSizes((current) => ({
                     ...current,
                     [pageNum]: {
-                        width: viewport.width / 1.5,
-                        height: viewport.height / 1.5,
+                        width: viewport.width / oversample,
+                        height: viewport.height / oversample,
                         originalWidth: baseViewport.width,
                     },
                 }));
@@ -84,16 +94,35 @@ export function PdfViewer({
                 renderingPages.current.delete(pageNum);
             }
         },
-        [pdfDoc, zoomLevel]
+        [pdfDoc, zoomLevel, containerWidth]
     );
 
-    // Re-render all visible pages on zoom change
+    // Track scroll viewport width — drives fit-to-width when the panel resizes
+    // (e.g., AI assistant toggled, citation panel switches list/preview view).
+    // Depends on pdfDoc so the observer attaches once the loading placeholder
+    // is replaced by the real scroll container (the ref is null while loading).
+    useEffect(() => {
+        if (!pdfDoc) return;
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        setContainerWidth(el.clientWidth);
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                setContainerWidth(entry.contentRect.width);
+            }
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [pdfDoc]);
+
+    // Re-render all visible pages on zoom or container width change
     useEffect(() => {
         if (!pdfDoc) return;
         for (let i = 1; i <= pdfDoc.numPages; i++) {
             renderPage(i);
         }
-    }, [pdfDoc, zoomLevel, renderPage]);
+    }, [pdfDoc, zoomLevel, containerWidth, renderPage]);
 
     // Scroll to target page
     useEffect(() => {

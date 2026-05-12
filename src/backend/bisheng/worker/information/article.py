@@ -5,6 +5,16 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 from sqlmodel import select, func
 
+from bisheng.core.database.dialect_helpers import json_array_contains
+
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return 'mysql'
+
 from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.models.channel_knowledge_sync import (
@@ -84,10 +94,10 @@ def sync_information_article(information_id: str = None):
 def _update_channels_by_source_id(source_ids: List[str]):
     """Update latest_article_update_time for channels that use the specified source_id."""
     with get_sync_db_session() as session:
-        # Query channels whose source_list contains the source_id
+        dialect = session.bind.dialect.name if session.bind else _db_dialect()
         or_list = []
         for source_id in source_ids:
-            or_list.append(func.json_contains(Channel.source_list, f'"{source_id}"'))
+            or_list.append(json_array_contains(Channel.source_list, f'"{source_id}"', dialect))
         channels = session.exec(select(Channel).where(*or_list)).all()
 
         if not channels:
@@ -282,9 +292,10 @@ def _sync_new_articles_to_knowledge_spaces(
 
     with get_sync_db_session() as session:
         if information_id:
+            dialect = session.bind.dialect.name if session.bind else _db_dialect()
             channels = session.exec(
                 select(Channel).where(
-                    func.json_contains(Channel.source_list, f'"{information_id}"')
+                    json_array_contains(Channel.source_list, f'"{information_id}"', dialect)
                 )
             ).all()
         else:
