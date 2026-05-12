@@ -558,6 +558,17 @@ export type BsConfig = {
     /** 门户管理后台 URL；有值则 BiSheng 工作台侧栏显示"门户配置"菜单 */
     portal_admin_url?: string;
   };
+  /**
+   * Knowledge-space feature flags forwarded from the YAML `knowledge_space` section.
+   * When absent from the server response (legacy deployments), defaults apply.
+   */
+  knowledge_space?: {
+    /**
+     * Show the left-side directory tree inside the global space list sidebar.
+     * Default: true. Set to false in deployments that prefer the original flat layout.
+     */
+    tree_structured_directory_display?: boolean;
+  };
 };
 
 export const configSchema = z.object({

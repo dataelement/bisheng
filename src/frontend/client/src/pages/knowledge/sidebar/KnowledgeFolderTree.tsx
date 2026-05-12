@@ -20,7 +20,7 @@ export interface FolderSelectPayload {
     name: string;
 }
 
-interface KnowledgeTreeProps {
+interface KnowledgeFolderTreeProps {
     knowledgeId: string | number;
     currentFolderId?: string;
     onSelectFolder: (folder: FolderSelectPayload | null) => void;
@@ -121,7 +121,7 @@ const TreeNodeRowMemo = TreeNodeRow;
 
 // ─── Root component ──────────────────────────────────────────────────────────
 
-export function KnowledgeTree({ knowledgeId, currentFolderId, onSelectFolder }: KnowledgeTreeProps) {
+export function KnowledgeFolderTree({ knowledgeId, currentFolderId, onSelectFolder }: KnowledgeFolderTreeProps) {
     const [roots, setRoots] = useState<TreeNode[]>([]);
     const [rootLoading, setRootLoading] = useState(false);
 
@@ -203,18 +203,15 @@ export function KnowledgeTree({ knowledgeId, currentFolderId, onSelectFolder }: 
 
     if (rootLoading) {
         return (
-            <div className="flex items-center justify-center py-6">
-                <span className="size-5 rounded-full border-2 border-[#8D93A0] border-t-transparent inline-block animate-spin" />
+            <div className="flex items-center justify-center py-3">
+                <span className="size-4 rounded-full border-2 border-[#8D93A0] border-t-transparent inline-block animate-spin" />
             </div>
         );
     }
 
     if (roots.length === 0) {
-        return (
-            <div className="px-3 py-4 text-center text-xs text-[#8D93A0]">
-                No folders
-            </div>
-        );
+        // Empty folder list — render nothing in sidebar context (no banner)
+        return null;
     }
 
     return (
