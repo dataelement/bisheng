@@ -15,6 +15,7 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
+import { useNotificationsFromUrl } from "~/hooks/useNotificationsFromUrl";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -42,7 +43,11 @@ function UserPopMenuDrawer() {
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
-    const [notificationsDialogOpen, setNotificationsDialogOpen] = useState(false);
+    const {
+        open: notificationsDialogOpen,
+        setOpen: setNotificationsDialogOpen,
+        focusedMessageId,
+    } = useNotificationsFromUrl();
 
     const handleAccountInfoClick = () => {
         setAccountDialogOpen(true);
@@ -235,6 +240,7 @@ function UserPopMenuDrawer() {
             <NotificationsDialog
                 open={notificationsDialogOpen}
                 onOpenChange={handleNotificationsClose}
+                focusedMessageId={focusedMessageId}
             />
         </div>
     );
@@ -246,7 +252,11 @@ function UserPopMenuRail() {
     const [menuSideOffset, setMenuSideOffset] = useState(0);
     const triggerRef = useRef<HTMLDivElement>(null);
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
-    const [notificationsDialogOpen, setNotificationsDialogOpen] = useState(false);
+    const {
+        open: notificationsDialogOpen,
+        setOpen: setNotificationsDialogOpen,
+        focusedMessageId,
+    } = useNotificationsFromUrl();
 
     const { user, logout } = useAuthContext();
     const { unreadCount, refreshCount } = useNotificationCount();
@@ -449,6 +459,7 @@ function UserPopMenuRail() {
             <NotificationsDialog
                 open={notificationsDialogOpen}
                 onOpenChange={handleNotificationsClose}
+                focusedMessageId={focusedMessageId}
             />
         </>
     );

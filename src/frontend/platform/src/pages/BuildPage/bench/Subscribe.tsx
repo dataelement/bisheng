@@ -18,6 +18,7 @@ import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import { SubscriptionSensitivePolicy } from "./SubscriptionSensitivePolicy";
 
 
 export interface FormErrors {
@@ -94,6 +95,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                 <CardContent className="pt-4 relative">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ConfigInheritanceBanner meta={configMeta} />
+                        <SubscriptionSensitivePolicy />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">

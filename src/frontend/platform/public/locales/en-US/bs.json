@@ -1102,6 +1102,7 @@
     "daily": "Daily",
     "lingsi": "$t(linsight)",
     "subscribe": "Subscribe",
+    "subscriptionContentSecurityDesc": "Review subscription articles with tenant-level sensitive words. Regular users cannot view details after a hit.",
     "knowledgeSpace": "KnowledgeSpace",
     "model": "Model",
     "displayName": "Display Name",

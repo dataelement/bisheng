@@ -1,6 +1,5 @@
-"""
-Article Search Request/Response Schema
-"""
+"""Article search request/response schema."""
+from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional, Dict
 
@@ -29,7 +28,7 @@ class ArticleSearchResultItem(BaseModel):
     source_id: str = Field(..., description='Source unique identifier')
     source_info: Optional[Dict[str, str]] = Field(None, description='Source information including name, description, etc.')
     title: str = Field(..., description='Article title')
-    content: str = Field(default='', description='Plain text content')
+    content_preview: str = Field(default='', description='Truncated plain text content for search list')
     cover_image: Optional[str] = Field(None, description='Article cover image URL')
     publish_time: Optional[datetime] = Field(None, description='Publish time')
     source_url: Optional[str] = Field(None, description='Original article URL')
@@ -38,11 +37,43 @@ class ArticleSearchResultItem(BaseModel):
     score: Optional[float] = Field(None, description='Search relevance score')
     highlight: Optional[Dict[str, List[str]]] = Field(None, description='Highlight fields, key is field name, value is list of highlighted fragments')
     is_read: Optional[bool] = Field(False, description='Whether the article has been read')
+    sensitive_review: Optional['ArticleSensitiveReview'] = Field(None, description='Tenant sensitive word review result')
+    review_content: str = Field(default='', exclude=True, description='Internal full text for sensitive review')
 
 
-class ArticleDetailResponse(ArticleSearchResultItem):
+class ArticleSensitiveHit(BaseModel):
+    word: str
+    count: int
+
+
+class ArticleSensitiveReview(BaseModel):
+    enabled: bool = Field(False, description='Whether sensitive word review policy is effective')
+    violated: bool = Field(False, description='Whether the article hits sensitive words')
+    hits: List[ArticleSensitiveHit] = Field(default_factory=list, description='Matched sensitive words')
+    can_view: bool = Field(True, description='Whether current user can view article detail')
+    auto_reply: Optional[str] = Field(None, description='Review hit prompt')
+
+
+class ArticleDetailResponse(BaseModel):
     """Article Detail Response"""
+    doc_id: str = Field(..., description='ES document ID')
+    source_type: int = Field(..., description='Source type: 0-WeChat Official Account, 1-Website')
+    source_id: str = Field(..., description='Source unique identifier')
+    source_info: Optional[Dict[str, str]] = Field(None, description='Source information including name, description, etc.')
+    title: str = Field(..., description='Article title')
     content_html: str = Field(default='', description='Article HTML content')
+    cover_image: Optional[str] = Field(None, description='Article cover image URL')
+    publish_time: Optional[datetime] = Field(None, description='Publish time')
+    source_url: Optional[str] = Field(None, description='Original article URL')
+    create_time: Optional[datetime] = Field(None, description='Creation time')
+    update_time: Optional[datetime] = Field(None, description='Update time')
+    is_read: Optional[bool] = Field(False, description='Whether the article has been read')
+    sensitive_review: Optional[ArticleSensitiveReview] = Field(None, description='Tenant sensitive word review result')
+
+
+class ArticleFullDocument(ArticleDetailResponse):
+    """Internal full article document. The plain text is never serialized to external APIs."""
+    content: str = Field(default='', exclude=True, description='Internal plain text content')
 
 
 class ArticleSearchPageResponse(BaseModel):

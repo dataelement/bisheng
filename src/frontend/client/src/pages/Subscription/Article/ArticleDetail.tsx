@@ -44,7 +44,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     const { showToast } = useToastContext();
 
     // 使用文章的真实 HTML 内容
-    const articleHtml = article.content_html || article.content || '';
+    const articleHtml = article.content_html || '';
 
     const processedHtml = `
     <html>

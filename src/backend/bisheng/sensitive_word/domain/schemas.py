@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class SensitiveWordBusinessType(str, Enum):
     KNOWLEDGE_SPACE_FILE_PARSE = 'knowledge_space_file_parse'
+    CHANNEL_ARTICLE = 'channel_article'
 
 
 class SensitiveWordScopeType(str, Enum):

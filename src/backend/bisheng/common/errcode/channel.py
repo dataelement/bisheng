@@ -81,6 +81,11 @@ class ChannelChatConversationNotFoundError(BaseErrorCode):
     Msg: str = 'Chat conversation not found'
 
 
+class ArticleSensitiveViolationError(BaseErrorCode):
+    Code: int = 19042
+    Msg: str = 'Article contains sensitive content and cannot be viewed'
+
+
 # User has reached the maximum limit for creating channels
 class ChannelCreateLimitExceededError(BaseErrorCode):
     Code: int = 19050

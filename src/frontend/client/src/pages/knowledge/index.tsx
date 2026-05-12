@@ -361,6 +361,13 @@ export default function Knowledge() {
             setActiveSpace(null);
             return;
         }
+        // Clear folder context from URL so the file list re-fetches the space root.
+        // Without this, clicking a space while the URL is on /folder/<id> leaves the
+        // file list stuck on the folder's contents and the tree's folder highlight
+        // pointing at the wrong space (Bug A + Bug B).
+        if (urlFolderId || spaceId !== space.id) {
+            navigate(`/knowledge/space/${space.id}`);
+        }
         // Set list-level data immediately for fast UI switch
         setActiveSpace(space);
         // Then fetch full detail from info API

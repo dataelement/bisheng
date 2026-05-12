@@ -22,9 +22,11 @@ import { useTranslation } from "react-i18next";
 import { cn } from "~/utils";
 import useLocalize, { type TranslationKeys } from "~/hooks/useLocalize";
 
-interface NotificationsDialogProps {
+export interface NotificationsDialogProps {
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    /** Forward-compat: message id to focus when dialog opens (v2 will scroll + highlight). */
+    focusedMessageId?: number | null;
 }
 
 const PAGE_SIZE = 20;
@@ -51,7 +53,7 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     sensitive_rejected_department_knowledge_space_upload: "com_notifications_action_sensitive_rejected_department_knowledge_space_upload",
 };
 
-export function NotificationsDialog({ open = false, onOpenChange }: NotificationsDialogProps) {
+export function NotificationsDialog({ open = false, onOpenChange, focusedMessageId }: NotificationsDialogProps) {
     const localize = useLocalize();
     const { i18n } = useTranslation();
     const formatMessageTime = (createdAt: string) =>
@@ -81,6 +83,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [hasTouchInput, setHasTouchInput] = useState(false);
     const isTouchMobile = isNarrowMobileLayout && (hasTouchInput || !canHover);
     const { showToast } = useToastContext();
+    // Forward-compat: stores focusedMessageId for v2 scroll-into-view + highlight hookup
+    const focusedMessageIdRef = useRef<number | null>(focusedMessageId ?? null);
+    useEffect(() => {
+        focusedMessageIdRef.current = focusedMessageId ?? null;
+    }, [focusedMessageId]);
+    // v2: wire scroll-into-view + highlight against focusedMessageIdRef
     const requestHoverTimersRef = useRef<Record<string, number>>({});
     const autoReadTimersRef = useRef<Record<string, number>>({});
     const observersRef = useRef<Record<string, IntersectionObserver>>({});

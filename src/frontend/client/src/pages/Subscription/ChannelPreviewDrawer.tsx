@@ -364,6 +364,13 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                             article={article}
                                             showArticleActions={false}
                                             onSelect={(a) => {
+                                                if (a?.sensitiveReview?.can_view === false) {
+                                                    showToast({
+                                                        message: a.sensitiveReview.auto_reply || localize("com_subscription.sensitive_review_blocked"),
+                                                        severity: NotificationSeverity.WARNING
+                                                    });
+                                                    return;
+                                                }
                                                 const url = (a?.url || "").trim();
                                                 if (!url) {
                                                     showToast({

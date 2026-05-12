@@ -1,6 +1,7 @@
 import axios from "../request";
 
 export const KNOWLEDGE_SPACE_FILE_PARSE_POLICY = "knowledge_space_file_parse";
+export const CHANNEL_ARTICLE_POLICY = "channel_article";
 
 export type SensitiveWordType = "builtin" | "custom";
 

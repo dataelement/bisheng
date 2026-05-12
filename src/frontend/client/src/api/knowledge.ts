@@ -1082,6 +1082,63 @@ export async function pinSpaceApi(space_id: string, is_pined: boolean): Promise<
     await request.post(`/api/v1/knowledge/space/${space_id}/set-pin`, { is_pined });
 }
 
+// ─────────────────────────────────────────────
+// API functions — Directory tree (folders only)
+// ─────────────────────────────────────────────
+
+/** Folder node returned by the directory-tree API (file_type=0 filter) */
+export interface KnowledgeFolderNode {
+    id: number;
+    file_name: string;
+    /** 0 = directory, 1 = file */
+    file_type: 0 | 1;
+    file_size: number | null;
+    created_at?: string;
+    updated_at?: string;
+}
+
+/**
+ * List direct-child folders of a space (file_type=0).
+ * Used exclusively by the KnowledgeTree left-side panel.
+ */
+export async function listKnowledgeFolders(params: {
+    space_id: string | number;
+    parent_id?: string | number | null;
+}): Promise<{ items: KnowledgeFolderNode[]; total: number }> {
+    if (!params.space_id) return { items: [], total: 0 };
+    const res = await request.get<any>(
+        `/api/v1/knowledge/space/${params.space_id}/children`,
+        {
+            params: {
+                parent_id: params.parent_id != null && params.parent_id !== "" ? params.parent_id : undefined,
+                file_type: 0,
+                page: 1,
+                page_size: 200,
+                order_field: "file_name",
+                order_sort: "asc",
+            },
+        }
+    );
+    const payload: any = res?.data ?? res ?? {};
+    const list: any[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+            ? payload.data
+            : Array.isArray(payload?.list)
+                ? payload.list
+                : [];
+    const total = Number(payload?.total ?? list.length);
+    const items: KnowledgeFolderNode[] = list.map((raw: any) => ({
+        id: Number(raw?.id ?? 0),
+        file_name: String(raw?.name ?? raw?.file_name ?? ""),
+        file_type: (raw?.file_type === 0 || raw?.type === "folder") ? 0 : 1,
+        file_size: raw?.file_size ?? raw?.size ?? null,
+        created_at: raw?.create_time,
+        updated_at: raw?.update_time,
+    }));
+    return { items, total };
+}
+
 /**
  * Get items (folders and files) under a space directory
  * If parent_id is omitted, returns root-level items

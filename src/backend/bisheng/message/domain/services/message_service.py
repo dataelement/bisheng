@@ -21,6 +21,7 @@ from bisheng.message.domain.schemas.message_schema import (
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
+from bisheng.notification.forwarder import maybe_forward_external
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,11 @@ class MessageService:
             status: MessageStatusEnum = MessageStatusEnum.WAIT_APPROVE,
             action_code: Optional[str] = None,
     ) -> InboxMessage:
-        """Create and save a new inbox message."""
+        """Create and save a new inbox message.
+
+        The E+ forwarding hook is invoked at the tail; it self-schedules a
+        fire-and-forget asyncio task and never blocks this method.
+        """
         message = InboxMessage(
             content=content,
             sender=sender,
@@ -67,6 +72,14 @@ class MessageService:
             "Inbox message sent: id=%s, type=%s, sender=%s, receivers=%s",
             saved_message.id, message_type.value, sender, receiver,
         )
+
+        # E+ forwarding hook — sync, lightweight; HTTP fires via asyncio task
+        try:
+            maybe_forward_external(saved_message)
+        except Exception as exc:
+            # Defensive guard: forwarder bug must never break the main flow
+            logger.warning("maybe_forward_external raised: %s", exc, exc_info=True)
+
         return saved_message
 
     async def get_message_list(
