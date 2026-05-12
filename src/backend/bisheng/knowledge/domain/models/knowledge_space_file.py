@@ -76,6 +76,7 @@ class SpaceFileDao(KnowledgeFileDao):
             file_status: List[int] = None,
             page: int = 1,
             page_size: int = 20,
+            file_type: Optional[int] = None,
     ) -> List[KnowledgeFile]:
         """
         Async: List direct children (folders first, then files) under a given parent.
@@ -95,6 +96,8 @@ class SpaceFileDao(KnowledgeFileDao):
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
         if file_ids:
             filters.append(KnowledgeFile.id.in_(file_ids))
+        if file_type is not None:
+            filters.append(KnowledgeFile.file_type == file_type)
 
         if file_status:
             from sqlalchemy.orm import aliased

@@ -292,6 +292,50 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
     return response
     // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
+
+/**
+ * Knowledge space node (file or directory).
+ */
+export interface KnowledgeNode {
+    id: number;
+    file_name: string;
+    file_type: 0 | 1;       // 0 = DIR, 1 = FILE
+    file_size: number | null;
+    status?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ListChildrenParams {
+    knowledge_id: number;
+    parent_id: number | null;
+    file_type?: 0 | 1;
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+}
+
+/**
+ * List children of a knowledge space directory.
+ * Wraps GET /api/v1/knowledge_space/{knowledge_id}/children
+ */
+export async function listKnowledgeChildren(
+    params: ListChildrenParams
+): Promise<{ items: KnowledgeNode[]; total: number }> {
+    return await axios.get(
+        `/api/v1/knowledge_space/${params.knowledge_id}/children`,
+        {
+            params: {
+                parent_id: params.parent_id ?? "",
+                file_type: params.file_type,
+                page: params.page ?? 1,
+                page_size: params.page_size ?? 200,
+                keyword: params.keyword,
+            },
+        }
+    );
+}
+
 /**
  * 添加元数据
  */

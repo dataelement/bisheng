@@ -1735,6 +1735,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_status: List[int] = None,
         page: int = 1,
         page_size: int = 20,
+        file_type: Optional[int] = None,
     ) -> dict:
         """
         Return direct children (folders first, then files) under a parent folder.
@@ -1756,6 +1757,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_status=file_status,
             page=0,
             page_size=0,
+            file_type=file_type,
         )
         visible_items = await self._filter_visible_child_items(items, space_id=space_id)
         total = len(visible_items)

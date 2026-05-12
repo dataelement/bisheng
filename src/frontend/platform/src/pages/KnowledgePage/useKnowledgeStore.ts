@@ -1,6 +1,12 @@
 // useKnowledgeStore.ts
 import { create } from 'zustand';
 
+/** A single segment of the directory breadcrumb trail. */
+export interface BreadcrumbItem {
+    id: number;
+    name: string;
+}
+
 // Define the store type for the knowledge base editable state
 interface KnowledgeStore {
     isEditable: boolean; // State: whether it is editable
@@ -19,6 +25,17 @@ interface KnowledgeStore {
     /** Selected bbox for the current chunk */
     selectedBbox: { page: number, bbox: [number, number, number, number] }[];
     setSelectedBbox: (data: { page: number, bbox: [number, number, number, number] }[]) => void;
+    // Tree navigation state (feature-6)
+    /** Currently displayed directory (null = root) */
+    currentParentId: number | null;
+    /** File currently open in the paragraph preview panel (null = show list) */
+    selectedFileId: number | null;
+    /** Ordered path from root to the current directory */
+    breadcrumbPath: BreadcrumbItem[];
+    /** Navigate to a directory and update the breadcrumb. Clears selectedFileId. */
+    setCurrentParent: (id: number | null, path: BreadcrumbItem[]) => void;
+    /** Set the file being previewed in the right panel. */
+    setSelectedFile: (id: number | null) => void;
 }
 
 // Create a zustand store to manage the knowledge base editable state
@@ -34,7 +51,14 @@ const useKnowledgeStore = create<KnowledgeStore>((set) => ({
     selectedBbox: [],
     setSelectedBbox: (data) => set({ selectedBbox: data }),
     selectedChunkDistanceFactor: 0,
-    setSelectedChunkDistanceFactor: () => set({ selectedChunkDistanceFactor: Math.random() / 100 })
+    setSelectedChunkDistanceFactor: () => set({ selectedChunkDistanceFactor: Math.random() / 100 }),
+    // Tree navigation (feature-6)
+    currentParentId: null,
+    selectedFileId: null,
+    breadcrumbPath: [],
+    setCurrentParent: (id, path) => set({ currentParentId: id, breadcrumbPath: path, selectedFileId: null }),
+    setSelectedFile: (id) => set({ selectedFileId: id }),
 }));
 
+export { useKnowledgeStore };
 export default useKnowledgeStore;

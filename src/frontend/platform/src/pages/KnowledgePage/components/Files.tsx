@@ -18,12 +18,12 @@ import Tip from "@/components/bs-ui/tooltip/tip";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
+import { CircleAlertIcon, ClipboardPenLine, FileText, Filter, Folder, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi, batchDownloadFileApi } from "../../../controllers/API";
+import { deleteFile, getKnowledgeDetailApi, listKnowledgeChildren, readFileByLibDatabase, retryKnowledgeFileApi, batchDownloadFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
@@ -104,14 +104,47 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
     return BadgeContent;
 };
 
-export default function Files({ onPreview, canEditKb = false, canDeleteKb = false }) {
+export interface FilesTreeProps {
+    /** Current directory id for tree-mode; null = root. When provided the component
+     *  fetches via listKnowledgeChildren instead of readFileByLibDatabase. */
+    parentId: number | null;
+    onSelectFolder: (folder: { id: number; name: string }) => void;
+    onSelectFile: (fileId: number) => void;
+}
+
+export default function Files({
+    onPreview,
+    canEditKb = false,
+    canDeleteKb = false,
+    // Tree-mode props (optional – only supplied when feature flag is enabled)
+    parentId,
+    onSelectFolder,
+    onSelectFile,
+}: {
+    onPreview?: (id: string) => void;
+    canEditKb?: boolean;
+    canDeleteKb?: boolean;
+} & Partial<FilesTreeProps>) {
+    // Detect whether we are in tree mode
+    const treeMode = parentId !== undefined;
+
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const { toast } = useToast()
 
     const { setEditable } = useKnowledgeStore();
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileByLibDatabase({ ...param, id, name: param.keyword })
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable(
+        { cancelLoadingWhenReload: true },
+        treeMode
+            ? (param) =>
+                listKnowledgeChildren({
+                    knowledge_id: Number(id),
+                    parent_id: parentId,
+                    page: param.page,
+                    page_size: param.pageSize,
+                    keyword: param.keyword,
+                }).then((resp) => ({ data: resp.items, total: resp.total }))
+            : (param) => readFileByLibDatabase({ ...param, id, name: param.keyword })
     )
     const [metadataOpen, setMetadataOpen] = useState(false);
     const navigate = useNavigate()
@@ -127,6 +160,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     useEffect(() => {
         setEditable(canEditKb);
     }, [canEditKb, setEditable]);
+
+    // In tree mode, reload whenever the parent directory changes
+    useEffect(() => {
+        if (treeMode) {
+            reload();
+        }
+    }, [parentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Polling during parsing
     const timerRef = useRef(null)
@@ -293,9 +333,11 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
         }
     }
 
-    // Strategy parsing
+    // Strategy parsing (only applicable in legacy mode where split_rule exists)
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
+            // In tree mode, items are KnowledgeNode objects without split_rule
+            if (treeMode) return { ...el, strategy: ['', ''] };
             const suffix = el.file_name.split('.').pop()?.toLowerCase() || '';
             if (['xlsx', 'xls', 'csv', 'et'].includes(suffix) && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
@@ -316,7 +358,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
             }
         })
-    }, [datalist, t])
+    }, [datalist, t, treeMode])
 
     const splitRuleDesc = (el) => {
         if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n')
@@ -604,15 +646,25 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {dataSouce.map(el => (
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {(dataSouce as any[]).map(el => (
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
+                                    if (treeMode) {
+                                        // Tree mode: delegate to folder/file handlers
+                                        if (el.file_type === 0) {
+                                            onSelectFolder?.({ id: el.id, name: el.file_name });
+                                        } else {
+                                            onSelectFile?.(el.id);
+                                        }
+                                        return;
+                                    }
                                     if (document.body.dataset.knowledgeTagDialogOpen === 'true') {
                                         return;
                                     }
                                     if (selectedFileObjs.length === 0 && el.status !== 3 && el.status !== 1) {
-                                        onPreview(el.id);
+                                        onPreview?.(el.id);
                                     }
                                 }}
                                 className={selectedFileObjs.some(file => file.id === el.id) ? 'bg-blue-50' : ''}
@@ -627,18 +679,33 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                     />
                                 </TableCell>
                                 <TableCell className="min-w-[250px]">
-                                    <Tip content={el.file_name} align="start" >
-                                        <div className="flex items-center gap-2">
-                                            <FileIcon
-                                                type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
-                                                className="size-[30px] min-w-[30px]"
-                                            />
-                                            {truncateString(el.file_name, 35)}
-                                        </div>
-                                    </Tip>
+                                    {treeMode ? (
+                                        // Tree mode: show folder or file icon based on file_type
+                                        el.file_type === 0 ? (
+                                            <span className="flex items-center gap-2 text-blue-600 cursor-pointer">
+                                                <Folder className="w-5 h-5" />
+                                                {truncateString(el.file_name, 35)}
+                                            </span>
+                                        ) : (
+                                            <span className="flex items-center gap-2 cursor-pointer">
+                                                <FileText className="w-5 h-5" />
+                                                {truncateString(el.file_name, 35)}
+                                            </span>
+                                        )
+                                    ) : (
+                                        <Tip content={el.file_name} side="top" align="start">
+                                            <div className="flex items-center gap-2">
+                                                <FileIcon
+                                                    type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
+                                                    className="size-[30px] min-w-[30px]"
+                                                />
+                                                {truncateString(el.file_name, 35)}
+                                            </div>
+                                        </Tip>
+                                    )}
                                 </TableCell>
                                 <TableCell>
-                                    {el.strategy[0] ? (
+                                    {!treeMode && (el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
                                             <Tooltip>
                                                 <TooltipTrigger className="truncate max-w-[106px]">{el.strategy[1].replace(/\n/g, '\\n')}</TooltipTrigger>
@@ -647,21 +714,27 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
-                                    ) : splitRuleDesc(el)}
+                                    ) : splitRuleDesc(el))}
                                 </TableCell>
                                 <TableCell className="min-w-[150px]">
-                                    <FileTagList
-                                        knowledgeId={id}
-                                        fileId={el.id}
-                                        tags={el.tags || []}
-                                        isEditable={canEditKb && el.status === 2}
-                                        onUpdate={reload}
-                                    />
+                                    {!treeMode && (
+                                        <FileTagList
+                                            knowledgeId={id}
+                                            fileId={el.id}
+                                            tags={el.tags || []}
+                                            isEditable={canEditKb && el.status === 2}
+                                            onUpdate={reload}
+                                        />
+                                    )}
                                 </TableCell>
-                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                <TableCell>
+                                    {treeMode
+                                        ? (el.updated_at || '').replace('T', ' ')
+                                        : (el.update_time || '').replace('T', ' ')}
+                                </TableCell>
 
                                 <TableCell>
-                                    <StatusIndicator status={el.status} remark={el.remark} />
+                                    {!treeMode && <StatusIndicator status={el.status} remark={el.remark} />}
                                 </TableCell>
                                 {hasRowActions && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
