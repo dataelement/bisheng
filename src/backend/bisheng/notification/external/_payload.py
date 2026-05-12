@@ -1,5 +1,5 @@
 """Build E+ textcard payloads from InboxMessage action_codes."""
-from bisheng.core.config import settings
+from bisheng.common.services.config_service import settings
 
 
 FORWARDABLE_ACTION_CODES: set[str] = {

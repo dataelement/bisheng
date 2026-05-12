@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import Optional, Tuple
 
-from bisheng.core.config import settings
+from bisheng.common.services.config_service import settings
 from bisheng.user.domain.models.user import UserDao
 from bisheng.notification.external._payload import FORWARDABLE_ACTION_CODES, build_textcard
 from bisheng.notification.external.cofco_eplus_client import CofcoEPlusClient

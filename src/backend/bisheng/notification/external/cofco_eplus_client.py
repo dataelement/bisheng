@@ -4,7 +4,7 @@ import time
 
 import httpx
 
-from bisheng.core.config import settings
+from bisheng.common.services.config_service import settings
 
 logger = logging.getLogger(__name__)
 
