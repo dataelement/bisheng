@@ -1,3 +1,4 @@
+from bisheng.common.utils.markdown_cmpnt.md_to_pdf import sanitize_html_for_pdf
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.config.default_style import style_conf
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.parser.md_parser import md2html
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.docx_processor import DocxProcessor
@@ -14,7 +15,7 @@ class MarkDocx:
         :return:
         """
 
-        html_text = md2html(md_input)
+        html_text = sanitize_html_for_pdf(md2html(md_input))
 
         # BuatdocxDoc.
         docx_file_byte, title_text = self.docx_processor.html2docx(html_text)
