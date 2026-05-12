@@ -61,6 +61,8 @@ export function ArticleCard({
     const highlightContent = hasHighlight && article.highlight?.content?.length
         ? stripTags(article.highlight.content.join(''))
         : null;
+    const sensitiveViolated = article.sensitiveReview?.violated === true;
+    const canViewArticle = article.sensitiveReview?.can_view !== false;
 
     return (
         <>
@@ -96,16 +98,23 @@ export function ArticleCard({
             <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
                     {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
-                    <h3 className={cn(
-                        "font-medium line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
-                        isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
-                        article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
-                    )}
-                    >
-                        {highlightTitle
-                            ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
-                            : article.title}
-                    </h3>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <h3 className={cn(
+                            "min-w-0 flex-1 truncate font-medium [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
+                            isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
+                            article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
+                        )}
+                        >
+                            {highlightTitle
+                                ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
+                                : article.title}
+                        </h3>
+                        {sensitiveViolated && (
+                            <span className="shrink-0 rounded-sm border border-[#F53F3F]/30 bg-[#F53F3F]/10 px-1.5 py-0.5 text-xs leading-4 text-[#F53F3F]">
+                                {localize("com_subscription.sensitive_review")}
+                            </span>
+                        )}
+                    </div>
 
                     {/* 正文预览 - 增加蓝色引号 */}
                     <div className="relative pt-4 pl-3 touch-mobile:pt-3">
@@ -138,7 +147,7 @@ export function ArticleCard({
                         <span>{formatTime(article.publishedAt)}</span>
                     </div>
 
-                    {showArticleActions && (
+                    {showArticleActions && canViewArticle && (
                         <div
                             className={cn(
                                 "flex items-center gap-3 transition-opacity",

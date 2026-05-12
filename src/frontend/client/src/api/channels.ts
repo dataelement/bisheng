@@ -44,7 +44,7 @@ export interface Article {
     id: string;
     title: string;
     url: string;               // 原文链接
-    content: string;           // 正文（纯文本）
+    content: string;           // 列表摘要文本
     content_html?: string;     // HTML 内容
     summary?: string;          // 摘要
     coverImage?: string;       // 封面图
@@ -58,6 +58,20 @@ export interface Article {
     createdAt: string;         // 创建时间（加入频道的时间）
     highlight?: Record<string, string[]>;  // 搜索高亮
     source_type?: number;      // 信源类型: 0-公众号 1-网站
+    sensitiveReview?: ArticleSensitiveReview;
+}
+
+export interface ArticleSensitiveHit {
+    word: string;
+    count: number;
+}
+
+export interface ArticleSensitiveReview {
+    enabled: boolean;
+    violated: boolean;
+    hits: ArticleSensitiveHit[];
+    can_view: boolean;
+    auto_reply?: string;
 }
 
 // Backend article search result item
@@ -66,8 +80,8 @@ export interface ArticleSearchResultItem {
     source_type: number;       // 0-公众号 1-网站
     source_id: string;
     title: string;
-    content: string;           // May contain HTML markup
-    content_html: string;      // Full HTML content
+    content_preview: string;   // Search list preview
+    content_html?: string;     // Detail-only HTML content
     cover_image?: string;
     publish_time?: string;
     source_url?: string;
@@ -76,6 +90,7 @@ export interface ArticleSearchResultItem {
     score?: number;
     highlight?: Record<string, string[]>;
     is_read?: boolean;
+    sensitive_review?: ArticleSensitiveReview;
     source_info?: {
         id: string;
         source_name: string;
@@ -260,8 +275,10 @@ export async function getArticlesApi(params: {
  * 获取文章详情
  * GET /api/v1/channel/manager/articles/detail/{article_id}
  */
-export async function getArticleDetailApi(articleId: string): Promise<ArticleSearchResultItem> {
-    const res: any = await request.get(`/api/v1/channel/manager/articles/detail/${articleId}`);
+export async function getArticleDetailApi(articleId: string, channelId: string): Promise<ArticleSearchResultItem> {
+    const res: any = await request.get(`/api/v1/channel/manager/articles/detail/${articleId}`, {
+        params: { channel_id: channelId }
+    });
     return res?.data ?? res;
 }
 

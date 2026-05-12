@@ -1087,6 +1087,7 @@
     "daily": "日常",
     "lingsi": "$t(linsight)",
     "subscribe": "購読",
+    "subscriptionContentSecurityDesc": "購読記事をテナント単位のセンシティブワードで審査し、ヒット時は一般ユーザーが詳細を閲覧できません。",
     "knowledgeSpace": "知識空間",
     "model": "モデル",
     "displayName": "表示名",

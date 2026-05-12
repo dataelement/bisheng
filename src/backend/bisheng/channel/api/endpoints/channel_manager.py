@@ -250,12 +250,14 @@ async def search_channel_articles(
 @router.get("/articles/detail/{article_id}")
 async def get_article_detail(
         article_id: str,
+        channel_id: str = Query(..., description='Channel ID'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Get article details by article ID and record read status."""
     result = await channel_service.get_article_detail(
         article_id=article_id,
+        channel_id=channel_id,
         login_user=login_user,
     )
     return resp_200(data=result.model_dump())
