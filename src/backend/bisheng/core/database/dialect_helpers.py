@@ -2,13 +2,28 @@
 from __future__ import annotations
 
 import json as _json
+import re
 
 import sqlalchemy as sa
 from sqlalchemy import inspect, Text, CLOB, JSON
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import FunctionElement
+from sqlalchemy.sql.schema import Computed
 from sqlalchemy.types import TypeDecorator
+
+
+# ---------------------------------------------------------------------------
+# Computed column DDL override for DaMeng
+# ---------------------------------------------------------------------------
+
+@compiles(Computed, "dm")
+def _compile_computed_dm(element, compiler, **kw):
+    """On DaMeng, suppress GENERATED ALWAYS AS — the column becomes a plain
+    integer whose value is maintained by a BEFORE INSERT OR UPDATE trigger
+    created at application startup (_ensure_dm_computed_triggers in connection.py).
+    """
+    return ""
 
 
 class _UpdateTimeServerDefault(FunctionElement):
