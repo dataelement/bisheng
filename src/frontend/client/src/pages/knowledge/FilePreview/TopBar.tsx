@@ -114,7 +114,10 @@ export function TopBar({
                         </Button>
                     </div>
                 )}
-                <span className="text-xl font-semibold text-gray-800 flex-1 break-all">
+                <span
+                    className="block min-w-0 flex-1 truncate text-base sm:text-xl font-semibold text-gray-800"
+                    title={fileName}
+                >
                     {fileName}
                 </span>
             </div>
@@ -122,7 +125,7 @@ export function TopBar({
             {/* ===== Center: Zoom + Pagination ===== */}
             <div className="flex gap-[16px] items-center relative shrink-0 justify-center flex-1">
                 {showZoom && (
-                    <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
+                    <div className="hidden sm:flex content-stretch gap-[4px] items-center relative shrink-0">
                         <Button onClick={onZoomOut} disabled={zoomLevel <= 25}
                             variant="ghost" className="w-8 h-8 p-2">
                             <ZoomOutIcon className="text-[#64698b]" />
