@@ -7,7 +7,7 @@ from sqlalchemy import Column, Integer, Text, JSON, Boolean, Enum as SQLEnum, Da
 from sqlmodel import Field, select, col, update
 
 from bisheng.core.database import get_async_db_session
-from bisheng.core.database.dialect_helpers import json_search_exists
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, json_search_exists
 from bisheng.database.base import uuid_hex
 from bisheng.common.models.base import SQLModelSerializable
 
@@ -79,7 +79,7 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     __tablename__ = "linsight_session_version"
 

@@ -2,13 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import Integer, String, JSON
+from sqlalchemy import Integer, String
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType, json_array_contains
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, json_array_contains
 from bisheng.utils import generate_uuid
 
 
@@ -153,7 +153,7 @@ class AuditLogBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class AuditLog(AuditLogBase, table=True):
     # id = 2 Represents the default user group

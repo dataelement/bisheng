@@ -7,6 +7,8 @@ from sqlmodel import Field
 from bisheng.common.models.base import SQLModelSerializable
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class ReportBase(SQLModelSerializable):
     # ```
     # Useflow_id Path to get the latest template in reverse order by update time
@@ -26,7 +28,7 @@ class ReportBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class Report(ReportBase, table=True):

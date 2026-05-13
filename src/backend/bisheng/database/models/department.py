@@ -29,6 +29,8 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 logger = logging.getLogger(__name__)
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 def _normalize_id_scalar_rows(rows) -> List[int]:
     """Normalize SQLAlchemy/SQLModel scalar select rows to plain int ids.
 
@@ -187,7 +189,7 @@ class Department(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(
             DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 

@@ -6,7 +6,7 @@ from sqlalchemy import Column, Integer, DateTime, text, Enum as SQLEnum
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 class MessageTypeEnum(str, Enum):
     """Message Type Enumeration"""
@@ -82,6 +82,6 @@ class InboxMessage(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(
             DateTime, nullable=True,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+            server_default=UPDATE_TIME_SERVER_DEFAULT
         )
     )

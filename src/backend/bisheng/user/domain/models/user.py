@@ -17,6 +17,8 @@ from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True)
     email: Optional[str] = Field(default=None, index=True)
@@ -51,7 +53,7 @@ class UserBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     @field_validator('user_name')
     @classmethod

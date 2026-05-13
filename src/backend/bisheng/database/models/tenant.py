@@ -17,7 +17,7 @@ from sqlmodel import Field, select
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class Tenant(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(
             DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 
