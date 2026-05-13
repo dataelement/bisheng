@@ -10,7 +10,7 @@ from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.base import async_get_count, get_count
 
 class KnowledgeFileStatus(int, Enum):
@@ -87,7 +87,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class QAKnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
@@ -108,7 +108,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     @field_validator('questions')
     @classmethod
@@ -704,7 +704,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def get_qa_knowledge_by_name(cls, question: List[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
-        from bisheng.core.database.dialect_helpers import json_array_contains
+        from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, json_array_contains
         with get_sync_db_session() as session:
             dialect = session.bind.dialect.name if session.bind else 'mysql'
             group_filters = []

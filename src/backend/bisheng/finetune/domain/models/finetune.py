@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, BaseModel, model_validator
 from sqlalchemy import Integer, Select
-from bisheng.core.database.dialect_helpers import JsonType, LargeText
+from bisheng.core.database.dialect_helpers import JsonType, LargeText, UPDATE_TIME_SERVER_DEFAULT
 from sqlmodel import Column, DateTime, Field, func, select, text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -57,7 +57,7 @@ class FinetuneBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     # Check training set data format
     @classmethod

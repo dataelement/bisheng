@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from pydantic import model_validator
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, text, func
-from bisheng.core.database.dialect_helpers import JsonType, LargeText
+from bisheng.core.database.dialect_helpers import JsonType, LargeText, UPDATE_TIME_SERVER_DEFAULT
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -33,7 +33,7 @@ class GptsToolsBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
@@ -69,7 +69,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'

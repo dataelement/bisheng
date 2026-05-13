@@ -7,7 +7,7 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 class ExecType(Enum):
     FLOW = 'flow'
@@ -44,7 +44,7 @@ class EvaluationBase(SQLModelSerializable):
                                             sa_column=Column(DateTime, nullable=False,
                                                              server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class Evaluation(EvaluationBase, table=True):
     id: int = Field(default=None, primary_key=True, unique=True)

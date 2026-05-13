@@ -1849,6 +1849,7 @@
     "success_modify": "Permission updated",
     "success_revoke": "Access revoked",
     "tab_grant": "Grant Access",
-    "uniform_grant": "Apply role:"
+    "uniform_grant": "Apply role:",
+    "remove": "Remove"
   }
 }

@@ -9,7 +9,7 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
@@ -50,7 +50,7 @@ class AssistantBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class AssistantLinkBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
@@ -66,7 +66,7 @@ class AssistantLinkBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class Assistant(AssistantBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)

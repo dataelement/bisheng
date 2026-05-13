@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Literal
 from loguru import logger
 from sqlalchemy import update
 from sqlalchemy import Integer
-from bisheng.core.database.dialect_helpers import LargeText
+from bisheng.core.database.dialect_helpers import LargeText, UPDATE_TIME_SERVER_DEFAULT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementUpdateSchema
@@ -39,7 +39,7 @@ class LinsightSOPBase(SQLModelSerializable):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class LinsightSOP(LinsightSOPBase, table=True):
@@ -73,7 +73,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class LinsightSOPDao(LinsightSOPBase):

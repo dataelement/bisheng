@@ -185,11 +185,11 @@ class DatabaseConnectionManager:
                 logger.error(f"Error creating tables: {exc}")
                 raise RuntimeError("Error creating tables") from exc
 
-        # DaMeng: ensure BEFORE UPDATE triggers for update_time columns exist.
-        # This replicates MySQL's ON UPDATE CURRENT_TIMESTAMP at the DB level
-        # and must run at startup so both fresh installs and upgrades are covered.
+        # DaMeng: ensure triggers exist for columns that MySQL handles natively
+        # but DaMeng requires explicit triggers for.
         if self.async_engine.dialect.name == 'dm':
             self._ensure_dm_triggers()
+            self._ensure_dm_computed_triggers()
 
         logger.info('Database and tables created successfully')
 
@@ -221,6 +221,53 @@ class DatabaseConnectionManager:
                     conn.exec_driver_sql(trigger_ddl)
                 except Exception as exc:
                     logger.warning(f'[dm] Could not create trigger {trigger_name}: {exc}')
+
+    def _ensure_dm_computed_triggers(self) -> None:
+        """Create BEFORE INSERT OR UPDATE triggers for Computed columns on DaMeng.
+
+        MySQL supports GENERATED ALWAYS AS (expr) STORED natively.
+        DaMeng rejects virtual columns in UNIQUE constraints, so we suppress
+        the GENERATED clause at DDL time (@compiles(Computed, 'dm')) and
+        instead maintain the value via triggers created here.
+        """
+        import re
+        from sqlmodel import SQLModel
+
+        with self.engine.connect() as conn:
+            for tbl in SQLModel.metadata.tables.values():
+                computed_cols = [c for c in tbl.columns if c.computed is not None]
+                if not computed_cols:
+                    continue
+
+                col_names = [c.name for c in tbl.columns]
+
+                for col in computed_cols:
+                    # Translate expression: col_name → :new.col_name
+                    expr = str(col.computed.sqltext)
+                    trigger_expr = expr
+                    for name in sorted(col_names, key=len, reverse=True):
+                        trigger_expr = re.sub(
+                            r'\b' + re.escape(name) + r'\b',
+                            f':new.{name}',
+                            trigger_expr,
+                        )
+
+                    trigger_name = f'trg_{tbl.name}_{col.name}'
+                    trigger_ddl = (
+                        f'CREATE OR REPLACE TRIGGER "{trigger_name}" '
+                        f'BEFORE INSERT OR UPDATE ON "{tbl.name}" '
+                        f'FOR EACH ROW '
+                        f'BEGIN '
+                        f'  :new.{col.name} := {trigger_expr}; '
+                        f'END'
+                    )
+                    try:
+                        conn.exec_driver_sql(trigger_ddl)
+                        logger.debug(f'[dm] Created computed trigger {trigger_name}')
+                    except Exception as exc:
+                        logger.warning(
+                            f'[dm] Could not create computed trigger {trigger_name}: {exc}'
+                        )
 
     async def close(self):
         """Close database connection"""

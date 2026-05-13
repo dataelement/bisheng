@@ -10,6 +10,8 @@ from bisheng.utils import generate_uuid
 
 
 # FinetunePreset training set for tasks
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class PresetTrainBase(SQLModelSerializable):
     id: str = Field(default=None, primary_key=True, description='Preset Training Files UniqueID')
     url: str = Field(default='', description='minIoFile link on')
@@ -25,7 +27,7 @@ class PresetTrainBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class PresetTrain(PresetTrainBase, table=True):

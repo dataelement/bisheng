@@ -31,6 +31,8 @@ from bisheng.core.database import get_async_db_session
 # Encryption helpers for auth_config (Fernet, AD-02)
 # ---------------------------------------------------------------------------
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 def encrypt_auth_config(config_dict: dict) -> str:
     """Encrypt auth_config dict to a Fernet-encrypted string for DB storage."""
     raw = json.dumps(config_dict, ensure_ascii=False)
@@ -159,7 +161,7 @@ class OrgSyncConfig(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(
             DateTime, nullable=False,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 

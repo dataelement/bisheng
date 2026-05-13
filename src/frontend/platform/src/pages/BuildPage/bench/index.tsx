@@ -25,7 +25,6 @@ import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInherita
 import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     tabDisplayName: string;
@@ -51,7 +50,6 @@ export interface ChatConfigForm {
         image: string;
         relative_path: string;
     };
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -79,7 +77,6 @@ export interface ChatConfigForm {
     orgKbs: OrgKbConfigType[];
 }
 export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -102,7 +99,6 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
         toggleFeature,
         handleSave
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -188,17 +184,6 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
                                 onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'assistant', relativePath)}
                             />
                         </div>
-                        <div ref={sidebarSloganRef}>
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.sidebarSlogan')}</Label>}
-                                value={formData.sidebarSlogan}
-                                error={errors.sidebarSlogan}
-                                placeholder=""
-                                maxLength={15}
-                                onChange={(v) => handleInputChange('sidebarSlogan', v, 15)}
-                            />
-                        </div>
-
                         <div ref={welcomeMessageRef}>
                             <FormInput
                                 label={t('chatConfig.welcomeMessage')}
@@ -350,7 +335,6 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -372,7 +356,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         systemPrompt: t('chatConfig.systemPrompt2'),
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -478,7 +461,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
 
                 return {
                     ...prev,
-                    sidebarSlogan: cfg.sidebarSlogan ?? prev.sidebarSlogan,
                     welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
                     functionDescription: cfg.functionDescription ?? prev.functionDescription,
                     inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
@@ -509,7 +491,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
     }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         tabDisplayName: '',
@@ -549,7 +530,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
         const modelErrorMessages: string[] = [];
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             tabDisplayName: '',
@@ -561,12 +541,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             applicationCenterDescription: '',
             systemPrompt: '',
         };
-
-        if (formData.sidebarSlogan.length > 15) {
-            newErrors.sidebarSlogan = t('chatConfig.errors.maxCharacters', { count: 15 });
-            if (!firstErrorRef) firstErrorRef = refs.sidebarSloganRef;
-            isValid = false;
-        }
 
         const tabName = (formData.tabDisplayName || '').trim();
         if (!tabName) {
@@ -669,7 +643,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         const dataToSave = {
             sidebarIcon: formData.sidebarIcon,
             assistantIcon: formData.assistantIcon,
-            sidebarSlogan: formData.sidebarSlogan.trim(),
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),

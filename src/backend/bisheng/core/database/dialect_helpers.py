@@ -2,11 +2,71 @@
 from __future__ import annotations
 
 import json as _json
+import re
 
 import sqlalchemy as sa
 from sqlalchemy import inspect, Text, CLOB, JSON
 from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.expression import FunctionElement
+from sqlalchemy.sql.schema import Computed
+from sqlalchemy.sql.sqltypes import Boolean as _Boolean
 from sqlalchemy.types import TypeDecorator
+
+
+# ---------------------------------------------------------------------------
+# Boolean DDL override for DaMeng
+# ---------------------------------------------------------------------------
+# DaMeng (Oracle-compatible) does not support the SQL BOOLEAN type.
+# Map it to SMALLINT (0/1).  SQLAlchemy's Boolean type still handles
+# Python True/False ↔ 1/0 conversion transparently at the driver level.
+
+@compiles(_Boolean, "dm")
+def _compile_boolean_dm(element, compiler, **kw):
+    return "SMALLINT"
+
+
+# ---------------------------------------------------------------------------
+# Computed column DDL override for DaMeng
+# ---------------------------------------------------------------------------
+
+@compiles(Computed, "dm")
+def _compile_computed_dm(element, compiler, **kw):  # noqa: F811
+    """On DaMeng, suppress GENERATED ALWAYS AS — the column becomes a plain
+    integer whose value is maintained by a BEFORE INSERT OR UPDATE trigger
+    created at application startup (_ensure_dm_computed_triggers in connection.py).
+    """
+    return ""
+
+
+class _UpdateTimeServerDefault(FunctionElement):
+    """Compile-time dialect-aware server_default for update_time columns.
+
+    MySQL  → CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    DaMeng → CURRENT_TIMESTAMP  (triggers created at startup handle ON UPDATE)
+    Others → CURRENT_TIMESTAMP
+
+    Usage in model definitions::
+
+        sa_column=Column(DateTime, nullable=False,
+                         server_default=UPDATE_TIME_SERVER_DEFAULT)
+    """
+    inherit_cache = True
+    name = "update_time_server_default"
+
+
+@compiles(_UpdateTimeServerDefault)
+def _compile_update_time_default(element, compiler, **kw):
+    return "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+
+
+@compiles(_UpdateTimeServerDefault, "dm")
+def _compile_update_time_default_dm(element, compiler, **kw):
+    return "CURRENT_TIMESTAMP"
+
+
+# Singleton — import and use directly in sa_column definitions
+UPDATE_TIME_SERVER_DEFAULT = _UpdateTimeServerDefault()
 
 
 class JsonType(TypeDecorator):

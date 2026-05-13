@@ -18,7 +18,6 @@ async def test_update_daily_chat_config_ignores_models_field(monkeypatch):
         return SimpleNamespace(key=key, value=value)
 
     result_config = WorkstationConfig(
-        sidebarSlogan='hello',
         models=[WSModel(id='101', name='gpt-4o', displayName='GPT-4o', visual=True)],
     )
 

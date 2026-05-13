@@ -8,6 +8,8 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class ModelDeployBase(SQLModelSerializable):
     endpoint: str = Field(index=False, unique=False)
     server: str = Field(index=True)
@@ -24,7 +26,7 @@ class ModelDeployBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class ModelDeploy(ModelDeployBase, table=True):

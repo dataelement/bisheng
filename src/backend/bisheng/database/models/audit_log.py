@@ -2,13 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import Integer, String, JSON
+from sqlalchemy import Integer, String
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType, json_array_contains
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, json_array_contains
 from bisheng.utils import generate_uuid
 
 
@@ -19,6 +19,7 @@ def _db_dialect() -> str:
     except Exception:
         return 'mysql'
 
+
 # System Module Enumeration
 class SystemId(Enum):
     CHAT = "chat"  # Sessions
@@ -28,6 +29,7 @@ class SystemId(Enum):
     DASHBOARD = "dashboard"  # KANBAN
     SUBSCRIPTION = "subscription"  # Subscription Management
     KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge Space
+
 
 # Action Behavior Enumeration
 class EventType(Enum):
@@ -69,6 +71,7 @@ class EventType(Enum):
     CREATE_KNOWLEDGE_SPACE = "create_knowledge_space"  # Create Knowledge Space
     DELETE_KNOWLEDGE_SPACE = "delete_knowledge_space"  # Delete Knowledge Space
 
+
 # Action object type enumeration
 class ObjectType(Enum):
     NONE = "none"  # W/O
@@ -84,6 +87,7 @@ class ObjectType(Enum):
     DASHBOARD = "dashboard"  # KANBAN
     CHANNEL = "channel"  # Subscription Channel
     KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge Space
+
 
 class AuditLogBase(SQLModelSerializable):
     """
@@ -146,18 +150,20 @@ class AuditLogBase(SQLModelSerializable):
     audit_metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(
-            'metadata', JSON, nullable=True,
+            'metadata', JsonType, nullable=True,
             comment='v2.5.1: extended fields (from/to values, affected ids, etc.)',
         ),
     )
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+
 
 class AuditLog(AuditLogBase, table=True):
     # id = 2 Represents the default user group
     id: str = Field(default_factory=generate_uuid, primary_key=True, index=True, description="primary keyuuidFormat")
+
 
 # v2.5.1 product decision (2026-05-06): the legacy "系统操作" page surfaces
 # only a curated subset of structured actions to operators. Other v2 actions
@@ -181,6 +187,7 @@ _V2_NAMESPACE_TO_ACTION_PREFIX: Dict[str, str] = {
     'tenant': 'tenant.',
     'llm': 'llm.server.',
 }
+
 
 class AuditLogDao(AuditLogBase):
 

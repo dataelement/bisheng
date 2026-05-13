@@ -864,7 +864,6 @@
     "iconUpload": "アイコンアップロード",
     "sidebarIcon": "左サイドバーアイコン",
     "assistantIcon": "ウェルカム画面アイコン & 対話アバター",
-    "sidebarSlogan": "左サイドバーのスローガン",
     "welcomeMessage": "ウェルカムメッセージ",
     "welcomeMessagePlaceholder": "私は $t(bisheng) です。お会いできてうれしいです！",
     "functionDescription": "機能説明",

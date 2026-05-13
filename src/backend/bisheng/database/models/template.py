@@ -6,7 +6,7 @@ from sqlalchemy import Column, DateTime, Integer, text, String
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.models.flow import FlowType
 
 class TemplateBase(SQLModelSerializable):
@@ -26,7 +26,7 @@ class TemplateBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class Template(TemplateBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -9,7 +9,7 @@ from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
 
@@ -78,7 +78,7 @@ class KnowledgeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     @field_validator('model', mode='before')
     @classmethod

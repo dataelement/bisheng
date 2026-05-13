@@ -28,6 +28,8 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class ChannelKnowledgeSync(SQLModelSerializable, table=True):
     """Config row binding a channel (or one of its sub-channels) to a
     knowledge-space folder so that newly-synced articles auto-import."""
@@ -91,7 +93,7 @@ class ChannelKnowledgeSync(SQLModelSerializable, table=True):
         sa_column=Column(
             DateTime,
             nullable=False,
-            server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 
