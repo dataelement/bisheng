@@ -344,8 +344,8 @@ const AiChatInput = memo(
                         size === "mini" ? "rounded-xl" : "rounded-3xl touch-mobile:rounded-2xl"
                     )}
                 >
-                    {/* File upload area: file list only. Trigger moves to "+" menu
-                        when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
+                    {/* File upload area: file list only. Upload entry lives in the
+                        "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
                         const accept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
@@ -356,7 +356,7 @@ const AiChatInput = memo(
                             showVoice={showVoice}
                             accepts={accept}
                             disabled={filesDisabled}
-                            hideTrigger={agentMode && !isLingsi}
+                            hideTrigger
                             hideList
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
                             size={envConfig?.uploaded_files_maximum_size || 50}
@@ -461,7 +461,7 @@ const AiChatInput = memo(
                                             onSearchTypeChange?.("");
                                         }
                                     }}
-                                    showFileUpload={showUpload && agentMode}
+                                    showFileUpload={showUpload}
                                     fileUploadDisabled={filesDisabled}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                 />
