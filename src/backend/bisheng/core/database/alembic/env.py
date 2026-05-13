@@ -3,11 +3,21 @@ from logging.config import fileConfig
 from sqlalchemy import text
 
 from alembic import context
+from alembic.ddl.impl import DefaultImpl
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database.alembic_helpers.online import (
     finalize_online_migration_connection,
 )
+
+
+# Register DaMeng dialect with Alembic.
+# Alembic ships implementations for mysql/postgresql/oracle/sqlite but not for
+# 'dm'.  Without this registration MigrationContext.configure() raises KeyError.
+# DaMeng is Oracle-compatible and uses auto-committed DDL (transactional_ddl=False).
+class DaMengImpl(DefaultImpl):
+    __dialect__ = "dm"
+    transactional_ddl = False
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
