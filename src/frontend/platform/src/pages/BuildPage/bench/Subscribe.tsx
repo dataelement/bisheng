@@ -22,7 +22,6 @@ import { SubscriptionSensitivePolicy } from "./SubscriptionSensitivePolicy";
 
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -44,7 +43,6 @@ export interface ChatConfigForm {
     feedbackTips: string;
 }
 export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number }) {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -67,7 +65,6 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
         toggleFeature,
         handleSave
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -214,7 +211,6 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -265,7 +261,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
     }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -299,7 +294,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
     const validateForm = (): boolean => {
         let isValid = true;
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             inputPlaceholder: '',

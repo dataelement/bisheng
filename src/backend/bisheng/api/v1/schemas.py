@@ -439,7 +439,6 @@ class WorkstationConfig(BaseModel):
     maxTokens: Optional[int] = Field(default=15000, description='Max chunk size for knowledge rag or web search')
     sidebarIcon: Optional[Icon] = None
     assistantIcon: Optional[Icon] = None
-    sidebarSlogan: Optional[str] = Field(default='', description='Sidebarslogan')
     welcomeMessage: Optional[str] = Field(default='')
     functionDescription: Optional[str] = Field(default='')
     inputPlaceholder: Optional[str] = ''

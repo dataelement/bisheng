@@ -36,7 +36,6 @@ import { ToggleSection } from "./ToggleSection";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -63,7 +62,6 @@ export interface ChatConfigForm {
         image: string;
         relative_path: string;
     };
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -147,7 +145,6 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
             image: '',
             relative_path: ''
         },
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: t('bench.inputPlaceholder'),
