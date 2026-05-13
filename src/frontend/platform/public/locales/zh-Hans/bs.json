@@ -868,7 +868,6 @@
     "iconUpload": "图标上传",
     "sidebarIcon": "左侧边栏图标",
     "assistantIcon": "欢迎页面图标&对话头像",
-    "sidebarSlogan": "左侧边栏slogan",
     "welcomeMessage": "欢迎语设置",
     "welcomeMessagePlaceholder": "我是 $t(bisheng)，很高兴见到你！",
     "functionDescription": "功能说明",
