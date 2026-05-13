@@ -55,6 +55,10 @@ class Role(RoleBase, table=True):
             Integer,
             Computed('COALESCE(department_id, -1)', persisted=True),
             nullable=False,
+            # server_default=-1 is only used on DaMeng where Computed is suppressed
+            # at DDL time; the BEFORE INSERT trigger immediately overwrites it with
+            # the correct COALESCE value, so -1 is never visible to business logic.
+            server_default=text('-1'),
             comment='Normalized department scope key; -1 = no scope restriction',
         ),
     )
