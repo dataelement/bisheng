@@ -161,10 +161,10 @@ export default function FilePreviewPage() {
     const hasAutoOpenedAiAssistant = useRef(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
 
-    // Mobile layout (<sm): AI assistant renders as full-screen overlay instead of split-pane.
+    // Mobile layout (<md = 768px): AI assistant renders as full-screen overlay instead of split-pane.
     const [isMobile, setIsMobile] = useState(false);
     useEffect(() => {
-        const mq = window.matchMedia("(max-width: 639px)");
+        const mq = window.matchMedia("(max-width: 767px)");
         const update = () => setIsMobile(mq.matches);
         update();
         mq.addEventListener("change", update);
@@ -205,7 +205,7 @@ export default function FilePreviewPage() {
                 <Button
                     variant="outline"
                     onClick={() => setPermissionDialogOpen(true)}
-                    className="hidden h-8 gap-1 rounded-[6px] px-2 text-sm sm:inline-flex"
+                    className="hidden h-8 gap-1 rounded-[6px] px-2 text-sm md:inline-flex"
                 >
                     <Shield className="size-4 text-[#4e5969]" />
                     <span className="font-normal">{localize("com_permission.manage_permission")}</span>
