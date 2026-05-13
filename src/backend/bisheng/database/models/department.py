@@ -13,7 +13,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
-    JSON,
     SmallInteger,
     String,
     UniqueConstraint,
@@ -28,8 +27,8 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 logger = logging.getLogger(__name__)
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
 def _normalize_id_scalar_rows(rows) -> List[int]:
     """Normalize SQLAlchemy/SQLModel scalar select rows to plain int ids.
@@ -162,7 +161,7 @@ class Department(SQLModelSerializable, table=True):
     default_role_ids: Optional[list] = Field(
         default=None,
         sa_column=Column(
-            JSON, nullable=True,
+            JsonType, nullable=True,
             comment='Default role IDs for department members',
         ),
     )
