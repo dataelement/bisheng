@@ -28,7 +28,7 @@ from bisheng.user.domain.models.user_role import UserRoleDao
 logger = logging.getLogger(__name__)
 
 DEFAULT_ROLE_QUOTA: dict[str, int] = {
-    'knowledge_space': 30,
+    'knowledge_space': 200,
     'knowledge_space_file': 500,  # GB
     'channel': 10,
     'channel_subscribe': 20,

@@ -76,7 +76,7 @@ if TYPE_CHECKING:
     from bisheng.message.domain.services.message_service import MessageService
 
 # Maximum number of Knowledge Spaces a user can create
-_MAX_SPACE_PER_USER = 30
+_MAX_SPACE_PER_USER = 200
 # Maximum number of spaces a user can subscribe to (not as creator)
 _MAX_SUBSCRIBE_PER_USER = 50
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
@@ -1485,7 +1485,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         share_to_children: Optional[bool] = None,
         skip_user_limit: bool = False,
     ) -> Knowledge:
-        """ Create a new knowledge space (max 30 per user).
+        """ Create a new knowledge space (max 200 per user).
 
         F017: when the creator's leaf tenant is Root, ``share_to_children``
         controls whether the new space is shared with all active Child Tenants.
