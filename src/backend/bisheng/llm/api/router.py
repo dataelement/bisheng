@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, BackgroundTasks, Depends, Query, Request, UploadFile
 from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -39,22 +39,10 @@ async def _assert_can_write_system_config(
     if target_tenant_id == ROOT_TENANT_ID:
         # Non-super caller targeting Root — disallowed regardless of
         # any partial admin grant they might hold elsewhere.
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'status_code': LLMSystemConfigForbiddenError.Code,
-                'status_message': LLMSystemConfigForbiddenError.Msg,
-            },
-        )
+        raise LLMSystemConfigForbiddenError()
     if await login_user.has_tenant_admin(target_tenant_id):
         return
-    raise HTTPException(
-        status_code=403,
-        detail={
-            'status_code': LLMSystemConfigForbiddenError.Code,
-            'status_message': LLMSystemConfigForbiddenError.Msg,
-        },
-    )
+    raise LLMSystemConfigForbiddenError()
 
 
 _AUDIT_MASKER = JsonFieldMasker()

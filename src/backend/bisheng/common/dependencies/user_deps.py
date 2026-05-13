@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 
@@ -99,10 +99,4 @@ class UserPayload(LoginUser):
                 and await user.has_tenant_admin(tid)):
             return user
 
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'status_code': LLMModelSharedReadonlyError.Code,
-                'status_message': LLMModelSharedReadonlyError.Msg,
-            },
-        )
+        raise LLMModelSharedReadonlyError()
