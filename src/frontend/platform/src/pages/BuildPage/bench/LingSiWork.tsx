@@ -19,7 +19,7 @@ import { getLinsiConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { sopApi } from "@/controllers/API/linsight";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useDebounce } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
@@ -343,7 +343,7 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
     useEffect(() => {
         if (!user.user_id) return;
 
-        if (!canManageModelSettings(user)) {
+        if (!canManageWorkbenchConfig(user)) {
             navigate('/build/apps');
             return;
         }
