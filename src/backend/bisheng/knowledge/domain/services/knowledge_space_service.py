@@ -92,6 +92,9 @@ _PERMISSION_LEVEL_TO_RELATION = {
     'can_read': 'viewer',
 }
 
+_CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
+_CHILD_PERMISSION_CHECK_CONCURRENCY = 8
+
 
 class KnowledgeSpaceService(KnowledgeUtils):
     """ Service for Knowledge Space operations.
@@ -481,6 +484,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return set()
         relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(member.user_role)
         return default_permission_ids_for_relation(relation or '')
+
+    @staticmethod
+    def _build_item_lineage(item: KnowledgeFile, space_id: int) -> List[tuple[str, int]]:
+        object_type = 'folder' if item.file_type == FileType.DIR.value else 'knowledge_file'
+        ancestor_ids = [int(part) for part in (item.file_level_path or '').split('/') if part]
+        return [(object_type, item.id)] + [('folder', fid) for fid in reversed(ancestor_ids)] + [
+            ('knowledge_space', space_id),
+        ]
 
     async def _space_id_for_resource(self, object_type: str, object_id: int) -> Optional[int]:
         if object_type == 'knowledge_space':
@@ -904,6 +915,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
         effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
+        return effective_permissions
+
+    async def _build_child_permission_context(self, space_id: int) -> dict:
+        user_subject_strings = await self._get_current_user_subject_strings()
+        bindings = await self._get_relation_bindings()
+        binding_department_paths = await self._get_binding_department_paths(bindings)
+        models = await self._get_relation_models_map()
+        membership_permission_ids = await self._membership_permission_ids(space_id)
+        public_space_permission_ids = await self._public_space_viewer_permission_ids([('knowledge_space', space_id)])
+        return {
+            'models': models,
+            'bindings': bindings,
+            'binding_department_paths': binding_department_paths,
+            'user_subject_strings': user_subject_strings,
+            'membership_permission_ids': membership_permission_ids,
+            'public_space_permission_ids': public_space_permission_ids,
+            'tuple_cache': {},
+            'tuple_department_paths': {},
+        }
+
+    async def _get_child_item_effective_permission_ids(
+        self,
+        item: KnowledgeFile,
+        *,
+        space_id: int,
+        context: dict,
+    ) -> set[str]:
+        object_type = 'folder' if item.file_type == FileType.DIR.value else 'knowledge_file'
+        lineage = self._build_item_lineage(item, space_id)
+        effective_permissions, matched_lineage_binding = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            self.login_user,
+            object_type,
+            item.id,
+            models=context['models'],
+            bindings=context['bindings'],
+            binding_department_paths=context['binding_department_paths'],
+            user_subject_strings=context['user_subject_strings'],
+            lineage=lineage,
+            nearest_binding_wins=True,
+            return_match_metadata=True,
+            tuple_cache=context['tuple_cache'],
+            tuple_department_paths=context['tuple_department_paths'],
+        )
+        if not matched_lineage_binding:
+            effective_permissions.update(context['membership_permission_ids'])
+        effective_permissions.update(context['public_space_permission_ids'])
         return effective_permissions
 
     async def _public_space_viewer_permission_ids(self, lineage: List[tuple[str, int]]) -> set[str]:
@@ -1704,16 +1761,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         items: List[KnowledgeFile],
         *,
         space_id: int,
+        context: Optional[dict] = None,
     ) -> List[KnowledgeFile]:
+        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
+        permission_context = context or await self._build_child_permission_context(space_id)
+
         async def can_view(item: KnowledgeFile) -> bool:
-            object_type = 'folder' if item.file_type == FileType.DIR.value else 'knowledge_file'
-            permission_id = 'view_folder' if item.file_type == FileType.DIR.value else 'view_file'
-            effective_permissions = await self._get_effective_permission_ids(
-                object_type,
-                item.id,
-                space_id=space_id,
-            )
-            return permission_id in effective_permissions
+            async with semaphore:
+                permission_id = 'view_folder' if item.file_type == FileType.DIR.value else 'view_file'
+                effective_permissions = await self._get_child_item_effective_permission_ids(
+                    item,
+                    space_id=space_id,
+                    context=permission_context,
+                )
+                return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
@@ -1724,6 +1785,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return items
         start = (page - 1) * page_size
         return items[start:start + page_size]
+
+    async def _scan_visible_child_items(
+        self,
+        *,
+        space_id: int,
+        parent_id: Optional[int],
+        file_ids: Optional[List[int]],
+        order_field: str,
+        order_sort: str,
+        file_status: Optional[List[int]],
+        file_type: Optional[int],
+        page: int,
+        page_size: int,
+    ) -> tuple[int, List[KnowledgeFile]]:
+        target_start = max(page - 1, 0) * page_size if page_size else 0
+        target_end = target_start + page_size if page_size else None
+
+        scan_page = 1
+        visible_total = 0
+        visible_page_items: List[KnowledgeFile] = []
+        permission_context = await self._build_child_permission_context(space_id)
+
+        while True:
+            batch_items = await SpaceFileDao.async_list_children(
+                space_id,
+                parent_id,
+                file_ids=file_ids,
+                order_field=order_field,
+                order_sort=order_sort,
+                file_status=file_status,
+                page=scan_page,
+                page_size=_CHILD_PERMISSION_SCAN_BATCH_SIZE,
+                file_type=file_type,
+            )
+            if not batch_items:
+                break
+
+            visible_batch = await self._filter_visible_child_items(
+                batch_items,
+                space_id=space_id,
+                context=permission_context,
+            )
+            for item in visible_batch:
+                if target_end is None or (target_start <= visible_total < target_end):
+                    visible_page_items.append(item)
+                visible_total += 1
+
+            if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
+                break
+            scan_page += 1
+
+        return visible_total, visible_page_items
 
     async def list_space_children(
         self,
@@ -1748,20 +1861,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id('folder', parent_id, 'view_folder', space_id=space_id)
         else:
             await self._require_permission_id('knowledge_space', space_id, 'view_space')
-        items = await SpaceFileDao.async_list_children(
-            space_id,
-            parent_id,
+        total, visible_page_items = await self._scan_visible_child_items(
+            space_id=space_id,
+            parent_id=parent_id,
             file_ids=file_ids,
             order_field=order_field,
             order_sort=order_sort,
             file_status=file_status,
-            page=0,
-            page_size=0,
             file_type=file_type,
+            page=page,
+            page_size=page_size,
         )
-        visible_items = await self._filter_visible_child_items(items, space_id=space_id)
-        total = len(visible_items)
-        data = await self._handle_file_folder_extra_info(self._paginate_items(visible_items, page, page_size))
+        data = await self._handle_file_folder_extra_info(visible_page_items)
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
