@@ -19,7 +19,6 @@ import Preview from "./Preview";
 
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -41,7 +40,6 @@ export interface ChatConfigForm {
     feedbackTips: string;
 }
 export default function Subscribe() {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -63,7 +61,6 @@ export default function Subscribe() {
         toggleFeature,
         handleSave
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -208,7 +205,6 @@ export default function Subscribe() {
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -256,7 +252,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     }, [t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -290,7 +285,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     const validateForm = (): boolean => {
         let isValid = true;
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             inputPlaceholder: '',

@@ -34,7 +34,6 @@ import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -61,7 +60,6 @@ export interface ChatConfigForm {
         image: string;
         relative_path: string;
     };
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -145,7 +143,6 @@ export default function index() {
             image: '',
             relative_path: ''
         },
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: t('bench.inputPlaceholder'),

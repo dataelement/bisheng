@@ -514,7 +514,6 @@ export type BsConfig = {
     enabled: boolean;
     image: string;
   };
-  sidebarSlogan: string;
   welcomeMessage: string;
   functionDescription: string;
   inputPlaceholder: string;
