@@ -448,7 +448,7 @@ const AiChatInput = memo(
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}
-                            {!isLingsi && (agentMode || bsConfig?.knowledgeBase?.enabled) && onSelectedOrgKbsChange && (
+                            {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatKnowledge
                                     config={bsConfig}
                                     disabled={!!disabled}
