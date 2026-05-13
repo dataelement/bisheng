@@ -23,6 +23,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKn
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
+from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
 
 # build router
@@ -129,10 +130,12 @@ async def upload_file(
                                     callback_url=callback_url,
                                     file_list=[KnowledgeFileOne(file_path=file_path, excel_rule=excel_rule)])
 
+    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(loging_user)
     res = await sync_func_to_async(KnowledgeService.process_knowledge_file)(request=request,
                                                                             login_user=loging_user,
                                                                             background_tasks=background_tasks,
-                                                                            req_data=req_data)
+                                                                            req_data=req_data,
+                                                                            upload_limit_bytes=upload_limit_bytes)
     return resp_200(data=res[0])
 
 
@@ -200,7 +203,10 @@ async def post_chunks(request: Request,
                                     max_chunk_size=max_chunk_size,
                                     file_list=[KnowledgeFileOne(file_path=file_path)])
 
-    res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(request, login_user, req_data)
+    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+    res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(
+        request, login_user, req_data, upload_limit_bytes=upload_limit_bytes,
+    )
     return resp_200(data=res[0])
 
 
@@ -223,8 +229,10 @@ async def post_string_chunks(request: Request, document: ChunkInput):
                                     extra=json.dumps(document.documents[0].metadata,
                                                      ensure_ascii=False))
 
+    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
     knowledge, failed_files, process_files, _ = await sync_func_to_async(KnowledgeService.save_knowledge_file)(
-        login_user, req_data)
+        login_user, req_data, upload_limit_bytes=upload_limit_bytes,
+    )
     if failed_files:
         return resp_200(data=failed_files[0])
 
