@@ -583,7 +583,7 @@ export function PermissionListTab({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
+                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
                           >
                             {canModifyEntry && (!isOwner || canManageOwnerEntry) && grantableModelOptions.map((model) => {
                               const active = model.id === currentModelId;

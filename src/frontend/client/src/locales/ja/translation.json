@@ -1772,6 +1772,7 @@
     "success_modify": "権限を更新しました",
     "success_revoke": "権限を解除しました",
     "tab_grant": "権限付与",
-    "uniform_grant": "一括付与："
+    "uniform_grant": "一括付与：",
+    "remove": "削除"
   }
 }

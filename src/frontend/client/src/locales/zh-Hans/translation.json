@@ -1778,6 +1778,7 @@
     "success_modify": "权限修改成功",
     "success_revoke": "权限撤销成功",
     "tab_grant": "新增授权",
-    "uniform_grant": "统一授权："
+    "uniform_grant": "统一授权：",
+    "remove": "移除"
   }
 }
