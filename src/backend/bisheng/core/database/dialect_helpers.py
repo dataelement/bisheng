@@ -10,7 +10,20 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import FunctionElement
 from sqlalchemy.sql.schema import Computed
+from sqlalchemy.sql.sqltypes import Boolean as _Boolean
 from sqlalchemy.types import TypeDecorator
+
+
+# ---------------------------------------------------------------------------
+# Boolean DDL override for DaMeng
+# ---------------------------------------------------------------------------
+# DaMeng (Oracle-compatible) does not support the SQL BOOLEAN type.
+# Map it to SMALLINT (0/1).  SQLAlchemy's Boolean type still handles
+# Python True/False ↔ 1/0 conversion transparently at the driver level.
+
+@compiles(_Boolean, "dm")
+def _compile_boolean_dm(element, compiler, **kw):
+    return "SMALLINT"
 
 
 # ---------------------------------------------------------------------------
@@ -18,7 +31,7 @@ from sqlalchemy.types import TypeDecorator
 # ---------------------------------------------------------------------------
 
 @compiles(Computed, "dm")
-def _compile_computed_dm(element, compiler, **kw):
+def _compile_computed_dm(element, compiler, **kw):  # noqa: F811
     """On DaMeng, suppress GENERATED ALWAYS AS — the column becomes a plain
     integer whose value is maintained by a BEFORE INSERT OR UPDATE trigger
     created at application startup (_ensure_dm_computed_triggers in connection.py).
