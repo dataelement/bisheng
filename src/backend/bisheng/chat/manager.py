@@ -571,8 +571,11 @@ class ChatManager:
             gragh_data = session.get(Flow, flow_id)
             if not gragh_data:
                 message = SkillDeletedError()
-            if gragh_data.status != 2:
+            elif gragh_data.status != 2:
                 message = SkillNotOnlineError()
+        if message:
+            self.reuse_connect(flow_id, chat_id, websocket)
+            return None, message
         gragh_data = gragh_data.data
         self.reuse_connect(flow_id, chat_id, websocket)
         return gragh_data, message
