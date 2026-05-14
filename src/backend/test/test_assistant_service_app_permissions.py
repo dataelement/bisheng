@@ -132,7 +132,10 @@ def _load_assistant_service_module():
 
         flow_module = ModuleType('bisheng.database.models.flow')
         flow_module.Flow = SimpleNamespace
-        flow_module.FlowDao = SimpleNamespace(get_flow_by_ids=lambda ids: [])
+        flow_module.FlowDao = SimpleNamespace(
+            get_flow_by_ids=lambda ids: [],
+            aget_user_access_online_flows=AsyncMock(return_value=[]),
+        )
         flow_module.FlowType = SimpleNamespace(ASSISTANT=SimpleNamespace(value=5), WORKFLOW=SimpleNamespace(value=10))
         sys.modules['bisheng.database.models.flow'] = flow_module
 
@@ -439,3 +442,26 @@ async def test_update_status_uses_publish_and_unpublish_permissions():
         'asst-4',
         ['unpublish_app'],
     )
+
+
+@pytest.mark.asyncio
+async def test_get_auto_flow_info_uses_async_flow_dao():
+    assistant_module = _load_assistant_service_module()
+    AssistantService = assistant_module.AssistantService
+
+    assistant = SimpleNamespace(user_id=7, prompt='help me build')
+    flow_one = SimpleNamespace(name='Flow A', description='alpha')
+    flow_two = SimpleNamespace(name='Flow B', description='beta')
+    auto_agent = SimpleNamespace(choose_tools=MagicMock(return_value=['Flow B']))
+
+    with patch.object(
+        assistant_module.FlowDao,
+        'aget_user_access_online_flows',
+        new_callable=AsyncMock,
+        return_value=[flow_one, flow_two],
+    ) as mock_aget_flows:
+        result = await AssistantService.get_auto_flow_info(assistant, auto_agent)
+
+    mock_aget_flows.assert_awaited_once_with(7, 1, 50)
+    auto_agent.choose_tools.assert_called_once()
+    assert result == [flow_two]
