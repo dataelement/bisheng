@@ -10,7 +10,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getSubConfigApi, setSubConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -82,7 +82,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && !canManageModelSettings(user)) {
+        if (user.user_id && !canManageWorkbenchConfig(user)) {
             navigate('/build/apps')
         }
     }, [navigate, user])

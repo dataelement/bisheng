@@ -27,6 +27,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
@@ -53,9 +54,9 @@ router = APIRouter()
 # Inspiration Upload File
 @router.post("/workbench/upload-file", summary="Inspiration Upload File", response_model=UnifiedResponseModel)
 async def upload_file(
-        background_tasks: BackgroundTasks,
-        file: UploadFile = File(...),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Inspiration Upload File
     :param background_tasks:
@@ -90,8 +91,8 @@ async def upload_file(
 @router.post("/workbench/file-parsing-status", summary="Get file resolution status",
              response_model=UnifiedResponseModel)
 async def get_file_parsing_status(
-        file_ids: List[str] = Body(..., description="Doc.IDVertical", embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    file_ids: List[str] = Body(..., description="Doc.IDVertical", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Get file resolution status
     :param file_ids:
@@ -114,10 +115,10 @@ async def get_file_parsing_status(
 
 @router.post("/workbench/file_download", summary="Inspiration File Download", response_model=UnifiedResponseModel)
 async def linsight_file_download(
-        file_url: str = Body(..., embed=True),
-        session_version_id: str = Body(..., embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
+    file_url: str = Body(..., embed=True),
+    session_version_id: str = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
     session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
     if not session_version_model:
         raise NotFoundError()
@@ -126,8 +127,8 @@ async def linsight_file_download(
     if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
         # Access by sharing a link
         if (share_link is None or
-                share_link.meta_data is None or
-                share_link.meta_data.get("versionId") != session_version_id):
+            share_link.meta_data is None or
+            share_link.meta_data.get("versionId") != session_version_id):
             raise UnAuthorizedError()
 
     minio_client = await get_minio_storage()
@@ -143,8 +144,8 @@ async def linsight_file_download(
 # Submit an Idea User Issue Request
 @router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
 async def submit_linsight_workbench(
-        submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
+    submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
     """
     Submit an Idea User Issue Request
     :param submit_obj:
@@ -206,14 +207,14 @@ async def submit_linsight_workbench(
 # workbench Generate and Reimagine IdeasSOP
 @router.post("/workbench/generate-sop", summary="Generate and Reimagine IdeasSOP", response_model=UnifiedResponseModel)
 async def generate_sop(
-        request: Request,
-        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
-        previous_session_version_id: str = Body(None, description="Previous Invisible Conversation VersionID"),
-        feedback_content: str = Body(None, description="User feedback content"),
-        reexecute: bool = Body(False, description="Whether to rerun the buildSOP"),
-        sop_id: int = Body(None, description="Featured Cases'ID"),
-        example_session_version_id: str = Body(default=None, description="Reference Cases'linsight_version_id"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
+    request: Request,
+    linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+    previous_session_version_id: str = Body(None, description="Previous Invisible Conversation VersionID"),
+    feedback_content: str = Body(None, description="User feedback content"),
+    reexecute: bool = Body(False, description="Whether to rerun the buildSOP"),
+    sop_id: int = Body(None, description="Featured Cases'ID"),
+    example_session_version_id: str = Body(default=None, description="Reference Cases'linsight_version_id"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
     """
     Generate and Reimagine IdeasSOP
     :param previous_session_version_id:
@@ -313,9 +314,9 @@ async def generate_sop(
 # workbench Changesop
 @router.post("/workbench/sop-modify", summary="Modify InspirationSOP", response_model=UnifiedResponseModel)
 async def modify_sop(
-        sop_content: str = Body(..., description="SOPContents"),
-        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    sop_content: str = Body(..., description="SOPContents"),
+    linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Modify InspirationSOP
     :param sop_content:
@@ -345,9 +346,9 @@ async def modify_sop(
 # workbench to process
 @router.post("/workbench/start-execute", summary="Start Executing Reims", response_model=UnifiedResponseModel)
 async def start_execute_sop(
-        background_tasks: BackgroundTasks,
-        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    background_tasks: BackgroundTasks,
+    linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Start Executing ReimsSOP
     :param linsight_session_version_id:
@@ -398,11 +399,11 @@ async def start_execute_sop(
 # workbench User input
 @router.post("/workbench/user-input", summary="User input Ideas", response_model=UnifiedResponseModel)
 async def user_input(
-        session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
-        linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
-        input_content: str = Body(..., description="User input"),
-        files: Optional[List[SubmitFileSchema]] = Body(None, description="User-uploaded files"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+    linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
+    input_content: str = Body(..., description="User input"),
+    files: Optional[List[SubmitFileSchema]] = Body(None, description="User-uploaded files"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     User input
     :param files:
@@ -438,13 +439,13 @@ async def user_input(
 @router.post("/workbench/submit-feedback", summary="Submitting Execution Result Feedback",
              response_model=UnifiedResponseModel)
 async def submit_feedback(
-        background_tasks: BackgroundTasks,
-        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
-        feedback: str = Body(None, description="User feedback"),
-        score: int = Body(0, ge=0, le=5, description="Users rating1-5cent"),
-        is_reexecute: bool = Body(False, description="Whether to re-execute"),
-        cancel_feedback: bool = Body(False, description="Cancel feedback"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    background_tasks: BackgroundTasks,
+    linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+    feedback: str = Body(None, description="User feedback"),
+    score: int = Body(0, ge=0, le=5, description="Users rating1-5cent"),
+    is_reexecute: bool = Body(False, description="Whether to re-execute"),
+    cancel_feedback: bool = Body(False, description="Cancel feedback"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Submitting Execution Result Feedback
     :param background_tasks:
@@ -523,8 +524,8 @@ async def submit_feedback(
 @router.post("/workbench/terminate-execute", summary="Termination of execution of Ideas",
              response_model=UnifiedResponseModel)
 async def terminate_execute(
-        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Termination of execution of Ideas
     :param linsight_session_version_id:
@@ -587,9 +588,9 @@ async def terminate_execute(
 @router.get("/workbench/session-version-list", summary="Get all the Inspiration information for the current session",
             response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
-        session_id: str = Query(..., description="SessionsID"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+    session_id: str = Query(..., description="SessionsID"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
 ) -> UnifiedResponseModel:
     """
     Get all the Inspiration information for the current session
@@ -607,8 +608,8 @@ async def get_linsight_session_version_list(
 
         # Access by sharing a link
         if (share_link is None or
-                share_link.meta_data is None or
-                share_link.meta_data.get("versionId") not in session_version_ids):
+            share_link.meta_data is None or
+            share_link.meta_data.get("versionId") not in session_version_ids):
             return UnAuthorizedError.return_resp()
 
         # Only return to the shared version of the Inspiration session
@@ -622,9 +623,9 @@ async def get_linsight_session_version_list(
 # Get task execution details
 @router.get("/workbench/execute-task-detail", summary="Get task execution details", response_model=UnifiedResponseModel)
 async def get_execute_task_detail(
-        session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
+    session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
     """
     Get task execution details
     :param share_link:
@@ -643,8 +644,8 @@ async def get_execute_task_detail(
     if login_user.user_id != linsight_session_version_model.user_id:
         # Access by sharing a link
         if (share_link is None or
-                share_link.meta_data is None or
-                share_link.meta_data.get("versionId") != session_version_id):
+            share_link.meta_data is None or
+            share_link.meta_data.get("versionId") != session_version_id):
             return UnAuthorizedError.return_resp()
 
     return resp_200(execute_task_models)
@@ -653,9 +654,9 @@ async def get_execute_task_detail(
 # Creating an Idea Task Message Flow websocket
 @router.websocket("/workbench/task-message-stream", name="task_message_stream")
 async def task_message_stream(
-        websocket: WebSocket,
-        session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
+    websocket: WebSocket,
+    session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     """
     Creating an Idea Task Message Flow websocket
     :param Authorize:
@@ -705,9 +706,9 @@ async def task_message_stream(
 # Batch Download Task Files
 @router.post("/workbench/batch-download-files", summary="Batch Download Task Files")
 async def batch_download_files(
-        zip_name: str = Body(..., description="Package name"),
-        file_info_list: List[DownloadFilesSchema] = Body(..., description="File Information List"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    zip_name: str = Body(..., description="Package name"),
+    file_info_list: List[DownloadFilesSchema] = Body(..., description="File Information List"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Batch Download Task Files
     :param zip_name:
@@ -738,8 +739,8 @@ async def batch_download_files(
 # Get Queue Queue Status
 @router.get("/workbench/queue-status", summary="Get Ideas Queue Queue Status", response_model=UnifiedResponseModel)
 async def get_queue_status(
-        session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Get Ideas Queue Queue Status
     :param session_version_id:
@@ -760,9 +761,9 @@ async def get_queue_status(
 # InspirationmdTransferpdf or docx Mengunduh
 @router.post("/workbench/download-md-to-pdf-or-docx", summary="InspirationmdTransferpdf or docx Mengunduh")
 async def download_md_to_pdf_or_docx(
-        file_info: DownloadFilesSchema = Body(..., description="File information"),
-        to_type: Literal["pdf", "docx"] = Body(..., description="the target file type of the conversion,pdfORdocx"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    file_info: DownloadFilesSchema = Body(..., description="File information"),
+    to_type: Literal["pdf", "docx"] = Body(..., description="the target file type of the conversion,pdfORdocx"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     InspirationmdTransferpdf or docx Mengunduh
     :param file_info:
@@ -806,72 +807,73 @@ async def download_md_to_pdf_or_docx(
 
 @router.post("/sop/add", summary="Add InspirationSOP", response_model=UnifiedResponseModel)
 async def add_sop(
-        sop_obj: SOPManagementSchema = Body(..., description="SOPObjects"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    sop_obj: SOPManagementSchema = Body(..., description="SOPObjects"),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
     """
     Add InspirationSOP
     :return:
     """
-
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
-
-    return await SOPManageService.add_sop(sop_obj, user_id=login_user.user_id)
+    with strict_tenant_filter():
+        return await SOPManageService.add_sop(sop_obj, user_id=login_user.user_id)
 
 
 @router.post("/sop/update", summary="Update IdeasSOP", response_model=UnifiedResponseModel)
 async def update_sop(
-        sop_obj: SOPManagementUpdateSchema = Body(..., description="SOPObjects"),
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
+    sop_obj: SOPManagementUpdateSchema = Body(..., description="SOPObjects"),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
     """
     Update IdeasSOP
     :return:
     """
     sop_obj.user_id = login_user.user_id
-    return await SOPManageService.update_sop(sop_obj, update_version_id=False)
+    with strict_tenant_filter():
+        return await SOPManageService.update_sop(sop_obj, update_version_id=False)
 
 
 @router.get("/sop/list", summary="Get IdeasSOPVertical", response_model=UnifiedResponseModel)
 async def get_sop_list(
-        keywords: str = Query(None, description="Keywords Search"),
-        showcase: bool = Query(None, description="Get featured cases only?"),
-        page: int = Query(1, ge=1, description="Page"),
-        page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-        sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
+    keywords: str = Query(None, description="Keywords Search"),
+    showcase: bool = Query(None, description="Get featured cases only?"),
+    page: int = Query(1, ge=1, description="Page"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+    sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
     """
     Get IdeasSOPVertical
     :return:
     """
 
-    sop_pages = await SOPManageService.get_sop_list(keywords=keywords, showcase=showcase, page=page,
-                                                    page_size=page_size,
-                                                    sort=sort)
+    with strict_tenant_filter():
+        sop_pages = await SOPManageService.get_sop_list(keywords=keywords, showcase=showcase, page=page,
+                                                        page_size=page_size,
+                                                        sort=sort)
     return resp_200(data=sop_pages)
 
 
 @router.get("/sop/record", summary="Get IdeasSOPRecord", response_model=UnifiedResponseModel)
-async def get_sop_record(login_user: UserPayload = Depends(UserPayload.get_admin_user),
+async def get_sop_record(login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                          keyword: str = Query(None, description="Search keyword ..."),
                          sort: str = Query(default='desc', description="Sort ByascORdesc"),
                          page: int = Query(1, ge=1, description="Page"),
                          page_size: int = Query(10, ge=1, le=100, description="Items per page")):
-    res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
+    with strict_tenant_filter():
+        res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
     return resp_200(PageList(total=count, list=res))
 
 
 @router.post("/sop/record/sync", summary="SynchronoussopRecord toSOPGallery", response_model=UnifiedResponseModel)
 async def sync_sop_record(
-        login_user: UserPayload = Depends(UserPayload.get_admin_user),
-        record_ids: list[int] = Body(..., description="sopThe only one in the record sheetid"),
-        override: Optional[bool] = Body(default=False,
-                                        description="Force override or not"),
-        save_new: Optional[bool] = Body(default=False,
-                                        description="Do you want to save as newsop")) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+    record_ids: list[int] = Body(..., description="sopThe only one in the record sheetid"),
+    override: Optional[bool] = Body(default=False,
+                                    description="Force override or not"),
+    save_new: Optional[bool] = Body(default=False,
+                                    description="Do you want to save as newsop")) -> UnifiedResponseModel:
     """
     SynchronousSOP"Log to"SOPGallery
     """
-    repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
+    with strict_tenant_filter():
+        repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
     return resp_200(data={
         "repeat_name": repeat_name,
     }, message="success")
@@ -879,19 +881,21 @@ async def sync_sop_record(
 
 @router.post("/sop/upload", summary="Batch importSOPWarehousing", response_model=UnifiedResponseModel)
 async def upload_sop_file(
-        file: UploadFile = File(..., description="Uploaded bySOPDoc."),
-        override: Optional[bool] = Body(default=False, description="Force override or not"),
-        save_new: Optional[bool] = Body(default=False, description="Do you want to save as newsop"),
-        ignore_error: Optional[bool] = Body(default=False,
-                                            description="Whether to ignore the file and find the wrong record"),
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
+    file: UploadFile = File(..., description="Uploaded bySOPDoc."),
+    override: Optional[bool] = Body(default=False, description="Force override or not"),
+    save_new: Optional[bool] = Body(default=False, description="Do you want to save as newsop"),
+    ignore_error: Optional[bool] = Body(default=False,
+                                        description="Whether to ignore the file and find the wrong record"),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
     """
     Batch importSOPWarehousing
     """
 
     try:
-        success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error,
-                                                                                       override, save_new)
+        with strict_tenant_filter():
+            success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(
+                login_user, file, ignore_error, override, save_new,
+            )
 
         return resp_200(data={
             "success_rows": success_rows,
@@ -906,22 +910,23 @@ async def upload_sop_file(
 
 @router.delete("/sop/remove", summary="Delete IdeasSOP", response_model=UnifiedResponseModel)
 async def remove_sop(
-        sop_ids: List[int] = Body(..., description="SOPUniqueness quantificationIDVertical", embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
+    sop_ids: List[int] = Body(..., description="SOPUniqueness quantificationIDVertical", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
     """
     Delete IdeasSOP
     :return:
     """
 
-    return await SOPManageService.remove_sop(sop_ids, login_user)
+    with strict_tenant_filter():
+        return await SOPManageService.remove_sop(sop_ids, login_user)
 
 
 @router.get("/sop/showcase", summary="InspirationsopLibrary's Featured Cases", response_model=UnifiedResponseModel)
 async def get_sop_banner(
-        page: int = Query(1, ge=1, description="Page"),
-        page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-        sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    page: int = Query(1, ge=1, description="Page"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+    sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     Set or cancel IdeasSOPLibrary's Featured Cases
     :return:
@@ -933,37 +938,38 @@ async def get_sop_banner(
 @router.post("/sop/showcase", summary="Set or unset a featured case for Inspirations",
              response_model=UnifiedResponseModel)
 async def set_sop_banner(
-        sop_id: int = Body(..., description="SOPUniqueness quantificationID"),
-        showcase: bool = Body(..., description="Set as featured case or not"),
-        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
+    sop_id: int = Body(..., description="SOPUniqueness quantificationID"),
+    showcase: bool = Body(..., description="Set as featured case or not"),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
     """
     Set or cancel IdeasSOPLibrary's Featured Cases
     :return:
     """
     # CorrectionSOPpresence or does it
-    existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
-    if not existing_sop:
-        raise NotFoundError.http_exception(msg="sop not found")
-    if showcase:
-        # Setting as featured case requires checking for run results
-        existing_sop = existing_sop[0]
-        if not existing_sop.linsight_version_id:
-            raise SopShowcaseError.http_exception()
-        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(existing_sop.linsight_version_id)
-        if not execute_task_models:
-            raise SopShowcaseError.http_exception()
+    with strict_tenant_filter():
+        existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
+        if not existing_sop:
+            raise NotFoundError.http_exception(msg="sop not found")
+        if showcase:
+            # Setting as featured case requires checking for run results
+            existing_sop = existing_sop[0]
+            if not existing_sop.linsight_version_id:
+                raise SopShowcaseError.http_exception()
+            execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(existing_sop.linsight_version_id)
+            if not execute_task_models:
+                raise SopShowcaseError.http_exception()
 
-    await LinsightSOPDao.set_sop_showcase(sop_id, showcase)
+        await LinsightSOPDao.set_sop_showcase(sop_id, showcase)
     return resp_200()
 
 
 @router.get("/sop/showcase/result", summary="Obtain the results of the execution of the selected cases of Lingsi",
             response_model=UnifiedResponseModel)
 async def get_sop_showcase_result(
-        sop_id: int = Query(None, description="SOPUniqueness quantificationID"),
-        linsight_version_id: str = Query(None,
-                                         description="Inspiration Conversation VersionID, use this parameter first"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    sop_id: int = Query(None, description="SOPUniqueness quantificationID"),
+    linsight_version_id: str = Query(None,
+                                     description="Inspiration Conversation VersionID, use this parameter first"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     if not linsight_version_id:
         # CorrectionSOPpresence or does it
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
@@ -999,11 +1005,11 @@ class IntegratedExecuteRequestBody(BaseModel):
 # Lingsi Integrated Execution Interface
 @router.post("/integrated-execute", summary="Lingsi Integrated Execution Interface")
 async def integrated_execute(
-        request: Request,
-        body_param: str = Form(..., description="Request Body Parameters,JSONString",
-                               example='{"query": "Please write one for mePythonfunction that calculates the sum of two numbers.", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
-        files: List[UploadFile] = File(None, description="Uploaded files list:"),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)
+    request: Request,
+    body_param: str = Form(..., description="Request Body Parameters,JSONString",
+                           example='{"query": "Please write one for mePythonfunction that calculates the sum of two numbers.", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
+    files: List[UploadFile] = File(None, description="Uploaded files list:"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)
 ) -> EventSourceResponse:
     """
     Lingsi Integrated Execution Interface
@@ -1224,7 +1230,7 @@ async def integrated_execute(
 
                     # Get the organization's knowledge base
                     if (linsight_session_version_model.org_knowledge_enabled and
-                            linsight_conf and linsight_conf.max_knowledge_num > 0):
+                        linsight_conf and linsight_conf.max_knowledge_num > 0):
                         try:
                             org_knowledge, _ = await KnowledgeService.get_knowledge(
                                 request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,

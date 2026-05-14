@@ -1,6 +1,6 @@
 import { TabIcon } from "@/components/bs-icons";
 import { userContext } from "@/contexts/userContext";
-import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useLocation } from "react-router-dom";
@@ -17,7 +17,7 @@ export default function HeaderMenu({ }) {
     const canOpenBuild = isAdmin
         || Boolean(user.web_menu?.includes('build'))
         || Boolean(user.web_menu?.includes('create_app'))
-    const canManageWorkbench = canManageModelSettings(user)
+    const canManageWorkbench = canManageWorkbenchConfig(user)
 
     if (['/build/apps', '/build/tools', '/build/client'].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ''))) {
         return <div className="build-tab flex justify-center h-[65px] items-center relative">

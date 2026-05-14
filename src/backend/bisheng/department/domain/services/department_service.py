@@ -440,12 +440,6 @@ class DepartmentService:
             if not depts:
                 return []
 
-            # "临时访客" 仅在开放注册时展示
-            if not _is_registration_enabled():
-                depts = [d for d in depts if d.dept_id != 'BS@guest']
-                if not depts:
-                    return []
-
             # Subtree filter for non-sys-admin: union of dept-admin subtrees
             # and the tenant-admin mount subtree (Child Admin per PRD §4.5).
             if not is_sys_admin:

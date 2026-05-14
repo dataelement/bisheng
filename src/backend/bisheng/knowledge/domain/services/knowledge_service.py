@@ -2,7 +2,6 @@ import asyncio
 import json
 import math
 import os
-import threading
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
@@ -119,29 +118,6 @@ class KnowledgeService(KnowledgeUtils):
 
     async def list_metadata_fields(self, default_user, knowledge_id):
         return await self.metadata_service.list_metadata_fields(default_user, knowledge_id)
-
-    @staticmethod
-    def _run_async_for_sync(coro):
-        """Run async quota helpers from sync service entrypoints."""
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(coro)
-
-        result = {}
-
-        def runner():
-            try:
-                result['value'] = asyncio.run(coro)
-            except Exception as exc:  # pragma: no cover - re-raised in caller thread
-                result['error'] = exc
-
-        thread = threading.Thread(target=runner, daemon=True)
-        thread.start()
-        thread.join()
-        if 'error' in result:
-            raise result['error']
-        return result.get('value')
 
     @classmethod
     async def _get_writable_knowledge(cls, login_user: UserPayload, knowledge_id: int) -> Knowledge:
@@ -711,9 +687,21 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def save_knowledge_file(
-        cls, login_user: UserPayload, req_data: KnowledgeFileProcess
+        cls,
+        login_user: UserPayload,
+        req_data: KnowledgeFileProcess,
+        *,
+        upload_limit_bytes: Optional[int] = None,
     ):
-        """Process uploaded files, Uploaded to onlyminioAndmysql"""
+        """Process uploaded files, Uploaded to only minio and mysql.
+
+        ``upload_limit_bytes`` is the per-user knowledge-space cap in bytes
+        (``None`` = no cap). Resolve it in the async route layer via
+        ``QuotaService.get_knowledge_space_upload_limit_bytes`` and pass it
+        in — avoids spinning up a private event loop in the sync threadpool
+        worker, which would clash with the SQLAlchemy AsyncEngine bound to
+        the FastAPI main loop.
+        """
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
@@ -731,9 +719,7 @@ class KnowledgeService(KnowledgeUtils):
         created_file_ids = []
         preview_cache_keys = []
         split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
-        limit_bytes = cls._run_async_for_sync(
-            QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-        )
+        limit_bytes = upload_limit_bytes
         current_total_file_size = int(KnowledgeFileDao.get_user_upload_total_file_size(login_user.user_id))
         try:
             for one in req_data.file_list:
@@ -772,12 +758,14 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         background_tasks: BackgroundTasks,
         req_data: KnowledgeFileProcess,
+        *,
+        upload_limit_bytes: Optional[int] = None,
     ) -> List[KnowledgeFile]:
         from bisheng.worker.knowledge import file_worker
 
         """Process uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = (
-            cls.save_knowledge_file(login_user, req_data)
+            cls.save_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
         )
 
         # Asynchronous processing of file parsing and warehousing, To voters if approvedcache_keyIf data can be obtained, use thecachefor inbound operations
@@ -789,11 +777,16 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def sync_process_knowledge_file(
-        cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        req_data: KnowledgeFileProcess,
+        *,
+        upload_limit_bytes: Optional[int] = None,
     ) -> List[KnowledgeFile]:
         """Sync uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = (
-            cls.save_knowledge_file(login_user, req_data)
+            cls.save_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
         )
 
         if process_files:

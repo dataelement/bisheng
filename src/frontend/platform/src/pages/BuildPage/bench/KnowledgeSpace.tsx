@@ -12,7 +12,7 @@ import { userContext } from "@/contexts/userContext";
 import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { NonNegativeInput, Textarea } from "@/components/bs-ui/input";
-import { canManageModelSettings, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
+import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useState } from "react";
@@ -42,7 +42,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
     const { user } = useContext(userContext);
     const navigate = useNavigate();
     const showSensitiveCheckControl = false;
-    const canManageWorkbench = canManageModelSettings(user);
+    const canManageWorkbench = canManageWorkbenchConfig(user);
     const isGlobalSuper = isGlobalSuperUser(user);
 
     const loadDepartmentSpaces = async () => {

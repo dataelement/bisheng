@@ -372,11 +372,11 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 #      status:
 #        - success
 #        - failure
-#trigger:
-#  branch:
-#  - feat/2.5.0
-#  event:
-#  - push
+trigger:
+  branch:
+  - feat/**
+  event:
+  - push
 
 volumes:
 - name: bisheng-cache

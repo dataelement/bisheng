@@ -22,7 +22,7 @@ import { ToggleSection } from "./ToggleSection";
 import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
-import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 export interface FormErrors {
     welcomeMessage: string;
@@ -118,7 +118,7 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && !canManageModelSettings(user)) {
+        if (user.user_id && !canManageWorkbenchConfig(user)) {
             navigate('/build/apps')
         }
     }, [user, navigate])

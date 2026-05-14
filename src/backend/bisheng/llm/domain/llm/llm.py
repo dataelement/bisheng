@@ -105,7 +105,7 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
-    params["base_url"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    params["base_url"] = params.get("base_url") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
     extra_body = params.pop('extra_body', {}) or params.pop('model_kwargs', {})
 
     extra_body['enable_search'] = model_config.get('enable_web_search', False)
