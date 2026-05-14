@@ -2,24 +2,6 @@
 from .base import BaseErrorCode
 
 
-# This skill has been deleted
-class SkillDeletedError(BaseErrorCode):
-    Code = 13001
-    Msg = "This skill has been deleted"
-
-
-# The current skill is not online and cannot be spoken to directly
-class SkillNotOnlineError(BaseErrorCode):
-    Code = 13002
-    Msg = "The current skill is not online and cannot be spoken to directly"
-
-
-# Current compilation failed
-class SkillNotBuildError(BaseErrorCode):
-    Code = 13003
-    Msg = "The current skill has not been compiled and passed, it is not possible to talk directly"
-
-
 # Backend Service Exception
 class ChatServiceError(BaseErrorCode):
     Code = 13004

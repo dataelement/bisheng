@@ -1,6 +1,6 @@
 import { useEffect, useState, type FC } from 'react';
 import { CrossCircledIcon } from '@radix-ui/react-icons';
-import type { TConversation } from '~/data-provider/data-provider/src';
+import type { TConversation } from '~/types/chat';
 import { useBookmarkContext } from '~/Providers/BookmarkContext';
 import { BookmarkItems, BookmarkItem } from '~/components/Bookmarks';
 import { useLocalize } from '~/hooks';

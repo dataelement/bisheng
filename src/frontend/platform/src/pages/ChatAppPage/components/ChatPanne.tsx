@@ -100,7 +100,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
             }
 
             if (isV1) {
-                const res = await loadFlowHistoryMsg(_flow.id, chatId, {
+                await loadFlowHistoryMsg(_flow.id, chatId, {
                     lastMsg: ''
                 });
                 setAutoRun(true);
@@ -287,7 +287,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     <AppAvator id={workflow.name} url={workflow.logo} flowType={10} ></AppAvator>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane  autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} />
+                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} />
             </div>
         }
     </div>

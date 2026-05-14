@@ -1,5 +1,5 @@
 import { Feather } from 'lucide-react';
-import { EModelEndpoint, alternateName } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, alternateName } from '~/types/chat';
 import {
   AzureMinimalIcon,
   OpenAIMinimalIcon,

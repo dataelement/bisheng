@@ -17,21 +17,6 @@ class VersionNameExistsError(BaseErrorCode):
     Msg: str = 'Version name already exists'
 
 
-class FlowNameExistsError(BaseErrorCode):
-    Code: int = 10503
-    Msg: str = 'Duplicate skill name'
-
-
-class NotFoundFlowError(BaseErrorCode):
-    Code: int = 10520
-    Msg: str = 'Skill does not exist.'
-
-
-class FlowOnlineEditError(BaseErrorCode):
-    Code: int = 10521
-    Msg: str = 'Skills are live and cannot be edited'
-
-
 class WorkFlowOnlineEditError(BaseErrorCode):
     Code: int = 10525
     Msg: str = 'Workflow is live and not editable'

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Cross1Icon } from '@radix-ui/react-icons';
-import type { TPrompt } from '~/data-provider/data-provider/src';
-import { useUpdatePromptLabels } from '~/data-provider';
+import type { TPrompt } from '~/types/chat';
+import { useUpdatePromptLabels } from '~/hooks/queries/data-provider';
 import { Input } from '~/components/ui';
 
 const PromptForm = ({ selectedPrompt }: { selectedPrompt?: TPrompt }) => {

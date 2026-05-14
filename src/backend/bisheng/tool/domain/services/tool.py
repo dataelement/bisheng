@@ -15,10 +15,12 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatError, ToolTypeNameError, \
     ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
-    ToolMcpSchemaError
+    ToolMcpSchemaError, ToolMcpStdioError
+from bisheng.common.services.config_service import settings
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
@@ -246,6 +248,11 @@ class ToolServices(BaseModel):
                                           is_preset=ToolPresetType.MCP.value,
                                           openapi_schema=file_content,
                                           children=[])
+            mcp_conf = await settings.get_mcp_conf()
+            if not mcp_conf.enable_stdio:
+                client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
+                if client_type == McpClientType.STDIO.value:
+                    raise ToolMcpStdioError()
             # Instantiatemcpservice object, getting a list of tools
             client = await ClientManager.connect_mcp_from_json(result)
 
@@ -263,6 +270,7 @@ class ToolServices(BaseModel):
             break
         if tool_type is None:
             raise ToolMcpSchemaError()
+
         return tool_type
 
     @classmethod

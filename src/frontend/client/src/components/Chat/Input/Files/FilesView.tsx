@@ -1,7 +1,7 @@
-import { FileSources, FileContext } from '~/data-provider/data-provider/src';
-import type { TFile } from '~/data-provider/data-provider/src';
+import { FileSources, FileContext } from '~/types/chat';
+import type { TFile } from '~/types/chat';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle } from '~/components';
-import { useGetFiles } from '~/data-provider';
+import { useGetFiles } from '~/hooks/queries/data-provider';
 import { DataTable, columns } from './Table';
 import { useLocalize } from '~/hooks';
 

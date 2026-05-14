@@ -1,4 +1,4 @@
-import { TPromptGroup } from '~/data-provider/data-provider/src';
+import { TPromptGroup } from '~/types/chat';
 import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
 
 export default function PromptCard({ promptGroup }: { promptGroup?: TPromptGroup }) {

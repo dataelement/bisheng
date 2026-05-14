@@ -1,4 +1,4 @@
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
 import type { TModelSelectProps } from '~/common';
 import type { FC } from 'react';
 

@@ -10,7 +10,7 @@ from bisheng.api.services.flow import FlowService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
-from bisheng.chat.types import WorkType
+from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError, AppWriteAuthError
@@ -40,14 +40,16 @@ async def check_app_write_auth(
         flow_type: int = Query(..., description="Apply type")
 ):
     """ Check if the user has administrative rights to the app """
-    check_auth_type = AccessType.FLOW_WRITE
     if flow_type == FlowType.ASSISTANT.value:
-        check_auth_type = AccessType.ASSISTANT_WRITE
         flow_info = await AssistantDao.aget_one_assistant(flow_id)
-    else:
+        check_auth_type = AccessType.ASSISTANT_WRITE
+    elif flow_type == FlowType.WORKFLOW.value:
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
-        if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
-            check_auth_type = AccessType.WORKFLOW_WRITE
+        check_auth_type = AccessType.WORKFLOW_WRITE
+        if flow_info and flow_info.flow_type != FlowType.WORKFLOW.value:
+            flow_info = None
+    else:
+        raise NotFoundError.http_exception()
     if not flow_info:
         raise NotFoundError.http_exception()
     owner_id = flow_info.user_id
@@ -176,7 +178,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
-    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id, FlowType.WORKFLOW.value)
+    FlowService.create_flow_hook(request, login_user, db_flow)
     return resp_200(data=ret)
 
 
@@ -295,13 +297,15 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
 @router.get('/list', status_code=200)
 def read_flows(*,
                login_user: UserPayload = Depends(UserPayload.get_login_user),
-               name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+               name: str = Query(default=None,
+                                 description='accordingnameFind databases with fuzzy searches for descriptions'),
                tag_id: int = Query(default=None, description='labelID'),
-               flow_type: int = Query(default=None, description='Type 1 flow 5 assitant 10 workflow '),
+               flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
                page_size: int = Query(default=10, description='Items per page'),
                page_num: int = Query(default=1, description='Page'),
                status: int = None,
-               managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
+               managed: bool = Query(default=False,
+                                     description='Whether to query the list of apps with administrative permissions')):
     """Read all flows."""
     data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size,
                                                 managed)

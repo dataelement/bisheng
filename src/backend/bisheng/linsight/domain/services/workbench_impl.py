@@ -12,11 +12,7 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
-from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
-    SubmitFileSchema
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -31,13 +27,16 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
-from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
+from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
+    SubmitFileSchema
+from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -152,6 +151,7 @@ class LinsightWorkbenchImpl:
             message_session = MessageSession(
                 chat_id=chat_id,
                 flow_id=ApplicationTypeEnum.LINSIGHT.value,
+                name='New Chat',
                 flow_name='New Chat',
                 flow_type=FlowType.LINSIGHT.value,
                 user_id=login_user.user_id
@@ -294,7 +294,8 @@ class LinsightWorkbenchImpl:
         """Get and validate the workbench configuration"""
         workbench_conf = await LLMService.get_workbench_llm()
         if not workbench_conf or not workbench_conf.task_model:
-            raise cls.BishengLLMError("The task has been terminated, please contact the administrator to check the status of the Ideas task execution model")
+            raise cls.BishengLLMError(
+                "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model")
         return workbench_conf
 
     @classmethod
@@ -316,8 +317,7 @@ class LinsightWorkbenchImpl:
         """Update session title"""
         session = await MessageSessionDao.async_get_one(chat_id)
         if session:
-            session.flow_name = title
-            await MessageSessionDao.async_insert_one(session)
+            await MessageSessionDao.update_session_name(chat_id, title)
 
     @classmethod
     async def get_linsight_session_version_list(cls, session_id: str) -> List[LinsightSessionVersion]:
@@ -789,16 +789,25 @@ class LinsightWorkbenchImpl:
         """
         # Read file contents
         try:
-            texts, _, parse_type, _ = await async_read_chunk_text(
-                invoke_user_id=invoke_user_id,
-                input_file=file_path,
-                file_name=original_filename,
+            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+            from bisheng.api.v1.schemas import FileProcessBase
+
+            file_rule = FileProcessBase(
+                knowledge_id=0,
                 separator=['\n\n', '\n'],
                 separator_rule=['after', 'after'],
                 chunk_size=1000,
                 chunk_overlap=100,
-                no_summary=True
             )
+            pipeline = TempFilePipeline(
+                invoke_user_id=invoke_user_id,
+                local_file_path=file_path,
+                file_name=original_filename,
+                file_rule=file_rule,
+            )
+            result = await pipeline.arun()
+            texts = [doc.page_content for doc in result.documents]
+            parse_type = type(pipeline.loader).__name__ if pipeline.loader else "local"
 
             # BuatmarkdownContents
             markdown_content = "\n".join(texts)
@@ -842,8 +851,8 @@ class LinsightWorkbenchImpl:
                                                                      invoke_user_id=invoke_user_id)
 
         # Create Vector Store
-        vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-        es_client = decide_vectorstores(collection_name, "ElasticKeywordsSearch", FakeEmbedding())
+        vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
+        es_client = KnowledgeRag.init_es_vectorstore(collection_name)
 
         # Adding Text to Vector Storage
         metadatas = [{"file_id": file_id} for _ in texts]
@@ -924,8 +933,8 @@ class LinsightWorkbenchImpl:
         tool_ids = cls._extract_tool_ids(session_version.tools)
 
         # Tools to get workbench configurationsID
-        ws_config = await WorkStationService.aget_config()
-        config_tool_ids = cls._extract_tool_ids(ws_config.linsightConfig.tools or [])
+        linsight_config = await WorkStationService.get_linsight_config()
+        config_tool_ids = cls._extract_tool_ids(linsight_config.tools or [])
 
         # todo Better tool initialization scheme
         if need_upload and file_dir:
@@ -934,7 +943,8 @@ class LinsightWorkbenchImpl:
                                                                       user_id=session_version.user_id)
                 tools.extend(bisheng_code_tool)
             except Exception as e:
-                logger.error(f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={str(e)}")
+                logger.error(
+                    f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={str(e)}")
 
         # Filter Effective ToolsID
         valid_tool_ids = [tid for tid in tool_ids if tid in config_tool_ids]
@@ -1007,10 +1017,12 @@ class LinsightWorkbenchImpl:
                 content=sop_content,
             ))
         except cls.ToolsInitializationError as e:
-            logger.exception(f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={str(e)}")
+            logger.exception(
+                f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={str(e)}")
 
         except Exception as e:
-            logger.exception(f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={str(e)}")
+            logger.exception(
+                f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={str(e)}")
 
     @classmethod
     async def _get_history_summary(cls, session_version_id: str) -> List[str]:

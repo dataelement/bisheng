@@ -1,9 +1,9 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useCallback } from 'react';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 import { useCustomAudioRef, MediaSourceAppender, usePauseGlobalAudio } from '~/hooks/Audio';
 import { getLatestText, logger } from '~/utils';
 import { useAuthContext } from '~/hooks';

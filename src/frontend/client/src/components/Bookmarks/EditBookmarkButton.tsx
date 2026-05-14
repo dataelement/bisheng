@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FC } from 'react';
-import type { TConversationTag } from '~/data-provider/data-provider/src';
+import type { TConversationTag } from '~/types/chat';
 import { TooltipAnchor, OGDialogTrigger } from '~/components/ui';
 import BookmarkEditDialog from './BookmarkEditDialog';
 import { EditIcon } from '~/components/svg';

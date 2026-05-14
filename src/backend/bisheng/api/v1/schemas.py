@@ -4,10 +4,10 @@ from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 
 from bisheng.database.models.assistant import AssistantBase
-from bisheng.database.models.flow import FlowCreate, FlowRead
+from bisheng.database.models.flow import FlowCreate, FlowRead, FlowType
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
@@ -113,7 +113,7 @@ class AddChatMessages(BaseModel):
 
 class ChatList(BaseModel):
     """Chat message list."""
-
+    name: str = None
     flow_name: str = None
     flow_description: str = None
     flow_id: str = None
@@ -123,6 +123,14 @@ class ChatList(BaseModel):
     flow_type: int = None
     latest_message: Optional[ChatMessageRead] = None
     logo: Optional[str] = None
+
+
+class ChatListGroup(BaseModel):
+    """Chat list grouped by time dimension."""
+
+    group_name: str = Field(description='Group display name, e.g. "今天", "昨天", "2025"')
+    group_key: str = Field(description='Group identifier, e.g. "today", "yesterday", "year_2025"')
+    sessions: List[ChatList] = Field(default_factory=list, description='List of chat sessions in this group')
 
 
 class FlowGptsOnlineList(BaseModel):
@@ -301,7 +309,8 @@ class FlowVersionCreate(BaseModel):
     description: Optional[str] = Field(default=None, description='Version description')
     data: Optional[Dict] = Field(default=None, description='Skill Version Node Data Data')
     original_version_id: Optional[int] = Field(default=None, description='Version Source VersionID')
-    flow_type: Optional[int] = Field(default=1, description='Type of version')  # 1:common version 10:new Version
+    flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value,
+                                     description='Type of version')  # 10:new Version
 
 
 class FlowCompareReq(BaseModel):
@@ -374,24 +383,27 @@ class WSModel(BaseModel):
 class WSPrompt(BaseModel):
     enabled: bool
     prompt: Optional[str] = None
-    model: Optional[str] = None
-    tool: Optional[str] = None  # Enumeration of tools
-    params: Optional[dict] = None  # Tools Input Parameters
-    bingKey: Optional[str] = None
-    bingUrl: Optional[str] = None
 
 
+# linsight Configuration
 class LinsightConfig(BaseModel):
     """
     Ideas Management Configuration
     """
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+
     linsight_entry: bool = Field(default=True, description='Whether to open the Ideas entrance')
     input_placeholder: str = Field(..., description='Input Box Prompt')
-    tools: Optional[List[Dict]] = Field(None, description='List of optional tools for Ideas')
+    tools: Optional[List[Dict]] = Field(default=None, description='List of optional tools for Ideas')
+    tab_display_name: Optional[str] = Field(default='Linsight', description='Tab Display Name')
 
 
+# Daily Chat Configuration
 class WorkstationConfig(BaseModel):
-    maxTokens: Optional[int] = Field(default=1500, description='MaxtokenQuantity')
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+
+    tabDisplayName: Optional[str] = Field(default='', alias='tabDisplayName', description='Tab Display Name')
+    maxTokens: Optional[int] = Field(default=15000, description='Max chunk size for knowledge rag or web search')
     sidebarIcon: Optional[Icon] = None
     assistantIcon: Optional[Icon] = None
     sidebarSlogan: Optional[str] = Field(default='', description='Sidebarslogan')
@@ -399,7 +411,6 @@ class WorkstationConfig(BaseModel):
     functionDescription: Optional[str] = Field(default='')
     inputPlaceholder: Optional[str] = ''
     models: Optional[Union[List[WSModel], str]] = None
-    voiceInput: Optional[WSPrompt] = None
     webSearch: Optional[WSPrompt] = None
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
@@ -410,7 +421,19 @@ class WorkstationConfig(BaseModel):
     applicationCenterDescription: Optional[str] = Field(default='', max_length=1000,
                                                         pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                         description='App Center Description')
-    linsightConfig: Optional[LinsightConfig] = Field(default=None, description='Inspiration Configuration')
+
+
+class SubscriptionConfig(BaseModel):
+    system_prompt: Optional[str] = Field(default='', description='System Prompt')
+    user_prompt: Optional[str] = Field(default='', description='User Prompt')
+    max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
+    feedback_tips: Optional[str] = Field(default='', description='Feedback Tips')
+
+
+class KnowledgeSpaceConfig(BaseModel):
+    system_prompt: Optional[str] = Field(default='', description='System Prompt')
+    user_prompt: Optional[str] = Field(default='', description='User Prompt')
+    max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
 
 
 class ExcelRule(BaseModel):
@@ -510,6 +533,11 @@ class KnowledgeFileReProcess(FileProcessBase):
 class FrequentlyUsedChat(BaseModel):
     user_link_type: str = Field(..., description='User-associatedtype')
     type_detail: str = Field(..., description='User-associatedtype_id')
+
+
+class UsedAppPin(BaseModel):
+    """Schema for pinning/unpinning used apps"""
+    flow_id: str = Field(..., description='Application ID to pin/unpin')
 
 
 class UpdateKnowledgeReq(BaseModel):

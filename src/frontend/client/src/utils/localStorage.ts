@@ -1,4 +1,4 @@
-import { LocalStorageKeys, TConversation } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys, TConversation } from '~/types/chat';
 
 export function getLocalStorageItems() {
   const items = {

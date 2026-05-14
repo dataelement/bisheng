@@ -20,3 +20,8 @@ class ServerAddAllError(BaseErrorCode):
 class ServerAddError(BaseErrorCode):
     Code: int = 10803
     Msg: str = 'Failed to add service provider, some models failed to initialize'
+
+
+class WorkbenchEmbeddingError(BaseErrorCode):
+    Code: int = 10810
+    Msg: str = 'Please configure the workbench embedding model.'

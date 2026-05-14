@@ -2,9 +2,9 @@ import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle } from '~/components';
-import { useGetDownloadUrl, useGetKnowledgeFiles, useModelBuilding } from '~/data-provider';
-import type { TFile } from '~/data-provider/data-provider/src';
-import { dataService } from '~/data-provider/data-provider/src';
+import { useGetDownloadUrl, useGetKnowledgeFiles, useModelBuilding } from '~/hooks/queries/data-provider';
+import type { TFile } from '~/types/chat';
+import { dataService } from '~/types/chat';
 import { useLocalize, useToast } from '~/hooks';
 import { DataTableKnowledge, getKnowledgeColumns } from './Table';
 

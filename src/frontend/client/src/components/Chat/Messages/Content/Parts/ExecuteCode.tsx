@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useRecoilValue } from 'recoil';
-import type { TAttachment } from '~/data-provider/data-provider/src';
+import type { TAttachment } from '~/types/chat';
 import ProgressText from '~/components/Chat/Messages/Content/ProgressText';
 import FinishedIcon from '~/components/Chat/Messages/Content/FinishedIcon';
 import MarkdownLite from '~/components/Chat/Messages/Content/MarkdownLite';

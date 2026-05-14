@@ -1,7 +1,7 @@
 import React from 'react';
 import { Plus, Minus } from 'lucide-react';
 import TextareaAutosize from 'react-textarea-autosize';
-import type { TExample } from '~/data-provider/data-provider/src';
+import type { TExample } from '~/types/chat';
 import type { TSetExample } from '~/common';
 import { Button, Label } from '~/components/ui';
 import { cn, defaultTextProps } from '~/utils/';

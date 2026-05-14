@@ -1,6 +1,6 @@
 // file deepcode ignore HardcodedNonCryptoSecret: No hardcoded secrets
-import { ViolationTypes, ErrorTypes } from '~/data-provider/data-provider/src';
-import type { TOpenAIMessage } from '~/data-provider/data-provider/src';
+import { ViolationTypes, ErrorTypes } from '~/types/chat';
+import type { TOpenAIMessage } from '~/types/chat';
 import type { LocalizeFunction } from '~/common';
 import { formatJSON, extractJson, isJson } from '~/utils/json';
 import useLocalize from '~/hooks/useLocalize';

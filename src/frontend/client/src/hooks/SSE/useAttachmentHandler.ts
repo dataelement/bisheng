@@ -1,5 +1,5 @@
 import { useSetRecoilState } from 'recoil';
-import type { TAttachment, EventSubmission } from '~/data-provider/data-provider/src';
+import type { TAttachment, EventSubmission } from '~/types/chat';
 import store from '~/store';
 
 export default function useAttachmentHandler() {

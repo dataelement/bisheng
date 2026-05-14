@@ -10,7 +10,7 @@ from sqlmodel import JSON, Field, select, update, text, Column, DateTime
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.database.models.flow import Flow
+from bisheng.database.models.flow import Flow, FlowType
 
 
 class FlowVersionBase(SQLModelSerializable):
@@ -20,7 +20,7 @@ class FlowVersionBase(SQLModelSerializable):
     data: Optional[Dict] = Field(default=None, description="Version Data")
     description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     user_id: Optional[int] = Field(default=None, index=True, description="creator")
-    flow_type: Optional[int] = Field(default=1, description="Type of version")
+    flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value, description="Type of version")
     is_current: Optional[int] = Field(default=0, description="Is version in use")
     is_delete: Optional[int] = Field(default=0, description="whether delete")
     original_version_id: Optional[int] = Field(default=None, description="Source Version ofID")

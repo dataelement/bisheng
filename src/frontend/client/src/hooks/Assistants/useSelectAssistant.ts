@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import { isAssistantsEndpoint } from '~/data-provider/data-provider/src';
-import type { AssistantsEndpoint, TConversation, TPreset } from '~/data-provider/data-provider/src';
+import { isAssistantsEndpoint } from '~/types/chat';
+import type { AssistantsEndpoint, TConversation, TPreset } from '~/types/chat';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
 import { useChatContext } from '~/Providers/ChatContext';
 import useAssistantListMap from './useAssistantListMap';

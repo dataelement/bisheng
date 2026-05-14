@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import { useNavigate } from 'react-router-dom';
+import useLocalize from '~/hooks/useLocalize';
 import {
   Constants,
   FileSources,
@@ -8,7 +9,7 @@ import {
   isParamEndpoint,
   LocalStorageKeys,
   isAssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
 import type {
   TPreset,
@@ -16,7 +17,7 @@ import type {
   TModelsConfig,
   TConversation,
   TEndpointsConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { AssistantListItem } from '~/common';
 import {
   getEndpointField,
@@ -26,7 +27,7 @@ import {
   getModelSpecIconURL,
   updateLastSelectedModel,
 } from '~/utils';
-import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
+import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import useAssistantListMap from './Assistants/useAssistantListMap';
 import { usePauseGlobalAudio } from './Audio';
 import { mainTextareaId } from '~/common';
@@ -34,6 +35,7 @@ import store from '~/store';
 
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
+  const localize = useLocalize();
   const { data: startupConfig } = useGetStartupConfig();
   const clearAllConversations = store.useClearConvoState();
   const defaultPreset = useRecoilValue(store.defaultPreset);
@@ -213,7 +215,7 @@ const useNewConvo = (index = 0) => {
 
       const conversation = {
         conversationId: Constants.NEW_CONVO as string,
-        title: 'New Chat',
+        title: localize('com_ui_new_chat'),
         endpoint: null,
         ...template,
         flowType: 15,

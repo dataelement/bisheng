@@ -9,14 +9,14 @@ import { typesContextType } from "../types/typesContext";
 
 const initialValue: typesContextType = {
   reactFlowInstance: null,
-  setReactFlowInstance: () => {},
-  deleteNode: () => {},
+  setReactFlowInstance: () => { },
+  deleteNode: () => { },
   types: {},
-  setTypes: () => {},
+  setTypes: () => { },
   templates: {},
-  setTemplates: () => {},
+  setTemplates: () => { },
   data: {},
-  setData: () => {},
+  setData: () => { },
 };
 
 export const typesContext = createContext<typesContextType>(initialValue);
@@ -88,7 +88,7 @@ export function TypesProvider({ children }: { children: ReactNode }) {
     }
 
     // Start the initial interval.
-    getTypes()
+    // getTypes()
     // intervalId = setInterval(getTypes, delay);
 
     return () => {

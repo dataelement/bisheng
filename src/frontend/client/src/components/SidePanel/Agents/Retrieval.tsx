@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Capabilities } from '~/data-provider/data-provider/src';
+import { Capabilities } from '~/types/chat';
 import { useFormContext, Controller, useWatch } from 'react-hook-form';
 import {
   Checkbox,

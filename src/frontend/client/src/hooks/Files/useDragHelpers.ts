@@ -5,14 +5,14 @@ import { useDrop } from 'react-dnd';
 import { NativeTypes } from 'react-dnd-html5-backend';
 import { useRecoilValue } from 'recoil';
 import { File_Accept } from '~/common';
-import { useGetBsConfig } from '~/data-provider';
-import type * as t from '~/data-provider/data-provider/src';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import type * as t from '~/types/chat';
 import {
   AgentCapabilities,
   EModelEndpoint,
   isAgentsEndpoint,
   QueryKeys,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import store from '~/store';
 import useFileHandling from './useFileHandling';
 import { useToastContext } from '~/Providers';

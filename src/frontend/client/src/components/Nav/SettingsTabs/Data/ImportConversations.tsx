@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Import } from 'lucide-react';
-import type { TError } from '~/data-provider/data-provider/src';
-import { useUploadConversationsMutation } from '~/data-provider';
+import type { TError } from '~/types/chat';
+import { useUploadConversationsMutation } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { Spinner } from '~/components/svg';
 import { useLocalize } from '~/hooks';

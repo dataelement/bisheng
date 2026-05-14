@@ -2,7 +2,7 @@
 
 import { Loader2, Pause, Volume2 } from "lucide-react"
 import { textToSpeech } from "~/api"
-import { useGetWorkbenchModelsQuery } from "~/data-provider"
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider"
 import { useToastContext } from "~/Providers"
 import { cn } from "~/utils"
 import {

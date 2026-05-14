@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { TConversationTag } from '~/data-provider/data-provider/src';
+import type { TConversationTag } from '~/types/chat';
 
 type TBookmarkContext = { bookmarks: TConversationTag[] };
 

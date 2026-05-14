@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { EModelEndpoint, KnownEndpoints } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, KnownEndpoints } from '~/types/chat';
 import { CustomMinimalIcon } from '~/components/svg';
 import { IconContext } from '~/common';
 import { cn } from '~/utils';

@@ -128,6 +128,7 @@ export default function Roles() {
         return <EditRole
             id={state.role.id || -1}
             name={state.role.role_name || ''}
+            knowledgeSpaceFileLimit={state.role.knowledge_space_file_limit || 40}
             groupId={state.group}
             onBeforeChange={checkSameName}
             onChange={() => {

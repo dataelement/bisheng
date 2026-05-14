@@ -57,6 +57,8 @@ export const usePublishDashboard = () => {
 
     return {
         publish: handlePublish,
+        publishAsync: (id: string, published: boolean) =>
+            mutation.mutateAsync({ id, published }),
         isPublishing: mutation.isLoading,
         mutation,
     };

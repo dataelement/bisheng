@@ -7,8 +7,8 @@ import {
   isParamEndpoint,
   EModelEndpoint,
   Permissions,
-} from '~/data-provider/data-provider/src';
-import type { TConfig, TInterfaceConfig } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TConfig, TInterfaceConfig } from '~/types/chat';
 import type { NavLink } from '~/common';
 import AgentPanelSwitch from '~/components/SidePanel/Agents/AgentPanelSwitch';
 import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';

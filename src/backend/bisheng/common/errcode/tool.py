@@ -49,3 +49,8 @@ class ToolSchemaServerError(BaseErrorCode):
 class ToolMcpSchemaError(BaseErrorCode):
     Code: int = 15024
     Msg: str = 'mcpTool configuration parsing failed, please check if the content matchesmcpConfigure Format: {exception}'
+
+
+class ToolMcpStdioError(BaseErrorCode):
+    Code: int = 15025
+    Msg: str = 'mcpTool not support stdio mode'

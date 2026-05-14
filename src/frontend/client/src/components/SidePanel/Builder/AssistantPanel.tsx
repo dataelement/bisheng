@@ -1,20 +1,20 @@
 import { useState, useMemo } from 'react';
 import { useForm, FormProvider, Controller, useWatch } from 'react-hook-form';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import {
   Tools,
   Capabilities,
   actionDelimiter,
   ImageVisionTool,
   defaultAssistantFormValues,
-} from '~/data-provider/data-provider/src';
-import type { FunctionTool, TConfig } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { FunctionTool, TConfig } from '~/types/chat';
 import type { AssistantForm, AssistantPanelProps } from '~/common';
 import {
   useCreateAssistantMutation,
   useUpdateAssistantMutation,
   useAvailableAgentToolsQuery,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import { cn, cardStyle, defaultTextProps, removeFocusOutlines } from '~/utils';
 import AssistantConversationStarters from './AssistantConversationStarters';
 import { useAssistantsMapContext, useToastContext } from '~/Providers';

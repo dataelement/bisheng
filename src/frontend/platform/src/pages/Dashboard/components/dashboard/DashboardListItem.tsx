@@ -127,15 +127,15 @@ export function DashboardListItem({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem
+                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem
                         onClick={() => setTimeout(() => {
                             setIsEditing(true)
                         }, 300)} // hold close dropdownmenu
                     >{t('rename')}</DropdownMenuItem>}
-                    {appConfig.isPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
+                    {appConfig.isDashboardPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
+                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
                     <DropdownMenuItem onClick={() => onShare(dashboard.id)}>{t('share')}</DropdownMenuItem>
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
+                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
                         {t('delete')}
                     </DropdownMenuItem>}
                 </DropdownMenuContent>

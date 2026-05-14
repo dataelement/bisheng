@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { EToolResources } from '~/data-provider/data-provider/src';
+import { EToolResources } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
-import { useDeleteFilesMutation } from '~/data-provider';
+import { useDeleteFilesMutation } from '~/hooks/queries/data-provider';
 import { useFileDeletion } from '~/hooks/Files';
 import FileContainer from './FileContainer';
 import { logger } from '~/utils';

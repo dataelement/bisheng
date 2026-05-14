@@ -1,4 +1,4 @@
-import { useGetCategories } from '~/data-provider';
+import { useGetCategories } from '~/hooks/queries/data-provider';
 import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
 import useLocalize, { TranslationKeys } from '~/hooks/useLocalize';
 

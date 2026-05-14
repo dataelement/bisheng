@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 
 import { MessageCircleDashed } from 'lucide-react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { Constants, getConfigDefaults } from '~/data-provider/data-provider/src';
-import { useGetStartupConfig } from '~/data-provider';
+import { Constants, getConfigDefaults } from '~/types/chat';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { Switch } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';

@@ -1,6 +1,6 @@
 import copy from 'copy-to-clipboard';
 import { InfoIcon } from 'lucide-react';
-import { Tools } from '~/data-provider/data-provider/src';
+import { Tools } from '~/types/chat';
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import type { CodeBarProps } from '~/common';
 import LogContent from '~/components/Chat/Messages/Content/Parts/LogContent';
@@ -128,7 +128,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         plugin={plugin === true}
         allowExecution={allowExecution}
       />
-      <div className={cn(classProp, 'overflow-y-auto p-4')}>
+      <div className={cn(classProp, 'overflow-y-auto scrollbar-on-hover p-4')}>
         <code
           ref={codeRef}
           className={cn(

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Settings } from 'lucide-react';
 import type { FC } from 'react';
-import type { TModelSpec, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import type { TModelSpec, TEndpointsConfig } from '~/types/chat';
 import { SetKeyDialog } from '~/components/Input/SetKeyDialog';
 import { useLocalize, useUserKey } from '~/hooks';
 import { cn, getEndpointField } from '~/utils';

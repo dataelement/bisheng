@@ -1,7 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { Layers3, Crown, Zap } from 'lucide-react';
-import type { TPrompt, TPromptGroup } from '~/data-provider/data-provider/src';
+import type { TPrompt, TPromptGroup } from '~/types/chat';
 import { Tag, TooltipAnchor, Label } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';

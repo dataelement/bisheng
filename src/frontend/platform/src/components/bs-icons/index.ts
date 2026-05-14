@@ -22,11 +22,11 @@ export { SystemIcon } from './menu/system';
 export { TechnologyIcon } from './menu/technology';
 export { MoonIcon } from './moon';
 export { MoveOneIcon } from './moveOne';
-export { NewApplicationIcon } from './newApplication';
+
 export { WordIcon } from './office';
 export { PlusIcon } from './plus';
 export { PlusBoxIcon } from './plusBox';
-export { QuestionMarkIcon } from './questionMark';
+
 export { QuitIcon } from './quit';
 export { SaveIcon } from './save';
 export { SearchIcon } from './search';

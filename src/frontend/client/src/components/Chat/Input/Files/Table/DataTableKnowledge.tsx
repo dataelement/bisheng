@@ -12,7 +12,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { dataService, FileContext } from '~/data-provider/data-provider/src';
+import { dataService, FileContext } from '~/types/chat';
 import { debounce } from 'lodash';
 import { useCallback, useEffect, useState } from 'react';
 import { NotificationSeverity, type AugmentedColumnDef } from '~/common';

@@ -10,7 +10,7 @@ import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import type {
   TConversation,
   TMessage,
-} from "~/data-provider/data-provider/src";
+} from "~/types/chat";
 import { useGenerationsByLatest, useLocalize } from "~/hooks";
 import MessageSource from "~/pages/appChat/components/MessageSource";
 import ResouceModal from "~/pages/appChat/components/ResouceModal";

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
-import { LocalStorageKeys } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys } from '~/types/chat';
 import { Dropdown } from '~/components/ui';
 import { useCategories } from '~/hooks';
 

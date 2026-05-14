@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { RefreshCcw, ShieldX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TBackupCode, TRegenerateBackupCodesResponse, type TUser } from '~/data-provider/data-provider/src';
+import { TBackupCode, TRegenerateBackupCodesResponse, type TUser } from '~/types/chat';
 import {
   OGDialog,
   OGDialogContent,
@@ -12,7 +12,7 @@ import {
   Spinner,
   TooltipAnchor,
 } from '~/components';
-import { useRegenerateBackupCodesMutation } from '~/data-provider';
+import { useRegenerateBackupCodesMutation } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
 import { useSetRecoilState } from 'recoil';

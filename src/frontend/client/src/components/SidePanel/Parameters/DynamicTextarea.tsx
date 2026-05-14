@@ -1,5 +1,5 @@
-import { OptionTypes } from '~/data-provider/data-provider/src';
-import type { DynamicSettingProps } from '~/data-provider/data-provider/src';
+import { OptionTypes } from '~/types/chat';
+import type { DynamicSettingProps } from '~/types/chat';
 import { Label, TextareaAutosize, HoverCard, HoverCardTrigger } from '~/components/ui';
 import { useLocalize, useDebouncedInput, useParameterEffects, TranslationKeys } from '~/hooks';
 import { cn, defaultTextProps } from '~/utils';

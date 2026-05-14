@@ -1,4 +1,4 @@
-import { TFile } from '~/data-provider/data-provider/src/dist/types';
+import { TFile } from '~/types/chat/files';
 import React, { useState } from 'react';
 import { TThread, TVectorStore } from '~/common';
 import { CheckMark, TrashIcon } from '~/components/svg';

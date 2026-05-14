@@ -1,8 +1,8 @@
 import { useForm } from 'react-hook-form';
 import React, { useState, useEffect } from 'react';
-import type { TLoginUser, TStartupConfig } from '~/data-provider/data-provider/src';
+import type { TLoginUser, TStartupConfig } from '~/types/chat';
 import type { TAuthContext } from '~/common';
-import { useResendVerificationEmail, useGetStartupConfig } from '~/data-provider';
+import { useResendVerificationEmail, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 
 type TLoginFormProps = {

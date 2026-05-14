@@ -5,7 +5,7 @@ import {
   AuthTypeEnum,
   AuthorizationTypeEnum,
   TokenExchangeMethodEnum,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import {
   OGDialog,
   OGDialogClose,

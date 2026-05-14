@@ -1,4 +1,4 @@
-import { EModelEndpoint, FileSources } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, FileSources } from '~/types/chat';
 import { MinimalIcon } from '~/components/Endpoints';
 import { cn } from '~/utils';
 

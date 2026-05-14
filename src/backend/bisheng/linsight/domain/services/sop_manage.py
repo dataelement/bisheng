@@ -11,9 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
-from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.linsight.domain.schemas.linsight_schema import SopRecordRead
+from bisheng.api.services.knowledge_imp import extract_code_blocks
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -26,9 +24,12 @@ from bisheng.common.errcode.server import (
     NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError, UploadFileEmptyError
 )
 from bisheng.common.services.config_service import settings
+from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
-from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
+from bisheng.linsight.domain.schemas.linsight_schema import SopRecordRead
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
@@ -36,7 +37,7 @@ from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
 from bisheng_langchain.retrievers import EnsembleRetriever
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng_langchain.vectorstores import Milvus
 
 
 class SOPManageService:
@@ -203,7 +204,7 @@ class SOPManageService:
                 new_name = one.name
                 if new_name in repeat_names:
                     # Add suffix if there are duplicate records, Limit Length500characters
-                    new_name = f"{one.name}Dungeon"
+                    new_name = f"{one.name} 副本"
                 await SOPManageService.add_sop(SOPManagementSchema(
                     name=new_name,
                     description=one.description,
@@ -349,16 +350,13 @@ class SOPManageService:
         embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=embed_info.id,
                                                                      invoke_user_id=user_id)
         try:
-            vector_client: Milvus = decide_vectorstores(
-                SOPManageService.collection_name, "Milvus", embeddings
-            )
+            vector_client: Milvus = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
+                                                                         embeddings=embeddings)
 
-            es_client: ElasticKeywordsSearch = decide_vectorstores(
-                SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
-            )
+            es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
             metadatas = [{"vector_store_id": vector_store_id}]
-            vector_client.add_texts([sop_obj.content[0:10000]], metadatas=metadatas)
-            es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
+            await vector_client.aadd_texts([sop_obj.content[0:10000]], metadatas=metadatas)
+            await es_client.aadd_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
         except Exception as e:
             return LinsightAddSopError.return_resp(data=str(e))
 
@@ -403,18 +401,14 @@ class SOPManageService:
 
             # Update Vector Store
             try:
-                vector_client: Milvus = decide_vectorstores(
-                    SOPManageService.collection_name, "Milvus", embeddings
-                )
-                es_client: ElasticKeywordsSearch = decide_vectorstores(
-                    SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
-                )
-
-                vector_client.delete(expr=f"vector_store_id == '{vector_store_id}'")
-                es_client.delete([vector_store_id])
+                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
+                                                                     embeddings=embeddings)
+                es_client = KnowledgeRag.init_es_vectorstore(index_name=SOPManageService.collection_name)
+                await vector_client.adelete(expr=f"vector_store_id == '{vector_store_id}'")
+                await es_client.adelete([vector_store_id])
                 metadatas = [{"vector_store_id": vector_store_id}]
-                vector_client.add_texts([sop_obj.content[0:10000]], metadatas=metadatas)
-                es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
+                await vector_client.aadd_texts([sop_obj.content[0:10000]], metadatas=metadatas)
+                await es_client.aadd_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
 
             except Exception as e:
                 return LinsightUpdateSopError.return_resp(data=str(e))
@@ -441,12 +435,12 @@ class SOPManageService:
         # Delete data in vector store
         try:
             vector_store_ids = [sop.vector_store_id for sop in existing_sops]
-            vector_client: Milvus = decide_vectorstores(
-                SOPManageService.collection_name, "Milvus", FakeEmbedding()
+
+            vector_client = KnowledgeRag.init_milvus_vectorstore(
+                SOPManageService.collection_name, embeddings=FakeEmbeddings()
             )
-            es_client: ElasticKeywordsSearch = decide_vectorstores(
-                SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
-            )
+
+            es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
 
             vector_client.delete(expr=f"vector_store_id in {vector_store_ids}")
             es_client.delete(vector_store_ids)
@@ -508,13 +502,10 @@ class SOPManageService:
                 embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
                                                                              model_id=int(emb_model_id))
 
-                vector_client: Milvus = decide_vectorstores(
-                    SOPManageService.collection_name, "Milvus", embeddings
-                )
+                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
+                                                                     embeddings=embeddings)
 
-                es_client: ElasticKeywordsSearch = decide_vectorstores(
-                    SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
-                )
+                es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
 
                 keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": 100},
                                                      text_splitter=text_splitter)
@@ -526,9 +517,8 @@ class SOPManageService:
 
             elif es_search and not vector_search:
                 # Search with keywords only
-                es_client: ElasticKeywordsSearch = decide_vectorstores(
-                    SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
-                )
+                es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
+
                 keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": 100},
                                                      text_splitter=text_splitter)
                 retrievers = [keyword_retriever]
@@ -539,9 +529,8 @@ class SOPManageService:
                 embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
                                                                              model_id=int(emb_model_id))
 
-                vector_client: Milvus = decide_vectorstores(
-                    SOPManageService.collection_name, "Milvus", embeddings
-                )
+                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
+                                                                     embeddings=embeddings)
 
                 baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client,
                                                                     search_kwargs={"k": 100},
@@ -599,10 +588,7 @@ class SOPManageService:
                 :param sops:
                 :return:
                 """
-
-                vector_client: Milvus = decide_vectorstores(
-                    SOPManageService.collection_name, "Milvus", emb
-                )
+                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name, embeddings=emb)
                 # Delete existing vector storecollection
                 if vector_client.col is not None:
                     logger.info("Delete existingSOPVector Storagecollection")

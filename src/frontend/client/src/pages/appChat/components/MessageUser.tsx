@@ -1,15 +1,18 @@
 import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useMemo } from "react";
 import { useRecoilState } from "recoil";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import { formatStrTime } from "~/utils";
 import { bishengConfState } from "../store/atoms";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 
 export default function MessageUser({ useName, data, showButton, disabledSearch = false, readOnly }) {
-    const avatar = useMemo(() => {
-        return <div className="w-6 h-6 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{useName.substring(0, 2).toUpperCase()}</div>
-    }, [useName])
+    // const avatar = useMemo(() => {
+    //     return <div className="w-6 h-6 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{useName.substring(0, 2).toUpperCase()}</div>
+    // }, [useName])
+    const { user } = useAuthContext();
+
     const [config] = useRecoilState(bishengConfState)
     const localize = useLocalize()
 
@@ -42,7 +45,12 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
             </div>
             <div className="rounded-2xl px-4">
                 <div className="flex gap-3">
-                    {avatar}
+                    <div className="shrink-0 flex justify-center">
+                        <Avatar className="w-6 h-6 text-xs">
+                            {user?.avatar ? <AvatarImage src={user?.avatar} alt="User" /> : <AvatarName name={user?.username} />}
+                        </Avatar>
+                    </div>
+                    {/* {avatar} */}
                     <div className="">
                         <p className="select-none font-semibold text-base mb-1">{useName}</p>
                         <div className="text-[#0D1638] dark:text-[#CFD5E8] text-base break-all whitespace-break-spaces">{msg}</div>

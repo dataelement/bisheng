@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { UseInfiniteQueryResult } from '@tanstack/react-query';
-import type { ConversationListResponse } from '~/data-provider/data-provider/src';
-import { useSearchInfiniteQuery, useGetSearchEnabledQuery } from '~/data-provider';
+import type { ConversationListResponse } from '~/types/chat';
+import { useSearchInfiniteQuery, useGetSearchEnabledQuery } from '~/hooks/queries/data-provider';
 import useNewConvo from '~/hooks/useNewConvo';
 import store from '~/store';
 

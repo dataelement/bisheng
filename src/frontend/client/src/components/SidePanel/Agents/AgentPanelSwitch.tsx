@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
 import type { ActionsEndpoint } from '~/common';
-import type { Action, TConfig, TEndpointsConfig } from '~/data-provider/data-provider/src';
-import { useGetActionsQuery, useGetEndpointsQuery } from '~/data-provider';
+import type { Action, TConfig, TEndpointsConfig } from '~/types/chat';
+import { useGetActionsQuery, useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { useChatContext } from '~/Providers';
 import ActionsPanel from './ActionsPanel';
 import AgentPanel from './AgentPanel';

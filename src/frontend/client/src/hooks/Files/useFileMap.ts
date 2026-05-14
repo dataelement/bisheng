@@ -1,4 +1,4 @@
-import { useGetFiles } from '~/data-provider';
+import { useGetFiles } from '~/hooks/queries/data-provider';
 import { mapFiles } from '~/utils';
 
 export default function useFileMap({ isAuthenticated }: { isAuthenticated: boolean }) {

@@ -8,11 +8,11 @@ import {
   EModelEndpoint,
   PermissionTypes,
   AgentCapabilities,
-} from '~/data-provider/data-provider/src';
-import type { TPlugin } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TPlugin } from '~/types/chat';
 import type { AgentForm, AgentPanelProps, IconComponentTypes } from '~/common';
 import { cn, defaultTextProps, removeFocusOutlines, getEndpointField, getIconKey } from '~/utils';
-import { useCreateAgentMutation, useUpdateAgentMutation } from '~/data-provider';
+import { useCreateAgentMutation, useUpdateAgentMutation } from '~/hooks/queries/data-provider';
 import { useLocalize, useAuthContext, useHasAccess } from '~/hooks';
 import { useToastContext, useFileMapContext } from '~/Providers';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';

@@ -4,11 +4,9 @@ from typing import Optional, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores
-from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.models import LLMDao
 
@@ -52,8 +50,8 @@ class SearchKnowledgeBase(BaseTool):
         except ValueError:
             return await self.search_linsight_file(query, knowledge_id, limit)
 
-    async def base_search(self, vector_client, query: str, k: int):
-        documents = await vector_client.asimilarity_search(query, k=k)
+    async def base_search(self, vector_client, query: str, k: int, **kwargs) -> str:
+        documents = await vector_client.asimilarity_search(query, k=k, **kwargs)
         if not documents:
             # "没有找到相关的知识内容"
             return '{"状态": "无结果", "错误信息":"没有找到相关的知识内容"}'
@@ -78,16 +76,10 @@ class SearchKnowledgeBase(BaseTool):
                 break
         if not file_info:
             raise Exception("File does not exist or has been deleted")
-        class_obj = import_vectorstore('Milvus')
         embeddings = await LLMService.get_bisheng_linsight_embedding(session_info.user_id,
                                                                      file_info.get("embedding_model_id"))
-        params = {
-            'collection_name': file_info.get("collection_name"),
-            'embedding': embeddings,
-            'metadata_expr': f'file_id in {[file_id]}'
-        }
-        milvus_client = instantiate_vectorstore('Milvus', class_object=class_obj, params=params)
-        return await self.base_search(milvus_client, query, limit)
+        milvus_client = KnowledgeRag.init_milvus_vectorstore(file_info.get("collection_name"), embeddings)
+        return await self.base_search(milvus_client, query, limit, expr=f'file_id in {[file_id]}')
 
     async def search_knowledge(self, query: str, knowledge_id: int, limit: int) -> str:
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
@@ -100,8 +92,5 @@ class SearchKnowledgeBase(BaseTool):
         if not embed_info:
             # "Configured by the Knowledge BaseembeddingModel does not exist or has been deleted"
             raise Exception("Configured by the Knowledge BaseembeddingModel does not exist or has been deleted")
-        embeddings = await LLMService.get_bisheng_knowledge_embedding(0, model_id=int(knowledge_info.model))
-        milvus_client = decide_vectorstores(
-            knowledge_info.collection_name, "Milvus", embeddings, knowledge_id=knowledge_id
-        )
+        milvus_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(0, knowledge=knowledge_info)
         return await self.base_search(milvus_client, query, limit)

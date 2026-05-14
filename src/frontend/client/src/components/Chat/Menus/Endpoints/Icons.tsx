@@ -1,4 +1,4 @@
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
 import type { IconMapProps, AgentIconMapProps, IconsRecord } from '~/common';
 import { Feather } from 'lucide-react';
 import {

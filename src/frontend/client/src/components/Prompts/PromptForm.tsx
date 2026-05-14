@@ -4,8 +4,8 @@ import { Menu, Rocket } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { useParams, useOutletContext } from 'react-router-dom';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import type { TCreatePrompt } from '~/data-provider/data-provider/src';
-import { SystemRoles, PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import type { TCreatePrompt } from '~/types/chat';
+import { SystemRoles, PermissionTypes, Permissions } from '~/types/chat';
 import {
   useCreatePrompt,
   useGetPrompts,
@@ -13,7 +13,7 @@ import {
   useUpdatePromptGroup,
   useMakePromptProduction,
   useDeletePrompt,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import { useAuthContext, usePromptGroupsNav, useHasAccess, useLocalize } from '~/hooks';
 import CategorySelector from './Groups/CategorySelector';
 import NoPromptGroup from './Groups/NoPromptGroup';

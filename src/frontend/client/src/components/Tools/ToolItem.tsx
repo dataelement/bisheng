@@ -1,4 +1,4 @@
-import { TPlugin } from '~/data-provider/data-provider/src';
+import { TPlugin } from '~/types/chat';
 import { XCircle, PlusCircleIcon, Wrench } from 'lucide-react';
 import { useLocalize } from '~/hooks';
 

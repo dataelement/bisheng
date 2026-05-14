@@ -1,9 +1,9 @@
 import * as Ariakit from '@ariakit/react';
 import React, { useRef, useState, useMemo } from 'react';
 import { FileSearch, ImageUpIcon, TerminalSquareIcon } from 'lucide-react';
-import { EToolResources, EModelEndpoint } from '~/data-provider/data-provider/src';
+import { EToolResources, EModelEndpoint } from '~/types/chat';
 import { FileUpload, TooltipAnchor, DropdownPopup } from '~/components/ui';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { AttachmentIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';

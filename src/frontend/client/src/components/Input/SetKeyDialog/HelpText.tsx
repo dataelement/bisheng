@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
 import { useLocalize } from '~/hooks';
 
 function HelpText({ endpoint }: { endpoint: string }) {

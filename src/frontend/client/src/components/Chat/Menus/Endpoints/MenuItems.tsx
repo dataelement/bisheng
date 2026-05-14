@@ -5,8 +5,8 @@ import {
   alternateName,
   PermissionTypes,
   Permissions,
-} from '~/data-provider/data-provider/src';
-import { useGetEndpointsQuery } from '~/data-provider';
+} from '~/types/chat';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import MenuSeparator from '../UI/MenuSeparator';
 import { getEndpointField } from '~/utils';
 import { useHasAccess } from '~/hooks';

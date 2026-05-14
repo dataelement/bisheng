@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { EModelEndpoint, EToolResources } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, EToolResources } from '~/types/chat';
 import { FileSearch, ImageUpIcon, TerminalSquareIcon } from 'lucide-react';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import useLocalize from '~/hooks/useLocalize';
 import { OGDialog } from '~/components/ui';
 

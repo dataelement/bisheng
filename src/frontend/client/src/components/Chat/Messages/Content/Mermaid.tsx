@@ -255,7 +255,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                         onMouseLeave={handleMouseLeave}
                     />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
-                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto">
+                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scrollbar-on-hover">
                             <code ref={codeRef} className="text-slate-500 text-foreground font-mono whitespace-pre-wrap break-words">{children}</code>
                         </pre>
                     </div>

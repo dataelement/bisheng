@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
 import { Controller, useForm } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
-import type { TConversationTag, TConversationTagRequest } from '~/data-provider/data-provider/src';
+import type { TConversationTag, TConversationTagRequest } from '~/types/chat';
 import { Checkbox, Label, TextareaAutosize, Input } from '~/components';
 import { useBookmarkContext } from '~/Providers/BookmarkContext';
-import { useConversationTagMutation } from '~/data-provider';
+import { useConversationTagMutation } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 import { cn, logger } from '~/utils';

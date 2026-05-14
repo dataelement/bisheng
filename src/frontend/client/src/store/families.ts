@@ -10,8 +10,8 @@ import {
   useSetRecoilState,
   useRecoilCallback,
 } from 'recoil';
-import { LocalStorageKeys, Constants } from '~/data-provider/data-provider/src';
-import type { TMessage, TPreset, TConversation, TSubmission } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys, Constants } from '~/types/chat';
+import type { TMessage, TPreset, TConversation, TSubmission } from '~/types/chat';
 import type { TOptionSettings, ExtendedFile } from '~/common';
 import { useSetConvoContext } from '~/Providers/SetConvoContext';
 import { storeEndpointSettings, logger } from '~/utils';

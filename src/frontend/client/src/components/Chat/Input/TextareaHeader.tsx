@@ -1,5 +1,5 @@
 import AddedConvo from './AddedConvo';
-import type { TConversation } from '~/data-provider/data-provider/src';
+import type { TConversation } from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 
 export default function TextareaHeader({

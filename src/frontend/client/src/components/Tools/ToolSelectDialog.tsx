@@ -2,18 +2,18 @@ import { useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
 import { useFormContext } from 'react-hook-form';
-import { isAgentsEndpoint } from '~/data-provider/data-provider/src';
-import { useUpdateUserPluginsMutation } from '~/data-provider/data-provider/src/react-query';
+import { isAgentsEndpoint } from '~/types/chat';
+import { useUpdateUserPluginsMutation } from '~/hooks/queries';
 import type {
   AssistantsEndpoint,
   EModelEndpoint,
   TPluginAction,
   TError,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { TPluginStoreDialogProps } from '~/common/types';
 import { PluginPagination, PluginAuthForm } from '~/components/Plugins/Store';
 import { useLocalize, usePluginDialogHelpers } from '~/hooks';
-import { useAvailableToolsQuery } from '~/data-provider';
+import { useAvailableToolsQuery } from '~/hooks/queries/data-provider';
 import ToolItem from './ToolItem';
 
 function ToolSelectDialog({

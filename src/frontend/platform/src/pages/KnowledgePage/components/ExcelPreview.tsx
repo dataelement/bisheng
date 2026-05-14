@@ -245,31 +245,40 @@ const ExcelPreview = ({ filePath }) => {
 
         } else if (isXLSX || fileExt === "xls") {
           // ---------------- Excel ----------------
-          let workbook;
+          // 1. 用 SheetJS 解析表格数据(对 WPS / 低版本 Excel 容错更好)
+          let wb;
           try {
-            workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
+            wb = XLSX.read(arrayBuffer, { type: "array" });
           } catch (e) {
-            console.error("XlsxPopulate解析失败:", e);
+            console.error("SheetJS解析失败:", e);
             throw new Error(t('excelParseFailed'));
           }
 
-          // 解析表格数据
-          const sheetNames = workbook.sheets().map((s: any) => s.name());
+          const sheetNames = wb.SheetNames;
           const parsedData: Record<string, any[][]> = {};
           sheetNames.forEach(sheetName => {
-            const sheet = workbook.sheet(sheetName);
-            const usedRange = sheet.usedRange();
-            parsedData[sheetName] = cleanData(usedRange?.value() || [[]]);
+            const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+              header: 1,
+              defval: "",
+            }) as any[][];
+            parsedData[sheetName] = cleanData(aoa);
           });
           setExcelData(parsedData);
           setSheets(sheetNames);
           setActiveSheet(sheetNames[0] || "");
 
-          // 提取图片
-          const { images, imagePositions } = await extractImagesWithPositions(workbook);
-          setImages(images);
-          setImagePositions(imagePositions);
-          console.log(`[ExcelPreview] 提取到 ${images.length} 张图片`);
+          // 2. 图片提取单独尝试,失败不影响表格展示
+          if (isXLSX) {
+            try {
+              const workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
+              const { images, imagePositions } = await extractImagesWithPositions(workbook);
+              setImages(images);
+              setImagePositions(imagePositions);
+              console.log(`[ExcelPreview] 提取到 ${images.length} 张图片`);
+            } catch (e) {
+              console.warn("[ExcelPreview] 图片提取失败,跳过:", e);
+            }
+          }
 
         } else {
           throw new Error(t('unsupportedType', { type: fileExt }));

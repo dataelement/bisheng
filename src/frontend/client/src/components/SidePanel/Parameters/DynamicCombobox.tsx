@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
-import { OptionTypes } from '~/data-provider/data-provider/src';
-import type { DynamicSettingProps } from '~/data-provider/data-provider/src';
+import { OptionTypes } from '~/types/chat';
+import type { DynamicSettingProps } from '~/types/chat';
 import { Label, HoverCard, HoverCardTrigger } from '~/components/ui';
 import ControlCombobox from '~/components/ui/ControlCombobox';
 import { TranslationKeys, useLocalize, useParameterEffects } from '~/hooks';

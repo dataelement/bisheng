@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Transition } from 'react-transition-group';
-import { Constants } from '~/data-provider/data-provider/src';
+import { Constants } from '~/types/chat';
 import { TooltipAnchor } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 

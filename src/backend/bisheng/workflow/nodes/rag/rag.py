@@ -9,7 +9,7 @@ from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTempla
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
-from bisheng.chat.types import IgnoreException
+from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.llm.domain.services import LLMService

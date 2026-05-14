@@ -1,6 +1,6 @@
-import { TAgentsMap } from '~/data-provider/data-provider/src';
+import { TAgentsMap } from '~/types/chat';
 import { useMemo } from 'react';
-import { useListAgentsQuery } from '~/data-provider';
+import { useListAgentsQuery } from '~/hooks/queries/data-provider';
 import { mapAgents } from '~/utils';
 
 export default function useAgentsMap({

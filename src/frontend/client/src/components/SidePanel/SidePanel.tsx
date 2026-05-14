@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo, memo } from 'react';
-import { useUserKeyQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TEndpointsConfig, TInterfaceConfig } from '~/data-provider/data-provider/src';
+import { useUserKeyQuery } from '~/hooks/queries';
+import type { TEndpointsConfig, TInterfaceConfig } from '~/types/chat';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { ResizableHandleAlt, ResizablePanel } from '~/components/ui/Resizable';
 import { useMediaQuery, useLocalStorage, useLocalize } from '~/hooks';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import NavToggle from '~/components/Nav/NavToggle';
 import { cn, getEndpointField } from '~/utils';
 import { useChatContext } from '~/Providers';

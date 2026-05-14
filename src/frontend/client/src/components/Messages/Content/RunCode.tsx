@@ -1,9 +1,9 @@
 import debounce from 'lodash/debounce';
-import { Tools, AuthType } from '~/data-provider/data-provider/src';
+import { Tools, AuthType } from '~/types/chat';
 import { TerminalSquareIcon, Loader } from 'lucide-react';
 import React, { useMemo, useCallback, useEffect } from 'react';
 import type { CodeBarProps } from '~/common';
-import { useVerifyAgentToolAuth, useToolCallMutation } from '~/data-provider';
+import { useVerifyAgentToolAuth, useToolCallMutation } from '~/hooks/queries/data-provider';
 import ApiKeyDialog from '~/components/SidePanel/Agents/Code/ApiKeyDialog';
 import { useLocalize, useCodeApiKeyForm } from '~/hooks';
 import { useMessageContext } from '~/Providers';

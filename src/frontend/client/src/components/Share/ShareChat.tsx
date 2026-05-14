@@ -1,19 +1,24 @@
-import { Share2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToastContext } from "~/Providers";
 import { getShareLinkApi } from "~/api";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input } from "../ui";
+import { ShareOutlineIcon } from "../icons/ShareOutlineIcon";
 
 interface ShareDialogProps {
     type: 'linsight_session' | 'workbench_chat' | 'workflow' | 'skill' | 'assistant'
     chatId: string
     flowId?: string
     versionId?: string
+    /** 与灵思头部「任务描述」等操作一致：描边 + 图标 + 「分享」文案 */
+    labeled?: boolean
 }
 
-export default function ShareChat({ type, chatId, flowId, versionId }: ShareDialogProps) {
+export default function ShareChat({ type, chatId, flowId, versionId, labeled }: ShareDialogProps) {
+    /** 灵思会话顶部需与「任务描述」同款描边按钮；未传 labeled 时由 type 决定 */
+    const showLabeledToolbar = labeled ?? type === "linsight_session"
+
     const [isOpen, setIsOpen] = useState(false)
     const [copied, setCopied] = useState(false)
     const { showToast } = useToastContext()
@@ -48,10 +53,21 @@ export default function ShareChat({ type, chatId, flowId, versionId }: ShareDial
         }) : setShareUrl('');
     }, [isOpen])
 
-    return <div>
-        <Button variant="outline" className="h-7 px-3 text-xs" onClick={() => setIsOpen(true)}>
-            <Share2Icon size={16} />
-            {localize('com_ui_share')}
+    return <div className={showLabeledToolbar ? "inline-flex" : undefined}>
+        <Button
+            variant={showLabeledToolbar ? "outline" : "ghost"}
+            size={showLabeledToolbar ? "sm" : undefined}
+            className={
+                showLabeledToolbar
+                    ? "h-7 px-3 rounded-lg shadow-sm focus-visible:outline-0 font-normal"
+                    : "h-[28px] w-[28px] p-0 text-[#212121] hover:bg-gray-100"
+            }
+            onClick={() => setIsOpen(true)}
+        >
+            <ShareOutlineIcon className="size-4 text-gray-800 shrink-0" />
+            {showLabeledToolbar ? (
+                <span className="text-xs">{localize("com_ui_share")}</span>
+            ) : null}
         </Button>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>

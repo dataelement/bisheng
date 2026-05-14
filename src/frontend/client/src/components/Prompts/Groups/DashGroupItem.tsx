@@ -1,8 +1,8 @@
 import { memo, useState, useRef, useMemo, useCallback, KeyboardEvent } from 'react';
 import { EarthIcon, Pen } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { SystemRoles, type TPromptGroup } from '~/data-provider/data-provider/src';
-import { useDeletePromptGroup, useUpdatePromptGroup } from '~/data-provider';
+import { SystemRoles, type TPromptGroup } from '~/types/chat';
+import { useDeletePromptGroup, useUpdatePromptGroup } from '~/hooks/queries/data-provider';
 import { Input, Label, Button, OGDialog, OGDialogTrigger } from '~/components/ui';
 import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';

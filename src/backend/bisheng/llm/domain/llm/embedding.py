@@ -7,7 +7,8 @@ from loguru import logger
 from pydantic import Field
 from typing_extensions import Self
 
-from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings
+from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings, \
+    VolcengineEmbeddings
 from bisheng.llm.domain.const import LLMServerType, LLMModelType
 from .base import BishengBase
 from ..models import LLMModel, LLMServer
@@ -81,7 +82,7 @@ _node_type: Dict = {
     LLMServerType.MINIMAX.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.ZHIPU.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.TENCENT.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
-    LLMServerType.VOLCENGINE.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.VOLCENGINE.value: {"client": VolcengineEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
 }
 
@@ -120,7 +121,8 @@ class BishengEmbedding(BishengBase, Embeddings):
         if model_info.model_type != LLMModelType.EMBEDDING.value:
             raise Exception(f'Support onlyEmbeddingModel of type, not supported{model_info.model_type}Type of model')
         if not ignore_online and not model_info.online:
-            raise Exception(f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
+            raise Exception(
+                f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
         logger.debug(
             f'init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info: LLMModel = model_info
@@ -133,7 +135,8 @@ class BishengEmbedding(BishengBase, Embeddings):
             self.embeddings = class_object(**params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
-            raise Exception(f'Inisialisasibisheng embeddingComponent failed, please check the configuration or contact the administrator.Error message:{e}')
+            raise Exception(
+                f'Inisialisasibisheng embeddingComponent failed, please check the configuration or contact the administrator.Error message:{e}')
 
     @staticmethod
     def _get_embedding_class(server_type: str) -> type[Embeddings]:

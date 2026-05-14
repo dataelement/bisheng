@@ -1,5 +1,5 @@
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TConversation } from '~/data-provider/data-provider/src';
+import { useGetModelsQuery } from '~/hooks/queries';
+import type { TConversation } from '~/types/chat';
 import type { TSetOption } from '~/common';
 import { multiChatOptions } from './options';
 

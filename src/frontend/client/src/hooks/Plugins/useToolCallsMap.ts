@@ -1,6 +1,6 @@
-import { ToolCallResult } from '~/data-provider/data-provider/src';
+import { ToolCallResult } from '~/types/chat';
 import { useMemo } from 'react';
-import { useGetToolCalls } from '~/data-provider';
+import { useGetToolCalls } from '~/hooks/queries/data-provider';
 import { mapToolCalls, logger } from '~/utils';
 
 type ToolCallsMap = {

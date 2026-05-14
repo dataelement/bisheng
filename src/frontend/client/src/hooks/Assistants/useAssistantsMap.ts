@@ -1,6 +1,6 @@
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
-import type { TAssistantsMap } from '~/data-provider/data-provider/src';
-import { useListAssistantsQuery } from '~/data-provider';
+import { EModelEndpoint } from '~/types/chat';
+import type { TAssistantsMap } from '~/types/chat';
+import { useListAssistantsQuery } from '~/hooks/queries/data-provider';
 import { mapAssistants } from '~/utils';
 
 export default function useAssistantsMap({

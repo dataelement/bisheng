@@ -4,9 +4,9 @@ import {
   ToolCallTypes,
   imageGenTools,
   isImageVisionTool,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { memo } from 'react';
-import type { TMessageContentParts, TAttachment } from '~/data-provider/data-provider/src';
+import type { TMessageContentParts, TAttachment } from '~/types/chat';
 import { ErrorMessage } from './MessageContent';
 import ExecuteCode from './Parts/ExecuteCode';
 import RetrievalCall from './RetrievalCall';

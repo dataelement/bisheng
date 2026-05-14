@@ -1,4 +1,4 @@
-import { TMessage } from '~/data-provider/data-provider/src';
+import { TMessage } from '~/types/chat';
 import Files from './Files';
 
 const Container = ({ children, message }: { children: React.ReactNode; message?: TMessage }) => (

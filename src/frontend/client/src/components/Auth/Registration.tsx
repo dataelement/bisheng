@@ -1,8 +1,8 @@
 import { useForm } from 'react-hook-form';
 import React, { useState } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
-import { useRegisterUserMutation } from '~/data-provider/data-provider/src/react-query';
-import type { TRegisterUser, TError } from '~/data-provider/data-provider/src';
+import { useRegisterUserMutation } from '~/hooks/queries';
+import type { TRegisterUser, TError } from '~/types/chat';
 import type { TLoginLayoutContext } from '~/common';
 import { ErrorMessage } from './ErrorMessage';
 import { Spinner } from '~/components/svg';

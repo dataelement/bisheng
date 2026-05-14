@@ -1,5 +1,4 @@
 import asyncio
-import gc
 import json
 import urllib.parse
 from datetime import datetime
@@ -13,7 +12,6 @@ from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
@@ -37,6 +35,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, Kn
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
@@ -408,13 +407,12 @@ async def get_QA_list(*,
 
 
 @router.post('/retry', status_code=200)
-def retry(*,
-          request: Request,
-          login_user: UserPayload = Depends(UserPayload.get_login_user),
-          background_tasks: BackgroundTasks,
-          req_data: dict):
+async def retry(*,
+                request: Request,
+                login_user: UserPayload = Depends(UserPayload.get_login_user),
+                req_data: dict):
     """Failed Retry"""
-    KnowledgeService.retry_files(request, login_user, background_tasks, req_data)
+    await KnowledgeService.retry_files(request, login_user, req_data)
     return resp_200()
 
 
@@ -476,7 +474,7 @@ async def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(UserPayload.get_login_user),
                              file_id: int = Query(description='File UniqueID')):
-    original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+    original_url, preview_url = KnowledgeService.get_file_share_with_auth(login_user, file_id)
     return resp_200(data={
         'original_url': original_url,
         'preview_url': preview_url

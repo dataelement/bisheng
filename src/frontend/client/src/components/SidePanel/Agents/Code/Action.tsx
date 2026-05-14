@@ -1,5 +1,5 @@
 import { KeyRoundIcon } from 'lucide-react';
-import { AuthType, AgentCapabilities } from '~/data-provider/data-provider/src';
+import { AuthType, AgentCapabilities } from '~/types/chat';
 import { useFormContext, Controller, useWatch } from 'react-hook-form';
 import type { AgentForm } from '~/common';
 import {

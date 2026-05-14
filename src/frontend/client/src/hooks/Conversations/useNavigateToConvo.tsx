@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
-import type { TConversation, TEndpointsConfig, TModelsConfig } from '~/data-provider/data-provider/src';
-import { Constants, EModelEndpoint, LocalStorageKeys, QueryKeys } from '~/data-provider/data-provider/src';
+import type { TConversation, TEndpointsConfig, TModelsConfig } from '~/types/chat';
+import { Constants, EModelEndpoint, LocalStorageKeys, QueryKeys } from '~/types/chat';
 import store from '~/store';
 import { buildDefaultConvo, getDefaultEndpoint, getEndpointField, logger } from '~/utils';
 

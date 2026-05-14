@@ -1,5 +1,5 @@
 import { useFormContext, Controller } from 'react-hook-form';
-import { Capabilities } from '~/data-provider/data-provider/src';
+import { Capabilities } from '~/types/chat';
 import type { AssistantForm } from '~/common';
 import { Checkbox, QuestionMark } from '~/components/ui';
 import { useLocalize } from '~/hooks';

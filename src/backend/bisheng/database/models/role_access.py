@@ -39,6 +39,9 @@ class WebMenuResource(Enum):
     KNOWLEDGE = 'knowledge'  # Knowledge Menu
     MODEL = 'model'  # Model Menu
     EVALUATION = 'evaluation'  # Evaluation Menu
+    BOARD = 'board'  # 看板菜单栏
+    KNOWLEDGE_SPACE = 'knowledge_space'  # Knowledge Space
+    SUBSCRIPTION = 'subscription'  # Subscription Management
 
     FRONTEND = 'frontend'  # Front-end permissions
     BACKEND = 'backend'  # Backend Access
@@ -50,9 +53,7 @@ class AccessType(Enum):
     """Type of the role_access"""
 
     KNOWLEDGE = 1  # Knowledge Base Reading Permissions
-    FLOW = 2  # Skill Read Permissions
     KNOWLEDGE_WRITE = 3  # Knowledge Base Write Permissions
-    FLOW_WRITE = 4  # Skill Write Permissions
     ASSISTANT_READ = 5  # Assistant Read Permissions
     ASSISTANT_WRITE = 6  # Assistant Write Permissions
     GPTS_TOOL_READ = 7  # Tool Read Permissions

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import copy from 'copy-to-clipboard';
-import { ContentTypes } from '~/data-provider/data-provider/src';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import { ContentTypes } from '~/types/chat';
+import type { TMessage } from '~/types/chat';
 
 export default function useCopyToClipboard({
   text,

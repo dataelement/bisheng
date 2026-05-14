@@ -1,6 +1,6 @@
 import filenamify from 'filenamify';
 import { useEffect, useState } from 'react';
-import type { TConversation } from '~/data-provider/data-provider/src';
+import type { TConversation } from '~/types/chat';
 import { OGDialog, Button, Input, Label, Checkbox, Dropdown } from '~/components/ui';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useExportConversation } from '~/hooks';

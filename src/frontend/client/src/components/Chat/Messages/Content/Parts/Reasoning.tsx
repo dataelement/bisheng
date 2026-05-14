@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { ContentTypes } from '~/data-provider/data-provider/src';
+import { ContentTypes } from '~/types/chat';
 import { ThinkingContent } from '~/components/Artifacts/Thinking';
 import { useMessageContext } from '~/Providers';
 import { cn } from '~/utils';

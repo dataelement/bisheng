@@ -3,11 +3,11 @@ import {
   EToolResources,
   mergeFileConfig,
   fileConfig as defaultFileConfig,
-} from '~/data-provider/data-provider/src';
-import type { AssistantsEndpoint, EndpointFileConfig } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { AssistantsEndpoint, EndpointFileConfig } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
 import FileRow from '~/components/Chat/Input/Files/FileRow';
-import { useGetFileConfig } from '~/data-provider';
+import { useGetFileConfig } from '~/hooks/queries/data-provider';
 import { useFileHandling } from '~/hooks/Files';
 import useLocalize from '~/hooks/useLocalize';
 import { useChatContext } from '~/Providers';

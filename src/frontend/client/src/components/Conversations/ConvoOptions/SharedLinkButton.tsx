@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
 import { QrCode, RotateCw, Trash2 } from 'lucide-react';
-import type { TSharedLinkGetResponse } from '~/data-provider/data-provider/src';
+import type { TSharedLinkGetResponse } from '~/types/chat';
 import {
   useCreateSharedLinkMutation,
   useUpdateSharedLinkMutation,
   useDeleteSharedLinkMutation,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import { Button, OGDialog, Spinner, TooltipAnchor, Label } from '~/components';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { NotificationSeverity } from '~/common';

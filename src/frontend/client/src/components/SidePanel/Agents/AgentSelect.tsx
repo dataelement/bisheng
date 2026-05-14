@@ -1,11 +1,11 @@
 import { EarthIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
-import { AgentCapabilities, defaultAgentFormValues } from '~/data-provider/data-provider/src';
+import { AgentCapabilities, defaultAgentFormValues } from '~/types/chat';
 import type { UseMutationResult, QueryObserverResult } from '@tanstack/react-query';
-import type { Agent, AgentCreateParams } from '~/data-provider/data-provider/src';
+import type { Agent, AgentCreateParams } from '~/types/chat';
 import type { TAgentCapabilities, AgentForm } from '~/common';
-import { useListAgentsQuery, useGetStartupConfig } from '~/data-provider';
+import { useListAgentsQuery, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { cn, createProviderOption, processAgentOption } from '~/utils';
 import ControlCombobox from '~/components/ui/ControlCombobox';
 import { useLocalize } from '~/hooks';

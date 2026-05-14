@@ -1,4 +1,6 @@
 import { Check, X } from "lucide-react";
+import LingsiIcon from '~/components/ui/icon/Lingsi';
+import TodayItemIcon from '~/components/ui/icon/TodayItem';
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -7,9 +9,9 @@ import { NotificationSeverity } from "~/common";
 import {
   useGetEndpointsQuery,
   useUpdateConversationMutation,
-} from "~/data-provider";
-import type { TConversation } from "~/data-provider/data-provider/src";
-import { Constants } from "~/data-provider/data-provider/src";
+} from "~/hooks/queries/data-provider";
+import type { TConversation } from "~/types/chat";
+import { Constants } from "~/types/chat";
 import { useLocalize, useMediaQuery, useNavigateToConvo } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import store from "~/store";
@@ -167,17 +169,18 @@ export default function Conversation({
   return (
     <div
       className={cn(
-        "group relative mt-2 flex h-10 w-full items-center rounded-lg hover:bg-[#EBEFF8]",
-        isActiveConvo ? "bg-[#EBEFF8]" : "",
-        isSmallScreen ? "h-12" : ""
+        "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors",
+        isActiveConvo ? "bg-[#e6edfc]" : "hover:bg-[#f7f7f7]",
+        renaming ? "bg-[#e6edfc]" : "",
+        isSmallScreen ? "py-[8px]" : ""
       )}
     >
       {renaming ? (
-        <div className="absolute inset-0 z-20 flex w-full items-center rounded-lg bg-[#EBEFF8] p-1.5">
+        <div className="flex h-6 grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all">
           <input
             ref={inputRef}
             type="text"
-            className="w-full rounded bg-transparent p-0.5 text-sm leading-tight focus-visible:outline-none"
+            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-[#212121]"
             value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -217,8 +220,7 @@ export default function Conversation({
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
-            "flex grow cursor-pointer items-center gap-2 overflow-hidden whitespace-nowrap break-all rounded-lg px-2 py-2",
-            isActiveConvo ? "bg-[#EBEFF8]" : ""
+            "flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all"
           )}
           title={title ?? ""}
         >
@@ -229,7 +231,7 @@ export default function Conversation({
             context="menu-item"
           /> */}
           <div
-            className="relative line-clamp-1 flex-1 grow overflow-hidden"
+            className="relative flex items-center gap-[8px] flex-1 grow overflow-hidden"
             onDoubleClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -238,28 +240,19 @@ export default function Conversation({
             }}
             alt={conversation?.flowType}
           >
-            <img
-              src={
-                __APP_ENV__.BASE_URL +
-                (conversation?.flowType === 20
-                  ? "/assets/linsi.png"
-                  : "/assets/talk.png")
-              }
-              className="size-6 inline-block mr-2.5"
-              alt=""
-            />
-            {title}
+            {conversation?.flowType === 20 ? (
+              <LingsiIcon className="size-[24px] shrink-0" />
+            ) : (
+              <TodayItemIcon className="size-[24px] shrink-0 text-[#6B778D]" />
+            )}
+            <span className="text-[#212121] text-[14px] leading-[20px] font-['PingFang_SC:Regular',sans-serif] truncate">
+              {title}
+            </span>
           </div>
-          {isActiveConvo ? (
-            <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l" />
-          ) : (
-            <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l " />
-          )}
         </a>
       )}
       <div
         className={cn(
-          "mr-2",
           isPopoverActive || isActiveConvo
             ? "flex"
             : "hidden group-focus-within:flex group-hover:flex"

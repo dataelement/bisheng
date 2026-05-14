@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { bindInviteCode } from "~/api/linsight";
-import { useGetBsConfig, useGetUserLinsightCountQuery } from "~/data-provider";
+import { useGetBsConfig, useGetUserLinsightCountQuery } from "~/hooks/queries/data-provider";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { Button, Dialog, DialogContent, Input } from "../ui";

@@ -3,15 +3,15 @@ import { useSetRecoilState } from 'recoil';
 import { SSE } from 'sse.js';
 import { v4 } from 'uuid';
 import type { TResData } from '~/common';
-import { useGenTitleMutation, useGetStartupConfig, useGetUserBalance } from '~/data-provider';
-import type { EventSubmission, TMessage, TPayload, TSubmission } from '~/data-provider/data-provider/src';
+import { useGenTitleMutation, useGetStartupConfig, useGetUserBalance } from '~/hooks/queries/data-provider';
+import type { EventSubmission, TMessage, TPayload, TSubmission } from '~/types/chat';
 import {
   /* @ts-ignore */
   createPayload,
   isAgentsEndpoint,
   isAssistantsEndpoint,
   removeNullishValues
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store from '~/store';
 import useLocalize from '../useLocalize';

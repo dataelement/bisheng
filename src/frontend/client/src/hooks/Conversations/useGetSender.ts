@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
-import { getResponseSender } from '~/data-provider/data-provider/src';
-import type { TEndpointOption, TEndpointsConfig } from '~/data-provider/data-provider/src';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { getResponseSender } from '~/types/chat';
+import type { TEndpointOption, TEndpointsConfig } from '~/types/chat';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 
 export default function useGetSender() {
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();

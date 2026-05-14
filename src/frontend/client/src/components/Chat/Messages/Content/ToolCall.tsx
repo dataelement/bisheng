@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { ShieldCheck, TriangleAlert } from 'lucide-react';
-import { actionDelimiter, actionDomainSeparator, Constants } from '~/data-provider/data-provider/src';
-import type { TAttachment } from '~/data-provider/data-provider/src';
+import { actionDelimiter, actionDomainSeparator, Constants } from '~/types/chat';
+import type { TAttachment } from '~/types/chat';
 import useLocalize from '~/hooks/useLocalize';
 import ProgressCircle from './ProgressCircle';
 import InProgressCall from './InProgressCall';

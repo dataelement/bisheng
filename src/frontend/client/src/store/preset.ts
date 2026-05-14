@@ -1,5 +1,5 @@
 import { atom } from 'recoil';
-import { TPreset } from '~/data-provider/data-provider/src';
+import { TPreset } from '~/types/chat';
 
 const defaultPreset = atom<TPreset | null>({
   key: 'defaultPreset',

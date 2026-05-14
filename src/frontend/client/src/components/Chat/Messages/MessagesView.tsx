@@ -4,7 +4,7 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import { useNavigate } from "react-router-dom";
 import { CSSTransition } from "react-transition-group";
 import type { ReactNode } from "react";
-import type { TMessage } from "~/data-provider/data-provider/src";
+import type { TMessage } from "~/types/chat";
 import {
   useScreenshot,
   useMessageScrolling,

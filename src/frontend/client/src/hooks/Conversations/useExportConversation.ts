@@ -8,13 +8,13 @@ import {
   ToolCallTypes,
   imageGenTools,
   isImageVisionTool,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type {
   TMessage,
   TPreset,
   TConversation,
   TMessageContentParts,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
 import { useScreenshot } from '~/hooks/ScreenshotContext';
 import { cleanupPreset, buildTree } from '~/utils';

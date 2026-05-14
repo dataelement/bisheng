@@ -9,7 +9,7 @@ import {
   MessageCircle,
   ArchiveRestore,
 } from 'lucide-react';
-import type { TConversation } from '~/data-provider/data-provider/src';
+import type { TConversation } from '~/types/chat';
 import {
   Table,
   Input,
@@ -25,7 +25,7 @@ import {
   TooltipAnchor,
   OGDialogTrigger,
 } from '~/components';
-import { useConversationsInfiniteQuery, useArchiveConvoMutation } from '~/data-provider';
+import { useConversationsInfiniteQuery, useArchiveConvoMutation } from '~/hooks/queries/data-provider';
 import { DeleteConversationDialog } from '~/components/Conversations/ConvoOptions';
 import { useAuthContext, useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';

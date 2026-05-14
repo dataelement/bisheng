@@ -253,3 +253,24 @@ class UserGroupDao(UserGroupBase):
                 UserGroup.is_group_admin == 1)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    async def aget_user_groups_batch(cls, user_ids: List[int]) -> dict:
+        """
+        Async: For a list of user_ids, return a map of user_id -> List[Group].
+        Only includes non-admin group memberships (is_group_admin == 0).
+        """
+        from bisheng.database.models.group import Group
+        if not user_ids:
+            return {}
+        statement = (
+            select(UserGroup.user_id, Group)
+            .join(Group, UserGroup.group_id == Group.id)
+            .where(UserGroup.user_id.in_(user_ids), UserGroup.is_group_admin == 0)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        result: dict = {}
+        for uid, group in rows:
+            result.setdefault(uid, []).append(group)
+        return result

@@ -1,13 +1,14 @@
 import { useState, useId, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
-import { Upload, Share2 } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import type * as t from '~/common';
 import ExportModal from '~/components/Nav/ExportConversation/ExportModal';
 import { ShareButton } from '~/components/Conversations/ConvoOptions';
 import { DropdownPopup, TooltipAnchor } from '~/components/ui';
 import { useMediaQuery, useLocalize } from '~/hooks';
 import store from '~/store';
+import { ShareOutlineIcon } from '~/components/icons';
 
 export default function ExportAndShareMenu({
   isSharedButtonEnabled,
@@ -56,7 +57,7 @@ export default function ExportAndShareMenu({
     {
       label: localize('com_ui_share'),
       onClick: shareHandler,
-      icon: <Share2 className="icon-md mr-2 text-text-secondary" />,
+      icon: <ShareOutlineIcon className="icon-md mr-2 text-text-secondary" />,
       show: isSharedButtonEnabled,
       /** NOTE: THE FOLLOWING PROPS ARE REQUIRED FOR MENU ITEMS THAT OPEN DIALOGS */
       hideOnClick: false,

@@ -29,11 +29,12 @@ class FlowStatus(Enum):
 
 
 class FlowType(Enum):
-    FLOW = 1
     ASSISTANT = 5
     WORKFLOW = 10
     WORKSTATION = 15
     LINSIGHT = 20  # Inspiration Mode
+    CHANNEL_ARTICLE = 25  # Channel Article AI Assistant
+    KNOLEDGE_SPACE = 30
 
 
 class AppEnum(Enum):
@@ -53,7 +54,7 @@ class FlowBase(SQLModelSerializable):
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(default=None, index=False)
     status: Optional[int] = Field(index=False, default=1)
-    flow_type: Optional[int] = Field(index=False, default=1)
+    flow_type: Optional[int] = Field(index=False, default=FlowType.WORKFLOW.value)
     guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -125,9 +126,7 @@ class FlowDao(FlowBase):
             session.commit()
             session.refresh(flow_info)
 
-            if flow_type == FlowType.FLOW.value:
-                app_type = ApplicationTypeEnum.SKILL
-            elif flow_type == FlowType.WORKFLOW.value:
+            if flow_type == FlowType.WORKFLOW.value:
                 app_type = ApplicationTypeEnum.WORKFLOW
             elif flow_type == FlowType.ASSISTANT.value:
                 app_type = ApplicationTypeEnum.ASSISTANT
@@ -143,7 +142,7 @@ class FlowDao(FlowBase):
                                              event_data=NewApplicationEventData(
                                                  app_id=flow_info.id,
                                                  app_name=flow_info.name,
-                                                 app_type=app_type.value
+                                                 app_type=app_type
                                              ))
 
             return flow_info
@@ -219,9 +218,10 @@ class FlowDao(FlowBase):
                            page_num: int) -> List[Tuple[Flow, RoleAccess]]:
         statment = select(Flow, RoleAccess).join(RoleAccess,
                                                  and_(RoleAccess.role_id == role_id,
-                                                      RoleAccess.type == AccessType.FLOW.value,
+                                                      RoleAccess.type == AccessType.WORKFLOW.value,
                                                       RoleAccess.third_id == Flow.id),
                                                  isouter=True)
+        statment = statment.where(Flow.flow_type == FlowType.WORKFLOW.value)
 
         if name:
             statment = statment.where(Flow.name.like('%' + name + '%'))
@@ -300,30 +300,13 @@ class FlowDao(FlowBase):
             return count_statement.scalar()
 
     @classmethod
-    def get_all_online_flows(cls,
-                             keyword: str = None,
-                             flow_ids: List[str] = None,
-                             flow_type: int = FlowType.FLOW.value) -> List[Flow]:
-        with get_sync_db_session() as session:
-            statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
-                               Flow.logo, Flow.update_time, Flow.description,
-                               Flow.guide_word).where(Flow.status == FlowStatus.ONLINE.value)
-            if flow_ids:
-                statement = statement.where(Flow.id.in_(flow_ids))
-            if keyword:
-                statement = statement.where(
-                    or_(Flow.name.like(f'%{keyword}%'), Flow.description.like(f'%{keyword}%')))
-            result = session.exec(statement).mappings().all()
-            return [Flow.model_validate(f) for f in result]
-
-    @classmethod
     def get_user_access_online_flows(cls,
                                      user_id: int,
                                      page: int = 0,
                                      limit: int = 0,
                                      keyword: str = None,
                                      flow_ids: List[str] = None,
-                                     flow_type: int = FlowType.FLOW.value) -> List[Flow]:
+                                     flow_type: int = FlowType.WORKFLOW.value) -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:
@@ -332,7 +315,7 @@ class FlowDao(FlowBase):
                 # admin
                 flow_id_extra = 'admin'
             else:
-                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
+                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.WORKFLOW)
                 if role_access:
                     flow_id_extra = [access.third_id for access in role_access]
         return FlowDao.get_flows(user_id,
@@ -346,10 +329,10 @@ class FlowDao(FlowBase):
 
     @classmethod
     def filter_flows_by_ids(cls, flow_ids: List[str], keyword: str = None,
-                            page: int = 0, limit: int = 0, flow_type: int = FlowType.FLOW.value) \
+                            page: int = 0, limit: int = 0, flow_type: int = FlowType.WORKFLOW.value) \
             -> (List[Flow], int):
         """
-        Via SkillsIDFilter the list of skills by returning only brief information and not includingdata
+        Filter flow records by ids and return brief information without graph data.
         """
         statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
                            Flow.update_time, Flow.description, Flow.guide_word)
@@ -397,7 +380,7 @@ class FlowDao(FlowBase):
                      id_list_not_in: list = None,
                      page: int = 0,
                      limit: int = 0) -> (List[Dict], int):
-        """ Get all apps Contains skills, assistants, workflows """
+        """Get all flow-based apps and assistants."""
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
             Flow.status, Flow.create_time, Flow.update_time).union_all(
@@ -466,7 +449,7 @@ class FlowDao(FlowBase):
                             page: int = 0,
                             limit: int = 0) -> (List[Dict], int):
         """
-        Get all apps Contains skills, assistants, workflows
+        Get all flow-based apps and assistants.
         Args:
             name:
             status:

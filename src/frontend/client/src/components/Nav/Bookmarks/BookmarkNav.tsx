@@ -3,7 +3,7 @@ import { useRecoilValue } from 'recoil';
 import { Menu, MenuButton, MenuItems } from '@headlessui/react';
 import { BookmarkFilledIcon, BookmarkIcon } from '@radix-ui/react-icons';
 import { BookmarkContext } from '~/Providers/BookmarkContext';
-import { useGetConversationTags } from '~/data-provider';
+import { useGetConversationTags } from '~/hooks/queries/data-provider';
 import BookmarkNavItems from './BookmarkNavItems';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';

@@ -1,4 +1,4 @@
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 
 export default function resetConvo(messages: TMessage[], sender: string) {
   if (messages.length === 0) {

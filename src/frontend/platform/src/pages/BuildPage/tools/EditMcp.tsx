@@ -228,7 +228,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 }
             );
 
-            if (tools) {
+            if (tools && typeof tools === 'object') {
                 serverRef.current = tools;
                 const parsedApis = tools.children.map(item => JSON.parse(item.extra));
                 setAvailableTools(parsedApis);

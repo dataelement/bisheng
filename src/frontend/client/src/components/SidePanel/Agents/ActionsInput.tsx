@@ -5,18 +5,18 @@ import {
   validateAndParseOpenAPISpec,
   openapiToFunction,
   AuthTypeEnum,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type {
   Action,
   FunctionTool,
   ActionMetadata,
   ValidationResult,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { ActionAuthForm } from '~/common';
 import type { Spec } from './ActionsTable';
 import ActionCallback from '~/components/SidePanel/Builder/ActionCallback';
 import { ActionsTable, columns } from './ActionsTable';
-import { useUpdateAgentAction } from '~/data-provider';
+import { useUpdateAgentAction } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import useLocalize from '~/hooks/useLocalize';
 import { Spinner } from '~/components/svg';

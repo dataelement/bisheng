@@ -1,10 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional, Union, Dict
+from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON
-from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
+from sqlalchemy import JSON, String, collate
+from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -19,6 +19,13 @@ class KnowledgeTypeEnum(Enum):
     QA = 1  # QAThe knowledge base upon
     NORMAL = 0  # Docly Knowledge Base
     PRIVATE = 2  # Workbench Personal Knowledge Base
+    SPACE = 3  # Knowledge Space
+
+
+class AuthTypeEnum(str, Enum):
+    PUBLIC = 'public'
+    PRIVATE = 'private'
+    APPROVAL = 'approval'
 
 
 class KnowledgeState(Enum):
@@ -49,7 +56,7 @@ class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     name: str = Field(index=True, min_length=1, max_length=200,
                       description='Knowledge Base Name')
-    type: int = Field(index=False, default=0,
+    type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
                       description='Knowledge Base Type, value from KnowledgeTypeEnum')
     description: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=False)
@@ -57,6 +64,8 @@ class KnowledgeBase(SQLModelSerializable):
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
+    is_released: bool = Field(default=False, description='is released to knowledge space square')
+    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -81,6 +90,7 @@ class KnowledgeRead(KnowledgeBase):
     id: int
     user_name: Optional[str] = None
     copiable: Optional[bool] = None
+    is_pinned: Optional[bool] = False
 
 
 class KnowledgeUpdate(BaseModel):
@@ -152,6 +162,14 @@ class KnowledgeDao(KnowledgeBase):
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    async def async_update_knowledge_update_time_by_id(cls, knowledge_id: int):
+        statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id).values(
+            update_time=text('NOW()'))
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
 
     @classmethod
     def query_by_id(cls, knowledge_id: int) -> Knowledge:
@@ -255,7 +273,10 @@ class KnowledgeDao(KnowledgeBase):
         elif sort_by == "update_time":
             statement = statement.order_by(Knowledge.update_time.desc())
         elif sort_by == "name":
-            statement = statement.order_by(text('CONVERT(name USING gbk) ASC'))
+            statement = statement.order_by(
+                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
+                text('CONVERT(name USING gbk) ASC'),
+            )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -450,7 +471,10 @@ class KnowledgeDao(KnowledgeBase):
         elif sort_by == "update_time":
             statement = statement.order_by(Knowledge.update_time.desc())
         elif sort_by == "name":
-            statement = statement.order_by(text('CONVERT(name USING gbk) ASC'))
+            statement = statement.order_by(
+                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
+                text('CONVERT(name USING gbk) ASC'),
+            )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -506,6 +530,14 @@ class KnowledgeDao(KnowledgeBase):
             session.commit()
 
     @classmethod
+    async def async_delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
+        async with get_async_db_session() as session:
+            await session.exec(delete(KnowledgeFile).where(col(KnowledgeFile.knowledge_id) == knowledge_id))
+            if not only_clear:
+                await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
+            await session.commit()
+
+    @classmethod
     def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
                                     page_size: int = 0) -> List[Knowledge]:
         """ Get a list of knowledge bases based on the creation timeframe """
@@ -525,3 +557,250 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    # ─── Knowledge Space specific ────────────────────────────────────────────
+
+    @classmethod
+    def count_spaces_by_user(cls, user_id: int) -> int:
+        """ Count how many Knowledge Spaces a user has created """
+        with get_sync_db_session() as session:
+            return session.scalar(
+                select(func.count(Knowledge.id)).where(
+                    Knowledge.user_id == user_id,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
+                )
+            )
+
+    @classmethod
+    async def async_count_spaces_by_user(cls, user_id: int) -> int:
+        """ Async: Count how many Knowledge Spaces a user has created """
+        async with get_async_db_session() as session:
+            return await session.scalar(
+                select(func.count(Knowledge.id)).where(
+                    Knowledge.user_id == user_id,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
+                )
+            )
+
+    @classmethod
+    def get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Get all Knowledge Spaces created by a user """
+        statement = select(Knowledge).where(
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Async: Get all Knowledge Spaces created by a user """
+        statement = select(Knowledge).where(
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def get_spaces_by_ids(cls, space_ids: List[int], order_by: str = 'update_time') -> List[Knowledge]:
+        """ Get Knowledge Spaces by a list of IDs """
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_spaces_by_ids(cls, space_ids: List[int], order_by: str = 'update_time') -> List[Knowledge]:
+        """ Async: Get Knowledge Spaces by a list of IDs """
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def get_public_spaces(cls, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
+        statement = select(Knowledge).where(
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_public_spaces(cls, keyword: str = None, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
+        statement = select(Knowledge).where(
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.is_released == True,
+            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
+        )
+        if keyword:
+            statement = statement.where(or_(Knowledge.name.like(f"%{keyword}%"),
+                                            Knowledge.description.like(f"%{keyword}%")))
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def update_space(cls, space: Knowledge) -> Knowledge:
+        """ Persist an updated Knowledge Space record """
+        with get_sync_db_session() as session:
+            session.add(space)
+            session.commit()
+            session.refresh(space)
+            return space
+
+    @classmethod
+    async def async_update_space(cls, space: Knowledge) -> Knowledge:
+        """ Async: Persist an updated Knowledge Space record """
+        async with get_async_db_session() as session:
+            session.add(space)
+            await session.commit()
+            await session.refresh(space)
+            return space
+
+    @classmethod
+    async def async_get_public_spaces_paginated(
+            cls,
+            user_id: int,
+            keyword: Optional[str] = None,
+            page: int = 1,
+            page_size: int = 20,
+    ) -> List[Tuple[Any, ...]]:
+        """
+        Paginated query of released public/approval spaces for the Knowledge Square.
+        Uses multi-table LEFT JOIN:
+        - LEFT JOIN space_channel_member for current user's subscription status
+        - LEFT JOIN subquery for subscriber count (status=ACTIVE)
+        Returns list of tuples:
+        (Knowledge, user_subscription_status, user_subscription_update_time, subscriber_count)
+        """
+        from bisheng.common.models.space_channel_member import (
+            SpaceChannelMember, BusinessTypeEnum, MembershipStatusEnum, REJECTED_STATUS_DISPLAY_WINDOW,
+        )
+
+        rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
+
+        # Subquery: count subscribers (status=ACTIVE) per space
+        subscriber_subq = (
+            select(
+                SpaceChannelMember.business_id,
+                func.count().label('subscriber_count'),
+            )
+            .where(
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+            )
+            .group_by(SpaceChannelMember.business_id)
+            .subquery()
+        )
+
+        # Main query with LEFT JOINs
+        query = (
+            select(
+                Knowledge,
+                SpaceChannelMember.status.label('user_subscription_status'),
+                SpaceChannelMember.update_time.label('user_subscription_update_time'),
+                func.coalesce(subscriber_subq.c.subscriber_count, 0).label('subscriber_count'),
+            )
+            .outerjoin(
+                SpaceChannelMember,
+                (collate(col(Knowledge.id).cast(String), 'utf8mb4_unicode_ci') == SpaceChannelMember.business_id)
+                & (SpaceChannelMember.business_type == BusinessTypeEnum.SPACE)
+                & (SpaceChannelMember.user_id == user_id),
+            )
+            .outerjoin(
+                subscriber_subq,
+                collate(col(Knowledge.id).cast(String), 'utf8mb4_unicode_ci') == subscriber_subq.c.business_id,
+            )
+            .where(
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.is_released == True,
+                Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
+            )
+        )
+
+        # Keyword filter
+        if keyword:
+            like_pattern = f'%{keyword}%'
+            query = query.where(
+                or_(
+                    Knowledge.name.like(like_pattern),
+                    Knowledge.description.like(like_pattern),
+                )
+            )
+
+        # Sort: not-subscribed first, then by update_time DESC
+        subscription_order = case(
+            (SpaceChannelMember.status.is_(None), 0),
+            (
+                (SpaceChannelMember.status == MembershipStatusEnum.REJECTED)
+                & (SpaceChannelMember.update_time < rejection_cutoff),
+                0,
+            ),
+            else_=1,
+        )
+        query = query.order_by(
+            subscription_order.asc(),
+            func.coalesce(Knowledge.update_time, Knowledge.create_time).desc(),
+        )
+
+        # Pagination
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+        async with get_async_db_session() as session:
+            result = await session.exec(query)
+            return list(result.all())
+
+    @classmethod
+    async def async_count_public_spaces(cls, keyword: Optional[str] = None) -> int:
+        """Count total released public/approval spaces matching the keyword filter."""
+        query = (
+            select(func.count())
+            .select_from(Knowledge)
+            .where(
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.is_released == True,
+                Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
+            )
+        )
+
+        if keyword:
+            like_pattern = f'%{keyword}%'
+            query = query.where(
+                or_(
+                    Knowledge.name.like(like_pattern),
+                    Knowledge.description.like(like_pattern),
+                )
+            )
+
+        async with get_async_db_session() as session:
+            return await session.scalar(query) or 0
+
+    @staticmethod
+    def _apply_space_order(statement, order_by: str):
+        if order_by == 'create_time':
+            return statement.order_by(Knowledge.create_time.desc())
+        elif order_by == 'name':
+            return statement.order_by(Knowledge.name.asc())
+        else:
+            return statement.order_by(Knowledge.update_time.desc())

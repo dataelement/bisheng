@@ -1,7 +1,7 @@
 import React, { useRef, Dispatch, SetStateAction } from 'react';
-import { TConversationTag } from '~/data-provider/data-provider/src';
+import { TConversationTag } from '~/types/chat';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { useConversationTagMutation } from '~/data-provider';
+import { useConversationTagMutation } from '~/hooks/queries/data-provider';
 import { OGDialog, Button, Spinner } from '~/components';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';

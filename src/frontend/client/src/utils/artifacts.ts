@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { ArtifactModes, shadcnComponents } from '~/data-provider/data-provider/src';
+import { ArtifactModes, shadcnComponents } from '~/types/chat';
 import type {
   SandpackProviderProps,
   SandpackPredefinedTemplate,
@@ -125,7 +125,7 @@ const standardDependencies = {
   'embla-carousel-react': '^8.2.0',
   'react-day-picker': '^9.0.8',
   'dat.gui': '^0.7.9',
-  vaul: '^0.9.1',
+  'vaul': '^0.9.1',
 };
 
 const mermaidDependencies = Object.assign(

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import type { Assistant, TPreset } from '~/data-provider/data-provider/src';
+import type { Assistant, TPreset } from '~/types/chat';
 import type { TModelSelectProps, Option } from '~/common';
 import {
   cn,

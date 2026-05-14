@@ -6,15 +6,15 @@ import {
   QueryKeys,
   defaultOrderQuery,
   mergeFileConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type {
   Agent,
   AgentAvatar,
   AgentCreateParams,
   AgentListResponse,
-} from '~/data-provider/data-provider/src';
-import { useUploadAgentAvatarMutation, useGetFileConfig } from '~/data-provider';
+} from '~/types/chat';
+import { useUploadAgentAvatarMutation, useGetFileConfig } from '~/hooks/queries/data-provider';
 import { AgentAvatarRender, NoImage, AvatarMenu } from './Images';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';

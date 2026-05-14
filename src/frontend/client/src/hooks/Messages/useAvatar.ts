@@ -1,7 +1,7 @@
 import { initials } from '@dicebear/collection';
 import { createAvatar } from '@dicebear/core';
 import { useEffect, useState } from 'react';
-import type { TUser } from '~/data-provider/data-provider/src';
+import type { TUser } from '~/types/chat';
 
 const avatarCache: Record<string, string> = {};
 const useAvatar = (user: TUser | undefined) => {

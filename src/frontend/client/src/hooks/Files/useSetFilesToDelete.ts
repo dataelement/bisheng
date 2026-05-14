@@ -1,4 +1,4 @@
-import { LocalStorageKeys } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys } from '~/types/chat';
 
 export default function useSetFilesToDelete() {
   const setFilesToDelete = (files: Record<string, unknown>) =>

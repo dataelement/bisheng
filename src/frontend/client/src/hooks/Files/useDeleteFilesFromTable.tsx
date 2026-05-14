@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys } from '~/data-provider/data-provider/src';
-import type { BatchFile, TFile } from '~/data-provider/data-provider/src';
-import { useDeleteFilesMutation } from '~/data-provider';
+import { QueryKeys } from '~/types/chat';
+import type { BatchFile, TFile } from '~/types/chat';
+import { useDeleteFilesMutation } from '~/hooks/queries/data-provider';
 import useFileDeletion from './useFileDeletion';
 
 export default function useDeleteFilesFromTable(callback?: () => void) {

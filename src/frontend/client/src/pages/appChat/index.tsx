@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
 import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
 import { chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
@@ -26,6 +27,8 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
     const [_, setChatId] = useRecoilState(chatIdState)
     const chatState = useRecoilValue(currentChatState)
     const build = useBuild()
+    const navigate = useNavigate()
+    const { showToast } = useToastContext()
 
     // console.log('[chatState] :>> ', chatState);
     // console.log('[runningState] :>> ', __);
@@ -58,12 +61,22 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
         switch (numericType) {
             case FLOW_TYPES.SKILL:
+                // Skill (flow_type=1) is not accessible via app chat — redirect to 404
+                navigate('/404', { replace: true });
+                return;
             case FLOW_TYPES.WORK_FLOW:
-                // 获取详情和历史消息
+                // Fetch detail and chat history, skip global 403 redirect
                 const [flowRes, msgRes] = await Promise.all([
-                    getFlowApi(fid!, API_VERSION, shareToken),
+                    getFlowApi(fid!, API_VERSION, shareToken, true),
                     getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ])
+
+                // Handle 403: no permission, redirect to app center
+                if (flowRes.status_code === 403) {
+                    showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+                    navigate('/apps', { replace: true });
+                    return;
+                }
 
                 if (flowRes.status_code !== 200) {
                     error = { code: AppLostMessage, data: null }
@@ -94,10 +107,18 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 }
                 break;
             case FLOW_TYPES.ASSISTANT:
+                // Fetch assistant detail, skip global 403 redirect
                 const [assistantRes, historyRes] = await Promise.all([
-                    getAssistantDetailApi(fid, shareToken),
+                    getAssistantDetailApi(fid, shareToken, true),
                     getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ]);
+
+                // Handle 403: no permission, redirect to app center
+                if (assistantRes.status_code === 403) {
+                    showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+                    navigate('/apps', { replace: true });
+                    return;
+                }
 
                 if (assistantRes.status_code !== 200) {
                     error = { code: AppLostMessage, data: null };

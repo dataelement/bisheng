@@ -1,8 +1,8 @@
 import { useForm } from 'react-hook-form';
 import { useOutletContext } from 'react-router-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useResetPasswordMutation } from '~/data-provider/data-provider/src/react-query';
-import type { TResetPassword } from '~/data-provider/data-provider/src';
+import { useResetPasswordMutation } from '~/hooks/queries';
+import type { TResetPassword } from '~/types/chat';
 import type { TLoginLayoutContext } from '~/common';
 import { useLocalize } from '~/hooks';
 

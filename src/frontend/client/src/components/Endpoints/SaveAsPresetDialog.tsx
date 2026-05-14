@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useCreatePresetMutation } from '~/data-provider/data-provider/src/react-query';
+import { useCreatePresetMutation } from '~/hooks/queries';
 import type { TEditPresetProps } from '~/common';
 import { cn, removeFocusOutlines, cleanupPreset, defaultTextProps } from '~/utils/';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';

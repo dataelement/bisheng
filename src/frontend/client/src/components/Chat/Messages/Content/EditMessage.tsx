@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
-import { useUpdateMessageMutation } from '~/data-provider/data-provider/src/react-query';
+import { useUpdateMessageMutation } from '~/hooks/queries';
 import type { TEditProps } from '~/common';
 import { useChatContext, useAddedChatContext } from '~/Providers';
 import { TextareaAutosize, TooltipAnchor } from '~/components/ui';

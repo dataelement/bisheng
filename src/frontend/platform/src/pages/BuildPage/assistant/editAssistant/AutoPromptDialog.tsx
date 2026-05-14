@@ -168,64 +168,66 @@ export default function AutoPromptDialog({ onOpenChange }) {
     }
 
     return <DialogContent className="sm:max-w-[925px] bg-background-login max-h-[90vh] overflow-hidden flex flex-col" close={false}>
-    <div className="flex-1 overflow-y-auto">
-        <div className="flex">
-            {/* Prompt */}
-            <div className="w-[50%] relative pr-6">
-                <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold leading-none tracking-tight flex">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
-                    <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><RefreshCw size={14} className="mr-2" />{t('build.retry')}</Button>
-                </div>
-                <div className="group flex justify-end mt-2 h-[600px] relative">
-                    <Textarea ref={areaRef} className="h-full"
-                        placeholder={t('prompt')}
-                    ></Textarea>
-                    <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
-                </div>
-            </div>
-            {/* Automatic configuration */}
-            <div className="w-[50%] border-l pl-6">
-                <div>
-                    <span className="text-lg font-semibold leading-none tracking-tight">{t('build.automaticallyConfigurations')}</span>
-                </div>
-                <div className="">
-                    {/* Opening statement */}
-                    <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
-                        <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50 dark:bg-[#171717]"></Textarea>
-                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
+        <div className="flex-1 overflow-y-auto">
+            <div className="flex">
+                {/* Prompt */}
+                <div className="w-[50%] relative pr-6">
+                    <div className="flex items-center justify-between">
+                        <span className="text-lg font-semibold leading-none tracking-tight flex">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
+                        <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><RefreshCw size={14} className="mr-2" />{t('build.retry')}</Button>
                     </div>
-                    {/* Guide questions */}
-                    <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
-                        {
-                            question.map(qs => (
-                                <p key={qs} className="text-sm text-muted-foreground bg-gray-50 dark:bg-[#171717] px-2 py-1 rounded-xl mb-2">{qs}</p>
-                            ))
-                        }
-                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
+                    <div className="group flex justify-end mt-2 h-[600px] relative">
+                        <Textarea ref={areaRef} className="h-full"
+                            placeholder={t('prompt')}
+                        ></Textarea>
+                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
                     </div>
-                    {/* Tools */}
-                    <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.tools')}{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
-                        <div className="pt-1">
-                            {
-                                tools.map(tool => (
-                                    <div key={tool.id} className="flex gap-2 items-center mt-2">
-                                        <TitleIconBg id={tool.id} className=" w-7 h-7" />
-                                        <p className="text-sm">{tool.name}</p>
-                                    </div>
-                                ))
-                            }
+                </div>
+                {/* Automatic configuration */}
+                <div className="w-[50%] border-l pl-6">
+                    <div>
+                        <span className="text-lg font-semibold leading-none tracking-tight">{t('build.automaticallyConfigurations')}</span>
+                    </div>
+                    <div className="">
+                        {/* Opening statement */}
+                        <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
+                            <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                            <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50 dark:bg-[#171717]"></Textarea>
+                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
                         </div>
-                        <Button
-                            className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
-                            disabled={LoadType.Tool <= loading || !tools.length} size="sm"
-                            onClick={handleUseTools}
-                        >{t('build.use')}</Button>
-                    </div>
-                    {/* Skills */}
-                    <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
+                        {/* Guide questions */}
+                        <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
+                            <div className="text-md mb-2 font-medium leading-none flex">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                            <div className="min-h-32">
+                                {
+                                    question.map(qs => (
+                                        <p key={qs} className="text-sm text-muted-foreground bg-gray-50 dark:bg-[#171717] px-2 py-1 rounded-xl mb-2">{qs}</p>
+                                    ))
+                                }
+                            </div>
+                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
+                        </div>
+                        {/* Tools */}
+                        <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
+                            <div className="text-md mb-2 font-medium leading-none flex">{t('build.tools')}{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                            <div className="pt-1 min-h-32">
+                                {
+                                    tools.map(tool => (
+                                        <div key={tool.id} className="flex gap-2 items-center mt-2">
+                                            <TitleIconBg id={tool.id} className=" w-7 h-7" />
+                                            <p className="text-sm">{tool.name}</p>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                            <Button
+                                className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
+                                disabled={LoadType.Tool <= loading || !tools.length} size="sm"
+                                onClick={handleUseTools}
+                            >{t('build.use')}</Button>
+                        </div>
+                        {/* Skills */}
+                        {/* <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.skill')}{LoadType.Flow === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
                             {
@@ -243,17 +245,17 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             size="sm"
                             onClick={handleUseFlows}
                         >{t('build.use')}</Button>
+                    </div> */}
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    {/* Bottom button area - fixed at bottom */}
-    <DialogFooter className="border-t mt-2">
-        <DialogClose>
-            <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>
-        </DialogClose>
-        <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>{t('build.useAll')}</Button>
-    </DialogFooter>
-</DialogContent>
+        {/* Bottom button area - fixed at bottom */}
+        <DialogFooter className="border-t pt-2">
+            <DialogClose>
+                <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>
+            </DialogClose>
+            <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>{t('build.useAll')}</Button>
+        </DialogFooter>
+    </DialogContent>
 };

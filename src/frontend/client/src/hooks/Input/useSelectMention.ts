@@ -1,13 +1,13 @@
 import { useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
-import { EModelEndpoint, isAgentsEndpoint, isAssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, isAgentsEndpoint, isAssistantsEndpoint } from '~/types/chat';
 import type {
   TPreset,
   TModelSpec,
   TConversation,
   TAssistantsMap,
   TEndpointsConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { MentionOption, ConvoGenerator } from '~/common';
 import { getConvoSwitchLogic, getModelSpecIconURL, removeUnavailableTools } from '~/utils';
 import { useChatContext } from '~/Providers';

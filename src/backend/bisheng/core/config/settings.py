@@ -50,14 +50,17 @@ class LoggerConf(BaseModel):
 
 class PasswordConf(BaseModel):
     """ Password Config """
-    password_valid_period: Optional[int] = Field(default=0, description='Password overXDays must be modified, Login prompt to change password again')
+    password_valid_period: Optional[int] = Field(default=0,
+                                                 description='Password overXDays must be modified, Login prompt to change password again')
     login_error_time_window: Optional[int] = Field(default=0, description='Login error time window,minutes unit')
-    max_error_times: Optional[int] = Field(default=0, description='Maximum number of errors, after which the user will be banned')
+    max_error_times: Optional[int] = Field(default=0,
+                                           description='Maximum number of errors, after which the user will be banned')
 
 
 class SystemLoginMethod(BaseModel):
     """ System Login Method Config """
-    bisheng_pro: bool = Field(default=False, description='Whether it is a commercial version, Verify Configuredlicense')
+    bisheng_pro: bool = Field(default=False, description='Whether it is a commercial version')
+    dashboard_pro: bool = Field(default=False, description='Whether dashboard is a commercial version')
     admin_username: Optional[str] = Field(default=None, description='Admin username registered via web')
     allow_multi_login: bool = Field(default=True, description='Whether to allow multi-sign-on')
 
@@ -105,13 +108,16 @@ class MinioConf(BaseModel):
     cert_check: Optional[bool] = Field(default=False, description="Whether to calibrate the certificate")
     endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio Service address")
     sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio Public access address")
-    share_schema: Optional[bool] = Field(default=False, description="minio Whether the public access address is usedhttps")
-    share_cert_check: Optional[bool] = Field(default=False, description="minio Whether the public access address verifies the certificate")
+    share_schema: Optional[bool] = Field(default=False,
+                                         description="minio Whether the public access address is usedhttps")
+    share_cert_check: Optional[bool] = Field(default=False,
+                                             description="minio Whether the public access address verifies the certificate")
     access_key: Optional[str] = Field(default="minioadmin", description="minio Username")
     secret_key: Optional[str] = Field(default="minioadmin", description="minio Passwords")
     public_bucket: Optional[str] = Field(default="bisheng",
                                          description="Store permanent files by defaultbucket. Files can be permanently accessed by anonymous users")
-    tmp_bucket: Optional[str] = Field(default="tmp-dir", description="Ad hocbucket, stored files will have an expiration date")
+    tmp_bucket: Optional[str] = Field(default="tmp-dir",
+                                      description="Ad hocbucket, stored files will have an expiration date")
 
 
 class ObjectStore(BaseModel):
@@ -141,22 +147,33 @@ class CeleryConf(BaseModel):
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_increment',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'telemetry_mid_knowledge_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_knowledge_increment'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'telemetry_sync_mid_app_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_sync_mid_app_increment'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_app_increment',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'telemetry_sync_mid_user_interact_dtl' not in self.beat_schedule:
             self.beat_schedule['telemetry_sync_mid_user_interact_dtl'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'sync_information_article' not in self.beat_schedule:
+            self.beat_schedule['sync_information_article'] = {
+                'task': 'bisheng.worker.information.article.sync_information_article',
+                'schedule': crontab.from_string('30 5 * * *'),  # 05:30 exec every day
+            }
+
+        if 'sync_information_article_hourly' not in self.beat_schedule:
+            self.beat_schedule['sync_information_article_hourly'] = {
+                'task': 'bisheng.worker.information.article.sync_information_article',
+                'schedule': crontab.from_string('*/30 * * * *'),  # exec Every half hour
             }
 
         # convert str to crontab
@@ -169,17 +186,25 @@ class CeleryConf(BaseModel):
 class LinsightConf(BaseModel):
     """ Inspiration Configuration """
     debug: bool = Field(default=False, description='Whether to opendebugMode')
-    tool_buffer: int = Field(default=100000, description='Maximum Tool Execution Historytoken, you need to summarize your history after')
+    tool_buffer: int = Field(default=100000,
+                             description='Maximum Tool Execution Historytoken, you need to summarize your history after')
     max_steps: int = Field(default=200, description='Maximum number of steps per task to prevent infinite loops')
-    retry_num: int = Field(default=3, description='Number of times the model call was retried during the execution of the Ideas task')
-    retry_sleep: int = Field(default=5, description='Interval between retries of model calls during execution of Invisible Tasks (seconds)')
-    max_file_num: int = Field(default=5, description='BuatSOPJampromptThe number of user-uploaded file information placed in the')
-    max_knowledge_num: int = Field(default=20, description='BuatSOPJampromptThe amount of knowledge base information placed in the')
+    retry_num: int = Field(default=3,
+                           description='Number of times the model call was retried during the execution of the Ideas task')
+    retry_sleep: int = Field(default=5,
+                             description='Interval between retries of model calls during execution of Invisible Tasks (seconds)')
+    max_file_num: int = Field(default=5,
+                              description='BuatSOPJampromptThe number of user-uploaded file information placed in the')
+    max_knowledge_num: int = Field(default=20,
+                                   description='BuatSOPJampromptThe amount of knowledge base information placed in the')
     waiting_list_url: str = Field(default=None, description='waiting list Jump link')
     default_temperature: float = Field(default=0, description='Default Temperature at Model Request')
-    retry_temperature: float = Field(default=1, description='reactModejsonModel temperature when retrying after parsing failure')
-    file_content_length: int = Field(default=5000, description='The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded')
-    max_file_content_num: int = Field(default=3, description='Number of files to read when subtasking, in reverse order by modification time')
+    retry_temperature: float = Field(default=1,
+                                     description='reactModejsonModel temperature when retrying after parsing failure')
+    file_content_length: int = Field(default=5000,
+                                     description='The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded')
+    max_file_content_num: int = Field(default=3,
+                                      description='Number of files to read when subtasking, in reverse order by modification time')
 
 
 class CookieConf(BaseModel):
@@ -202,9 +227,40 @@ class Etl4lmConf(BaseModel):
     ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdkService Address')
 
 
+class MineruConf(BaseModel):
+    url: str = Field(default='', description='MineruService Address')
+    timeout: int = Field(default=60, description='MineruService Request Timeout (sec)')
+    headers: Dict = Field(default_factory=dict, description='MineruService Request Headers')
+    request_kwargs: Dict = Field(default_factory=dict, description='MineruService Request Arguments')
+
+
+class PaddleOcrConf(BaseModel):
+    """ PaddleOcr Configure """
+    url: str = Field(default='', description='PaddleOcrService Address')
+    timeout: int = Field(default=60, description='PaddleOcrService Request Timeout (sec)')
+    auth_token: str = Field(default='', description='PaddleOcrService Authentication Token')
+    headers: Dict = Field(default_factory=dict, description='PaddleOcrService Headers')
+    request_kwargs: Dict = Field(default_factory=dict, description='PaddleOcrService Request Arguments')
+
+
 class KnowledgeConf(BaseModel):
     """ Knowledge Configure """
-    etl4lm: Etl4lmConf
+    loader_provider: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
+    etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description='Etl4lm Configure')
+    mineru: MineruConf = Field(default_factory=MineruConf, description='Mineru Configure')
+    paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description='PaddleOcr Config')
+
+
+class IntelligenceCenterConf(BaseModel):
+    """ Intelligence Center Configure """
+    base_url: str = Field(default='', description='Intelligence Center Service Address')
+    api_key: str = Field(default='', description='Intelligence Center Service API Key')
+    kwargs: Dict = Field(default_factory=dict, description='Additional Arguments')
+
+
+class McpConf(BaseModel):
+    """ MCP Configure """
+    enable_stdio: bool = Field(default=True, description='Whether to enable stdio')
 
 
 class Settings(BaseModel):
@@ -258,6 +314,9 @@ class Settings(BaseModel):
     telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
     license_str: Optional[str] = None  # license Contents
+
+    information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
+    mcp: McpConf = McpConf()
 
     @field_validator('database_url')
     @classmethod

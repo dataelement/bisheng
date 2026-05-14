@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -14,8 +14,8 @@ import svgr from "vite-plugin-svgr";
 const app_env = { BASE_URL: '' } // /custom
 
 // Use environment variable to determine the target.
-//  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
+// const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
 const fileServiceTarget = "http://192.168.106.116:9000";
 
 // 公共代理配置
@@ -59,7 +59,8 @@ fileServiceRoutes.forEach(route => {
 });
 
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, __dirname, ['VITE_']);
   return {
     base: app_env.BASE_URL || '/',
     build: {
@@ -70,23 +71,38 @@ export default defineConfig(() => {
           chunkFileNames: 'assets/js/[name]-[hash].js',
           entryFileNames: 'assets/js/[name]-[hash].js',
           assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+          experimentalMinChunkSize: 10_000,
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react-ace') || id.includes('ace-builds') || id.includes('react-syntax-highlighter') || id.includes('rehype-mathjax') || id.includes('react-markdown')) {
-                return 'acebuilds';
-              }
-              if (id.includes('@xyflow/react')) {
-                return 'reactflow';
-              }
+              // ── Isolated heavy packages (no React init-time dep, safe to split) ──
+
+              // PDF viewer — completely standalone
               if (id.includes('pdfjs-dist')) {
-                return 'pdfjs';
+                return 'vendor-pdf';
               }
-              if (id.includes('react-window') || id.includes('react-beautiful-dnd') || id.includes('react-dropzone')) {
-                return 'reactdrop';
+              // Document processing — standalone (xlsx, mammoth + their transitive deps)
+              if (/[\\/](xlsx|mammoth|xmlbuilder|@xmldom|bluebird|lop|underscore)[\\/]/.test(id)) {
+                return 'vendor-xlsx';
+              }
+              // Editor suite — heavy, lazy-loaded, self-contained subgraph
+              // Includes transitive deps: refractor, highlight.js, prismjs
+              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|highlight\.js|prismjs)[\\/]/.test(id)) {
+                return 'vendor-editor';
+              }
+              // Markdown + MathJax — heavy, lazy-loaded, self-contained subgraph
+              if (
+                id.includes('mathjax') ||
+                /[\\/](react-markdown|rehype-|remark-|dompurify|mdast-|hast|micromark|property-information)/.test(id)
+              ) {
+                return 'vendor-markdown';
               }
 
-              return
+              // ── Everything else → single vendor chunk (avoids circular deps) ──
+              // Includes: react, radix, recharts/d3, lucide, i18n, xyflow,
+              // dnd libs, lodash, axios, zustand, etc.
+              return 'vendor';
             }
+            // Business code: let Rollup handle via lazy-import code splitting
           }
         }
       }
@@ -133,7 +149,8 @@ export default defineConfig(() => {
       // })
     ],
     define: {
-      __APP_ENV__: JSON.stringify(app_env)
+      __APP_ENV__: JSON.stringify(app_env),
+      __VCONSOLE_ENABLED__: JSON.stringify(env.VITE_ENABLE_VCONSOLE === 'true'),
     },
     server: {
       host: '0.0.0.0',

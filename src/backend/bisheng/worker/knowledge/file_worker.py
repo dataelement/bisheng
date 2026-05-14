@@ -1,16 +1,18 @@
 import json
 from typing import List
 
+from langchain_elasticsearch import ElasticsearchStore
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
+from bisheng.api.services.knowledge_imp import process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
+from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
@@ -19,7 +21,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng_langchain.vectorstores import Milvus
 
 
 @bisheng_celery.task(acks_late=True)
@@ -171,9 +173,10 @@ def copy_vector(
         target_file_id: int,
 ):
     # migrate vectordb
-    embedding = FakeEmbedding()
+    embedding = FakeEmbeddings()
     source_col = source_konwledge.collection_name
-    source_milvus: Milvus = decide_vectorstores(source_col, "Milvus", embedding)
+    source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_konwledge,
+                                                                        embeddings=embedding)
     # Saat Inies Exclusion:vector
     fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
     source_data = source_milvus.col.query(
@@ -183,34 +186,30 @@ def copy_vector(
     for data in source_data:
         data["knowledge_id"] = target_knowledge.id
         data["document_id"] = target_file_id
-    milvus_db: Milvus = decide_vectorstores(
-        target_knowledge.collection_name, "Milvus", embedding
-    )
+    milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge, embeddings=embedding)
     # Create a new one for the first time collection
     if milvus_db.col is None:
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
                              using=source_milvus.alias,
                              consistency_level=source_milvus.consistency_level)
-        milvus_db: Milvus = decide_vectorstores(
-            target_knowledge.collection_name, "Milvus", embedding
-        )
+        milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
+                                                                        embeddings=embedding)
+
     if milvus_db:
         insert_milvus(source_data, fields, milvus_db)
 
-    es_db = decide_vectorstores(
-        target_knowledge.index_name, "ElasticKeywordsSearch", embedding
-    )
+    es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=target_knowledge)
     if es_db:
-        insert_es(source_data, es_db)
+        insert_es(source_data, es_db, index_name=target_knowledge.index_name)
 
 
 def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge: Knowledge):
-    embedding = FakeEmbedding()
+    embedding = FakeEmbeddings()
     source_col = source_konwledge.collection_name
-    source_milvus: Milvus = decide_vectorstores(source_col, "Milvus", embedding)
-    milvus_db: Milvus = decide_vectorstores(
-        target_knowledge.collection_name, "Milvus", embedding
-    )
+    source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_konwledge,
+                                                                        embeddings=embedding)
+    milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
+                                                                    embeddings=embedding)
     if milvus_db.col is None and source_milvus.col is not None:
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
                              using=source_milvus.alias,
@@ -218,9 +217,7 @@ def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge
         new_col.load()
 
     # Buates index
-    es_db = decide_vectorstores(
-        target_knowledge.index_name, "ElasticKeywordsSearch", embedding
-    )
+    es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=target_knowledge)
 
     es_db.client.indices.create(index=target_knowledge.index_name, ignore=400)
 
@@ -247,7 +244,7 @@ def insert_milvus(li: List, fields: list, target: Milvus):
     logger.info("copy_done pk_size={}", len(res_list))
 
 
-def insert_es(li: List, target: ElasticKeywordsSearch):
+def insert_es(li: List, target: ElasticsearchStore, index_name: str):
     from elasticsearch.helpers import bulk
 
     res_list = []
@@ -259,7 +256,7 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
         metadata = data
         request = {
             "_op_type": "index",
-            "_index": target.index_name,
+            "_index": index_name,
             "text": text,
             "metadata": metadata,
             "_id": ids[i],
@@ -267,7 +264,7 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
         requests.append(request)
     bulk(target.client, requests)
 
-    target.client.indices.refresh(index=target.index_name)
+    target.client.indices.refresh(index=index_name)
     logger.info("copy_es_done pk_size={}", len(res_list))
 
 
@@ -317,17 +314,8 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     logger.debug("parse_knowledge_file_celery_start", file_id)
     process_file_task(db_knowledge,
                       db_files=[db_file],
-                      separator=file_rule.separator,
-                      separator_rule=file_rule.separator_rule,
-                      chunk_size=file_rule.chunk_size,
-                      chunk_overlap=file_rule.chunk_overlap,
                       callback_url=callback_url,
-                      extra_metadata=db_file.user_metadata,
-                      preview_cache_keys=[preview_cache_key],
-                      retain_images=file_rule.retain_images,
-                      enable_formula=file_rule.enable_formula,
-                      force_ocr=file_rule.force_ocr,
-                      filter_page_header_footer=file_rule.filter_page_header_footer)
+                      preview_cache_keys=[preview_cache_key])
     logger.debug("parse_knowledge_file_celery_over", file_id)
     return db_file, db_knowledge
 
@@ -358,7 +346,7 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             delete_vector_files([db_file[0].id], knowledge)
 
 
-@bisheng_celery.task()
+@bisheng_celery.task(acks_late=True)
 def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
     """ Asynchronous deletion of knowledge files and their vectors """
     trace_id_var.set(f'delete_knowledge_file_{file_ids}')

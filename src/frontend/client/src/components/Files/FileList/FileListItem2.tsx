@@ -1,4 +1,4 @@
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import { FileIcon, PlusIcon } from 'lucide-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';

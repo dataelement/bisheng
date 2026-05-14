@@ -1,4 +1,4 @@
-import type { TPromptGroup } from '~/data-provider/data-provider/src';
+import type { TPromptGroup } from '~/types/chat';
 import { OGDialogContent, OGDialog } from '~/components/ui';
 import PromptDetails from './PromptDetails';
 

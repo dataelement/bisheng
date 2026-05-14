@@ -2,9 +2,9 @@ from typing import Dict, List, Optional
 
 from fastapi import HTTPException
 
-from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schema.dataset_param import CreateDatasetParam
 from bisheng.common.errcode.dataset import DatasetNameExistsError
+from bisheng.common.services.base import BaseService
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.dataset import Dataset, DatasetCreate, DatasetDao, DatasetRead
 from bisheng.user.domain.models.user import UserDao

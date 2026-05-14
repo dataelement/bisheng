@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Constants } from '~/data-provider/data-provider/src';
+import { Constants } from '~/types/chat';
 import { useRecoilState, useRecoilValue, useResetRecoilState } from 'recoil';
 import { useChatContext } from '~/Providers';
 import { getKey } from '~/utils/artifacts';

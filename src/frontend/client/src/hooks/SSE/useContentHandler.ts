@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { ContentTypes } from '~/data-provider/data-provider/src';
+import { ContentTypes } from '~/types/chat';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type {
@@ -11,7 +11,7 @@ import type {
   TContentData,
   EventSubmission,
   TMessageContentParts,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { addFileToCache } from '~/utils';
 
 type TUseContentHandler = {

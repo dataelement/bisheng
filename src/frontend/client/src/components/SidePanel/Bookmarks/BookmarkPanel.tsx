@@ -1,4 +1,4 @@
-import { useConversationTagsQuery } from '~/data-provider';
+import { useConversationTagsQuery } from '~/hooks/queries/data-provider';
 import { BookmarkContext } from '~/Providers/BookmarkContext';
 import BookmarkTable from './BookmarkTable';
 

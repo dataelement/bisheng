@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
-import type { TMessageContentParts } from '~/data-provider/data-provider/src';
+import type { TMessageContentParts } from '~/types/chat';
 import type { TMessageProps, TMessageIcon } from '~/common';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import { useMessageHelpers, useLocalize } from '~/hooks';

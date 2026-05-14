@@ -19,8 +19,6 @@ class ResourceTypeEnum(str, Enum):
     WORKBENCH_CHAT = "workbench_chat"
     # The Workflow
     WORKFLOW = "workflow"
-    # Skill
-    SKILL = "skill"
     # assistant
     ASSISTANT = "assistant"
 

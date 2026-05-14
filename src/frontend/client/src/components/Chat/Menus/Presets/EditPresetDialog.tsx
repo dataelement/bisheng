@@ -1,8 +1,8 @@
 import { useRecoilState } from 'recoil';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, isAgentsEndpoint } from '~/data-provider/data-provider/src';
-import type { TModelsConfig, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import { QueryKeys, isAgentsEndpoint } from '~/types/chat';
+import type { TModelsConfig, TEndpointsConfig } from '~/types/chat';
 import {
   cn,
   defaultTextProps,
@@ -15,7 +15,7 @@ import { useSetIndexOptions, useLocalize, useDebouncedInput } from '~/hooks';
 import PopoverButtons from '~/components/Chat/Input/PopoverButtons';
 import DialogTemplate from '~/components/ui/DialogTemplate';
 import { EndpointSettings } from '~/components/Endpoints';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { useChatContext } from '~/Providers';
 import store from '~/store';
 

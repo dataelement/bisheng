@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import type { TPromptGroup } from '~/data-provider/data-provider/src';
+import type { TPromptGroup } from '~/types/chat';
 import { OGDialog, OGDialogTitle, OGDialogContent } from '~/components/ui';
 import { detectVariables } from '~/utils';
 import VariableForm from './VariableForm';

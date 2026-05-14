@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import cloneDeep from 'lodash/cloneDeep';
 import { useEffect, useMemo, useRef } from 'react';
 import { submitLinsightFeedback } from '~/api/linsight';
-import { useGetBsConfig } from '~/data-provider';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useToastContext } from '~/Providers';

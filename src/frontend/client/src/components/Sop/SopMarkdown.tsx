@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { useRecoilValue } from 'recoil';
 import Vditor from "vditor";
 import "vditor/dist/index.css";
-import { useGetBsConfig, useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
+import { useGetBsConfig, useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 import { LinsightInfo } from "~/store/linsight";
@@ -343,19 +343,19 @@ const useSopTools = (linsight) => {
         }
 
         // 3. 转换PersonalTool数据（单对象转数组）
-        if (personal_knowledge_enabled && personalTool && personalTool[0]) {
-            tree.push({
-                // label: personalTool[0].name,
-                label: localize('com_sop_personal_knowledge_base'),
-                value: personalTool[0].id,
-                desc: '',
-                children: [] // 个人知识库没有子节点
-            });
-            const name = personalTool[0].name;
-            const value = `${personalTool[0].name}的储存信息:{'知识库储存在语义检索库中的id':'${personalTool[0].id}'}`
-            nameToValueRef.current[name] = value;
-            valueToNameRef.current[value] = name;
-        }
+        // if (personal_knowledge_enabled && personalTool && personalTool[0]) {
+        //     tree.push({
+        //         // label: personalTool[0].name,
+        //         label: localize('com_sop_personal_knowledge_base'),
+        //         value: personalTool[0].id,
+        //         desc: '',
+        //         children: [] // 个人知识库没有子节点
+        //     });
+        //     const name = personalTool[0].name;
+        //     const value = `${personalTool[0].name}的储存信息:{'知识库储存在语义检索库中的id':'${personalTool[0].id}'}`
+        //     nameToValueRef.current[name] = value;
+        //     valueToNameRef.current[value] = name;
+        // }
 
         // 4. 转换linsightTools数据
         if (linsightTools && linsightTools.length > 0) {

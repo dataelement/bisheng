@@ -1,4 +1,4 @@
-import { EModelEndpoint, isAssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, isAssistantsEndpoint } from '~/types/chat';
 
 type TUseGenerations = {
   error?: boolean;

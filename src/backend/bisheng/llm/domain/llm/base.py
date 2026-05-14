@@ -42,9 +42,9 @@ class BishengBase(BaseModel):
         server_info = None
         if not model_id:
             return model_info, server_info
-        model_info = await LLMDao.aget_model_by_id(model_id)
+        model_info = await LLMDao.aget_model_by_id(model_id, cache=True)
         if model_info:
-            server_info = await LLMDao.aget_server_by_id(model_info.server_id)
+            server_info = await LLMDao.aget_server_by_id(model_info.server_id, cache=True)
         return model_info, server_info
 
     @classmethod
@@ -53,16 +53,17 @@ class BishengBase(BaseModel):
         server_info = None
         if not model_id:
             return model_info, server_info
-        model_info = LLMDao.get_model_by_id(model_id)
+        model_info = LLMDao.get_model_by_id(model_id, cache=True)
         if model_info:
-            server_info = LLMDao.get_server_by_id(model_info.server_id)
+            server_info = LLMDao.get_server_by_id(model_info.server_id, cache=True)
         return model_info, server_info
 
     async def update_model_status(self, status: int, remark: str = ''):
         """Update model status"""
         if self.model_info.status != status:
             self.model_info.status = status
-            await LLMDao.aupdate_model_status(self.model_id, status, remark[-500:])  # Limit note length to500characters. 
+            await LLMDao.aupdate_model_status(self.model_id, status,
+                                              remark[-500:])  # Limit note length to500characters.
 
     def sync_update_model_status(self, status: int, remark: str = ''):
         """Update model status"""

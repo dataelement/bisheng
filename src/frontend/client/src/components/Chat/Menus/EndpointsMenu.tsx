@@ -1,9 +1,9 @@
 import { useCallback, useRef } from 'react';
-import { alternateName } from '~/data-provider/data-provider/src';
+import { alternateName } from '~/types/chat';
 import { Content, Portal, Root } from '@radix-ui/react-popover';
 import type { FC, KeyboardEvent } from 'react';
 import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { mapEndpoints, getEntity } from '~/utils';
 import EndpointItems from './Endpoints/MenuItems';
 import useLocalize from '~/hooks/useLocalize';

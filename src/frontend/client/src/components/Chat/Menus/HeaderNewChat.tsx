@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, Constants } from '~/data-provider/data-provider/src';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import { QueryKeys, Constants } from '~/types/chat';
+import type { TMessage } from '~/types/chat';
 import { useMediaQuery, useLocalize } from '~/hooks';
 import { NewChatIcon } from '~/components/svg';
 import { useChatContext } from '~/Providers';

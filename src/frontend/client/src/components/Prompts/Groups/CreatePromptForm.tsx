@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller, FormProvider } from 'react-hook-form';
-import { LocalStorageKeys, PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys, PermissionTypes, Permissions } from '~/types/chat';
 import CategorySelector from '~/components/Prompts/Groups/CategorySelector';
 import PromptVariables from '~/components/Prompts/PromptVariables';
 import { Button, TextareaAutosize, Input } from '~/components/ui';
 import Description from '~/components/Prompts/Description';
 import { useLocalize, useHasAccess } from '~/hooks';
 import Command from '~/components/Prompts/Command';
-import { useCreatePrompt } from '~/data-provider';
+import { useCreatePrompt } from '~/hooks/queries/data-provider';
 import { cn } from '~/utils';
 
 type CreateFormValues = {

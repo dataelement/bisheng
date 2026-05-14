@@ -6,6 +6,7 @@ export type AppConfig = {
     dialog_quick_search: string;
     websocket_url: string;
     pro: boolean;
+    dashboard_pro: boolean;
     sso: boolean;
     application_usage_tips: boolean;
     show_github_and_help: boolean;

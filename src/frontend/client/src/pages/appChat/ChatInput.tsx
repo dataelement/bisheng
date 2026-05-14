@@ -3,7 +3,7 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
-import { useGetWorkbenchModelsQuery } from "~/data-provider";
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
@@ -47,7 +47,7 @@ export default function ChatInput({ readOnly, v }) {
     }, [inputDisabled]);
 
     return (
-        <div className="absolute z-10 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+        <div className="absolute z-10 px-4 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
             {/* drag upload overlay */}
             {isDragging && <DragDropOverlay />}
 

@@ -253,7 +253,7 @@ export default function Setting() {
           </AccordionContent>
         </AccordionItem>
         {/* Skills */}
-        <AccordionItem value="skill">
+        {/* <AccordionItem value="skill">
           <AccordionTrigger>
             <div className="flex flex-1 items-center justify-between">
               <span className="flex items-center gap-1">
@@ -309,7 +309,7 @@ export default function Setting() {
               ))}
             </div>
           </AccordionContent>
-        </AccordionItem>
+        </AccordionItem> */}
         {/* <TaggingSheet>
           <Plus
             className="mr-2 text-primary hover:text-primary/80"

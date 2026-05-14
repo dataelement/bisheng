@@ -4,7 +4,7 @@ import SocialButton from './SocialButton';
 
 import { useLocalize } from '~/hooks';
 
-import { TStartupConfig } from '~/data-provider/data-provider/src';
+import { TStartupConfig } from '~/types/chat';
 
 function SocialLoginRender({
   startupConfig,

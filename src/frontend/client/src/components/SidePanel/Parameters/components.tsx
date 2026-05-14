@@ -1,5 +1,5 @@
-import { ComponentTypes } from '~/data-provider/data-provider/src';
-import type { DynamicSettingProps } from '~/data-provider/data-provider/src';
+import { ComponentTypes } from '~/types/chat';
+import type { DynamicSettingProps } from '~/types/chat';
 import {
   DynamicCombobox,
   DynamicDropdown,

@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useContext } from 'react';
-import type { TUser, PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import type { TUser, PermissionTypes, Permissions } from '~/types/chat';
 import { AuthContext } from '~/hooks/AuthContext';
 
 const useHasAccess = ({

@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { defaultAssistantsVersion } from '~/data-provider/data-provider/src';
-import type { Action, TEndpointsConfig, AssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { defaultAssistantsVersion } from '~/types/chat';
+import type { Action, TEndpointsConfig, AssistantsEndpoint } from '~/types/chat';
 import type { ActionsEndpoint } from '~/common';
 import {
   useGetActionsQuery,
   useGetEndpointsQuery,
   useGetAssistantDocsQuery,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import AssistantPanel from './AssistantPanel';
 import { useChatContext } from '~/Providers';
 import ActionsPanel from './ActionsPanel';

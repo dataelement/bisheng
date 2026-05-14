@@ -2,7 +2,7 @@ import { useCallback, useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import debounce from 'lodash/debounce';
 import { TrashIcon, MessageSquare, ArrowUpDown } from 'lucide-react';
-import type { SharedLinkItem, SharedLinksListParams } from '~/data-provider/data-provider/src';
+import type { SharedLinkItem, SharedLinksListParams } from '~/types/chat';
 import {
   OGDialog,
   OGDialogTrigger,
@@ -13,7 +13,7 @@ import {
   TooltipAnchor,
   Label,
 } from '~/components/ui';
-import { useDeleteSharedLinkMutation, useSharedLinksQuery } from '~/data-provider';
+import { useDeleteSharedLinkMutation, useSharedLinksQuery } from '~/hooks/queries/data-provider';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useMediaQuery } from '~/hooks';
 import DataTable from '~/components/ui/DataTable';

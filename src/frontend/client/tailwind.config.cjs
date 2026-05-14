@@ -27,11 +27,21 @@ module.exports = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: 0 },
         },
+        'pulse-scale': {
+          '0%, 100%': { transform: 'scale(0.6)' },
+          '50%': { transform: 'scale(1)' },
+        },
+        'crawl-slide': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(400%)' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
+        'crawl-slide': 'crawl-slide 1.4s linear infinite',
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
       },
       colors: {
         gray: {

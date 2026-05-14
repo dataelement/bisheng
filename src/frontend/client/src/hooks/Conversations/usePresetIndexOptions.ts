@@ -1,5 +1,5 @@
 import { useRecoilValue, useSetRecoilState } from 'recoil';
-import type { TPreset, TPlugin } from '~/data-provider/data-provider/src';
+import type { TPreset, TPlugin } from '~/types/chat';
 import type { TSetOptionsPayload, TSetExample, TSetOption, TSetOptions } from '~/common';
 import { useChatContext } from '~/Providers/ChatContext';
 import { cleanupPreset } from '~/utils';

@@ -1,6 +1,6 @@
 import { useRecoilValue } from 'recoil';
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { useTextToSpeechMutation, useVoicesQuery } from '~/data-provider';
+import { useTextToSpeechMutation, useVoicesQuery } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers/ToastContext';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';

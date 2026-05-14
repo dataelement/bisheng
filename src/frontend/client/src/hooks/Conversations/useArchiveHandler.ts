@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import type { MouseEvent, FocusEvent, KeyboardEvent } from 'react';
-import { useArchiveConversationMutation } from '~/data-provider';
+import { useArchiveConversationMutation } from '~/hooks/queries/data-provider';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';
 import useLocalize, { TranslationKeys } from '../useLocalize';

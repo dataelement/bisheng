@@ -10,16 +10,16 @@ import {
   tPresetSchema,
   tMessageSchema,
   tConvoUpdateSchema,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type {
   TMessage,
   TConversation,
   EventSubmission,
   ConversationData,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { SetterOrUpdater, Resetter } from 'recoil';
 import type { TResData, TFinalResData, ConvoGenerator } from '~/common';
-import type { TGenTitleMutation } from '~/data-provider';
+import type { TGenTitleMutation } from '~/hooks/queries/data-provider';
 import {
   scrollToEnd,
   addConversation,

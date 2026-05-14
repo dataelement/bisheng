@@ -1,5 +1,6 @@
 from typing import Any, Optional, Type
 
+import json
 import requests
 from pydantic import BaseModel, Field
 
@@ -41,11 +42,11 @@ class FeishuMessageTool(BaseModel):
         headers = {"Content-Type": "application/json","Authorization":f"Bearer {self.get_access_token()}"}
         # 构建请求体
         url = f"{self.API_BASE_URL}/im/v1/messages?receive_id_type={receive_id_type}"
+        content = {"text": message}
         payload = {
             "receive_id": receive_id,
             "msg_type": "text",
-            "content": '{\"text\":\"' + message + '\"}',
-            # "content": message.strip('"').replace(r"\"", '"').replace(r"\\", "\\"),
+            "content": json.dumps(content, ensure_ascii=False)
         }
         try:
             # 发送 POST 请求

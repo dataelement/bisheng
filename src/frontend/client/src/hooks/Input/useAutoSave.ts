@@ -1,10 +1,10 @@
 import debounce from 'lodash/debounce';
 import { SetterOrUpdater, useRecoilValue } from 'recoil';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { LocalStorageKeys, TFile } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys, TFile } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
 import { useChatFormContext } from '~/Providers';
-import { useGetFiles } from '~/data-provider';
+import { useGetFiles } from '~/hooks/queries/data-provider';
 import store from '~/store';
 
 export const useAutoSave = ({

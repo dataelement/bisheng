@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from 'react';
 import { useRecoilValue, useRecoilState } from 'recoil';
-import { ContentTypes } from '~/data-provider/data-provider/src';
-import type { TMessageContentParts, TAttachment, Agents } from '~/data-provider/data-provider/src';
+import { ContentTypes } from '~/types/chat';
+import type { TMessageContentParts, TAttachment, Agents } from '~/types/chat';
 import { ThinkingButton } from '~/components/Artifacts/Thinking';
 import EditTextPart from './Parts/EditTextPart';
 import useLocalize from '~/hooks/useLocalize';
@@ -22,9 +22,9 @@ type ContentPartsProps = {
   enterEdit?: (cancel?: boolean) => void | null | undefined;
   siblingIdx?: number;
   setSiblingIdx?:
-    | ((value: number) => void | React.Dispatch<React.SetStateAction<number>>)
-    | null
-    | undefined;
+  | ((value: number) => void | React.Dispatch<React.SetStateAction<number>>)
+  | null
+  | undefined;
 };
 
 const ContentParts = memo(

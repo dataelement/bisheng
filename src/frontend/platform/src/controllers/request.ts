@@ -28,21 +28,26 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 11010) {
         return response.data;
     }
-    const i18Msg = i18next.t(`errors.${response.data.status_code}`, response.data.data)
-    const errorMessage = i18Msg === `errors.${response.data.status_code}` ? response.data.status_message : i18Msg
+    const statusCode = response.data.status_code
+    const i18Msg = i18next.t(`errors.${statusCode}`, response.data.data)
+    const errorMessage = i18Msg === `errors.${statusCode}` ? response.data.status_message : i18Msg
 
+    // 密码过期，标记后透传给业务层处理
+    if (statusCode === 10601) {
+        return Promise.reject({ code: 10601, message: errorMessage });
+    }
     // 无权访问
-    if ([403, 404].includes(response.data.status_code) && response.config.url !== '/api/v1/user/info') {
+    if ([403, 404].includes(statusCode) && response.config.url !== '/api/v1/user/info') {
         // 修改不跳转
         localStorage.setItem('noAccessUrl', response.request.responseURL)
         if (response.config.method === 'get') {
-            location.href = __APP_ENV__.BASE_URL + '/' + response.data.status_code
+            location.href = __APP_ENV__.BASE_URL + '/' + statusCode
         }
         return Promise.reject(errorMessage);
     }
     // 应用无编辑权限 (TODO业务状态码放行到具体业务中)
-    if ([10599, 17005].includes(response.data.status_code)) {
-        location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${response.data.status_code}`
+    if ([10599, 17005].includes(statusCode)) {
+        location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${statusCode}`
         return Promise.reject(errorMessage);
     }
     // 异地登录
@@ -83,7 +88,10 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         if (error?.code === "ERR_CANCELED") return 'canceled'
 
         console.log('error :>> ', error);
-        iocFunc?.(error)
+        // If iocFunc returns true, it means the caller has handled the error itself (e.g. showing its own toast)
+        const handled = iocFunc?.(error)
+        if (handled) return false
+
         // 弹窗
         toast({
             title: `${i18next.t('prompt')}`,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useClearConversationsMutation } from '~/data-provider/data-provider/src/react-query';
+import { useClearConversationsMutation } from '~/hooks/queries';
 import { Label, Button, OGDialog, OGDialogTrigger, Spinner } from '~/components';
 import { useLocalize, useNewConvo } from '~/hooks';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';

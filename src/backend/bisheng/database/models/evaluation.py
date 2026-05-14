@@ -25,13 +25,16 @@ class EvaluationBase(SQLModelSerializable):
     user_id: int = Field(default=None, index=True)
     file_name: str = Field(default='', description='Uploaded filename')
     file_path: str = Field(default='', description='Doc. minio <g id="Bold">Address:</g>')
-    exec_type: str = Field(description='Execute subject categories. Assistants, Skills, Workflows, ReferenceExecTypeEnum')
+    exec_type: str = Field(
+        description='Execute subject categories. Assistants, Skills, Workflows, ReferenceExecTypeEnum')
     unique_id: str = Field(index=True, description='Unique to the executing entityID')
     version: Optional[int] = Field(default=None, description='Version of workflow or skillID')
-    status: int = Field(index=True, default=1, description='Task Execution Status: 1:Executing "{0}" 2: execute fail 3:execute success')
+    status: int = Field(index=True, default=1,
+                        description='Task Execution Status: 1:Executing "{0}" 2: execute fail 3:execute success')
     prompt: str = Field(default='', sa_column=Column(Text), description='Evaluation Instruction Text')
     result_file_path: str = Field(default='', description='of the assessment results minio <g id="Bold">Address:</g>')
-    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON), description='Final Assessment Score')
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON),
+                                               description='Final Assessment Score')
     description: str = Field(default='', sa_column=Column(Text), description='Error description information')
     is_delete: int = Field(default=0, description='whether delete')
     create_time: Optional[datetime] = Field(default=None,
@@ -56,11 +59,14 @@ class EvaluationCreate(EvaluationBase):
 
 class EvaluationDao(EvaluationBase):
     @classmethod
-    def get_my_evaluations(cls, user_id: int, page: int, limit: int) -> (List[Evaluation], int):
+    def get_my_evaluations(cls, user_id: int, page: int, limit: int) -> tuple[List[Evaluation], int]:
         with get_sync_db_session() as session:
-            statement = select(Evaluation).where(and_(Evaluation.is_delete == 0, Evaluation.user_id == user_id))
+            statement = select(Evaluation).where(Evaluation.is_delete == 0, Evaluation.user_id == user_id,
+                                                 Evaluation.exec_type != ExecType.FLOW.value)
+
             count_statement = session.query(func.count(
-                Evaluation.id)).where(and_(Evaluation.is_delete == 0, Evaluation.user_id == user_id))
+                Evaluation.id)).where(Evaluation.is_delete == 0, Evaluation.user_id == user_id,
+                                      Evaluation.exec_type != ExecType.FLOW.value)
             statement = statement.offset(
                 (page - 1) * limit
             ).limit(limit).order_by(

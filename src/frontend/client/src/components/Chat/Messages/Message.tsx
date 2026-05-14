@@ -7,7 +7,7 @@ import MessageRender from './ui/MessageRender';
 import MultiMessage from './MultiMessage';
 import { cn } from '~/utils';
 import store from '~/store';
-import { useGetBsConfig } from '~/data-provider';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 
 const MessageContainer = React.memo(
   ({

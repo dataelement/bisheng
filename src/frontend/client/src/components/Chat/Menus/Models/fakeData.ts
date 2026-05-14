@@ -1,5 +1,5 @@
-import { EModelEndpoint, AuthType } from '~/data-provider/data-provider/src';
-import type { TModelSpec } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, AuthType } from '~/types/chat';
+import type { TModelSpec } from '~/types/chat';
 
 export const data: TModelSpec[] = [
   {

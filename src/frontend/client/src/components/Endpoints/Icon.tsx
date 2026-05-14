@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import type { TUser } from '~/data-provider/data-provider/src';
+import type { TUser } from '~/types/chat';
 import type { IconProps } from '~/common';
 import MessageEndpointIcon from './MessageEndpointIcon';
 import { useAuthContext } from '~/hooks/AuthContext';

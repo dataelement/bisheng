@@ -1,6 +1,6 @@
 import { useRecoilState } from 'recoil';
 import HoverCardSettings from '../HoverCardSettings';
-import { ForkOptions } from '~/data-provider/data-provider/src';
+import { ForkOptions } from '~/types/chat';
 import { Dropdown, Switch } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';

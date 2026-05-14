@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
-import { useUserKeyQuery, useUpdateUserKeysMutation } from '~/data-provider/data-provider/src/react-query';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { EModelEndpoint } from '~/types/chat';
+import { useUserKeyQuery, useUpdateUserKeysMutation } from '~/hooks/queries';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 
 const useUserKey = (endpoint: string) => {
   const { data: endpointsConfig } = useGetEndpointsQuery();

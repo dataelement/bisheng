@@ -1,5 +1,5 @@
 import TextareaAutosize from 'react-textarea-autosize';
-import { EModelEndpoint, endpointSettings } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, endpointSettings } from '~/types/chat';
 import type { TModelSelectProps, OnInputNumberChange } from '~/common';
 import {
   Input,

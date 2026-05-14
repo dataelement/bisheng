@@ -1,4 +1,4 @@
-import { isAssistantsEndpoint, isAgentsEndpoint } from '~/data-provider/data-provider/src';
+import { isAssistantsEndpoint, isAgentsEndpoint } from '~/types/chat';
 import type { SwitcherProps } from '~/common';
 import AssistantSwitcher from './AssistantSwitcher';
 import AgentSwitcher from './AgentSwitcher';

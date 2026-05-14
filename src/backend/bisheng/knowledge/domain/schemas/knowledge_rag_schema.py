@@ -17,3 +17,14 @@ class Metadata(BaseModel):
     uploader: Optional[str] = Field(default=None, description="Uploader's name")
     updater: Optional[str] = Field(default=None, description="Updater's name")
     user_metadata: Optional[dict] = Field(default=None, description="User-defined metadata")
+
+
+class QAKnowledgeMetadata(BaseModel):
+    file_id: int = Field(..., description="File ID")
+    knowledge_id: str = Field(..., description="Knowledge ID")
+    page: Optional[int] = Field(default=1, description="Page number")
+    source: Optional[str] = Field(default='', description="Source")
+    bbox: Optional[str] = Field(default='', description="Bounding box")
+    title: Optional[str] = Field(default='', description="Title")
+    chunk_index: Optional[int] = Field(default=0, description="Chunk Index")
+    extra: Optional[str] = Field(default=None, description="Extra information")

@@ -7,13 +7,16 @@ interface TooltipAnchorProps extends Ariakit.TooltipAnchorProps {
   description?: string | React.ReactNode;
   side?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
+  /** When set, replaces the default dark `.tooltip` panel styles (full control). */
+  tooltipClassName?: string;
+  hideArrow?: boolean;
   focusable?: boolean;
   role?: string;
-  showSide?:boolean;
+  showSide?: boolean;
 }
 
 export const TooltipAnchor = forwardRef<HTMLDivElement, TooltipAnchorProps>(function TooltipAnchor(
-  { description,showSide, side = 'top', className, role, ...props },
+  { description, showSide, side = 'top', className, role, tooltipClassName, hideArrow = false, ...props },
   ref,
 ) {
   const tooltip = Ariakit.useTooltipStore({ placement: side });
@@ -53,25 +56,25 @@ export const TooltipAnchor = forwardRef<HTMLDivElement, TooltipAnchorProps>(func
         className={cn('cursor-pointer', className)}
       />
       {!showSide && (
-              <AnimatePresence>
-              {mounted === true && (
-                <Ariakit.Tooltip
-                  gutter={4}
-                  alwaysVisible
-                  className="tooltip"
-                  render={
-                    <motion.div
-                      initial={{ opacity: 0, x, y }}
-                      animate={{ opacity: 1, x: 0, y: 0 }}
-                      exit={{ opacity: 0, x, y }}
-                    />
-                  }
-                >
-                  <Ariakit.TooltipArrow />
-                  <span className='text-sm'>{description}</span>
-                </Ariakit.Tooltip>
-              )}
-            </AnimatePresence>
+        <AnimatePresence>
+          {mounted === true && (
+            <Ariakit.Tooltip
+              gutter={4}
+              alwaysVisible
+              className={cn(tooltipClassName || 'tooltip')}
+              render={
+                <motion.div
+                  initial={{ opacity: 0, x, y }}
+                  animate={{ opacity: 1, x: 0, y: 0 }}
+                  exit={{ opacity: 0, x, y }}
+                />
+              }
+            >
+              {!hideArrow && <Ariakit.TooltipArrow />}
+              {tooltipClassName ? description : <span className="text-sm">{description}</span>}
+            </Ariakit.Tooltip>
+          )}
+        </AnimatePresence>
       )
       }
     </Ariakit.TooltipProvider>

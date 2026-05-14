@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { useParams } from 'react-router-dom';
-import { useGetSharedMessages } from '~/data-provider/data-provider/src/react-query';
+import { useGetSharedMessages } from '~/hooks/queries';
 import { useLocalize, useDocumentTitle } from '~/hooks';
-import { useGetStartupConfig } from '~/data-provider';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { ShareContext } from '~/Providers';
 import { Spinner } from '~/components/svg';
 import MessagesView from './MessagesView';

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { TMessage, TPreset, Assistant, Agent } from '~/data-provider/data-provider/src';
+import type { TMessage, TPreset, Assistant, Agent } from '~/types/chat';
 import type { TMessageProps } from '~/common';
 import MessageEndpointIcon from '../Endpoints/MessageEndpointIcon';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';

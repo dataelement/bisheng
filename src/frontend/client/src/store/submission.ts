@@ -1,5 +1,5 @@
 import { atom } from 'recoil';
-import { TSubmission } from '~/data-provider/data-provider/src';
+import { TSubmission } from '~/types/chat';
 
 // current submission
 // submit any new value to this state will cause new message to be send.

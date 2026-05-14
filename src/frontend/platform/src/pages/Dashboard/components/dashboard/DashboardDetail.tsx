@@ -16,6 +16,7 @@ import { DashboardStatus, usePublishDashboard } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { EditorCanvas } from "../editor/EditorCanvas"
 import { ExpandIcon } from "@/components/bs-icons/expand"
+import { LoadingIcon } from "@/components/bs-icons/loading"
 
 interface DashboardDetailProps {
     dashboard: Dashboard | null
@@ -62,7 +63,7 @@ export function DashboardDetail({
     }, [isEditingTitle])
 
     const handleDoubleClick = () => {
-        if (appConfig.isPro && dashboard.write) {
+        if (appConfig.isDashboardPro && dashboard.write) {
             setIsEditingTitle(true)
         }
     }
@@ -110,6 +111,12 @@ export function DashboardDetail({
 
     const { publish } = usePublishDashboard()
 
+    if (isLoading) {
+        return <div className="flex-1 flex justify-center items-center z-10">
+            <LoadingIcon />
+        </div>
+    }
+
     if (!dashboard) {
         return <div className="flex-1 flex items-center justify-center text-muted-foreground">{t('selectADashboard')}</div>
     }
@@ -150,7 +157,7 @@ export function DashboardDetail({
                                 {dashboard.title}
                             </h1>
                         )}
-                        {appConfig.isPro && <>
+                        {appConfig.isDashboardPro && <>
                             <p className="text-sm ml-4 mr-2">
                                 <span className="text-muted-foreground">{t('createdBy')}: </span>
                                 {dashboard.user_name}</p>
@@ -176,11 +183,11 @@ export function DashboardDetail({
                 <div className="flex items-center gap-2">
                     <ButtonGroup>
                         <Button variant="outline" size="sm" onClick={handleFullscreen}>{t('fullScreen')}</Button>
-                        {appConfig.isPro && dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
+                        {appConfig.isDashboardPro && dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
                         <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>{t('share')}</Button>
                     </ButtonGroup>
 
-                    {appConfig.isPro && <Button
+                    {appConfig.isDashboardPro && <Button
                         variant="outline"
                         className="disabled:pointer-events-auto"
                         disabled={dashboard.is_default}
@@ -189,7 +196,7 @@ export function DashboardDetail({
                         {dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}
                     </Button>}
 
-                    {appConfig.isPro && dashboard.write &&
+                    {appConfig.isDashboardPro && dashboard.write &&
                         <Tip content={isPublished ? t('editAfterUnpublish') : ""} side={"top"} styleClasses="-translate-x-12" >
                             <Button
                                 className="disabled:pointer-events-auto"

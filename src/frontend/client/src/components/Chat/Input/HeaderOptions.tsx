@@ -7,13 +7,13 @@ import {
   isParamEndpoint,
   isAgentsEndpoint,
   tConvoUpdateSchema,
-} from '~/data-provider/data-provider/src';
-import type { TPreset, TInterfaceConfig } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TPreset, TInterfaceConfig } from '~/types/chat';
 import { EndpointSettings, SaveAsPresetDialog, AlternativeSettings } from '~/components/Endpoints';
 import { PluginStoreDialog, TooltipAnchor } from '~/components';
 import { ModelSelect } from '~/components/Input/ModelSelect';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import OptionsPopover from './OptionsPopover';
 import PopoverButtons from './PopoverButtons';
 import { useChatContext } from '~/Providers';

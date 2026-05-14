@@ -144,3 +144,9 @@ class KnowledgeMetadataFieldImmutableError(BaseErrorCode):
 class KnowledgeMetadataValueTypeConvertError(BaseErrorCode):
     Code: int = 10984
     Msg: str = 'Meta data fields {field_name} Value type conversion error: {error_msg}'
+
+
+# source keyword Processing in the background, try again later
+class BackendProcessingError(BaseErrorCode):
+    Code = 10990
+    Msg = "Processing in the background, try again later"

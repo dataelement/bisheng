@@ -1,5 +1,5 @@
 import TextareaAutosize from 'react-textarea-autosize';
-import { ImageDetail, imageDetailNumeric, imageDetailValue } from '~/data-provider/data-provider/src';
+import { ImageDetail, imageDetailNumeric, imageDetailValue } from '~/types/chat';
 import type { ValueType } from '@rc-component/mini-decimal';
 import type { TModelSelectProps } from '~/common';
 import {

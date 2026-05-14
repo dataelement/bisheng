@@ -17,3 +17,12 @@ class ConversationNotFoundError(BaseErrorCode):
 class AgentAlreadyExistsError(BaseErrorCode):
     Code: int = 12042
     Msg: str = 'This agent has been added'
+
+
+class UsedAppNotFoundError(BaseErrorCode):
+    Code: int = 12043
+    Msg: str = 'Used app not found'
+
+class UsedAppNotOnlineError(BaseErrorCode):
+    Code: int = 12044
+    Msg: str = 'Used app not online'

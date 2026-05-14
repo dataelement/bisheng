@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "2.4.0_beta1",
+  "version": "2.4.0",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^2.0.4",
@@ -9,9 +9,7 @@
     "@radix-ui/react-checkbox": "^1.1.1",
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-dropdown-menu": "^2.1.1",
-    "@radix-ui/react-form": "^0.1.0",
     "@radix-ui/react-label": "^2.1.0",
-    "@radix-ui/react-menubar": "^1.1.1",
     "@radix-ui/react-popover": "^1.1.1",
     "@radix-ui/react-progress": "^1.1.0",
     "@radix-ui/react-radio-group": "^1.2.0",
@@ -52,7 +50,6 @@
     "react-day-picker": "^9.13.0",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.2.3",
-    "react-error-boundary": "^4.0.13",
     "react-grid-layout": "2.1.1",
     "react-i18next": "^15.0.0",
     "react-markdown": "^10.1.0",
@@ -77,6 +74,7 @@
     "dev:docker": "vite --host 0.0.0.0",
     "start": "vite",
     "build": "vite build",
+    "build:vconsole": "VITE_ENABLE_VCONSOLE=true vite build",
     "serve": "vite preview",
     "format": "npx prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
   },
@@ -114,6 +112,7 @@
     "prettier-plugin-tailwindcss": "^0.6.5",
     "rollup-plugin-visualizer": "^5.12.0",
     "typescript": "^5.4.5",
+    "vconsole": "^3.15.1",
     "vite": "^5.3.1",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^1.0.6",

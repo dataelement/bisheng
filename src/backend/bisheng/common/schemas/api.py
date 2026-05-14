@@ -1,3 +1,4 @@
+import json
 from typing import Generic, TypeVar, Union, Any, List
 
 from pydantic import BaseModel
@@ -36,6 +37,20 @@ class PageList(BaseModel, Generic[DataT]):
 class PageData(BaseModel, Generic[DataT]):
     data: List[DataT]
     total: int
+
+
+class SSEResponse(BaseModel):
+    event: str = "message"
+    data: Any
+
+    def to_string(self):
+        data = self.data
+        if isinstance(self.data, dict):
+            data = json.dumps(data)
+        elif isinstance(self.data, BaseModel):
+            data = json.dumps(self.data.model_dump(mode="json"))
+
+        return f'event: {self.event}\ndata: {data}\n\n'
 
 
 def resp_501(code: int = 501,

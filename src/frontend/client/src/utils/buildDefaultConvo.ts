@@ -3,8 +3,8 @@ import {
   EModelEndpoint,
   isAssistantsEndpoint,
   isAgentsEndpoint,
-} from '~/data-provider/data-provider/src';
-import type { TConversation } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TConversation } from '~/types/chat';
 import { getLocalStorageItems } from './localStorage';
 
 const buildDefaultConvo = ({

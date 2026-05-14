@@ -14,7 +14,7 @@ const loadECharts = async () => {
   }
 
   const script = document.createElement('script')
-  script.src = `${(window as any).__APP_ENV__?.BASE_URL || ''}/echarts.min.js`
+  script.src = `${__APP_ENV__?.BASE_URL || ''}/echarts.min.js`
   script.type = 'module'
 
   return new Promise((resolve, reject) => {

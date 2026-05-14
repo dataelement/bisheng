@@ -9,7 +9,7 @@ import { SandpackProviderProps } from '@codesandbox/sandpack-react/unstyled';
 import type { CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { ArtifactFiles, Artifact } from '~/common';
 import { sharedFiles, sharedOptions } from '~/utils/artifacts';
-import { useEditArtifact } from '~/data-provider';
+import { useEditArtifact } from '~/hooks/queries/data-provider';
 import { useEditorContext } from '~/Providers';
 
 const createDebouncedMutation = (

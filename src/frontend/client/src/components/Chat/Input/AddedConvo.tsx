@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import type { TConversation, TEndpointOption, TPreset } from '~/data-provider/data-provider/src';
+import type { TConversation, TEndpointOption, TPreset } from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 import useGetSender from '~/hooks/Conversations/useGetSender';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { EndpointIcon } from '~/components/Endpoints';
 import { getPresetTitle } from '~/utils';
 

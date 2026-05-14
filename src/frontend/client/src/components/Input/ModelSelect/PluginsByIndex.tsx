@@ -1,8 +1,8 @@
 import { useRecoilValue } from 'recoil';
 import { ChevronDownIcon } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { useAvailablePluginsQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TPlugin } from '~/data-provider/data-provider/src';
+import { useAvailablePluginsQuery } from '~/hooks/queries';
+import type { TPlugin } from '~/types/chat';
 import type { TModelSelectProps } from '~/common';
 import {
   Button,

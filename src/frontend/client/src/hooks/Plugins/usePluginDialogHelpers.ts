@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { TPlugin } from '~/data-provider/data-provider/src';
+import type { TPlugin } from '~/types/chat';
 
 function usePluginDialogHelpers() {
   const [maxPage, setMaxPage] = useState(1);

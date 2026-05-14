@@ -6,12 +6,12 @@ import {
   mergeFileConfig,
   AgentCapabilities,
   fileConfig as defaultFileConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { ExtendedFile, AgentForm } from '~/common';
 import { useFileHandling, useLocalize, useLazyEffect } from '~/hooks';
 import FileRow from '~/components/Chat/Input/Files/FileRow';
 import FileSearchCheckbox from './FileSearchCheckbox';
-import { useGetFileConfig } from '~/data-provider';
+import { useGetFileConfig } from '~/hooks/queries/data-provider';
 import { AttachmentIcon } from '~/components/svg';
 import { useChatContext } from '~/Providers';
 

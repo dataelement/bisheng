@@ -238,9 +238,9 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     const [loading, setLoading] = useState(true)
     const handleAnwserInit = (words) => {
         setKeywords(words)
-        if (words.length) {
-            setLoading(false)
-        }
+        // if (words.length) { // 无分词有解析时导致无法关闭loading
+        setLoading(false)
+        // }
     }
 
 

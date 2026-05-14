@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import TagManager from 'react-gtm-module';
 import { useRecoilState, useSetRecoilState } from 'recoil';
-import { LocalStorageKeys } from '~/data-provider/data-provider/src';
-import { useAvailablePluginsQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TStartupConfig, TPlugin, TUser } from '~/data-provider/data-provider/src';
+import { LocalStorageKeys } from '~/types/chat';
+import { useAvailablePluginsQuery } from '~/hooks/queries';
+import type { TStartupConfig, TPlugin, TUser } from '~/types/chat';
 import { mapPlugins, selectPlugins, processPlugins } from '~/utils';
 import store from '~/store';
 

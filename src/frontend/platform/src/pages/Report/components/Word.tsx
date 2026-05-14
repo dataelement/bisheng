@@ -3,35 +3,35 @@ import { useEffect, useContext } from "react"
 import { locationContext } from "../../../contexts/locationContext"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useTranslation } from "react-i18next"
+import { getOfficeTokenApi } from "@/controllers/API/flow"
 
 export default function Word({ data, workflow }) {
     const { appConfig } = useContext(locationContext)
     const { t } = useTranslation('flow')
 
     const wordUrl = appConfig.officeUrl
-    // console.log('wordUrl :>> ', wordUrl, data);
-    // 本地调试
+    // Local debug
     // const host = 'http://192.168.106.120:3002'
     const host = `${location.origin}${__APP_ENV__.BASE_URL}`
     const backUrl = workflow ? `${host}/api/v1/workflow/report/callback`
-        : `${host}/api/v1/report/callback` // 后端服务地址
+        : `${host}/api/v1/report/callback` // Backend callback URL
 
     const editorConfig = {
-        // 编辑器宽度
+        // Editor width
         width: '100%',
-        // 编辑器高度
+        // Editor height
         height: '100%',
-        // 编辑器类型，支持 word（文档）、cell（表格）、slide（PPT）
+        // Editor type: word (document), cell (spreadsheet), slide (PPT)
         documentType: 'word',
-        // 文档配置
+        // Document config
         document: {
-            // 文件类型  
+            // File type  
             fileType: 'docx',
-            // 文档标识符
+            // Document identifier
             key: data.key,
-            // 文档地址，绝对路径
+            // Document URL, absolute path
             url: data.path,
-            // 文档标题
+            // Document title
             title: 'bisheng.docx',
             permissions: {
                 changeHistory: true,
@@ -81,14 +81,29 @@ export default function Word({ data, workflow }) {
     }
 
 
-    const createEditor = () => {
-        window.editor = new window.DocsAPI.DocEditor('bsoffice', editorConfig)
+    const createEditor = (config) => {
+        window.editor = new window.DocsAPI.DocEditor('bsoffice', config)
+    }
+
+    // Sign editorConfig with JWT and then create editor
+    const initEditor = async () => {
+        let finalConfig = { ...editorConfig }
+        try {
+            const res = await getOfficeTokenApi(editorConfig)
+            if (res.token) {
+                finalConfig.token = res.token
+            }
+        } catch (e) {
+            // If token request fails, proceed without token (for non-JWT setups)
+            console.warn('Failed to get OnlyOffice JWT token, proceeding without it:', e)
+        }
+        createEditor(finalConfig)
     }
 
     const { toast } = useToast()
     useEffect(() => {
         if (window.DocsAPI) {
-            createEditor()
+            initEditor()
         } else {
             if (!wordUrl) {
                 toast({
@@ -98,8 +113,8 @@ export default function Word({ data, workflow }) {
                 })
             }
             const script = document.createElement('script')
-            script.src = wordUrl + '/web-apps/apps/api/documents/api.js' // 在线编辑服务
-            script.onload = createEditor
+            script.src = wordUrl + '/web-apps/apps/api/documents/api.js' // OnlyOffice editor service
+            script.onload = initEditor
             document.head.appendChild(script)
             script.onerror = () => {
                 toast({
@@ -121,4 +136,3 @@ export default function Word({ data, workflow }) {
         <div id="bsoffice"></div>
     </div>
 };
-

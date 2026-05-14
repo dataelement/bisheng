@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
 from bisheng.api.services.flow import FlowService
@@ -23,24 +23,3 @@ async def get_flow(request: Request, flow_id: UUID):
     default_user = get_default_operator()
 
     return await FlowService.get_one_flow(default_user, flow_id)
-
-
-@router.get('', status_code=200)
-def get_flow_list(request: Request,
-                  name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
-                  tag_id: int = Query(default=None, description='labelID'),
-                  page_size: int = Query(default=10, description='Items per page'),
-                  page_num: int = Query(default=1, description='Page'),
-                  status: int = None,
-                  user_id: int = None):
-    """
-    Exposed interfaces for obtaining skill information
-    """
-    logger.info(f'public_get_flow_list  ip: {request.client.host} user_id={user_id}')
-    login_user = get_default_operator()
-
-    try:
-        return FlowService.get_all_flows(login_user, name, status, tag_id, page_num, page_size)
-    except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail='Failed to get skills list')

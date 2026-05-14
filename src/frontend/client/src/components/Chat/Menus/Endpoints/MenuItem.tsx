@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { useRecoilValue } from 'recoil';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
-import type { TConversation } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
+import type { TConversation } from '~/types/chat';
 import type { FC } from 'react';
 import { cn, getConvoSwitchLogic, getEndpointField, getIconKey } from '~/utils';
 import { useLocalize, useUserKey, useDefaultConvo } from '~/hooks';
 import { SetKeyDialog } from '~/components/Input/SetKeyDialog';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { useChatContext } from '~/Providers';
 import { icons } from './Icons';
 import store from '~/store';

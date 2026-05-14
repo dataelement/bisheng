@@ -1,8 +1,8 @@
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 import { useCallback, memo, ReactNode } from 'react';
 import { ChevronDownIcon, LucideProps } from 'lucide-react';
-import type { TResPlugin, TInput } from '~/data-provider/data-provider/src';
-import { useGetEndpointsQuery } from '~/data-provider';
+import type { TResPlugin, TInput } from '~/types/chat';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { useShareContext } from '~/Providers';
 import { cn, formatJSON } from '~/utils';
 import { Spinner } from '~/components';

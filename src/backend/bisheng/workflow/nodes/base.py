@@ -2,12 +2,12 @@ import base64
 import copy
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 
 from bisheng.core.cache.utils import file_download
-from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user import UserDao, User
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
@@ -60,7 +60,7 @@ class BaseNode(ABC):
 
         self.exec_unique_id = None
 
-        self.user_info = None
+        self.user_info: Optional[User] = None
 
         # Parse Simple Parameters
         self.init_data()

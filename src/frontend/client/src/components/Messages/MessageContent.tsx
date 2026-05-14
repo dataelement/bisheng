@@ -4,7 +4,7 @@ import type { TMessageProps } from '~/common';
 // eslint-disable-next-line import/no-cycle
 import MultiMessage from '~/components/Chat/Messages/MultiMessage';
 import ContentRender from './ContentRender';
-import { useGetBsConfig } from '~/data-provider';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 
 const MessageContainer = React.memo(
   ({

@@ -185,10 +185,11 @@ export async function getRolePermissionsApi(
 /**
  * 更新角色基本信息
  */
-export async function updateRoleNameApi(roleId, name) {
+export async function updateRoleNameApi(roleId, name,knowledgeSpaceFileLimit) {
   return axios.patch(`/api/v1/role/${roleId}`, {
     role_name: name,
     remark: "手动创建用户",
+    knowledge_space_file_limit:knowledgeSpaceFileLimit
   });
 }
 

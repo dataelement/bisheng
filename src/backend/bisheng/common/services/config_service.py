@@ -8,7 +8,7 @@ from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf, KnowledgeConf
+    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -64,9 +64,12 @@ class ConfigService(Settings):
 
     @staticmethod
     def env_var_constructor(loader, node):
-        value = loader.construct_scalar(node)  # PyYAML loaderFixed method for constructing a variable value from the current node
-        var_name = value.strip('${} ')  # Subtract variable values (e.g.${PATH}) Special characters and spaces before and after
-        env_val = os.getenv(var_name)  # Try to get the variable name in the environment variable (e.g.USER) corresponding to the value, if it is not obtained, it is empty
+        value = loader.construct_scalar(
+            node)  # PyYAML loaderFixed method for constructing a variable value from the current node
+        var_name = value.strip(
+            '${} ')  # Subtract variable values (e.g.${PATH}) Special characters and spaces before and after
+        env_val = os.getenv(
+            var_name)  # Try to get the variable name in the environment variable (e.g.USER) corresponding to the value, if it is not obtained, it is empty
         if env_val is None:
             raise ValueError(f'Environment variable {var_name} not found')
         return env_val
@@ -199,6 +202,7 @@ class ConfigService(Settings):
         all_config = self.get_all_config()
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        tmp.dashboard_pro = os.getenv('BISHENG_DASHBOARD_PRO') == 'true'
         return tmp
 
     async def aget_system_login_method(self) -> SystemLoginMethod:
@@ -206,6 +210,7 @@ class ConfigService(Settings):
         all_config = await self.aget_all_config()
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        tmp.dashboard_pro = os.getenv('BISHENG_DASHBOARD_PRO') == 'true'
         return tmp
 
     def get_workflow_conf(self) -> WorkflowConf:
@@ -222,6 +227,31 @@ class ConfigService(Settings):
             setattr(conf, k, v)
         return conf
 
+    async def aget_linsight_conf(self) -> LinsightConf:
+        # Get Ideas-related configuration items
+        all_config = await self.aget_all_config()
+        conf = LinsightConf(debug=self.linsight_conf.debug)
+        linsight_conf = all_config.get('linsight', {})
+        for k, v in linsight_conf.items():
+            setattr(conf, k, v)
+        return conf
+
+    async def aget_intelligence_center_conf(self) -> IntelligenceCenterConf:
+        # Get Intelligence Center-related configuration items
+        all_config = await self.aget_all_config()
+        information_conf = all_config.get('information_conf', {})
+        if information_conf:
+            self.information_conf = IntelligenceCenterConf.model_validate(information_conf)
+        return self.information_conf
+
+    def get_intelligence_center_conf(self) -> IntelligenceCenterConf:
+        # Get Intelligence Center-related configuration items
+        all_config = self.get_all_config()
+        information_conf = all_config.get('information_conf', {})
+        if information_conf:
+            self.information_conf = IntelligenceCenterConf.model_validate(information_conf)
+        return self.information_conf
+
     def get_from_db(self, key: str):
         # Get all of them firstkey
         all_config = self.get_all_config()
@@ -231,6 +261,13 @@ class ConfigService(Settings):
         # Get all of them firstkey
         all_config = await self.aget_all_config()
         return all_config.get(key, {})
+
+    async def get_mcp_conf(self) -> McpConf:
+        all_config = await self.aget_all_config()
+        mcp_conf = all_config.get('mcp', {})
+        if mcp_conf:
+            return McpConf(**mcp_conf)
+        return McpConf()
 
 
 settings = ConfigService.load_settings_from_yaml(config_file)

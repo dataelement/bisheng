@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getConfigDefaults, PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import { getConfigDefaults, PermissionTypes, Permissions } from '~/types/chat';
 import type { ContextType } from '~/common';
 import { EndpointsMenu, ModelSpecsMenu, PresetsMenu, HeaderNewChat } from './Menus';
-import { useGetStartupConfig } from '~/data-provider';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import ExportAndShareMenu from './ExportAndShareMenu';
 import { useMediaQuery, useHasAccess } from '~/hooks';
 import HeaderOptions from './Input/HeaderOptions';

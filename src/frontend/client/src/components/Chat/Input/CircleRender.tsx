@@ -1,6 +1,6 @@
 import React from 'react';
 import { CircleIcon, CircleDotsIcon } from '~/components/svg';
-import { ECallState } from '~/data-provider/data-provider/src';
+import { ECallState } from '~/types/chat';
 
 const CircleRender = ({ rmsLevel, isCameraOn, state }) => {
   const getIconComponent = (state) => {

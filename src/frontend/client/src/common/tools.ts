@@ -1,4 +1,4 @@
-import type { AuthType } from '~/data-provider/data-provider/src';
+import type { AuthType } from '~/types/chat';
 
 export type ApiKeyFormData = {
   apiKey: string;

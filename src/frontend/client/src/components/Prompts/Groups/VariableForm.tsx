@@ -6,7 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
-import type { TPromptGroup } from '~/data-provider/data-provider/src';
+import type { TPromptGroup } from '~/types/chat';
 import {
   cn,
   wrapVariable,
