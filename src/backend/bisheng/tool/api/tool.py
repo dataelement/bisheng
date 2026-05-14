@@ -64,7 +64,7 @@ async def delete_tool_type(*, request: Request, login_user: UserPayload = Depend
 
 @router.post('/config')
 async def update_tool_config(*,
-                             login_user: UserPayload = Depends(UserPayload.get_admin_user),
+                             login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                              tool_id: int = Body(description='Tool Category UniqueID'),
                              extra: Dict = Body(..., description='Configuration information for the tool')):
     """ Update the configuration of the tool """

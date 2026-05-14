@@ -3,6 +3,7 @@ import json
 import math
 import os
 from datetime import datetime
+from time import perf_counter
 from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
 
@@ -194,12 +195,14 @@ class KnowledgeService(KnowledgeUtils):
         permission_id: str = 'use_kb',
         preferred_ids: Optional[List[int]] = None,
     ) -> Tuple[List[KnowledgeRead], int]:
+        total_start = perf_counter()
         scoped_super_admin = cls._is_scoped_super_admin(login_user)
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
         # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
         accessible_ids = None if scoped_super_admin else await login_user.rebac_list_accessible('can_read',
                                                                                                 'knowledge_library')
         if accessible_ids is not None:
+            filter_start = perf_counter()
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
                 login_user.user_id, knowledge_type,
             )
@@ -222,14 +225,62 @@ class KnowledgeService(KnowledgeUtils):
             total = await KnowledgeDao.acount_user_knowledge(
                 login_user.user_id, knowledge_id_extra, knowledge_type, name
             )
+            logger.info(
+                '[perf][knowledge.list.filter] user_id={} permission_id={} type={} accessible_ids={} creator_ids={} '
+                'filtered_ids={} page={} limit={} total={} took_ms={:.2f}',
+                login_user.user_id,
+                permission_id,
+                knowledge_type.value,
+                len(accessible_ids),
+                len(creator_ids),
+                len(knowledge_id_extra),
+                page,
+                limit,
+                total,
+                (perf_counter() - filter_start) * 1000,
+            )
         else:
+            dao_start = perf_counter()
             res = await KnowledgeDao.aget_all_knowledge(
                 name, knowledge_type, sort_by, page=page, limit=limit,
                 preferred_ids=preferred_ids,
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
+            logger.info(
+                '[perf][knowledge.list.dao] user_id={} permission_id={} type={} page={} limit={} total={} rows={} '
+                'took_ms={:.2f}',
+                login_user.user_id,
+                permission_id,
+                knowledge_type.value,
+                page,
+                limit,
+                total,
+                len(res),
+                (perf_counter() - dao_start) * 1000,
+            )
 
+        enrich_start = perf_counter()
         result = await cls.aconvert_knowledge_read(login_user, res)
+        logger.info(
+            '[perf][knowledge.list.enrich] user_id={} permission_id={} type={} rows={} took_ms={:.2f}',
+            login_user.user_id,
+            permission_id,
+            knowledge_type.value,
+            len(result),
+            (perf_counter() - enrich_start) * 1000,
+        )
+        logger.info(
+            '[perf][knowledge.list.total] user_id={} permission_id={} type={} page={} limit={} total={} rows={} '
+            'took_ms={:.2f}',
+            login_user.user_id,
+            permission_id,
+            knowledge_type.value,
+            page,
+            limit,
+            total,
+            len(result),
+            (perf_counter() - total_start) * 1000,
+        )
         return result, total
 
     @classmethod
@@ -242,24 +293,28 @@ class KnowledgeService(KnowledgeUtils):
         db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
+        owned_ids = {
+            int(one.id) for one in knowledge_list
+            if login_user.user_id == one.user_id
+        }
+        permission_map = await cls.permission_service.get_knowledge_permission_map_async(
+            login_user,
+            [int(one.id) for one in knowledge_list if int(one.id) not in owned_ids],
+            ['edit_kb'],
+        )
 
-        async def _row(one: Knowledge) -> KnowledgeRead:
+        def _row(one: Knowledge) -> KnowledgeRead:
             if login_user.user_id == one.user_id:
                 copiable = True
             else:
-                copiable = await cls.permission_service.check_access_async(
-                    login_user=login_user,
-                    owner_user_id=one.user_id,
-                    knowledge_id=one.id,
-                    access_type=AccessType.KNOWLEDGE_WRITE,
-                )
+                copiable = 'edit_kb' in permission_map.get(int(one.id), set())
             return KnowledgeRead(
                 **one.model_dump(),
                 user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                 copiable=copiable,
             )
 
-        return list(await asyncio.gather(*[_row(one) for one in knowledge_list]))
+        return [_row(one) for one in knowledge_list]
 
     @classmethod
     def convert_knowledge_read(

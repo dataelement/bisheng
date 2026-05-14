@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from time import perf_counter
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
@@ -19,6 +20,7 @@ UserDepartmentDao = _UserDepartmentDao
 
 logger = logging.getLogger(__name__)
 
+_KNOWLEDGE_PERMISSION_MAP_CONCURRENCY = 20
 
 _PERMISSION_SYNC_TIMEOUT_SECONDS = 60
 
@@ -186,6 +188,8 @@ class KnowledgePermissionService:
         bindings: list[dict] | None = None,
         binding_department_paths: dict[int, str] | None = None,
         user_subject_strings: set[str] | None = None,
+        tuple_cache: dict[str, list[dict]] | None = None,
+        tuple_department_paths: dict[int, str] | None = None,
     ) -> set[str]:
         if models is None:
             models = await cls._get_relation_models_map()
@@ -204,7 +208,48 @@ class KnowledgePermissionService:
             bindings=bindings,
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
+            tuple_cache=tuple_cache,
+            tuple_department_paths=tuple_department_paths,
         )
+
+    @classmethod
+    async def get_knowledge_permission_map_async(
+        cls,
+        login_user: UserPayload,
+        knowledge_ids: list[int],
+        permission_ids: list[str],
+    ) -> dict[int, set[str]]:
+        normalized_ids = [int(knowledge_id) for knowledge_id in knowledge_ids]
+        permission_id_set = set(permission_ids)
+        if not normalized_ids or not permission_id_set:
+            return {}
+
+        models, bindings, user_subject_strings = await asyncio.gather(
+            cls._get_relation_models_map(),
+            _get_bindings(),
+            cls._get_current_user_subject_strings(login_user),
+        )
+        binding_department_paths = await cls._get_binding_department_paths(bindings)
+        tuple_cache: dict[str, list[dict]] = {}
+        tuple_department_paths: dict[int, str] = {}
+        semaphore = asyncio.Semaphore(_KNOWLEDGE_PERMISSION_MAP_CONCURRENCY)
+
+        async def _one(knowledge_id: int) -> tuple[int, set[str]]:
+            async with semaphore:
+                perms = await cls.get_effective_permission_ids_async(
+                    login_user,
+                    knowledge_id,
+                    models=models,
+                    bindings=bindings,
+                    binding_department_paths=binding_department_paths,
+                    user_subject_strings=user_subject_strings,
+                    tuple_cache=tuple_cache,
+                    tuple_department_paths=tuple_department_paths,
+                )
+            return knowledge_id, perms & permission_id_set
+
+        pairs = await asyncio.gather(*[_one(knowledge_id) for knowledge_id in normalized_ids])
+        return {knowledge_id: perms for knowledge_id, perms in pairs}
 
     async def filter_knowledge_ids_by_permission_async(
         self,
@@ -215,29 +260,26 @@ class KnowledgePermissionService:
         normalized_ids = [int(knowledge_id) for knowledge_id in knowledge_ids]
         if not normalized_ids:
             return []
-
-        models, bindings, user_subject_strings = await asyncio.gather(
-            self._get_relation_models_map(),
-            _get_bindings(),
-            self._get_current_user_subject_strings(login_user),
+        start = perf_counter()
+        permission_map = await self.get_knowledge_permission_map_async(
+            login_user,
+            normalized_ids,
+            [permission_id],
         )
-        binding_department_paths = await self._get_binding_department_paths(bindings)
-        permissions_list = await asyncio.gather(*[
-            self.get_effective_permission_ids_async(
-                login_user,
-                knowledge_id,
-                models=models,
-                bindings=bindings,
-                binding_department_paths=binding_department_paths,
-                user_subject_strings=user_subject_strings,
-            )
-            for knowledge_id in normalized_ids
-        ])
-        return [
+        filtered_ids = [
             knowledge_id
-            for knowledge_id, permission_ids in zip(normalized_ids, permissions_list)
-            if permission_id in permission_ids
+            for knowledge_id in normalized_ids
+            if permission_id in permission_map.get(knowledge_id, set())
         ]
+        logger.info(
+            '[perf][knowledge.permission_map] user_id=%s permission_id=%s candidates=%s kept=%s took_ms=%.2f',
+            getattr(login_user, 'user_id', None),
+            permission_id,
+            len(normalized_ids),
+            len(filtered_ids),
+            (perf_counter() - start) * 1000,
+        )
+        return filtered_ids
 
     async def check_access_async(
             self,
