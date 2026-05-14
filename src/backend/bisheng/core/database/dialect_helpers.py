@@ -20,10 +20,92 @@ from sqlalchemy.types import TypeDecorator
 # DaMeng (Oracle-compatible) does not support the SQL BOOLEAN type.
 # Map it to SMALLINT (0/1).  SQLAlchemy's Boolean type still handles
 # Python True/False ↔ 1/0 conversion transparently at the driver level.
+#
+# @compiles dispatch does not always intercept type-compiler paths in all
+# dialect configurations.  Directly patch DmTypeCompiler as a reliable fallback.
 
 @compiles(_Boolean, "dm")
 def _compile_boolean_dm(element, compiler, **kw):
     return "SMALLINT"
+
+
+def _patch_dm_ddl_compiler() -> None:
+    """Fix autoincrement column generation in dmSQLAlchemy DDL compiler.
+
+    dmSQLAlchemy's get_column_specification checks `column.autoincrement == True`
+    but SQLModel / SQLAlchemy default for primary-key integer columns is the
+    string 'auto', not the bool True.  'auto' == True is False in Python, so
+    IDENTITY(1,1) is never emitted for SQLModel-defined primary keys.
+
+    This patch wraps the method to normalise 'auto' → True before the check.
+    """
+    try:
+        from sqlalchemy import Integer, SmallInteger, BigInteger
+        from dmSQLAlchemy.base import DMDDLCompiler  # type: ignore[import]
+
+        _orig = DMDDLCompiler.get_column_specification
+
+        def _patched(self, column, **kw):
+            # Temporarily promote 'auto' to True for integer PK columns so
+            # dmSQLAlchemy's `== True` guard emits IDENTITY(1,1).
+            promoted = False
+            if (column.autoincrement == 'auto'
+                    and column.primary_key
+                    and not column.foreign_keys   # FK columns are never autoincrement
+                    and isinstance(column.type,
+                                   (Integer, SmallInteger, BigInteger))):
+                column.__dict__['autoincrement'] = True
+                promoted = True
+            try:
+                return _orig(self, column, **kw)
+            finally:
+                if promoted:
+                    column.__dict__['autoincrement'] = 'auto'
+
+        DMDDLCompiler.get_column_specification = _patched
+    except (ImportError, AttributeError):
+        pass
+
+
+def _patch_dm_type_compiler() -> None:
+    """Directly patch DaMeng's type compiler so BOOLEAN → SMALLINT.
+
+    This is a belt-and-suspenders fix: @compiles above handles the standard
+    path; this patch covers the case where dmSQLAlchemy's DmTypeCompiler has
+    its own visit_boolean that bypasses @compiles dispatch.
+    """
+    try:
+        from dmSQLAlchemy.base import DMTypeCompiler as DmTypeCompiler  # type: ignore[import]
+
+        def _visit_boolean(self, type_, **kw):
+            return "SMALLINT"
+
+        def _visit_longtext(self, type_, **kw):
+            return "CLOB"
+
+        def _visit_json(self, type_, **kw):
+            return "CLOB"
+
+        DmTypeCompiler.visit_boolean = _visit_boolean
+        DmTypeCompiler.visit_BOOLEAN = _visit_boolean
+        # LONGTEXT / JSON are MySQL-specific; fall back to CLOB on DaMeng
+        DmTypeCompiler.visit_LONGTEXT = _visit_longtext
+        DmTypeCompiler.visit_JSON = _visit_json
+        DmTypeCompiler.visit_json = _visit_json
+
+        # Tell SQLAlchemy that DaMeng has no native JSON support so it
+        # serialises Python dicts to JSON strings on the Python side.
+        try:
+            from dmSQLAlchemy.base import DMDialect  # type: ignore[import]
+            DMDialect.supports_native_json = False
+        except (ImportError, AttributeError):
+            pass
+    except ImportError:
+        pass  # Not on a DaMeng-capable platform (e.g., macOS dev)
+
+
+_patch_dm_ddl_compiler()
+_patch_dm_type_compiler()
 
 
 # ---------------------------------------------------------------------------
