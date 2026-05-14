@@ -16,8 +16,6 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 from sqlalchemy import Column, DateTime, Integer, SmallInteger, String, UniqueConstraint, text
-from sqlalchemy.dialects.mysql import LONGTEXT
-
 from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import Field, select
 
@@ -42,7 +40,7 @@ class TenantSystemModelConfigBase(SQLModelSerializable):
     )
     value: Optional[str] = Field(
         default=None,
-        sa_column=Column(LONGTEXT, nullable=True,
+        sa_column=Column(LargeText, nullable=True,
                          comment='JSON-encoded config payload'),
     )
     is_shared_to_children: Optional[int] = Field(

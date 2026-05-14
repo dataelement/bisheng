@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, List
 
-from sqlalchemy import Enum as SQLEnum, Column, Integer, JSON, DateTime, text, CHAR, ForeignKey, update
+from sqlalchemy import Enum as SQLEnum, Column, Integer, DateTime, text, CHAR, ForeignKey, update
 from sqlmodel import Field, select, col
 
 from bisheng.core.database import get_async_db_session
@@ -10,7 +10,7 @@ from bisheng.database.base import uuid_hex
 from bisheng.common.models.base import SQLModelSerializable
 
 
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 class ExecuteTaskTypeEnum(str, Enum):
     """
@@ -61,14 +61,14 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
                                                          nullable=True))
     task_type: ExecuteTaskTypeEnum = Field(..., description='Task type',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
-    task_data: Optional[dict] = Field(None, description='Task Data', sa_type=JSON, nullable=True)
+    task_data: Optional[dict] = Field(None, description='Task Data', sa_column=Column(JsonType, nullable=True))
 
     # input_prompt: Optional[str] = Field(None, description='Enter a prompt', sa_type=Text, nullable=True)
     # user_input: Optional[str] = Field(None, description='User input', sa_type=Text, nullable=True)
-    history: Optional[List[Dict]] = Field(None, description='Execute Step Record', sa_type=JSON, nullable=True)
+    history: Optional[List[Dict]] = Field(None, description='Execute Step Record', sa_column=Column(JsonType, nullable=True))
     status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="Status Misi",
                                           sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
-    result: Optional[Dict] = Field(None, description='Result of Task', sa_type=JSON, nullable=True)
+    result: Optional[Dict] = Field(None, description='Result of Task', sa_column=Column(JsonType, nullable=True))
     tenant_id: Optional[int] = Field(
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text('1'),

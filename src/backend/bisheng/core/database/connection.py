@@ -180,7 +180,8 @@ class DatabaseConnectionManager:
             try:
                 await conn.run_sync(SQLModel.metadata.create_all)
             except OperationalError as oe:
-                logger.warning(f"Table creation skipped due to OperationalError: {oe}")
+                # Log full OperationalError so silent failures are visible
+                logger.error(f"Table creation OperationalError (tables may be missing): {oe}")
             except Exception as exc:
                 logger.error(f"Error creating tables: {exc}")
                 raise RuntimeError("Error creating tables") from exc
@@ -193,25 +194,56 @@ class DatabaseConnectionManager:
 
         logger.info('Database and tables created successfully')
 
+    @staticmethod
+    def _dm_quote_table(actual_name: str) -> str:
+        """Return the DDL identifier for a DaMeng table name.
+
+        DaMeng stores unquoted identifiers as UPPERCASE.
+        Tables whose names contain lowercase letters were created with double
+        quotes (e.g. reserved words like `group`, `user`) and must be quoted
+        in DDL to preserve their case.  All-uppercase names can be used
+        unquoted.
+        """
+        if actual_name == actual_name.upper():
+            return actual_name          # e.g. ROLE, TENANT — no quotes needed
+        return f'"{actual_name}"'       # e.g. "group", "user" — reserved word
+
     def _ensure_dm_triggers(self) -> None:
-        """Create or replace BEFORE UPDATE triggers for update_time on DaMeng."""
-        from sqlalchemy import inspect as sa_inspect
+        """Create or replace BEFORE UPDATE triggers for update_time on DaMeng.
+
+        Uses SYS.ALL_TABLES to get the actual stored table names (UPPERCASE for
+        normal tables, lowercase for reserved-word tables created with quotes).
+        This avoids the case-mismatch that occurs when using Inspector's
+        get_table_names() which always returns lowercase names.
+        """
+        from sqlalchemy import inspect as sa_inspect, text
 
         with self.engine.connect() as conn:
+            # Get actual stored table names from DaMeng system catalog
+            result = conn.execute(text(
+                "SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = USER ORDER BY TABLE_NAME"
+            ))
+            actual_tables = [row[0] for row in result]
+
             insp = sa_inspect(conn)
-            for table in insp.get_table_names():
+            for actual_name in actual_tables:
                 try:
-                    col_names = [c['name'].lower() for c in insp.get_columns(table)]
+                    # Inspector returns columns for lowercase name
+                    col_names = [c['name'].lower() for c in insp.get_columns(actual_name.lower())]
                 except Exception:
-                    continue
+                    try:
+                        col_names = [c['name'].lower() for c in insp.get_columns(actual_name)]
+                    except Exception:
+                        continue
 
                 if 'update_time' not in col_names:
                     continue
 
-                trigger_name = f'trg_{table}_update_time'
+                table_ref = self._dm_quote_table(actual_name)
+                trigger_name = f'trg_{actual_name.lower()}_update_time'
                 trigger_ddl = (
-                    f'CREATE OR REPLACE TRIGGER "{trigger_name}" '
-                    f'BEFORE UPDATE ON "{table}" '
+                    f'CREATE OR REPLACE TRIGGER {trigger_name} '
+                    f'BEFORE UPDATE ON {table_ref} '
                     f'FOR EACH ROW '
                     f'BEGIN '
                     f'  :new.update_time := CURRENT_TIMESTAMP; '
@@ -252,10 +284,12 @@ class DatabaseConnectionManager:
                             trigger_expr,
                         )
 
+                    # Use system catalog name for correct DaMeng identifier case
+                    table_ref = self._dm_quote_table(tbl.name.upper())
                     trigger_name = f'trg_{tbl.name}_{col.name}'
                     trigger_ddl = (
-                        f'CREATE OR REPLACE TRIGGER "{trigger_name}" '
-                        f'BEFORE INSERT OR UPDATE ON "{tbl.name}" '
+                        f'CREATE OR REPLACE TRIGGER {trigger_name} '
+                        f'BEFORE INSERT OR UPDATE ON {table_ref} '
                         f'FOR EACH ROW '
                         f'BEGIN '
                         f'  :new.{col.name} := {trigger_expr}; '
