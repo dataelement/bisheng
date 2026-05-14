@@ -229,8 +229,8 @@ class EvaluationService:
                         'type': 'file',
                         'id': node.id
                     })
-            if len(input_keys_response.get("input_keys")):
-                input_item = input_keys_response.get("input_keys")[0]
+            if len(input_keys_response.get("input_keys", [])):
+                input_item = input_keys_response["input_keys"][0]
                 del input_item["id"]
                 return input_item
         finally:
@@ -390,7 +390,7 @@ async def add_evaluation_task(evaluation_id: int):
         for index, one in enumerate(question):
             row_data = {}
             for field, title, unit_type in columns:
-                value = result.get(field)[index]
+                value = result[field][index]
                 if unit_type != 1:
                     tmp_dict[field] += value
                 if unit_type == 3:
@@ -400,7 +400,7 @@ async def add_evaluation_task(evaluation_id: int):
 
         total_row_data = {}
         for field, title, unit_type in columns:
-            value = tmp_dict.get(field)
+            value = tmp_dict[field]
             if unit_type == 3:
                 value = f'{(value / len(row_list)) * 100:.2f}%'
                 total_dict[field] = value
