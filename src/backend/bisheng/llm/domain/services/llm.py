@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import os
-from typing import Any, List, Optional, Dict, Tuple
+from typing import Any, List, Optional, Dict, Tuple, Iterable, Set
 
 from fastapi import Request, BackgroundTasks, UploadFile
 from langchain_core.documents import BaseDocumentCompressor, Document
@@ -111,6 +111,91 @@ async def _write_llm_audit(
 
 class LLMService:
 
+    @staticmethod
+    def _coerce_model_id(value: Any) -> Optional[int]:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            model_id = int(value)
+        except (TypeError, ValueError):
+            return None
+        return model_id if model_id > 0 else None
+
+    @classmethod
+    async def _aget_inherited_system_default_server_ids_for_leaf(
+        cls, leaf_id: int,
+    ) -> List[int]:
+        """Root servers referenced by system-config rows this leaf inherits.
+
+        Child tenants can inherit Root's system model config even when the
+        underlying Root LLM servers were not explicitly shared via FGA.
+        The runtime already resolves those model_ids with dedicated Root-share
+        fallback helpers; this method keeps the management UI honest by making
+        the referenced servers visible in the list API as readonly rows.
+        """
+        if leaf_id == ROOT_TENANT_ID:
+            return []
+
+        def _extend_ids(dest: Set[int], raw_ids: Iterable[Any]) -> None:
+            for raw in raw_ids:
+                model_id = cls._coerce_model_id(raw)
+                if model_id is not None:
+                    dest.add(model_id)
+
+        inherited_model_ids: Set[int] = set()
+
+        knowledge_cfg, knowledge_inherited, _ = await cls.aget_knowledge_llm_with_meta(tenant_id=leaf_id)
+        if knowledge_inherited:
+            _extend_ids(inherited_model_ids, [
+                knowledge_cfg.embedding_model_id,
+                knowledge_cfg.source_model_id,
+                knowledge_cfg.extract_title_model_id,
+                knowledge_cfg.qa_similar_model_id,
+            ])
+
+        assistant_cfg, assistant_inherited, _ = await cls.aget_assistant_llm_with_meta(tenant_id=leaf_id)
+        if assistant_inherited:
+            if assistant_cfg.auto_llm:
+                _extend_ids(inherited_model_ids, [assistant_cfg.auto_llm.model_id])
+            _extend_ids(
+                inherited_model_ids,
+                [one.model_id for one in (assistant_cfg.llm_list or [])],
+            )
+
+        evaluation_cfg, evaluation_inherited, _ = await cls.aget_evaluation_llm_with_meta(tenant_id=leaf_id)
+        if evaluation_inherited:
+            _extend_ids(inherited_model_ids, [evaluation_cfg.model_id])
+
+        workflow_cfg, workflow_inherited, _ = await cls.aget_workflow_llm_with_meta(tenant_id=leaf_id)
+        if workflow_inherited:
+            _extend_ids(inherited_model_ids, [workflow_cfg.model_id])
+
+        workbench_cfg, workbench_inherited, _ = await cls.aget_workbench_llm_with_meta(tenant_id=leaf_id)
+        if workbench_inherited:
+            _extend_ids(
+                inherited_model_ids,
+                [
+                    *(one.id for one in (workbench_cfg.models or [])),
+                    getattr(workbench_cfg.task_model, 'id', None),
+                    getattr(workbench_cfg.embedding_model, 'id', None),
+                    getattr(workbench_cfg.asr_model, 'id', None),
+                    getattr(workbench_cfg.tts_model, 'id', None),
+                    getattr(workbench_cfg.chat_title_llm, 'id', None),
+                ],
+            )
+
+        if not inherited_model_ids:
+            return []
+
+        with bypass_tenant_filter():
+            rows = await LLMDao.aget_model_by_ids(list(inherited_model_ids))
+        return list({
+            row.server_id for row in rows
+            if row is not None
+               and row.server_id
+               and row.tenant_id == ROOT_TENANT_ID
+        })
+
     # --- F022 system-config getters: 5 typed configs share the same
     # resolve-and-deserialize shape, so wire each named method through
     # one of these private helpers. Each named getter stays as a thin
@@ -180,12 +265,19 @@ class LLMService:
                 with strict_tenant_filter():
                     return await LLMDao.aget_all_server()
 
-            own, shared_ids = await asyncio.gather(
+            own, shared_ids, inherited_default_server_ids = await asyncio.gather(
                 _own_only(),
                 LLMDao.aget_shared_server_ids_for_leaf(leaf_id),
+                cls._aget_inherited_system_default_server_ids_for_leaf(leaf_id),
             )
             existing_ids = {s.id for s in own}
-            extra_ids = [sid for sid in shared_ids if sid not in existing_ids]
+            extra_ids: List[int] = []
+            seen_extra: Set[int] = set()
+            for sid in [*shared_ids, *inherited_default_server_ids]:
+                if sid in existing_ids or sid in seen_extra:
+                    continue
+                seen_extra.add(sid)
+                extra_ids.append(sid)
             if extra_ids:
                 with bypass_tenant_filter():
                     shared_servers = await LLMDao.aget_server_by_ids(extra_ids)

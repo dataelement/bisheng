@@ -29,10 +29,8 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
                 return true
             }
         })
-        // 无对应选项自动清空旧值
-        if (_defaultValue.length === 0) onChange(null)
         return _defaultValue
-    }, [value])
+    }, [value, options])
 
     return (
         <div>
