@@ -209,6 +209,7 @@
     },
     "filterTypes": {
       "conditional": "Conditional Filter",
+      "noFields": "No fields available",
       "enum": "Enum Filter"
     },
     "operators": {
