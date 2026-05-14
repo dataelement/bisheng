@@ -103,7 +103,6 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                 <CardContent className="pt-4 relative">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ConfigInheritanceBanner meta={configMeta} />
-                        <SubscriptionSensitivePolicy ref={sensitivePolicyRef} />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">
@@ -201,6 +200,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                                 </div>
                             </>
                         </div>
+                        <SubscriptionSensitivePolicy ref={sensitivePolicyRef} />
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
