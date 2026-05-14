@@ -391,11 +391,11 @@ class ChatManager:
                             erro_resp = ChatResponse(**base_param)
                             context = context_dict.get(future_key)
                             if context.get('status') == 'init':
-                                raise LLMExecutionError(exception=e, error=str(e))
+                                error_cls = LLMExecutionError
                             elif context.get('has_file'):
-                                raise DocumentParseError(exception=e, error=str(e))
+                                error_cls = DocumentParseError
                             else:
-                                raise InputDataParseError(exception=e, error=str(e))
+                                error_cls = InputDataParseError
 
                             context['status'] = 'init'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
@@ -403,6 +403,7 @@ class ChatManager:
                             erro_resp.type = 'close'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
+                            raise error_cls(exception=e, error=str(e))
         except WebSocketDisconnect as e:
             logger.info(f'act=rcv_client_disconnect {str(e)}')
         except BaseErrorCode as e:
