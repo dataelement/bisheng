@@ -92,7 +92,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     }, [keyword, type, allData]);
 
     const hasSet = (name) => {
-        if (user.role !== 'admin') return false
+        const canManageBuiltinTools = Boolean(
+            user?.is_global_super || user?.role === 'admin' || user?.is_child_admin
+        );
+        if (!canManageBuiltinTools) return false
         return MANAGED_TOOLS.includes(name)
     }
 

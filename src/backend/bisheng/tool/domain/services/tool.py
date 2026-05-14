@@ -1,5 +1,6 @@
 import asyncio
 import json
+from time import perf_counter
 from typing import Optional, List
 
 import yaml
@@ -50,8 +51,9 @@ class ToolServices(BaseModel):
         permission_id: str = 'use_tool',
     ) -> List[GptsToolsTypeRead]:
         """ Get a list of tools visible to users """
+        total_start = perf_counter()
+        current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
         if self._is_scoped_super_admin():
-            current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
             scoped_preset = ToolPresetType(is_preset) if is_preset is not None else None
             all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
                 current_tid,
@@ -79,22 +81,54 @@ class ToolServices(BaseModel):
             # When getting a list of custom tools, you need to include a list of tools available to the user
             access_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_READ])
             if access_resources:
+                permission_prefilter_start = perf_counter()
                 filtered_ids = await ToolPermissionService.filter_tool_ids_by_permission_async(
                     self.login_user,
                     [int(access) for access in access_resources],
                     permission_id,
                 )
                 tool_type_ids_extra = [int(access) for access in filtered_ids]
+                logger.info(
+                    '[perf][tool.list.prefilter] user_id={} tenant_id={} is_preset={} permission_id={} '
+                    'access_resources={} filtered_ids={} took_ms={:.2f}',
+                    self.login_user.user_id,
+                    current_tid,
+                    is_preset,
+                    permission_id,
+                    len(access_resources),
+                    len(tool_type_ids_extra),
+                    (perf_counter() - permission_prefilter_start) * 1000,
+                )
         if is_preset is None:
             # Get a list of all tools visible to the user
             all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra)
         elif is_preset == ToolPresetType.PRESET.value:
             # Get a list of preset tools
-            all_tool_type = await GptsToolsDao.aget_preset_tool_type()
+            if current_tid != DEFAULT_TENANT_ID:
+                all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+                    current_tid,
+                    include_preset=True,
+                    is_preset=ToolPresetType.PRESET,
+                )
+            else:
+                all_tool_type = await GptsToolsDao.aget_preset_tool_type()
         else:
             # Get a list of custom tools visible to users
             all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra, False,
                                                                    ToolPresetType(is_preset))
+
+        if is_preset is None and current_tid != DEFAULT_TENANT_ID:
+            preset_tool_types = await GptsToolsDao.aget_tenant_tool_type(
+                current_tid,
+                include_preset=True,
+                is_preset=ToolPresetType.PRESET,
+            )
+            preset_ids = {one.id for one in preset_tool_types}
+            all_tool_type = [
+                *preset_tool_types,
+                *(one for one in all_tool_type if
+                  one.id not in preset_ids and one.is_preset != ToolPresetType.PRESET.value),
+            ]
         tool_type_id = [one.id for one in all_tool_type]
         res: List[GptsToolsTypeRead] = []
         tool_type_children = {}
@@ -107,34 +141,50 @@ class ToolServices(BaseModel):
         for one in tool_list:
             tool_type_children[one.type].append(one)
 
-        write_tool_type = None
-        delete_tool_type = None
+        permission_map = {}
+        if tool_type_id and not self.login_user.is_admin():
+            permission_map_start = perf_counter()
+            permission_map = await ToolPermissionService.get_tool_permission_map_async(
+                self.login_user,
+                tool_type_id,
+                ['edit_tool', 'delete_tool'],
+            )
+            logger.info(
+                '[perf][tool.list.permission_map] user_id={} tenant_id={} tool_types={} map_size={} took_ms={:.2f}',
+                self.login_user.user_id,
+                current_tid,
+                len(tool_type_id),
+                len(permission_map),
+                (perf_counter() - permission_map_start) * 1000,
+            )
+        tenant_admin = (
+            current_tid != DEFAULT_TENANT_ID
+            and await self.login_user.has_tenant_admin(current_tid)
+        )
         for one in res:
-            if self.login_user.is_admin() or one.user_id == self.login_user.user_id:
+            if self.login_user.is_admin() or tenant_admin or one.user_id == self.login_user.user_id:
                 one.write = True
                 one.delete = True
             else:
-                if write_tool_type is None:
-                    filtered_write = await ToolPermissionService.filter_tool_ids_by_permission_async(
-                        self.login_user,
-                        tool_type_id,
-                        'edit_tool',
-                    )
-                    write_tool_type = {int(x) for x in filtered_write}
-                one.write = one.id in write_tool_type
-                if delete_tool_type is None:
-                    filtered_delete = await ToolPermissionService.filter_tool_ids_by_permission_async(
-                        self.login_user,
-                        tool_type_id,
-                        'delete_tool',
-                    )
-                    delete_tool_type = {int(x) for x in filtered_delete}
-                one.delete = one.id in delete_tool_type
+                one_permissions = permission_map.get(str(one.id), set())
+                one.write = 'edit_tool' in one_permissions
+                one.delete = 'delete_tool' in one_permissions
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
             one.mask_sensitive_data()
 
+        logger.info(
+            '[perf][tool.list.total] user_id={} tenant_id={} is_preset={} permission_id={} tool_types={} '
+            'children={} took_ms={:.2f}',
+            self.login_user.user_id,
+            current_tid,
+            is_preset,
+            permission_id,
+            len(res),
+            len(tool_list),
+            (perf_counter() - total_start) * 1000,
+        )
         return res
 
     async def add_tools(
@@ -225,7 +275,7 @@ class ToolServices(BaseModel):
         if tool_type.name == "Dalle3-	painting;":
             # Instructions not toggledtab. Just changed the configuration
             if ("azure_endpoint" in old_config and "azure_endpoint" in extra) or (
-                    "azure_endpoint" not in old_config and "azure_endpoint" not in extra
+                "azure_endpoint" not in old_config and "azure_endpoint" not in extra
             ):
                 # Update the configuration of all tools under the Tools category
                 merge_extra = json_masker.update_json_with_masked(old_config, extra)

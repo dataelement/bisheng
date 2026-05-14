@@ -257,6 +257,21 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.scalar(statement) or 0
 
     @classmethod
+    async def aget_user_upload_total_file_size(cls, user_id: int) -> int:
+        """Async total bytes for active files uploaded by a user."""
+        statement = select(func.sum(KnowledgeFile.file_size)).where(
+            KnowledgeFile.user_id == user_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status.in_([
+                KnowledgeFileStatus.PROCESSING.value,
+                KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFileStatus.WAITING.value,
+            ]),
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement) or 0
+
+    @classmethod
     async def aadd_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
         async with get_async_db_session() as session:
             session.add(knowledge_file)

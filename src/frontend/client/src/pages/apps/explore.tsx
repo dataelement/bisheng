@@ -8,6 +8,7 @@ import AppAvator from '~/components/Avator'
 import { AiChatIcon, ShareOutlineIcon } from "~/components/icons"
 import { Button } from "~/components/ui/Button"
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks"
+import { useGetBsConfig } from "~/hooks/queries/data-provider"
 import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
 import { AgentNavigation } from './components/AgentNavigation'
@@ -136,8 +137,11 @@ export default function ExplorePlaza() {
     const navigate = useNavigate()
     const { showToast } = useToastContext()
     const localize = useLocalize()
+    const { data: bsConfig } = useGetBsConfig()
     const isAtLeast768 = useMediaQuery('(min-width: 768px)')
     const isAtLeast1024 = useMediaQuery('(min-width: 1024px)')
+    const bannerTitle = bsConfig?.applicationCenterWelcomeMessage?.trim() || localize('com_app_center_welcome')
+    const bannerDescription = bsConfig?.applicationCenterDescription?.trim() || localize('com_app_center_description')
 
     const exploreCols = useMemo(() => {
         // md: 2 列（与应用中心一致）；lg+: 3 列（应用中心 4 列减 1）
@@ -266,10 +270,10 @@ export default function ExplorePlaza() {
                 </div>
                 <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
                     <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-[#335CFF]">
-                        {localize('com_app_center_welcome')}
+                        {bannerTitle}
                     </h1>
                     <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
-                        {localize('com_app_center_description')}
+                        {bannerDescription}
                     </p>
                 </div>
             </div>

@@ -1,4 +1,3 @@
-import { Button } from "@/components/bs-ui/button";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
@@ -12,7 +11,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Upload } from "lucide-react";
 import type { ChangeEvent } from "react";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 type SensitiveForm = {
@@ -25,6 +24,10 @@ const DEFAULT_FORM: SensitiveForm = {
     isCheck: false,
     words: "",
     wordsType: [],
+};
+
+export type KnowledgeSpaceSensitivePolicyHandle = {
+    save: () => Promise<boolean>;
 };
 
 function toWordsType(wordsTypes: SensitiveWordType[] = []) {
@@ -41,26 +44,28 @@ function toApiWordsType(wordsType: number[] = []): SensitiveWordType[] {
 
 function normalizeCustomWords(words: string) {
     return words
-        .replace(/[\r\n，、;；|]+/g, ",")
-        .replace(/,+/g, ",")
-        .replace(/^,|,$/g, "");
+        .split(/[\r\n,，、;；|]+/)
+        .map((word) => word.trim())
+        .filter(Boolean)
+        .join("\n");
 }
 
-export function KnowledgeSpaceSensitivePolicy() {
+export const KnowledgeSpaceSensitivePolicy = forwardRef<KnowledgeSpaceSensitivePolicyHandle>(
+function KnowledgeSpaceSensitivePolicy(_, ref) {
     const { t } = useTranslation();
-    const { toast, message } = useToast();
+    const { toast } = useToast();
     const [form, setForm] = useState<SensitiveForm>(DEFAULT_FORM);
-    const [savedForm, setSavedForm] = useState<SensitiveForm>(DEFAULT_FORM);
+    const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
         getSensitiveWordPolicyApi().then((policy) => {
             const next = {
                 isCheck: Boolean(policy?.enabled),
-                words: policy?.custom_words || "",
+                words: normalizeCustomWords(policy?.custom_words || ""),
                 wordsType: toWordsType(policy?.words_types),
             };
             setForm(next);
-            setSavedForm(next);
+            setLoaded(true);
         });
     }, []);
 
@@ -73,12 +78,12 @@ export function KnowledgeSpaceSensitivePolicy() {
         }));
         if (res) {
             setForm(nextForm);
-            setSavedForm(nextForm);
         }
         return Boolean(res);
     };
 
     const validateForm = (nextForm: SensitiveForm) => {
+        if (!nextForm.isCheck) return true;
         const errors: string[] = [];
         if (nextForm.wordsType.length === 0) errors.push(t("build.errors.selectAtLeastOneWordType"));
         if (nextForm.wordsType.includes(2) && !nextForm.words?.trim()) {
@@ -91,32 +96,23 @@ export function KnowledgeSpaceSensitivePolicy() {
         return true;
     };
 
-    const handleSave = async () => {
-        const nextForm = { ...form, isCheck: true, words: normalizeCustomWords(form.words) };
-        if (!validateForm(nextForm)) return;
-        const success = await savePolicy(nextForm);
-        if (success) {
-            message({ title: t("prompt"), variant: "success", description: t("build.saveSuccess") });
-        }
-    };
+    useImperativeHandle(ref, () => ({
+        save: async () => {
+            if (!loaded) {
+                toast({ title: t("prompt"), variant: "error", description: t("build.errors.sensitivePolicyLoading", "敏感词配置加载中，请稍后再试") });
+                return false;
+            }
+            const nextForm = { ...form, words: normalizeCustomWords(form.words) };
+            if (!validateForm(nextForm)) return false;
+            return savePolicy(nextForm);
+        },
+    }), [form, loaded, t, toast]);
 
-    const handleSwitchChange = async (checked: boolean) => {
-        if (checked) {
-            setForm((prev) => ({
-                ...prev,
-                isCheck: true,
-            }));
-            return;
-        }
-        const prev = form;
-        const next = { ...form, isCheck: false };
-        setForm(next);
-        const success = await savePolicy(next);
-        if (!success) setForm(prev);
-    };
-
-    const handleCancel = () => {
-        setForm(savedForm);
+    const handleSwitchChange = (checked: boolean) => {
+        setForm((prev) => ({
+            ...prev,
+            isCheck: checked,
+        }));
     };
 
     const handleWordTypeChange = (checked: boolean, value: number) => {
@@ -160,7 +156,7 @@ export function KnowledgeSpaceSensitivePolicy() {
                 </div>
                 {form.isCheck && (
                     <div className="mt-4 w-full max-w-[560px] rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
-                        <div className="mb-6">
+                        <div>
                             <span className="bisheng-label">{t("build.wordListType")}</span>
                             <div className="mt-4 mb-6 space-y-3">
                                 <div className="space-x-2 flex items-center">
@@ -191,7 +187,7 @@ export function KnowledgeSpaceSensitivePolicy() {
                                     className="h-[100px] resize-none"
                                     value={form.words}
                                     onChange={(event) => setForm({ ...form, words: event.target.value })}
-                                    placeholder={t("build.useCommaToSeparate", "使用英文逗号分隔，例如：词1,词2,词3")}
+                                    placeholder={t("bench.customWordsNewlinePlaceholder", "使用换行符进行分割，每行一个")}
                                 />
                                 <input
                                     type="file"
@@ -209,13 +205,9 @@ export function KnowledgeSpaceSensitivePolicy() {
                                 </Label>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-4">
-                            <Button onClick={handleCancel} variant="outline">{t("cancel")}</Button>
-                            <Button onClick={handleSave}>{t("save")}</Button>
-                        </div>
                     </div>
                 )}
             </div>
         </div>
     );
-}
+});

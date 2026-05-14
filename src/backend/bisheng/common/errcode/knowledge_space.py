@@ -81,6 +81,11 @@ class SpacePermissionDeniedError(BaseErrorCode):
     Msg: str = 'Permission denied: only the creator or admin can perform this operation'
 
 
+class SpaceTenantMismatchError(BaseErrorCode):
+    Code: int = 18041
+    Msg: str = '当前租户与知识空间归属租户不一致，暂不支持该操作，请切换到知识空间所属租户后重试'
+
+
 # —— TAG
 class SpaceTagExistsError(BaseErrorCode):
     Code: int = 18050

@@ -116,6 +116,11 @@ class KnowledgeFileNotExistError(BaseErrorCode):
     Msg: str = 'Knowledge base file does not exist'
 
 
+class KnowledgeTenantMismatchError(BaseErrorCode):
+    Code: int = 10972
+    Msg: str = '当前租户与知识库归属租户不一致，暂不支持上传文件，请切换到知识库所属租户后重试'
+
+
 # Conflicts with built-in metadata field name
 class KnowledgeMetadataFieldConflictError(BaseErrorCode):
     Code: int = 10980
@@ -168,4 +173,3 @@ class KnowledgeFileTagLimitError(BaseErrorCode):
 class BackendProcessingError(BaseErrorCode):
     Code = 10990
     Msg = "Processing in the background, try again later"
-
