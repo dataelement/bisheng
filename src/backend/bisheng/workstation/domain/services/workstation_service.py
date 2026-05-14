@@ -770,7 +770,7 @@ class WorkStationService(BaseService):
         return result
 
     @classmethod
-    def uploadPersonalKnowledge(
+    async def uploadPersonalKnowledge(
         cls,
         request: Request,
         login_user: UserPayload,
@@ -779,20 +779,20 @@ class WorkStationService(BaseService):
         *,
         upload_limit_bytes: Optional[int] = None,
     ):
-        knowledge = KnowledgeDao.get_user_knowledge(
+        knowledge = await KnowledgeDao.aget_user_knowledge(
             login_user.user_id,
             None,
             KnowledgeTypeEnum.PRIVATE,
         )
         if not knowledge:
-            model = LLMService.get_knowledge_llm()
+            model = await LLMService.aget_knowledge_llm()
             knowledge_create = KnowledgeCreate(
                 name='Personal Knowledge Base',
                 type=KnowledgeTypeEnum.PRIVATE.value,
                 user_id=login_user.user_id,
                 model=model.embedding_model_id,
             )
-            knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge_create)
+            knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge_create)
         else:
             knowledge = knowledge[0]
         req_data = KnowledgeFileProcess(
@@ -800,10 +800,12 @@ class WorkStationService(BaseService):
             file_list=[KnowledgeFileOne(file_path=file_path)],
         )
         try:
-            _ = LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
+            _ = await LLMService.get_bisheng_knowledge_embedding(
+                login_user.user_id, int(knowledge.model)
+            )
         except Exception as exc:
             raise EmbeddingModelStatusError(exception=exc)
-        return KnowledgeService.process_knowledge_file(
+        return await KnowledgeService.aprocess_knowledge_file(
             request, login_user, background_tasks, req_data,
             upload_limit_bytes=upload_limit_bytes,
         )

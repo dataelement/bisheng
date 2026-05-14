@@ -32,7 +32,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
-    KnowledgeTagExistError, KnowledgeTagNotExistError
+    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeTenantMismatchError
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.core.ai import FakeEmbeddings
@@ -67,10 +67,6 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.llm.domain.const import LLMModelType
-from bisheng.llm.domain.share_fallback import (
-    get_model_by_id_with_share_fallback,
-)
-from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 
@@ -126,6 +122,25 @@ class KnowledgeService(KnowledgeUtils):
             field_names=field_names,
             background_tasks=background_tasks,
         )
+
+    @classmethod
+    def ensure_knowledge_upload_tenant_consistency(
+        cls, login_user: UserPayload, knowledge: Knowledge
+    ) -> None:
+        current_tid = get_current_tenant_id()
+        knowledge_tid = knowledge.tenant_id
+        if knowledge_tid is None or current_tid in (None, knowledge_tid):
+            return
+
+        logger.warning(
+            "reject knowledge upload across tenant boundary: knowledge_id={} knowledge_tenant_id={} "
+            "current_tenant_id={} user_id={}",
+            knowledge.id,
+            knowledge_tid,
+            current_tid,
+            login_user.user_id,
+        )
+        raise KnowledgeTenantMismatchError.http_exception()
 
     async def list_metadata_fields(self, default_user, knowledge_id):
         return await self.metadata_service.list_metadata_fields(default_user, knowledge_id)
@@ -387,6 +402,7 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge(
         cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
     ) -> Knowledge:
+        from bisheng.llm.domain.share_fallback import get_model_by_id_with_share_fallback
 
         # Determine if the Knowledge Base is Renamed
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
@@ -414,6 +430,39 @@ class KnowledgeService(KnowledgeUtils):
             raise KnowledgeNoEmbeddingError.http_exception()
 
         return cls.create_knowledge_base(request, login_user, db_knowledge)
+
+    @classmethod
+    async def acreate_knowledge(
+        cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
+    ) -> Knowledge:
+        from bisheng.llm.domain.share_fallback import aget_model_by_id_with_share_fallback
+
+        repeat_knowledge = await KnowledgeDao.aget_user_knowledge(
+            login_user.user_id,
+            None,
+            KnowledgeTypeEnum(knowledge.type)
+            if not isinstance(knowledge.type, KnowledgeTypeEnum) else knowledge.type,
+            knowledge.name,
+            page=1,
+            limit=1,
+        )
+        if repeat_knowledge:
+            raise KnowledgeExistError.http_exception()
+
+        db_knowledge = Knowledge.model_validate(knowledge)
+        if not db_knowledge.model:
+            raise KnowledgeNoEmbeddingError.http_exception()
+        try:
+            embedding_model_id = int(str(db_knowledge.model).strip())
+        except (TypeError, ValueError):
+            raise KnowledgeNoEmbeddingError.http_exception()
+        embed_info = await aget_model_by_id_with_share_fallback(embedding_model_id)
+        if not embed_info:
+            raise KnowledgeNoEmbeddingError.http_exception()
+        if embed_info.model_type != LLMModelType.EMBEDDING.value:
+            raise KnowledgeNoEmbeddingError.http_exception()
+
+        return await cls.acreate_knowledge_base(request, login_user, db_knowledge)
 
     @classmethod
     def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge,
@@ -449,6 +498,56 @@ class KnowledgeService(KnowledgeUtils):
         # Handling the next steps in creating a Knowledge Base
         if not skip_hook:
             cls.create_knowledge_hook(request, login_user, db_knowledge)
+        return db_knowledge
+
+    @classmethod
+    async def acreate_knowledge_base(
+        cls, request, login_user: UserPayload, db_knowledge: Knowledge, skip_hook: bool = False
+    ) -> Knowledge:
+        from bisheng.permission.domain.services.owner_service import OwnerService
+
+        db_knowledge.index_name = generate_knowledge_index_name()
+        db_knowledge.collection_name = db_knowledge.index_name
+        db_knowledge.user_id = login_user.user_id
+        db_knowledge.tenant_id = login_user.tenant_id
+        db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
+
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            try:
+                vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+                    login_user.user_id,
+                    knowledge=db_knowledge,
+                    metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+                )
+                await run_in_threadpool(
+                    cls.ensure_milvus_schema_ready,
+                    login_user.user_id,
+                    db_knowledge,
+                    vector_client,
+                )
+                es_client = await KnowledgeRag.init_knowledge_es_vectorstore(
+                    knowledge=db_knowledge,
+                    metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+                )
+                await run_in_threadpool(es_client._store._create_index_if_not_exists)
+            except Exception:
+                logger.exception("create knowledge index name error")
+
+        if not skip_hook:
+            await OwnerService.write_owner_tuple(
+                login_user.user_id, 'knowledge_library', str(db_knowledge.id)
+            )
+            await run_in_threadpool(
+                cls.audit_telemetry_service.audit_create_knowledge,
+                login_user,
+                request,
+                db_knowledge,
+            )
+            await run_in_threadpool(
+                cls.audit_telemetry_service.telemetry_new_knowledge,
+                login_user,
+                db_knowledge,
+            )
         return db_knowledge
 
     @classmethod
@@ -791,6 +890,7 @@ class KnowledgeService(KnowledgeUtils):
             )
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
+        cls.ensure_knowledge_upload_tenant_consistency(login_user, knowledge)
         failed_files = []
         # Process each file
         process_files = []
@@ -830,6 +930,66 @@ class KnowledgeService(KnowledgeUtils):
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod
+    async def asave_knowledge_file(
+        cls,
+        login_user: UserPayload,
+        req_data: KnowledgeFileProcess,
+        *,
+        upload_limit_bytes: Optional[int] = None,
+    ):
+        """Async upload path for request-driven file ingestion."""
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        try:
+            await cls.permission_service.ensure_knowledge_write_async(
+                login_user=login_user,
+                owner_user_id=knowledge.user_id,
+                knowledge_id=knowledge.id,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+        cls.ensure_knowledge_upload_tenant_consistency(login_user, knowledge)
+
+        failed_files = []
+        process_files = []
+        created_file_ids = []
+        preview_cache_keys = []
+        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
+        limit_bytes = upload_limit_bytes
+        current_total_file_size = int(
+            await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id)
+        )
+        try:
+            for one in req_data.file_list:
+                db_file = await run_in_threadpool(
+                    cls.process_one_file, login_user, knowledge, one, split_rule_dict
+                )
+                if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, 'id', None):
+                        created_file_ids.append(db_file.id)
+                    current_total_file_size += int(db_file.file_size or 0)
+                    if limit_bytes is not None and current_total_file_size > limit_bytes:
+                        raise SpaceFileSizeLimitError()
+                    cache_key = cls.get_preview_cache_key(
+                        req_data.knowledge_id, one.file_path
+                    )
+                    preview_cache_keys.append(cache_key)
+                    process_files.append(db_file)
+                else:
+                    failed_file_info = db_file.model_dump()
+                    failed_file_info["file_path"] = one.file_path
+                    failed_files.append(failed_file_info)
+        except Exception:
+            if created_file_ids:
+                try:
+                    await KnowledgeFileDao.adelete_batch(created_file_ids)
+                except Exception as cleanup_exc:
+                    logger.warning(f'Failed to cleanup files after upload quota error: {cleanup_exc}')
+            raise
+        return knowledge, failed_files, process_files, preview_cache_keys
+
+    @classmethod
     def process_knowledge_file(
         cls,
         request: Request,
@@ -851,6 +1011,30 @@ class KnowledgeService(KnowledgeUtils):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
 
         cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
+        return failed_files + process_files
+
+    @classmethod
+    async def aprocess_knowledge_file(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        background_tasks: BackgroundTasks,
+        req_data: KnowledgeFileProcess,
+        *,
+        upload_limit_bytes: Optional[int] = None,
+    ) -> List[KnowledgeFile]:
+        from bisheng.worker.knowledge import file_worker
+
+        knowledge, failed_files, process_files, preview_cache_keys = (
+            await cls.asave_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
+        )
+
+        for index, one in enumerate(process_files):
+            file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
+
+        await run_in_threadpool(
+            cls.upload_knowledge_file_hook, request, login_user, knowledge, process_files
+        )
         return failed_files + process_files
 
     @classmethod
@@ -1019,6 +1203,7 @@ class KnowledgeService(KnowledgeUtils):
         # Insert new data, upload the original file tominio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
+            tenant_id=knowledge.tenant_id,
             file_name=original_file_name,
             file_size=file_size,
             md5=md5_,

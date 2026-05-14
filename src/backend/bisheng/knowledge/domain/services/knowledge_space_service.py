@@ -17,6 +17,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
     SpaceSubscribePrivateError, SpaceSubscribeLimitError,
     SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
+    SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
@@ -26,6 +27,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
     MembershipStatusEnum,
 )
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -106,6 +108,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.request = request
         self.login_user = login_user
         self.message_service: Optional['MessageService'] = None
+
+    def _ensure_space_async_task_tenant_consistency(
+        self, space: Knowledge, operation: str
+    ) -> None:
+        current_tid = get_current_tenant_id()
+        space_tid = space.tenant_id
+        if space_tid is None or current_tid in (None, space_tid):
+            return
+
+        logger.warning(
+            "reject knowledge space async operation across tenant boundary: "
+            "space_id={} space_tenant_id={} current_tenant_id={} user_id={} operation={}",
+            space.id,
+            space_tid,
+            current_tid,
+            self.login_user.user_id,
+            operation,
+        )
+        raise SpaceTenantMismatchError.http_exception()
 
     # ──────────────────────────── Permission helpers ───────────────────────────
 
@@ -1157,7 +1178,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._decorate_department_metadata([result])
 
         if space.state != KnowledgeState.PUBLISHED.value:
-            rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
+            current_tid = get_current_tenant_id()
+            if space.tenant_id is None or current_tid in (None, space.tenant_id):
+                rebuild_knowledge_celery.delay(
+                    space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id
+                )
+            else:
+                logger.warning(
+                    "skip knowledge space rebuild across tenant boundary: "
+                    "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
+                    space.id,
+                    space.tenant_id,
+                    current_tid,
+                    self.login_user.user_id,
+                )
 
         return result
 
@@ -2025,6 +2059,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         folder = await self._get_folder_for_action(space_id, folder_id)
         await self._require_permission_id('folder', folder_id, 'delete_folder', space_id=space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(space, 'delete_folder')
 
         prefix = f"{folder.file_level_path}/{folder.id}"
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
@@ -2108,6 +2146,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
             raise SpaceFolderNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(db_knowledge, 'upload_file')
 
         if not skip_approval:
             from bisheng.approval.domain.services.approval_service import ApprovalService
@@ -2269,6 +2308,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_file_chunk
         file_record = await self._get_file_for_action(file_id)
         await self._require_permission_id('knowledge_file', file_id, 'rename_file', space_id=file_record.knowledge_id)
+        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+        if not space:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(space, 'rename_file')
 
         old_suffix = file_record.file_name.rsplit('.', 1)[-1] if '.' in file_record.file_name else ''
         new_suffix = new_name.rsplit('.', 1)[-1] if '.' in new_name else ''
@@ -2313,6 +2356,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         file_record = await self._get_file_for_action(file_id)
         await self._require_permission_id('knowledge_file', file_id, 'delete_file', space_id=file_record.knowledge_id)
+        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+        if not space:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(space, 'delete_file')
 
         await KnowledgeFileDao.adelete_batch([file_id])
         delete_knowledge_file_celery.delay(file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True)
@@ -2405,6 +2452,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
         await self._require_read_permission(space_id)
+        self._ensure_space_async_task_tenant_consistency(space, 'retry_space_files')
 
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
@@ -2437,6 +2485,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space:
             raise SpaceNotFoundError()
         await self._require_read_permission(space_id)
+        self._ensure_space_async_task_tenant_consistency(space, 'batch_retry_failed_files')
 
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
@@ -2484,6 +2533,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
 
         await self._require_read_permission(knowledge_id)
+        self._ensure_space_async_task_tenant_consistency(knowledge, 'batch_delete')
 
         for folder_id in folder_ids:
             await self.delete_folder(knowledge.id, folder_id)

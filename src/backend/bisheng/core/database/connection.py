@@ -87,11 +87,11 @@ class DatabaseConnectionManager:
         at_idx = url.find("@")
         if at_idx == -1:
             return url
-        after_at = url[at_idx + 1:]          # host:port/schema?query
+        after_at = url[at_idx + 1:]  # host:port/schema?query
         slash_idx = after_at.find("/")
         if slash_idx == -1:
-            return url                         # no path — nothing to strip
-        return url[:at_idx + 1 + slash_idx]   # trim /schema and beyond
+            return url  # no path — nothing to strip
+        return url[:at_idx + 1 + slash_idx]  # trim /schema and beyond
 
     @property
     def engine(self) -> Engine:
@@ -146,7 +146,7 @@ class DatabaseConnectionManager:
                 yield session
             except Exception as e:
                 session.rollback()
-                logger.exception(f"Database session rolled back due to error: {e}")
+                logger.error(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 session.close()
@@ -168,7 +168,7 @@ class DatabaseConnectionManager:
                 yield session
             except Exception as e:
                 await session.rollback()
-                logger.exception(f"Database session rolled back due to error: {e}")
+                logger.error(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 await session.close()
@@ -205,8 +205,8 @@ class DatabaseConnectionManager:
         unquoted.
         """
         if actual_name == actual_name.upper():
-            return actual_name          # e.g. ROLE, TENANT — no quotes needed
-        return f'"{actual_name}"'       # e.g. "group", "user" — reserved word
+            return actual_name  # e.g. ROLE, TENANT — no quotes needed
+        return f'"{actual_name}"'  # e.g. "group", "user" — reserved word
 
     def _ensure_dm_triggers(self) -> None:
         """Create or replace BEFORE UPDATE triggers for update_time on DaMeng.

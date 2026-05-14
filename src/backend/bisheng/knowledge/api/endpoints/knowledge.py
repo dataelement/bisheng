@@ -217,7 +217,7 @@ async def process_knowledge_file(*,
     """ Uploading Files to the Knowledge Base """
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-    res = await sync_func_to_async(KnowledgeService.process_knowledge_file)(
+    res = await KnowledgeService.aprocess_knowledge_file(
         request, login_user, background_tasks, req_data,
         upload_limit_bytes=upload_limit_bytes,
     )

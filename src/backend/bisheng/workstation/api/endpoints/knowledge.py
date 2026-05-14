@@ -27,7 +27,7 @@ async def knowledge_upload(
     try:
         file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file.filename)
         upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-        res = await sync_func_to_async(WorkStationService.uploadPersonalKnowledge)(
+        res = await WorkStationService.uploadPersonalKnowledge(
             request,
             login_user,
             file_path=file_path,
