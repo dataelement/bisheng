@@ -44,9 +44,10 @@ function toApiWordsType(wordsType: number[] = []): SensitiveWordType[] {
 
 function normalizeCustomWords(words: string) {
     return words
-        .replace(/[\r\n，、;；|]+/g, ",")
-        .replace(/,+/g, ",")
-        .replace(/^,|,$/g, "");
+        .split(/[\r\n,，、;；|]+/)
+        .map((word) => word.trim())
+        .filter(Boolean)
+        .join("\n");
 }
 
 export const KnowledgeSpaceSensitivePolicy = forwardRef<KnowledgeSpaceSensitivePolicyHandle>(
@@ -60,7 +61,7 @@ function KnowledgeSpaceSensitivePolicy(_, ref) {
         getSensitiveWordPolicyApi().then((policy) => {
             const next = {
                 isCheck: Boolean(policy?.enabled),
-                words: policy?.custom_words || "",
+                words: normalizeCustomWords(policy?.custom_words || ""),
                 wordsType: toWordsType(policy?.words_types),
             };
             setForm(next);
@@ -186,7 +187,7 @@ function KnowledgeSpaceSensitivePolicy(_, ref) {
                                     className="h-[100px] resize-none"
                                     value={form.words}
                                     onChange={(event) => setForm({ ...form, words: event.target.value })}
-                                    placeholder={t("build.useCommaToSeparate", "使用英文逗号分隔，例如：词1,词2,词3")}
+                                    placeholder={t("bench.customWordsNewlinePlaceholder", "使用换行符进行分割，每行一个")}
                                 />
                                 <input
                                     type="file"

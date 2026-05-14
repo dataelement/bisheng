@@ -45,9 +45,10 @@ function toApiWordsType(wordsType: number[] = []): SensitiveWordType[] {
 
 function normalizeCustomWords(words: string) {
     return words
-        .replace(/[\r\n，、;；|]+/g, ",")
-        .replace(/,+/g, ",")
-        .replace(/^,|,$/g, "");
+        .split(/[\r\n,，、;；|]+/)
+        .map((word) => word.trim())
+        .filter(Boolean)
+        .join("\n");
 }
 
 export const SubscriptionSensitivePolicy = forwardRef<SubscriptionSensitivePolicyHandle>(
@@ -61,7 +62,7 @@ function SubscriptionSensitivePolicy(_, ref) {
         getSensitiveWordPolicyApi(CHANNEL_ARTICLE_POLICY).then((policy) => {
             const next = {
                 isCheck: Boolean(policy?.enabled),
-                words: policy?.custom_words || "",
+                words: normalizeCustomWords(policy?.custom_words || ""),
                 wordsType: toWordsType(policy?.words_types),
             };
             setForm(next);
@@ -140,7 +141,7 @@ function SubscriptionSensitivePolicy(_, ref) {
                 <div>
                     <p className="text-lg font-bold">{t("build.contentSecurityReview", "内容安全审查")}</p>
                     <p className="mt-1 text-sm text-[#86909C]">
-                        {t("bench.subscriptionContentSecurityDesc", "对订阅文章进行租户级敏感词审查，命中后普通用户不可查看详情。")}
+                        {t("bench.subscriptionContentSecurityDesc", "对订阅文章进行敏感词审查，命中后普通用户不可查看详情。")}
                     </p>
                 </div>
                 <Switch checked={form.isCheck} onCheckedChange={handleSwitchChange} />
@@ -177,7 +178,7 @@ function SubscriptionSensitivePolicy(_, ref) {
                                 className="h-[100px] resize-none"
                                 value={form.words}
                                 onChange={(event) => setForm({ ...form, words: event.target.value })}
-                                placeholder={t("build.useCommaToSeparate", "使用英文逗号分隔，例如：词1,词2,词3")}
+                                placeholder={t("bench.customWordsNewlinePlaceholder", "使用换行符进行分割，每行一个")}
                             />
                             <input
                                 type="file"
