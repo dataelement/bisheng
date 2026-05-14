@@ -95,6 +95,7 @@ class KnowledgeRead(KnowledgeBase):
     user_name: Optional[str] = None
     copiable: Optional[bool] = None
     is_pinned: Optional[bool] = False
+    permission_ids: Optional[List[str]] = None
 
 class KnowledgeUpdate(BaseModel):
     knowledge_id: int

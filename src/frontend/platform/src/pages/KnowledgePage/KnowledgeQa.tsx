@@ -3,7 +3,6 @@ import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
@@ -31,15 +30,6 @@ const enum KnowledgeBaseStatus {
     Rebuilding = 3,
     Failed = 4
 }
-
-const KB_PERMISSION_IDS = [
-    'view_kb',
-    'edit_kb',
-    'delete_kb',
-    'manage_kb_owner',
-    'manage_kb_manager',
-    'manage_kb_viewer',
-]
 
 const KB_MANAGE_PERMISSION_IDS = [
     'manage_kb_owner',
@@ -301,22 +291,22 @@ export default function KnowledgeQa(params) {
         { cancelLoadingWhenReload: true },
         (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1, permissionId: 'view_kb' })
     );
-    const resourceIds = datalist.map((el: any) => String(el.id));
-    const { permissions: permIds } = usePermissionIds('knowledge_library', resourceIds, KB_PERMISSION_IDS);
     const visibleLibs = datalist;
+    const hasListPermission = (el: any, permissionId: string) =>
+        Array.isArray(el.permission_ids) && el.permission_ids.includes(permissionId);
     const canEdit = (el: any) =>
-        hasPermissionId(permIds, el.id, 'edit_kb');
+        hasListPermission(el, 'edit_kb');
     const canDelete = (el: any) =>
-        hasPermissionId(permIds, el.id, 'delete_kb');
+        hasListPermission(el, 'delete_kb');
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
-        hasPermissionId(permIds, el.id, 'view_kb');
+        hasListPermission(el, 'view_kb');
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
-        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
+        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasListPermission(el, permissionId));
     const isLibraryBusy = (el: any) =>
         [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
     const canCopy = (el: any) =>

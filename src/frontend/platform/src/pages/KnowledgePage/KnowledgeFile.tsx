@@ -14,7 +14,6 @@ import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
@@ -41,15 +40,6 @@ const enum KnowledgeBaseStatus {
     Rebuilding = 3,  // Document knowledge base rebuilding status
     Failed = 4       // Document knowledge base rebuild failed status
 }
-
-const KB_PERMISSION_IDS = [
-    'view_kb',
-    'edit_kb',
-    'delete_kb',
-    'manage_kb_owner',
-    'manage_kb_manager',
-    'manage_kb_viewer',
-]
 
 const KB_MANAGE_PERMISSION_IDS = [
     'manage_kb_owner',
@@ -353,25 +343,25 @@ export default function KnowledgeFile() {
     )
 
     // Permission levels for badge display
-    const resourceIds = datalist.map((el: any) => String(el.id));
-    const { permissions: permIds } = usePermissionIds('knowledge_library', resourceIds, KB_PERMISSION_IDS);
     // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
     const visibleLibs = datalist;
+    const hasListPermission = (el: any, permissionId: string) =>
+        Array.isArray(el.permission_ids) && el.permission_ids.includes(permissionId);
     const canEdit = (el: any) =>
-        hasPermissionId(permIds, el.id, 'edit_kb');
+        hasListPermission(el, 'edit_kb');
     const canDelete = (el: any) =>
-        hasPermissionId(permIds, el.id, 'delete_kb');
+        hasListPermission(el, 'delete_kb');
     // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
-        hasPermissionId(permIds, el.id, 'view_kb');
+        hasListPermission(el, 'view_kb');
     /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
-        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasPermissionId(permIds, el.id, permissionId));
+        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasListPermission(el, permissionId));
     const isLibraryBusy = (el: any) =>
         [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
     const canCopy = (el: any) =>

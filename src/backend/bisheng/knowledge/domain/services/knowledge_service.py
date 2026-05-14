@@ -74,6 +74,16 @@ from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 
+_KNOWLEDGE_LIST_PERMISSION_IDS = [
+    'view_kb',
+    'use_kb',
+    'edit_kb',
+    'delete_kb',
+    'manage_kb_owner',
+    'manage_kb_manager',
+    'manage_kb_viewer',
+]
+
 
 class KnowledgeService(KnowledgeUtils):
     """Service class for managing knowledge domain operations."""
@@ -197,6 +207,7 @@ class KnowledgeService(KnowledgeUtils):
     ) -> Tuple[List[KnowledgeRead], int]:
         total_start = perf_counter()
         scoped_super_admin = cls._is_scoped_super_admin(login_user)
+        permission_map: Dict[int, set[str]] = {}
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
         # 的细粒度 permission ids 收口到真正具备目标权限的知识库。
         accessible_ids = None if scoped_super_admin else await login_user.rebac_list_accessible('can_read',
@@ -207,11 +218,16 @@ class KnowledgeService(KnowledgeUtils):
                 login_user.user_id, knowledge_type,
             )
             merged = set(int(k) for k in accessible_ids) | set(creator_ids)
-            knowledge_id_extra = await cls.permission_service.filter_knowledge_ids_by_permission_async(
+            permission_map = await cls.permission_service.get_knowledge_permission_map_async(
                 login_user,
                 list(merged),
-                permission_id,
+                _KNOWLEDGE_LIST_PERMISSION_IDS,
             )
+            knowledge_id_extra = [
+                knowledge_id
+                for knowledge_id in merged
+                if permission_id in permission_map.get(int(knowledge_id), set())
+            ]
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
@@ -260,7 +276,7 @@ class KnowledgeService(KnowledgeUtils):
             )
 
         enrich_start = perf_counter()
-        result = await cls.aconvert_knowledge_read(login_user, res)
+        result = await cls.aconvert_knowledge_read(login_user, res, permission_map=permission_map)
         logger.info(
             '[perf][knowledge.list.enrich] user_id={} permission_id={} type={} rows={} took_ms={:.2f}',
             login_user.user_id,
@@ -285,7 +301,10 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def aconvert_knowledge_read(
-        cls, login_user: UserPayload, knowledge_list: List[Knowledge]
+        cls,
+        login_user: UserPayload,
+        knowledge_list: List[Knowledge],
+        permission_map: Optional[Dict[int, set[str]]] = None,
     ) -> List[KnowledgeRead]:
         """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
         if not knowledge_list:
@@ -297,21 +316,25 @@ class KnowledgeService(KnowledgeUtils):
             int(one.id) for one in knowledge_list
             if login_user.user_id == one.user_id
         }
-        permission_map = await cls.permission_service.get_knowledge_permission_map_async(
-            login_user,
-            [int(one.id) for one in knowledge_list if int(one.id) not in owned_ids],
-            ['edit_kb'],
-        )
+        if permission_map is None:
+            permission_map = await cls.permission_service.get_knowledge_permission_map_async(
+                login_user,
+                [int(one.id) for one in knowledge_list if int(one.id) not in owned_ids],
+                _KNOWLEDGE_LIST_PERMISSION_IDS,
+            )
 
         def _row(one: Knowledge) -> KnowledgeRead:
             if login_user.user_id == one.user_id:
                 copiable = True
+                permission_ids = list(_KNOWLEDGE_LIST_PERMISSION_IDS)
             else:
-                copiable = 'edit_kb' in permission_map.get(int(one.id), set())
+                permission_ids = sorted(permission_map.get(int(one.id), set()))
+                copiable = 'edit_kb' in permission_ids
             return KnowledgeRead(
                 **one.model_dump(),
                 user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                 copiable=copiable,
+                permission_ids=permission_ids,
             )
 
         return [_row(one) for one in knowledge_list]
