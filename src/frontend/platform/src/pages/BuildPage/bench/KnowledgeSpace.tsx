@@ -15,13 +15,16 @@ import { NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DepartmentKnowledgeSpaceApprovalDialog } from "./DepartmentKnowledgeSpaceApprovalDialog";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
-import { KnowledgeSpaceSensitivePolicy } from "./KnowledgeSpaceSensitivePolicy";
+import {
+    KnowledgeSpaceSensitivePolicy,
+    type KnowledgeSpaceSensitivePolicyHandle,
+} from "./KnowledgeSpaceSensitivePolicy";
 
 interface KnowledgeConfigForm {
     /** 系统提示词，对应接口 system_prompt */
@@ -34,7 +37,15 @@ interface KnowledgeConfigForm {
 
 export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { t } = useTranslation();
-    const { formData, setFormData, errors, setErrors, handleSave, configMeta } = useKnowledgeConfig(scopeVersion);
+    const {
+        formData,
+        setFormData,
+        errors,
+        setErrors,
+        handleSave: saveKnowledgeConfig,
+        configMeta,
+    } = useKnowledgeConfig(scopeVersion);
+    const sensitivePolicyRef = useRef<KnowledgeSpaceSensitivePolicyHandle>(null);
     const [managerOpen, setManagerOpen] = useState(false);
     const [approvalTarget, setApprovalTarget] = useState<DepartmentKnowledgeSpaceSummary | null>(null);
     const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([]);
@@ -89,6 +100,12 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
             });
         }
         void loadDepartmentSpaces();
+    };
+
+    const handleSave = async () => {
+        const sensitiveSaved = await sensitivePolicyRef.current?.save();
+        if (sensitiveSaved === false) return false;
+        return saveKnowledgeConfig();
     };
 
     return (
@@ -171,13 +188,9 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                     </div>
                                 </>
 
-                                <div className="mt-6 flex justify-end gap-4">
-                                    <Preview onBeforView={handleSave} />
-                                    <Button onClick={handleSave}>{t('save')}</Button>
-                                </div>
                             </div>
 
-                            <KnowledgeSpaceSensitivePolicy />
+                            <KnowledgeSpaceSensitivePolicy ref={sensitivePolicyRef} />
 
                             {isGlobalSuper && (
                                 <div className="p-5 rounded-lg">
@@ -287,6 +300,10 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                 </div>
                             )}
                         </div>
+                    </div>
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
+                        <Preview onBeforView={handleSave} />
+                        <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
                 </CardContent>
             </div>
@@ -404,7 +421,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             reloadConfig();
         }
 
-        return true;
+        return Boolean(res);
     };
 
     return {

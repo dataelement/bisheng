@@ -18,7 +18,10 @@ import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
-import { SubscriptionSensitivePolicy } from "./SubscriptionSensitivePolicy";
+import {
+    SubscriptionSensitivePolicy,
+    type SubscriptionSensitivePolicyHandle,
+} from "./SubscriptionSensitivePolicy";
 
 
 export interface FormErrors {
@@ -53,6 +56,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
+    const sensitivePolicyRef = useRef<SubscriptionSensitivePolicyHandle>(null);
 
     const { t } = useTranslation()
     const {
@@ -63,7 +67,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
         configMeta,
         handleInputChange,
         toggleFeature,
-        handleSave
+        handleSave: saveChatConfig
     } = useChatConfig({
         welcomeMessageRef,
         functionDescriptionRef,
@@ -86,13 +90,20 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
             navigate('/build/apps')
         }
     }, [navigate, user])
+
+    const handleSave = async () => {
+        const sensitiveSaved = await sensitivePolicyRef.current?.save();
+        if (sensitiveSaved === false) return false;
+        return saveChatConfig();
+    };
+
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ConfigInheritanceBanner meta={configMeta} />
-                        <SubscriptionSensitivePolicy />
+                        <SubscriptionSensitivePolicy ref={sensitivePolicyRef} />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">
@@ -364,28 +375,27 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             feedback_tips: formData.feedbackTips,
         };
 
-        captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave)).then((res) => {
-            if (res) {
-                setConfigMeta({
-                    inherited_from_root: false,
-                    has_override: true,
+        const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));
+        if (res) {
+            setConfigMeta({
+                inherited_from_root: false,
+                has_override: true,
+            });
+            if (feedbackTooLong) {
+                toast({
+                    variant: 'warning',
+                    description: '提示文案不可超过 1000 个字符',
                 });
-                if (feedbackTooLong) {
-                    toast({
-                        variant: 'warning',
-                        description: '提示文案不可超过 1000 个字符',
-                    });
-                } else {
-                    toast({
-                        variant: 'success',
-                        description: t('chatConfig.saveSuccess'),
-                    });
-                }
-                reloadConfig()
+            } else {
+                toast({
+                    variant: 'success',
+                    description: t('chatConfig.saveSuccess'),
+                });
             }
-        })
+            reloadConfig()
+        }
 
-        return true
+        return Boolean(res)
     };
 
     return {
