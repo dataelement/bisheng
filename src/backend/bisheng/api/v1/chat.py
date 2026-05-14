@@ -288,7 +288,7 @@ def add_chat_messages(*,
             tmp_human_message = json.loads(data.human_message)
             for node_id, node_input in tmp_human_message.items():
                 save_human_message = node_input.get('message')
-        except:
+        except (json.JSONDecodeError, ValueError, AttributeError):
             save_human_message = data.human_message
 
     human_message = ChatMessage(flow_id=flow_id,

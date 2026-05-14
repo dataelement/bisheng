@@ -95,7 +95,7 @@ class WorkflowClient(BaseClient):
             try:
                 await WorkflowOfflineError().websocket_close_message(websocket=self.websocket, close_ws=False)
                 await self.send_response('processing', 'close', '')
-            except:
+            except Exception:
                 logger.warning('websocket is closed')
                 pass
             self.workflow.clear_workflow_status()

@@ -167,7 +167,7 @@ class FlowService(BaseService):
                 # Refresh this version of the form data
                 if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
                     logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
-            except:
+            except Exception:
                 pass
         return resp_200(data=flow_version)
 
@@ -209,7 +209,7 @@ class FlowService(BaseService):
                 # Refresh this version of the form data
                 if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
                     logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
-            except:
+            except Exception:
                 pass
         await cls.update_flow_hook(request, user, flow_info)
         return resp_200(data=flow_version)
