@@ -384,7 +384,7 @@ def file_download(file_path: str):
             file_content = minio_client.get_object_sync(bucket_name, object_name)
         else:
             # download file from http url
-            r = requests.get(file_path, verify=False)
+            r = requests.get(file_path, verify=False, timeout=30)
             if r.status_code != 200:
                 raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
             # OthersContent-Dispositionheader to find the filename

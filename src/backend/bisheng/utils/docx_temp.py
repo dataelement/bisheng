@@ -1560,7 +1560,7 @@ class DocxTemplateRender(object):
 def test_replace_string(template_file, kv_dict: dict, file_name: str):
     # If the file is a web path, download it to a temporary file, and use that
     if not os.path.isfile(template_file) and _is_valid_url(template_file):
-        r = requests.get(template_file)
+        r = requests.get(template_file, timeout=30)
 
         if r.status_code != 200:
             raise ValueError("Check the url of your file; returned status code %s" % r.status_code)
