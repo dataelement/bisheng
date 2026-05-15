@@ -1526,6 +1526,7 @@
     "sync_to_knowledge_space_hint": "该频道下的内容会自动同步到知识空间",
     "per_sub_channel_sync": "为每个子频道单独设置",
     "per_sub_channel_sync_hint": "该子频道下的内容会自动同步到知识空间",
+    "create_sub_channel_first": "请先创建子频道",
     "delete": "删除",
     "added_to_space_success": "已加入知识库",
     "ai_assistant": "AI 助手",

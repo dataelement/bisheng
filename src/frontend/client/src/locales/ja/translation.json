@@ -1522,6 +1522,7 @@
     "sync_to_knowledge_space_hint": "このチャンネルの内容は自動的にナレッジスペースへ同期されます",
     "per_sub_channel_sync": "サブチャンネルごとに個別設定",
     "per_sub_channel_sync_hint": "このサブチャンネルの内容は自動的にナレッジスペースへ同期されます",
+    "create_sub_channel_first": "先にサブチャンネルを作成してください",
     "delete": "削除",
     "added_to_space_success": "ナレッジスペースに追加しました",
     "ai_assistant": "AIアシスタント",
