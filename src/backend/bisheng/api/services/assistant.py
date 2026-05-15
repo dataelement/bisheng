@@ -334,7 +334,7 @@ class AssistantService(BaseService, AssistantUtils):
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
         yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
-        flow_info = cls.get_auto_flow_info(assistant, auto_agent)
+        flow_info = await cls.get_auto_flow_info(assistant, auto_agent)
         flow_info = [one.model_dump() for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
@@ -583,9 +583,9 @@ class AssistantService(BaseService, AssistantUtils):
         return res
 
     @classmethod
-    def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
+    async def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
         # Automatically select skills, Before picking50skills to make automatic selections
-        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 1, 50)
+        all_flow = await FlowDao.aget_user_access_online_flows(assistant.user_id, 1, 50)
         flow_dict = {}
         flow_list = []
         for one in all_flow:

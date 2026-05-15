@@ -16,9 +16,9 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
-from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
@@ -45,7 +45,6 @@ from bisheng.llm.domain.models import LLMDao
 from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, calc_data_sha256
-from bisheng.utils.util import sync_func_to_async
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -173,9 +172,9 @@ async def preview_file_chunk(*,
 
 @router.get('/preview/status')
 async def get_preview_file_status(
-        request: Request,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        preview_file_id: str = Query(..., description='Preview the file returned by the interfaceID')):
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    preview_file_id: str = Query(..., description='Preview the file returned by the interfaceID')):
     redis_key = f'preview_file:{preview_file_id}'
     redis_client = await get_redis_client()
     file_status = await redis_client.aget(redis_key)
@@ -409,9 +408,9 @@ def delete_knowledge(*,
 # Personal Knowledge Base Information Acquisition
 @router.get('/personal_knowledge_info', status_code=200)
 def get_personal_knowledge_info(
-        *,
-        request: Request,
-        login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Get personal knowledge base information. """
     knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                 KnowledgeTypeEnum.PRIVATE)
@@ -623,10 +622,10 @@ def qa_detail(*, id: int, login_user: UserPayload = Depends(UserPayload.get_logi
 
 @router.post('/qa/append', status_code=200)
 def qa_append(
-        *,
-        ids: list[int] = Body(..., embed=True),
-        question: str = Body(..., embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
+    *,
+    ids: list[int] = Body(..., embed=True),
+    question: str = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """ Add knowledge base information. """
     qa_list = QAKnoweldgeDao.select_list(ids)
@@ -660,11 +659,11 @@ def qa_delete(*,
 
 @router.post('/qa/auto_question')
 def qa_auto_question(
-        *,
-        number: int = Body(default=3, embed=True),
-        ori_question: str = Body(default='', embed=True),
-        answer: str = Body(default='', embed=True),
-        login_user: UserPayload = Depends(UserPayload.get_login_user)
+    *,
+    number: int = Body(default=3, embed=True),
+    ori_question: str = Body(default='', embed=True),
+    answer: str = Body(default='', embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
     """Automatically generate questions from large models"""
     questions = knowledge_imp.recommend_question(login_user.user_id, ori_question, number=number, answer=answer)
@@ -774,8 +773,8 @@ def post_import_file(*,
         d = QAKnowledgeUpsert(
             user_id=login_user.user_id,
             knowledge_id=qa_knowledge_id,
-            answers=[convert_excel_value(dd['Question'])],
-            questions=[convert_excel_value(dd['Answer'])],
+            answers=[convert_excel_value(dd['Answer'])],
+            questions=[convert_excel_value(dd['Question'])],
             source=4,
             create_time=datetime.now(),
             update_time=datetime.now())
@@ -976,10 +975,10 @@ def update_knowledge_model(*,
 @router.post("/file/batch_download", description="Batch download knowledge base files",
              response_model=UnifiedResponseModel)
 async def batch_download_knowledge_files(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
-        file_ids: List[int] = Body(..., embed=True, description="List of file IDs to download"),
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
+    file_ids: List[int] = Body(..., embed=True, description="List of file IDs to download"),
 ):
     """Batch download files from a document knowledge base.
 
@@ -999,12 +998,12 @@ async def batch_download_knowledge_files(
 
 @router.get("/{knowledge_id}/tags", description="获取知识库下所有标签", response_model=UnifiedResponseModel)
 async def get_knowledge_tags(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        knowledge_id: int,
-        keyword: str = Query(default=None, description="标签名称模糊搜索"),
-        page: int = Query(default=1, ge=1, description="页码"),
-        limit: int = Query(default=10, ge=1, le=100, description="每页数量"),
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int,
+    keyword: str = Query(default=None, description="标签名称模糊搜索"),
+    page: int = Query(default=1, ge=1, description="页码"),
+    limit: int = Query(default=10, ge=1, le=100, description="每页数量"),
 ):
     tags, total = await KnowledgeService.get_knowledge_tags(
         login_user,
@@ -1018,10 +1017,10 @@ async def get_knowledge_tags(
 
 @router.post("/tags", description="创建知识库标签", response_model=UnifiedResponseModel)
 async def add_knowledge_tag(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
-        tag_name: str = Body(..., embed=True, description="标签名称"),
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
+    tag_name: str = Body(..., embed=True, description="标签名称"),
 ):
     tag = await KnowledgeService.add_knowledge_tag(login_user, knowledge_id, tag_name)
     return resp_200(data=tag)
@@ -1029,11 +1028,11 @@ async def add_knowledge_tag(
 
 @router.put("/tags/{tag_id}", description="编辑知识库标签名", response_model=UnifiedResponseModel)
 async def update_knowledge_tag(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        tag_id: int,
-        knowledge_id: int = Body(..., embed=True),
-        tag_name: str = Body(..., embed=True, description="新的标签名称"),
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    tag_id: int,
+    knowledge_id: int = Body(..., embed=True),
+    tag_name: str = Body(..., embed=True, description="新的标签名称"),
 ):
     tag = await KnowledgeService.update_knowledge_tag(login_user, knowledge_id, tag_id, tag_name)
     return resp_200(data=tag)
@@ -1041,10 +1040,10 @@ async def update_knowledge_tag(
 
 @router.delete("/tags/{tag_id}", description="删除知识库标签", response_model=UnifiedResponseModel)
 async def delete_knowledge_tag(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        tag_id: int,
-        knowledge_id: int = Body(..., embed=True),
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    tag_id: int,
+    knowledge_id: int = Body(..., embed=True),
 ):
     await KnowledgeService.delete_knowledge_tag(login_user, knowledge_id, tag_id)
     return resp_200()
@@ -1052,9 +1051,9 @@ async def delete_knowledge_tag(
 
 @router.post("/file/tags", description="设置文件标签(全量替换)", response_model=UnifiedResponseModel)
 async def update_file_tags(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        req_data: UpdateFileTagsReq,
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: UpdateFileTagsReq,
 ):
     await KnowledgeService.update_file_tags(
         login_user, req_data.knowledge_id, req_data.file_id, req_data.tag_ids
@@ -1064,14 +1063,15 @@ async def update_file_tags(
 
 @router.post("/file/tags/batch", description="批量给文件追加标签", response_model=UnifiedResponseModel)
 async def batch_add_file_tags(
-        *,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        req_data: BatchAddFileTagsReq,
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: BatchAddFileTagsReq,
 ):
     await KnowledgeService.batch_add_file_tags(
         login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids
     )
     return resp_200()
+
 
 @router.get("/file/info/{file_id}", description="Get knowledge base file information",
             response_model=UnifiedResponseModel)
