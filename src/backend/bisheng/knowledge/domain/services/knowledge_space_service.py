@@ -55,6 +55,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp, KnowledgeSpaceCreateOptionsResp,
     KnowledgeSpaceCreateOptionDepartmentsResp, KnowledgeSpaceCreateOptionUserGroupsResp,
     KnowledgeSpaceCreateOptionDepartment, KnowledgeSpaceCreateOptionUserGroup,
+    ShougangPortalSpaceInfoError, ShougangPortalSpaceInfoItemResp,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -1624,6 +1625,196 @@ class KnowledgeSpaceService(KnowledgeUtils):
             rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
 
         return result
+
+    async def get_shougang_portal_space_infos(self, space_ids: List[int]) -> List[ShougangPortalSpaceInfoItemResp]:
+        if not space_ids:
+            return []
+
+        unique_space_ids = list(dict.fromkeys(space_ids))
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(unique_space_ids, order_by='update_time')
+        space_map = {int(space.id): space for space in spaces}
+
+        permission_results = await asyncio.gather(
+            *[
+                self._get_effective_permission_ids('knowledge_space', space_id)
+                for space_id in space_map
+            ],
+            return_exceptions=True,
+        )
+        permission_map = dict(zip(space_map.keys(), permission_results))
+
+        visible_space_ids: List[int] = []
+        has_content_permission_map: Dict[int, bool] = {}
+        error_map: Dict[int, ShougangPortalSpaceInfoError] = {}
+        for space_id in unique_space_ids:
+            space = space_map.get(space_id)
+            if not space:
+                error_map[space_id] = ShougangPortalSpaceInfoError(
+                    code=SpaceNotFoundError.Code,
+                    message=SpaceNotFoundError.Msg,
+                )
+                continue
+            permission_result = permission_map.get(space_id)
+            if isinstance(permission_result, Exception):
+                error_map[space_id] = ShougangPortalSpaceInfoError(
+                    code=500,
+                    message='Failed to get knowledge space info',
+                )
+                continue
+            if 'view_space' in permission_result:
+                visible_space_ids.append(space_id)
+                has_content_permission_map[space_id] = True
+                continue
+            if self._is_square_preview_space(space):
+                visible_space_ids.append(space_id)
+                has_content_permission_map[space_id] = False
+                continue
+            error_map[space_id] = ShougangPortalSpaceInfoError(
+                code=SpacePermissionDeniedError.Code,
+                message=SpacePermissionDeniedError.Msg,
+            )
+
+        if not visible_space_ids:
+            return [
+                ShougangPortalSpaceInfoItemResp(
+                    id=space_id,
+                    data={},
+                    error=error_map.get(space_id),
+                )
+                for space_id in space_ids
+            ]
+
+        visible_space_id_strings = [str(space_id) for space_id in visible_space_ids]
+        creator_ids = list({
+            int(space_map[space_id].user_id)
+            for space_id in visible_space_ids
+            if space_map[space_id].user_id != self.login_user.user_id
+        })
+        file_count_task = KnowledgeFileDao.async_count_success_files_batch(visible_space_ids)
+        follower_count_task = SpaceChannelMemberDao.async_count_members_batch(visible_space_id_strings)
+        membership_task = SpaceChannelMemberDao.async_get_all_members_for_spaces(
+            self.login_user.user_id,
+            visible_space_id_strings,
+        )
+        creator_task = UserDao.aget_user_by_ids(creator_ids) if creator_ids else None
+        if creator_task:
+            file_count_map, follower_count_map, memberships, creators = await asyncio.gather(
+                file_count_task,
+                follower_count_task,
+                membership_task,
+                creator_task,
+            )
+        else:
+            file_count_map, follower_count_map, memberships = await asyncio.gather(
+                file_count_task,
+                follower_count_task,
+                membership_task,
+            )
+            creators = []
+
+        creator_map = {int(user.user_id): user for user in (creators or [])}
+        member_map = {
+            int(member.business_id): member
+            for member in (memberships or [])
+            if str(member.business_id).isdigit()
+        }
+        is_global_admin = False
+        is_admin = getattr(self.login_user, 'is_admin', None)
+        if callable(is_admin):
+            is_global_admin = bool(is_admin())
+
+        permission_level_space_ids = [
+            space_id
+            for space_id in visible_space_ids
+            if space_map[space_id].user_id != self.login_user.user_id
+            and not (
+                member_map.get(space_id)
+                and member_map[space_id].is_active
+            )
+            and has_content_permission_map.get(space_id)
+        ]
+        permission_levels: Dict[int, Optional[str]] = {}
+        if permission_level_space_ids:
+            levels = await asyncio.gather(*[
+                PermissionService.get_permission_level(
+                    user_id=self.login_user.user_id,
+                    object_type='knowledge_space',
+                    object_id=str(space_id),
+                    login_user=self.login_user,
+                )
+                for space_id in permission_level_space_ids
+            ])
+            permission_levels = {
+                space_id: level
+                for space_id, level in zip(permission_level_space_ids, levels)
+            }
+
+        result_map: Dict[int, KnowledgeSpaceInfoResp] = {}
+        can_unsubscribe_tasks = []
+        for space_id in visible_space_ids:
+            space = space_map[space_id]
+            result = KnowledgeSpaceInfoResp(**space.model_dump())
+            member_info = None
+            if space.user_id != self.login_user.user_id:
+                create_user = creator_map.get(int(space.user_id))
+                result.user_name = create_user.user_name if create_user else str(space.user_id)
+            else:
+                result.user_name = self.login_user.user_name
+
+            if space.user_id == self.login_user.user_id:
+                result.user_role = UserRoleEnum.CREATOR
+                self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+            else:
+                member_info = member_map.get(space_id)
+                if member_info:
+                    self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                    if member_info.is_active:
+                        result.user_role = member_info.user_role
+                elif has_content_permission_map.get(space_id) and not is_global_admin:
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+                if result.user_role is None and has_content_permission_map.get(space_id):
+                    result.user_role = self._permission_level_to_space_user_role(permission_levels.get(space_id))
+                    if result.user_role is not None and not is_global_admin:
+                        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+                if result.user_role is None and has_content_permission_map.get(space_id):
+                    result.user_role = UserRoleEnum.MEMBER
+
+            result.follower_num = int(follower_count_map.get(str(space_id), 0) or 0)
+            result.file_num = int(file_count_map.get(space_id, 0) or 0)
+            result_map[space_id] = result
+            can_unsubscribe_tasks.append((space_id, self._can_unsubscribe_space(space, member_info)))
+
+        can_unsubscribe_results = await asyncio.gather(
+            *[task for _, task in can_unsubscribe_tasks],
+            return_exceptions=True,
+        )
+        for (space_id, _), can_unsubscribe in zip(can_unsubscribe_tasks, can_unsubscribe_results):
+            result_map[space_id].can_unsubscribe = (
+                False if isinstance(can_unsubscribe, Exception) else bool(can_unsubscribe)
+            )
+
+        await self._decorate_department_metadata(list(result_map.values()))
+
+        items: List[ShougangPortalSpaceInfoItemResp] = []
+        for space_id in space_ids:
+            result = result_map.get(space_id)
+            if result:
+                items.append(
+                    ShougangPortalSpaceInfoItemResp(
+                        id=space_id,
+                        data=result.model_dump(mode='json'),
+                        error=None,
+                    )
+                )
+            else:
+                items.append(
+                    ShougangPortalSpaceInfoItemResp(
+                        id=space_id,
+                        data={},
+                        error=error_map.get(space_id),
+                    )
+                )
+        return items
 
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)

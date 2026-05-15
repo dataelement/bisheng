@@ -30,7 +30,10 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
 )
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import SpaceSubscriptionStatusEnum
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalSpaceInfoItemResp,
+    SpaceSubscriptionStatusEnum,
+)
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 
 
@@ -58,6 +61,7 @@ def _install_schema_stubs() -> None:
         schemas_module.KnowledgeFileOne = _DummySchema
         schemas_module.FileProcessBase = _DummySchema
         schemas_module.ExcelRule = _DummySchema
+        schemas_module.WSModel = _DummySchema
         sys.modules['bisheng.api.v1.schemas'] = schemas_module
 
     if 'bisheng.api.services' not in sys.modules:
@@ -155,6 +159,17 @@ def _install_schema_stubs() -> None:
 
         knowledge_utils_module.KnowledgeUtils = _DummyKnowledgeUtils
         sys.modules['bisheng.knowledge.domain.services.knowledge_utils'] = knowledge_utils_module
+
+    if 'bisheng.llm.domain' not in sys.modules:
+        llm_domain_module = ModuleType('bisheng.llm.domain')
+
+        class _DummyLLMService:
+            @staticmethod
+            async def get_workbench_llm(*args, **kwargs):
+                return None
+
+        llm_domain_module.LLMService = _DummyLLMService
+        sys.modules['bisheng.llm.domain'] = llm_domain_module
 
     if 'bisheng.worker' not in sys.modules:
         worker_module = ModuleType('bisheng.worker')
@@ -402,9 +417,9 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value=3,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
             new_callable=AsyncMock,
-            return_value=5,
+            return_value={1: 5},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
             new_callable=AsyncMock,
@@ -447,9 +462,9 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value=3,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
             new_callable=AsyncMock,
-            return_value=5,
+            return_value={1: 5},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
             new_callable=AsyncMock,
@@ -520,9 +535,9 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value=0,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
             new_callable=AsyncMock,
-            return_value=0,
+            return_value={1: 0},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
             new_callable=AsyncMock,
@@ -564,9 +579,9 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value={'view_space'},
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
             new_callable=AsyncMock,
-            return_value=5,
+            return_value={1: 5},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
             new_callable=AsyncMock,
@@ -591,6 +606,77 @@ class TestGetSpaceInfo:
         assert result.is_followed is True
 
     @pytest.mark.asyncio
+    async def test_shougang_portal_space_infos_batch_loads_space_details(self, service):
+        visible_space = _make_space(space_id=1, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
+        denied_space = _make_space(space_id=3, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
+        member = _make_member(user_id=service.login_user.user_id, user_role=UserRoleEnum.MEMBER, space_id=1)
+
+        async def _effective_permission_ids(_object_type: str, object_id: int, **_kwargs):
+            return {'view_space'} if object_id == 1 else set()
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock,
+            return_value=[visible_space, denied_space],
+        ) as mock_get_spaces, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+        ) as mock_query_one, patch.object(
+            service,
+            '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            side_effect=_effective_permission_ids,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock,
+            return_value={1: 4},
+        ) as mock_count_files, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_members_batch',
+            new_callable=AsyncMock,
+            return_value={'1': 9},
+        ) as mock_count_members, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_all_members_for_spaces',
+            new_callable=AsyncMock,
+            return_value=[member],
+        ) as mock_get_members, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user_by_ids',
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(user_id=99, user_name='space-owner')],
+        ) as mock_get_users, patch.object(
+            service,
+            '_can_unsubscribe_space',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch.object(
+            service,
+            '_decorate_department_metadata',
+            new_callable=AsyncMock,
+            side_effect=lambda spaces: spaces,
+        ):
+            result = await service.get_shougang_portal_space_infos([1, 2, 3])
+
+        mock_get_spaces.assert_awaited_once_with([1, 2, 3], order_by='update_time')
+        mock_query_one.assert_not_awaited()
+        mock_count_files.assert_awaited_once_with([1])
+        mock_count_members.assert_awaited_once_with(['1'])
+        mock_get_members.assert_awaited_once_with(service.login_user.user_id, ['1'])
+        mock_get_users.assert_awaited_once_with([99])
+        assert all(isinstance(item, ShougangPortalSpaceInfoItemResp) for item in result)
+        assert result[0].id == 1
+        assert result[0].data["id"] == 1
+        assert result[0].data["name"] == "Knowledge Space"
+        assert result[0].data["file_num"] == 4
+        assert result[0].data["follower_num"] == 9
+        assert result[0].data["user_name"] == "space-owner"
+        assert result[0].error is None
+        assert result[1].id == 2
+        assert result[1].data == {}
+        assert result[1].error.code == 18000
+        assert result[2].id == 3
+        assert result[2].data == {}
+        assert result[2].error.code == 18040
+
+    @pytest.mark.asyncio
     async def test_super_admin_read_shortcut_does_not_mark_space_subscribed(self, service):
         service.login_user.is_admin = lambda: True
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99, is_released=True)
@@ -608,9 +694,9 @@ class TestGetSpaceInfo:
             new_callable=AsyncMock,
             return_value=3,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_file_by_knowledge_id',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
             new_callable=AsyncMock,
-            return_value=5,
+            return_value={1: 5},
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user',
             new_callable=AsyncMock,

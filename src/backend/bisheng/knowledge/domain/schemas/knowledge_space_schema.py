@@ -62,6 +62,28 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     owner_name: Optional[str] = Field(default=None, description="Scope owner display name")
 
 
+class ShougangPortalSpaceInfoReq(BaseModel):
+    space_ids: List[int] = Field(..., min_length=1, max_length=200, description="Knowledge Space IDs")
+
+
+class ShougangPortalSpaceInfoError(BaseModel):
+    code: int = Field(..., description="Error code")
+    message: str = Field(..., description="Error message")
+
+
+class ShougangPortalSpaceInfoItemResp(BaseModel):
+    id: int = Field(..., description="Knowledge Space ID")
+    data: Dict = Field(default_factory=dict, description="Knowledge Space info; empty when failed")
+    error: Optional[ShougangPortalSpaceInfoError] = Field(default=None, description="Error info when failed")
+
+
+class ShougangPortalSpaceInfoResp(BaseModel):
+    spaces: List[ShougangPortalSpaceInfoItemResp] = Field(
+        default_factory=list,
+        description="Knowledge Space info items",
+    )
+
+
 class KnowledgeSpaceCreateOptionDepartment(BaseModel):
     id: int
     name: str
