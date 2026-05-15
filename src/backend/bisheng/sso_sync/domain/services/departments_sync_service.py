@@ -24,18 +24,18 @@ from bisheng.core.context.tenant import (
 )
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.department.domain.services.department_archive_cleanup_service import (
+    DepartmentArchiveCleanupService,
+)
 from bisheng.org_sync.domain.services.ts_guard import (
     GuardDecision,
     OrgSyncTsGuard,
 )
-from bisheng.sso_sync.domain.constants import SSO_SOURCE
+from bisheng.sso_sync.domain.constants import DEFAULT_SSO_SYNC_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     BatchResult,
     DepartmentsSyncRequest,
     DepartmentUpsertItem,
-)
-from bisheng.department.domain.services.department_archive_cleanup_service import (
-    DepartmentArchiveCleanupService,
 )
 from bisheng.sso_sync.domain.services.dept_upsert_service import (
     DeptUpsertService,
@@ -47,15 +47,14 @@ from bisheng.tenant.domain.services.department_deletion_handler import (
 
 
 class DepartmentsSyncService:
-
-    SOURCE = SSO_SOURCE
+    SOURCE = DEFAULT_SSO_SYNC_SOURCE
 
     @classmethod
     async def execute(
         cls,
         payload: DepartmentsSyncRequest,
         request_ip: str = '',
-        row_source: str = SSO_SOURCE,
+        row_source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> BatchResult:
         result = BatchResult()
 
@@ -123,7 +122,7 @@ class DepartmentsSyncService:
             it.parent_external_id
             for it in upsert_items
             if it.parent_external_id
-            and it.parent_external_id not in item_ext_ids
+               and it.parent_external_id not in item_ext_ids
         }
         cache: Dict[str, Department] = {}
         for ext in parent_ext_ids:
@@ -219,7 +218,7 @@ class DepartmentsSyncService:
         source_ts: Optional[int],
         result: BatchResult,
         parent_cache: Optional[Dict[str, Department]] = None,
-        row_source: str = SSO_SOURCE,
+        row_source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> None:
         try:
             existing = await DepartmentDao.aget_by_source_external_id(
@@ -266,7 +265,7 @@ class DepartmentsSyncService:
         source_ts: Optional[int],
         result: BatchResult,
         request_ip: str,
-        row_source: str = SSO_SOURCE,
+        row_source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> None:
         try:
             dept = await DepartmentDao.aget_by_source_external_id(

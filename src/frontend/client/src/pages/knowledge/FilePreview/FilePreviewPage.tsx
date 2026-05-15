@@ -161,6 +161,16 @@ export default function FilePreviewPage() {
     const hasAutoOpenedAiAssistant = useRef(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
 
+    // Mobile layout (<md = 768px): AI assistant renders as full-screen overlay instead of split-pane.
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        const mq = window.matchMedia("(max-width: 767px)");
+        const update = () => setIsMobile(mq.matches);
+        update();
+        mq.addEventListener("change", update);
+        return () => mq.removeEventListener("change", update);
+    }, []);
+
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
         storageKey: AI_SPLIT_STORAGE_KEY,
         defaultRatio: 0.6,
@@ -170,23 +180,23 @@ export default function FilePreviewPage() {
     });
 
     useEffect(() => {
-        if (loading || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
+        if (loading || isMobile || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
         const w = splitContainerRef.current.getBoundingClientRect().width;
         if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return;
         hasAutoOpenedAiAssistant.current = true;
         setShowAiAssistant(true);
-    }, [loading, showAiAssistant]);
+    }, [loading, showAiAssistant, isMobile]);
 
     // Toggle AI assistant
     const handleToggleAiAssistant = useCallback(() => {
         setShowAiAssistant((prev) => {
-            if (!prev && splitContainerRef.current) {
+            if (!prev && !isMobile && splitContainerRef.current) {
                 const w = splitContainerRef.current.getBoundingClientRect().width;
                 if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return false;
             }
             return !prev;
         });
-    }, []);
+    }, [isMobile]);
 
     // Extra actions injected into FilePreview's TopBar slot.
     const topBarActions = (
@@ -195,7 +205,7 @@ export default function FilePreviewPage() {
                 <Button
                     variant="outline"
                     onClick={() => setPermissionDialogOpen(true)}
-                    className="h-8 gap-1 rounded-[6px] px-2 text-sm"
+                    className="hidden h-8 gap-1 rounded-[6px] px-2 text-sm md:inline-flex"
                 >
                     <Shield className="size-4 text-[#4e5969]" />
                     <span className="font-normal">{localize("com_permission.manage_permission")}</span>
@@ -250,7 +260,7 @@ export default function FilePreviewPage() {
 
             {/* Left: FilePreview (pure component) */}
             <div
-                style={{ width: showAiAssistant ? `${leftWidth}px` : "100%" }}
+                style={{ width: showAiAssistant && !isMobile ? `${leftWidth}px` : "100%" }}
                 className="h-full flex-shrink-0 overflow-hidden"
             >
                 <FilePreview
@@ -264,8 +274,8 @@ export default function FilePreviewPage() {
                 />
             </div>
 
-            {/* Splitter */}
-            {showAiAssistant && (
+            {/* Splitter (desktop only) */}
+            {showAiAssistant && !isMobile && (
                 <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
                     <div
                         onMouseDown={startResizing}
@@ -276,9 +286,15 @@ export default function FilePreviewPage() {
                 </div>
             )}
 
-            {/* Right: AI Assistant (full height) */}
+            {/* Right: AI Assistant — desktop: split column; mobile: full-screen overlay */}
             {showAiAssistant && (
-                <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white">
+                <div
+                    className={
+                        isMobile
+                            ? "fixed inset-0 z-[60] flex h-full flex-col overflow-hidden bg-white"
+                            : "flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white"
+                    }
+                >
                     <AiAssistantPanel
                         features={{ tools: false, modelSelect: true, knowledgeBase: false, fileUpload: false }}
                         onClose={() => setShowAiAssistant(false)}

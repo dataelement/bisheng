@@ -24,6 +24,7 @@ class TestLoginSyncRequest:
 
     def test_minimum_required(self):
         req = LoginSyncRequest(external_user_id='u1', ts=1713400000)
+        assert req.source is None
         assert req.external_user_id == 'u1'
         assert req.ts == 1713400000
         assert req.primary_dept_external_id is None
@@ -42,6 +43,7 @@ class TestLoginSyncRequest:
 
     def test_full_payload_round_trip(self):
         raw = {
+            'source': 'wecom',
             'external_user_id': 'u1',
             'primary_dept_external_id': 'D001',
             'secondary_dept_external_ids': ['D002'],
@@ -57,9 +59,26 @@ class TestLoginSyncRequest:
             'ts': 1713400000,
         }
         req = LoginSyncRequest.model_validate(raw)
+        assert req.source == 'wecom'
         assert req.user_attrs.name == 'Alice'
         assert req.tenant_mapping[0].tenant_code == 'child1'
         assert req.secondary_dept_external_ids == ['D002']
+
+    def test_source_accepts_supported_values(self):
+        req = LoginSyncRequest(
+            source='WECOM',
+            external_user_id='u1',
+            ts=1713400000,
+        )
+        assert req.source == 'wecom'
+
+    def test_source_rejects_unknown_values(self):
+        with pytest.raises(ValidationError):
+            LoginSyncRequest(
+                source='ldap',
+                external_user_id='u1',
+                ts=1713400000,
+            )
 
 
 class TestTenantMappingItem:
@@ -84,6 +103,7 @@ class TestDepartmentsSyncRequest:
 
     def test_empty_lists_ok(self):
         req = DepartmentsSyncRequest()
+        assert req.source is None
         assert req.upsert == []
         assert req.remove == []
         assert req.source_ts is None
@@ -103,6 +123,7 @@ class TestDepartmentsSyncRequest:
 
     def test_parse_full_batch(self):
         raw = {
+            'source': 'sso',
             'upsert': [
                 {'external_id': 'D1', 'name': 'Eng', 'ts': 10},
                 {'external_id': 'D2', 'name': 'Mkt', 'parent_external_id': 'D1'},
@@ -111,11 +132,20 @@ class TestDepartmentsSyncRequest:
             'source_ts': 500,
         }
         req = DepartmentsSyncRequest.model_validate(raw)
+        assert req.source == 'sso'
         assert len(req.upsert) == 2
         assert req.upsert[0].ts == 10
         assert req.upsert[1].parent_external_id == 'D1'
         assert req.remove == ['D99', 'D100']
         assert req.source_ts == 500
+
+    def test_source_accepts_supported_values(self):
+        req = DepartmentsSyncRequest(source='WECOM')
+        assert req.source == 'wecom'
+
+    def test_source_rejects_unknown_values(self):
+        with pytest.raises(ValidationError):
+            DepartmentsSyncRequest(source='ldap')
 
 
 class TestResponseShapes:
