@@ -258,10 +258,19 @@ class ToolServices(BaseModel):
         if not tool_type or tool_type.is_preset != ToolPresetType.PRESET.value:
             raise NotFoundError()
 
-        if not await ToolPermissionService.has_any_permission_async(
+        current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        tenant_admin = (
+            current_tid != DEFAULT_TENANT_ID
+            and await self.login_user.has_tenant_admin(current_tid)
+        )
+        if not (
+            self.login_user.is_admin()
+            or tenant_admin
+            or await ToolPermissionService.has_any_permission_async(
             self.login_user,
             str(tool_type.id),
             ['edit_tool'],
+        )
         ):
             raise UnAuthorizedError()
 
