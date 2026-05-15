@@ -489,19 +489,21 @@ def _build_tool_meta(tool: BaseTool) -> dict:
     }
 
 
-async def _build_web_search_tool(user_id: int) -> tuple[BaseTool | None, str | None]:
+async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tuple[BaseTool | None, str | None]:
     """Return (tool, error_msg). A non-None error_msg means the agent should
     surface the failure to the user (e.g. missing provider config) rather
     than silently dropping the tool.
     """
-    web_search_info = GptsToolsDao.get_tool_by_tool_key('web_search')
-    if not web_search_info:
-        msg = '联网搜索工具未注册到 GptsTools'
-        logger.warning(f'{msg}, skipping.')
-        return None, msg
     try:
+        if tool_id is None:
+            web_search_info = GptsToolsDao.get_tool_by_tool_key('web_search')
+            if not web_search_info:
+                msg = '联网搜索工具未注册到 GptsTools'
+                logger.warning(f'{msg}, skipping.')
+                return None, msg
+            tool_id = web_search_info.id
         t = await ToolExecutor.init_by_tool_id(
-            tool_id=web_search_info.id,
+            tool_id=tool_id,
             app_id=ApplicationTypeEnum.DAILY_CHAT.value,
             app_name=ApplicationTypeEnum.DAILY_CHAT.value,
             app_type=ApplicationTypeEnum.DAILY_CHAT,
@@ -935,7 +937,7 @@ async def _prepare_tools(
         t = None
         err: str | None = None
         if tool_key == 'web_search':
-            t, err = await _build_web_search_tool(login_user.user_id)
+            t, err = await _build_web_search_tool(login_user.user_id, int(tool_id) if tool_id else None)
         elif tool_id:
             try:
                 t = await ToolExecutor.init_by_tool_id(
