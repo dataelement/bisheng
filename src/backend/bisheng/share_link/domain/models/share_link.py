@@ -21,6 +21,8 @@ class ResourceTypeEnum(str, Enum):
     WORKFLOW = "workflow"
     # assistant
     ASSISTANT = "assistant"
+    # Knowledge space file shared by Shougang portal
+    KNOWLEDGE_SPACE_FILE = "knowledge_space_file"
 
 
 class ShareMode(str, Enum):

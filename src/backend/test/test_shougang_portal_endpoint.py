@@ -11,6 +11,8 @@ class _FakeKnowledgeSpaceService:
     def __init__(self):
         self.requested_space_ids = None
         self.search_request = None
+        self.share_create_request = None
+        self.share_verify_request = None
 
     async def get_space_info(self, space_id: int):
         raise AssertionError("endpoint should use the batch service method")
@@ -49,6 +51,57 @@ class _FakeKnowledgeSpaceService:
             {"value": "team", "label": "团队空间"},
             {"value": "personal", "label": "个人空间"},
         ]
+
+    async def get_shougang_portal_personal_spaces(self):
+        return {
+            "data": [
+                {
+                    "id": 7,
+                    "name": "个人沉淀库",
+                    "description": "个人知识空间",
+                    "file_count": 3,
+                    "updated_at": "2026-05-15T09:30:00",
+                }
+            ],
+            "total": 1,
+        }
+
+    async def create_shougang_portal_favorite(self, req):
+        return {
+            "file_id": 99,
+            "space_id": req.target_space_id,
+            "title": "热轧1580产线精轧机振动纹治理实践",
+        }
+
+    async def create_shougang_portal_share_link(self, req):
+        self.share_create_request = req
+        return {
+            "share_token": "share-token-1580",
+            "link": "/share/document/share-token-1580",
+            "invite_code": "ABC123",
+            "expire_seconds": req.expire_seconds,
+        }
+
+    async def get_shougang_portal_share_link_meta(self, share_token):
+        return {
+            "share_token": share_token,
+            "file_name": "热轧1580产线精轧机振动纹治理实践.pdf",
+            "share_type": "invite_code",
+            "visibility": "public",
+            "permissions": {"view": True, "download": False, "upload": False},
+            "requires_password": True,
+            "requires_invite_code": True,
+            "expired": False,
+        }
+
+    async def verify_shougang_portal_share_link(self, share_token, req):
+        self.share_verify_request = (share_token, req)
+        return {
+            "share_token": share_token,
+            "space_id": 12,
+            "file_id": 1580,
+            "allow_download": False,
+        }
 
     async def search_shougang_portal_files(self, req):
         self.search_request = req
@@ -164,6 +217,99 @@ async def test_shougang_portal_space_levels_returns_level_options(monkeypatch: p
         {"value": "team", "label": "团队空间"},
         {"value": "personal", "label": "个人空间"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_personal_spaces_returns_current_user_spaces(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        response = await endpoint.get_shougang_portal_personal_spaces(svc=_FakeKnowledgeSpaceService())
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert response.data["total"] == 1
+    assert response.data["data"][0]["id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_create_favorite_delegates_to_service(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        req = endpoint.ShougangPortalFavoriteCreateReq(
+            source_space_id=12,
+            source_file_id=1580,
+            target_space_id=7,
+        )
+        response = await endpoint.create_shougang_portal_favorite(req, svc=_FakeKnowledgeSpaceService())
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert response.data == {
+        "file_id": 99,
+        "space_id": 7,
+        "title": "热轧1580产线精轧机振动纹治理实践",
+    }
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_endpoints_delegate_to_service(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        fake_service = _FakeKnowledgeSpaceService()
+        create_req = endpoint.ShougangPortalShareLinkCreateReq(
+            space_id=12,
+            file_id=1580,
+            share_type="invite_code",
+            visibility="public",
+            allow_download=False,
+            password="secret",
+            expire_seconds=3600,
+        )
+        create_response = await endpoint.create_shougang_portal_share_link(create_req, svc=fake_service)
+        meta_response = await endpoint.get_shougang_portal_share_link_meta(
+            "share-token-1580",
+            svc=fake_service,
+        )
+        verify_req = endpoint.ShougangPortalShareLinkVerifyReq(password="secret", invite_code="ABC123")
+        verify_response = await endpoint.verify_shougang_portal_share_link(
+            "share-token-1580",
+            verify_req,
+            svc=fake_service,
+        )
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert create_response.status_code == 200
+    assert fake_service.share_create_request.file_id == 1580
+    assert create_response.data["invite_code"] == "ABC123"
+    assert meta_response.data["requires_password"] is True
+    assert meta_response.data["permissions"]["download"] is False
+    assert verify_response.data == {
+        "share_token": "share-token-1580",
+        "space_id": 12,
+        "file_id": 1580,
+        "allow_download": False,
+    }
 
 
 @pytest.mark.asyncio

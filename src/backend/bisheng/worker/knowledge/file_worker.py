@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from langchain_elasticsearch import ElasticsearchStore
 from loguru import logger
@@ -91,17 +91,24 @@ def copy_normal(
     source_knowledge: Knowledge,
     target_knowledge: Knowledge,
     op_user_id: int,
-):
+    *,
+    extra_user_metadata: Optional[Dict[str, Any]] = None,
+) -> Optional[KnowledgeFile]:
     one_dict = one.model_dump()
     one_dict.pop("id")
     one_dict.pop("update_time")
     one_dict["user_id"] = op_user_id
     one_dict["knowledge_id"] = target_knowledge.id
     one_dict["status"] = KnowledgeFileStatus.PROCESSING.value
+    if extra_user_metadata:
+        one_dict["user_metadata"] = {
+            **(one_dict.get("user_metadata") or {}),
+            **extra_user_metadata,
+        }
 
     source_file_pdf = one.id
     source_file = one.object_name
-    source_file_ext = one.object_name.split('.')[-1]
+    source_file_ext = source_file.split('.')[-1] if source_file else ''
     bbox_file = one.bbox_object_name
 
     knowledge_new = KnowledgeFile(**one_dict)
@@ -114,7 +121,7 @@ def copy_normal(
         minio_client = get_minio_storage_sync()
 
         # Copy source file
-        if minio_client.object_exists_sync(minio_client.bucket, source_file):
+        if source_file and minio_client.object_exists_sync(minio_client.bucket, source_file):
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=source_file,
                                           dest_object=target_source_file, dest_bucket=minio_client.bucket)
         knowledge_new.object_name = target_source_file
@@ -125,7 +132,7 @@ def copy_normal(
                                           dest_object=f"{knowledge_new.id}", dest_bucket=minio_client.bucket)
 
         # Copies:bboxDoc.
-        if minio_client.object_exists_sync(object_name=bbox_file):
+        if bbox_file and minio_client.object_exists_sync(object_name=bbox_file):
             target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=bbox_file,
                                           dest_object=target_bbox_file, dest_bucket=minio_client.bucket)
@@ -148,7 +155,7 @@ def copy_normal(
         knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
-        return
+        return knowledge_new
 
     # copy vector
     try:
@@ -164,6 +171,7 @@ def copy_normal(
         knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
+    return knowledge_new
 
 
 def copy_vector(

@@ -1,7 +1,10 @@
 import asyncio
+import hashlib
+import hmac
 import logging
+import secrets
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, TYPE_CHECKING
 
@@ -15,12 +18,15 @@ from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – 
 from bisheng.common.errcode.knowledge_space import (
     SpaceLimitError, SpaceNotFoundError,
     SpaceFolderNotFoundError, SpaceFolderDepthError, SpaceFolderDuplicateError,
-    SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
+    SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError, SpaceFileDuplicateError,
     SpaceSubscribePrivateError, SpaceSubscribeLimitError,
     SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
     SpaceInvalidLevelError, SpaceInvalidScopeOwnerError, SpaceCreatePublicDeniedError, SpaceCreateDepartmentDeniedError,
     SpaceCreateTeamDeniedError,
 )
+from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.utils import util as common_util
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
     SpaceChannelMember,
@@ -30,7 +36,7 @@ from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
 )
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.department import DepartmentDao, UserDepartment
+from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
@@ -55,7 +61,17 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp, KnowledgeSpaceCreateOptionsResp,
     KnowledgeSpaceCreateOptionDepartmentsResp, KnowledgeSpaceCreateOptionUserGroupsResp,
     KnowledgeSpaceCreateOptionDepartment, KnowledgeSpaceCreateOptionUserGroup,
+    ShougangPortalFavoriteCreateReq, ShougangPortalFavoriteCreateResp,
     ShougangPortalFileItemResp, ShougangPortalFileSearchReq, ShougangPortalHomeReq,
+    ShougangPortalPersonalSpaceItemResp,
+    ShougangPortalShareLinkAccessResp,
+    ShougangPortalShareLinkCreateReq,
+    ShougangPortalShareLinkCreateResp,
+    ShougangPortalShareLinkMetaResp,
+    ShougangPortalShareLinkVerifyReq,
+    ShougangPortalSharePermissions,
+    ShougangPortalShareType,
+    ShougangPortalShareVisibility,
     ShougangPortalSpaceInfoError, ShougangPortalSpaceInfoItemResp,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -70,6 +86,13 @@ from bisheng.permission.domain.services.fine_grained_permission_service import F
 from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
+from bisheng.share_link.domain.models.share_link import (
+    ResourceTypeEnum as ShareResourceTypeEnum,
+    ShareLink,
+    ShareLinkStatusEnum,
+    ShareMode,
+)
+from bisheng.share_link.domain.repositories.implementations.share_link_repository_impl import ShareLinkRepositoryImpl
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.knowledge import file_worker
@@ -125,6 +148,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # Roles with write access to a space
     _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
+    _SHOUGANG_PORTAL_SHARE_SECRET_ALGORITHM = 'pbkdf2_sha256'
+    _SHOUGANG_PORTAL_SHARE_SECRET_ITERATIONS = 120_000
 
     @staticmethod
     def _resolve_subscription_status(
@@ -1634,6 +1659,542 @@ class KnowledgeSpaceService(KnowledgeUtils):
             {"value": KnowledgeSpaceLevelEnum.TEAM.value, "label": "团队空间"},
             {"value": KnowledgeSpaceLevelEnum.PERSONAL.value, "label": "个人空间"},
         ]
+
+    async def get_shougang_portal_personal_spaces(self) -> Dict:
+        grouped = await self.get_grouped_spaces()
+        items: List[ShougangPortalPersonalSpaceItemResp] = []
+        for space in getattr(grouped, 'personal_spaces', []) or []:
+            if getattr(space, 'space_level', KnowledgeSpaceLevelEnum.PERSONAL) != KnowledgeSpaceLevelEnum.PERSONAL:
+                continue
+            permission_ids = await self._get_effective_permission_ids('knowledge_space', int(space.id))
+            if 'upload_file' not in permission_ids:
+                continue
+            items.append(
+                ShougangPortalPersonalSpaceItemResp(
+                    id=int(space.id),
+                    name=str(space.name or ''),
+                    description=str(space.description or ''),
+                    file_count=int(getattr(space, 'file_num', 0) or 0),
+                    updated_at=self._serialize_datetime(getattr(space, 'update_time', None)),
+                )
+            )
+        data = [item.model_dump(mode='json') for item in items]
+        return {"data": data, "total": len(data)}
+
+    def _copy_shougang_portal_favorite_file(
+        self,
+        source_file: KnowledgeFile,
+        source_space: Knowledge,
+        target_space: Knowledge,
+        extra_user_metadata: Dict,
+    ) -> Optional[KnowledgeFile]:
+        loop: Optional[asyncio.AbstractEventLoop] = None
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        try:
+            return file_worker.copy_normal(
+                source_file,
+                source_space,
+                target_space,
+                self.login_user.user_id,
+                extra_user_metadata=extra_user_metadata,
+            )
+        finally:
+            if loop is not None:
+                asyncio.set_event_loop(None)
+                loop.close()
+
+    async def create_shougang_portal_favorite(
+        self,
+        req: ShougangPortalFavoriteCreateReq,
+    ) -> ShougangPortalFavoriteCreateResp:
+        source_space = await KnowledgeDao.aquery_by_id(req.source_space_id)
+        target_space = await KnowledgeDao.aquery_by_id(req.target_space_id)
+        if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        source_file = await KnowledgeFileDao.query_by_id(req.source_file_id)
+        source_file = self._ensure_space_file(source_file, req.source_space_id)
+
+        await self._require_permission_id(
+            'knowledge_file',
+            req.source_file_id,
+            'view_file',
+            space_id=req.source_space_id,
+        )
+        if await self._get_space_level(req.target_space_id) != KnowledgeSpaceLevelEnum.PERSONAL:
+            raise SpaceInvalidLevelError(msg='Target space must be a personal knowledge space')
+        await self._require_permission_id('knowledge_space', req.target_space_id, 'upload_file')
+
+        repeat_file = await KnowledgeFileDao.get_repeat_file(
+            req.target_space_id,
+            md5_=source_file.md5,
+            file_name=source_file.file_name,
+        )
+        if repeat_file:
+            raise SpaceFileDuplicateError()
+
+        extra_user_metadata = {
+            'shougang_portal_favorite': {
+                'source_space_id': req.source_space_id,
+                'source_file_id': req.source_file_id,
+            }
+        }
+        copied_file = await asyncio.to_thread(
+            self._copy_shougang_portal_favorite_file,
+            source_file,
+            source_space,
+            target_space,
+            extra_user_metadata,
+        )
+        if not copied_file or not copied_file.id or copied_file.status == KnowledgeFileStatus.FAILED.value:
+            raise KnowledgeFileFailedError()
+
+        await self._initialize_child_resource_permissions(
+            'knowledge_file',
+            int(copied_file.id),
+            'knowledge_space',
+            req.target_space_id,
+        )
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(req.target_space_id)
+
+        title = Path(copied_file.file_name or source_file.file_name or '').stem
+        return ShougangPortalFavoriteCreateResp(
+            file_id=int(copied_file.id),
+            space_id=req.target_space_id,
+            title=title,
+        )
+
+    @staticmethod
+    def _enum_value(value) -> str:
+        raw = getattr(value, 'value', value)
+        return str(raw or '')
+
+    @classmethod
+    def _hash_shougang_portal_share_secret(cls, secret: str) -> str:
+        normalized = str(secret or '')
+        if not normalized:
+            return ''
+        salt = secrets.token_hex(16)
+        digest = hashlib.pbkdf2_hmac(
+            'sha256',
+            normalized.encode('utf-8'),
+            salt.encode('utf-8'),
+            cls._SHOUGANG_PORTAL_SHARE_SECRET_ITERATIONS,
+        ).hex()
+        return (
+            f'{cls._SHOUGANG_PORTAL_SHARE_SECRET_ALGORITHM}$'
+            f'{cls._SHOUGANG_PORTAL_SHARE_SECRET_ITERATIONS}${salt}${digest}'
+        )
+
+    @classmethod
+    def _verify_shougang_portal_share_secret(cls, secret: str, secret_hash: str) -> bool:
+        if not secret_hash:
+            return True
+        parts = str(secret_hash).split('$')
+        if len(parts) != 4 or parts[0] != cls._SHOUGANG_PORTAL_SHARE_SECRET_ALGORITHM:
+            return False
+        try:
+            iterations = int(parts[1])
+        except ValueError:
+            return False
+        salt = parts[2]
+        expected = parts[3]
+        actual = hashlib.pbkdf2_hmac(
+            'sha256',
+            str(secret or '').encode('utf-8'),
+            salt.encode('utf-8'),
+            iterations,
+        ).hex()
+        return hmac.compare_digest(actual, expected)
+
+    @staticmethod
+    def _generate_shougang_portal_invite_code() -> str:
+        alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+        return ''.join(secrets.choice(alphabet) for _ in range(6))
+
+    @staticmethod
+    def _is_shougang_portal_share_expired(share_link: ShareLink) -> bool:
+        expire_time = int(getattr(share_link, 'expire_time', 0) or 0)
+        create_time = getattr(share_link, 'create_time', None)
+        if expire_time <= 0 or not create_time:
+            return False
+        return create_time + timedelta(seconds=expire_time) < datetime.now()
+
+    @staticmethod
+    def _shougang_portal_share_permissions(meta_data: Dict) -> ShougangPortalSharePermissions:
+        permissions = meta_data.get('permissions') or {}
+        return ShougangPortalSharePermissions(
+            view=True,
+            download=bool(permissions.get('download')),
+            upload=False,
+        )
+
+    async def _save_shougang_portal_share_link(self, share_link: ShareLink) -> ShareLink:
+        async with get_async_db_session() as session:
+            repository = ShareLinkRepositoryImpl(session)
+            return await repository.save(share_link)
+
+    async def _get_shougang_portal_share_link(self, share_token: str) -> ShareLink:
+        async with get_async_db_session() as session:
+            repository = ShareLinkRepositoryImpl(session)
+            share_link = await repository.find_one(share_token=share_token)
+        if not share_link:
+            raise NotFoundError()
+        return share_link
+
+    def _require_shougang_portal_file_share_link(self, share_link: ShareLink) -> Dict:
+        resource_type = self._enum_value(getattr(share_link, 'resource_type', ''))
+        if resource_type not in {
+            ShareResourceTypeEnum.KNOWLEDGE_SPACE_FILE.value,
+            ShareResourceTypeEnum.KNOWLEDGE_SPACE_FILE.name,
+        }:
+            raise NotFoundError()
+        status = self._enum_value(getattr(share_link, 'status', ''))
+        if status not in {
+            ShareLinkStatusEnum.ACTIVE.value,
+            ShareLinkStatusEnum.ACTIVE.name,
+        }:
+            raise NotFoundError()
+        meta_data = getattr(share_link, 'meta_data', None) or {}
+        if not isinstance(meta_data, dict):
+            raise NotFoundError()
+        return meta_data
+
+    async def _resolve_shougang_portal_space_department_id(self, space_id: int) -> int:
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+        if binding and getattr(binding, 'department_id', None) is not None:
+            return int(binding.department_id)
+
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        scope_level = self._enum_value(getattr(scope, 'level', '')) if scope else ''
+        if (
+            scope
+            and scope_level == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+            and self._enum_value(getattr(scope, 'owner_type', '')) == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+            and getattr(scope, 'owner_id', None) is not None
+        ):
+            return int(scope.owner_id)
+        return 0
+
+    async def _resolve_shougang_portal_create_share_department_id(self, source_space: Knowledge) -> int:
+        space_id = int(source_space.id)
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        scope_level = self._enum_value(getattr(scope, 'level', '')) if scope else ''
+        if scope and scope_level == KnowledgeSpaceLevelEnum.PERSONAL.value:
+            return await self._resolve_shougang_portal_current_user_department_id()
+        if (
+            scope
+            and scope_level == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+            and self._enum_value(getattr(scope, 'owner_type', '')) == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+            and getattr(scope, 'owner_id', None) is not None
+        ):
+            return int(scope.owner_id)
+        space_department_id = await self._resolve_shougang_portal_space_department_id(space_id)
+        if space_department_id:
+            return space_department_id
+        return await self._resolve_shougang_portal_current_user_department_id()
+
+    async def _resolve_shougang_portal_current_user_department_id(self) -> int:
+        login_user_id = self._normalize_shougang_portal_user_id(getattr(self.login_user, 'user_id', None))
+        if login_user_id is None:
+            return 0
+        primary_department = await UserDepartmentDao.aget_user_primary_department(login_user_id)
+        if primary_department and getattr(primary_department, 'department_id', None) is not None:
+            return int(primary_department.department_id)
+        departments = await UserDepartmentDao.aget_user_departments(login_user_id)
+        for department in departments or []:
+            if getattr(department, 'department_id', None) is not None:
+                return int(department.department_id)
+        return 0
+
+    @staticmethod
+    def _normalize_shougang_portal_user_id(user_id) -> Optional[int]:
+        if user_id is None or user_id == '':
+            return None
+        try:
+            return int(user_id)
+        except (TypeError, ValueError):
+            return None
+
+    async def _require_shougang_portal_share_create_permission(
+        self,
+        source_space: Knowledge,
+        source_file: KnowledgeFile,
+    ) -> None:
+        try:
+            await self._require_permission_id(
+                'knowledge_file',
+                int(source_file.id),
+                'share_file',
+                space_id=int(source_space.id),
+            )
+            return
+        except SpacePermissionDeniedError:
+            pass
+
+        login_user_id = self._normalize_shougang_portal_user_id(getattr(self.login_user, 'user_id', None))
+        if login_user_id is None:
+            raise SpacePermissionDeniedError(msg='当前账号没有分享该文档的权限')
+
+        if self._normalize_shougang_portal_user_id(getattr(source_file, 'user_id', None)) == login_user_id:
+            return
+        if self._normalize_shougang_portal_user_id(getattr(source_space, 'user_id', None)) == login_user_id:
+            return
+
+        membership = await SpaceChannelMemberDao.async_find_member(int(source_space.id), login_user_id)
+        if (
+            membership
+            and membership.is_active
+            and self._enum_value(membership.user_role) in {UserRoleEnum.CREATOR.value, UserRoleEnum.ADMIN.value}
+        ):
+            return
+
+        raise SpacePermissionDeniedError(msg='当前账号没有分享该文档的权限')
+
+    async def create_shougang_portal_share_link(
+        self,
+        req: ShougangPortalShareLinkCreateReq,
+    ) -> ShougangPortalShareLinkCreateResp:
+        source_space = await KnowledgeDao.aquery_by_id(req.space_id)
+        if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        source_file = await KnowledgeFileDao.query_by_id(req.file_id)
+        source_file = self._ensure_space_file(source_file, req.space_id)
+        await self._require_shougang_portal_share_create_permission(source_space, source_file)
+
+        share_type = self._enum_value(req.share_type)
+        visibility = self._enum_value(req.visibility)
+        if share_type not in {item.value for item in ShougangPortalShareType}:
+            raise SpacePermissionDeniedError(msg='Invalid share type')
+        if visibility not in {item.value for item in ShougangPortalShareVisibility}:
+            raise SpacePermissionDeniedError(msg='Invalid share visibility')
+
+        department_id = 0
+        if visibility == ShougangPortalShareVisibility.DEPARTMENT.value:
+            department_id = await self._resolve_shougang_portal_create_share_department_id(source_space)
+            if not department_id:
+                raise SpacePermissionDeniedError(
+                    msg='当前账号未绑定部门，无法创建仅本部门分享',
+                )
+
+        invite_code = (
+            self._generate_shougang_portal_invite_code()
+            if share_type == ShougangPortalShareType.INVITE_CODE.value
+            else ''
+        )
+        password = str(req.password or '')
+        meta_data = {
+            'space_id': int(req.space_id),
+            'file_id': int(req.file_id),
+            'file_name': str(source_file.file_name or ''),
+            'share_type': share_type,
+            'visibility': visibility,
+            'permissions': {
+                'view': True,
+                'download': bool(req.allow_download),
+                'upload': False,
+            },
+            'password_hash': self._hash_shougang_portal_share_secret(password),
+            'invite_code_hash': self._hash_shougang_portal_share_secret(invite_code),
+        }
+        if department_id:
+            meta_data['department_id'] = department_id
+        tenant_id = int(getattr(self.login_user, 'tenant_id', 1) or 1)
+        share_link = ShareLink(
+            share_token=common_util.generate_short_high_entropy_string(),
+            resource_id=str(req.file_id),
+            resource_type=ShareResourceTypeEnum.KNOWLEDGE_SPACE_FILE,
+            share_mode=ShareMode.READ_ONLY,
+            expire_time=int(req.expire_seconds or 0),
+            meta_data=meta_data,
+            create_user_id=str(getattr(self.login_user, 'user_id', '')),
+            tenant_id=tenant_id,
+        )
+        saved = await self._save_shougang_portal_share_link(share_link)
+        return ShougangPortalShareLinkCreateResp(
+            share_token=saved.share_token,
+            link=f'/share/document/{saved.share_token}',
+            invite_code=invite_code,
+            expire_seconds=int(req.expire_seconds or 0),
+        )
+
+    async def get_shougang_portal_share_link_meta(
+        self,
+        share_token: str,
+    ) -> ShougangPortalShareLinkMetaResp:
+        share_link = await self._get_shougang_portal_share_link(share_token)
+        meta_data = self._require_shougang_portal_file_share_link(share_link)
+        share_type = self._enum_value(meta_data.get('share_type')) or ShougangPortalShareType.LINK.value
+        visibility = self._enum_value(meta_data.get('visibility')) or ShougangPortalShareVisibility.DEPARTMENT.value
+        return ShougangPortalShareLinkMetaResp(
+            share_token=share_link.share_token,
+            file_name=str(meta_data.get('file_name') or ''),
+            share_type=share_type,
+            visibility=visibility,
+            permissions=self._shougang_portal_share_permissions(meta_data),
+            requires_password=bool(meta_data.get('password_hash')),
+            requires_invite_code=(
+                share_type == ShougangPortalShareType.INVITE_CODE.value
+                or bool(meta_data.get('invite_code_hash'))
+            ),
+            expired=self._is_shougang_portal_share_expired(share_link),
+        )
+
+    async def verify_shougang_portal_share_link(
+        self,
+        share_token: str,
+        req: ShougangPortalShareLinkVerifyReq,
+    ) -> ShougangPortalShareLinkAccessResp:
+        share_link = await self._get_shougang_portal_share_link(share_token)
+        meta_data = self._require_shougang_portal_file_share_link(share_link)
+        if self._is_shougang_portal_share_expired(share_link):
+            raise SpacePermissionDeniedError(msg='Share link has expired')
+
+        password_hash = str(meta_data.get('password_hash') or '')
+        if password_hash and not self._verify_shougang_portal_share_secret(req.password, password_hash):
+            raise SpacePermissionDeniedError(msg='Invalid share password')
+
+        share_type = self._enum_value(meta_data.get('share_type'))
+        invite_code_hash = str(meta_data.get('invite_code_hash') or '')
+        if share_type == ShougangPortalShareType.INVITE_CODE.value:
+            invite_code = str(req.invite_code or '').strip().upper()
+            if not invite_code or not self._verify_shougang_portal_share_secret(invite_code, invite_code_hash):
+                raise SpacePermissionDeniedError(msg='Invalid invite code')
+
+        space_id = int(meta_data.get('space_id') or 0)
+        file_id = int(meta_data.get('file_id') or 0)
+        if not space_id or not file_id:
+            raise NotFoundError()
+
+        visibility = self._enum_value(meta_data.get('visibility'))
+        if visibility == ShougangPortalShareVisibility.DEPARTMENT.value:
+            await self._require_shougang_portal_share_department_access(
+                space_id=space_id,
+                share_link=share_link,
+                meta_data=meta_data,
+            )
+
+        permissions = self._shougang_portal_share_permissions(meta_data)
+        return ShougangPortalShareLinkAccessResp(
+            share_token=share_token,
+            space_id=space_id,
+            file_id=file_id,
+            allow_download=permissions.download,
+        )
+
+    async def _require_shougang_portal_share_department_access(
+        self,
+        *,
+        space_id: int,
+        share_link: ShareLink,
+        meta_data: Dict,
+    ) -> None:
+        if await self._can_shougang_portal_department_share_access(
+            space_id=space_id,
+            share_link=share_link,
+            meta_data=meta_data,
+        ):
+            return
+        raise SpacePermissionDeniedError(
+            msg='Share link is limited to the owning department, sub-departments, reviewers, or creator',
+        )
+
+    async def _can_shougang_portal_department_share_access(
+        self,
+        *,
+        space_id: int,
+        share_link: ShareLink,
+        meta_data: Dict,
+    ) -> bool:
+        user_id = int(getattr(self.login_user, 'user_id', 0) or 0)
+        if not user_id:
+            return False
+
+        if str(getattr(share_link, 'create_user_id', '') or '') == str(user_id):
+            return True
+
+        department_id = int(meta_data.get('department_id') or 0)
+        if not department_id:
+            department_id = await self._resolve_shougang_portal_space_department_id(space_id)
+        if not department_id:
+            return False
+
+        if await self._is_shougang_portal_user_in_department_scope(department_id):
+            return True
+        if await self._is_shougang_portal_user_department_admin(department_id):
+            return True
+        if await self._is_shougang_portal_share_reviewer(space_id):
+            return True
+        return False
+
+    async def _get_shougang_portal_department_scope_ids(self, department_id: int) -> set[int]:
+        dept = await DepartmentDao.aget_by_id(department_id)
+        if dept and getattr(dept, 'path', None):
+            return {int(department_id)} | {int(item) for item in await DepartmentDao.aget_subtree_ids(dept.path)}
+        return {int(department_id)}
+
+    async def _is_shougang_portal_user_in_department_scope(self, department_id: int) -> bool:
+        allowed_department_ids = await self._get_shougang_portal_department_scope_ids(department_id)
+        user_departments = await UserDepartmentDao.aget_user_departments(int(self.login_user.user_id))
+        user_department_ids = {int(row.department_id) for row in user_departments}
+        return bool(allowed_department_ids & user_department_ids)
+
+    async def _is_shougang_portal_user_department_admin(self, department_id: int) -> bool:
+        admin_departments = await DepartmentDao.aget_user_admin_departments(int(self.login_user.user_id))
+        if not admin_departments:
+            return False
+
+        admin_department_ids = {
+            int(row.id)
+            for row in admin_departments
+            if getattr(row, 'id', None) is not None
+        }
+        if int(department_id) in admin_department_ids:
+            return True
+
+        target_dept = await DepartmentDao.aget_by_id(department_id)
+        target_path = str(getattr(target_dept, 'path', '') or '')
+        if not target_path:
+            return False
+        return any(
+            bool(getattr(row, 'path', None)) and target_path.startswith(str(row.path))
+            for row in admin_departments
+        )
+
+    async def _is_shougang_portal_share_reviewer(self, space_id: int) -> bool:
+        from bisheng.approval.domain.services.approval_service import ApprovalService
+
+        try:
+            reviewer_ids = await ApprovalService.get_department_space_reviewer_user_ids(
+                request=self.request,
+                login_user=self.login_user,
+                space_id=space_id,
+                parent_folder_id=None,
+            )
+        except Exception:
+            logger.warning(
+                'Failed to resolve shougang portal share reviewers for space_id={}',
+                space_id,
+            )
+            return False
+        return int(self.login_user.user_id) in {int(user_id) for user_id in reviewer_ids}
+
+    async def _get_space_level(self, space_id: int) -> KnowledgeSpaceLevelEnum:
+        scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids([space_id])
+        scope = scopes.get(space_id)
+        if scope:
+            return scope.level
+        department_bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids([space_id])
+        if any(int(binding.space_id) == int(space_id) for binding in department_bindings):
+            return KnowledgeSpaceLevelEnum.DEPARTMENT
+        return KnowledgeSpaceLevelEnum.PERSONAL
 
     async def search_shougang_portal_tags(
             self,

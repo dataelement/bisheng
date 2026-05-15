@@ -1,5 +1,7 @@
+import asyncio
 import importlib
 import sys
+from datetime import datetime, timedelta
 from types import ModuleType
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.common.errcode.knowledge_space import (
+    SpaceFileDuplicateError,
     SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
     SpaceFolderNotFoundError,
@@ -31,6 +34,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceOwnerTypeEnum,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalFavoriteCreateReq,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
     ShougangPortalSpaceInfoItemResp,
@@ -199,8 +203,12 @@ def _install_schema_stubs() -> None:
             def delay(*args, **kwargs):
                 return None
 
+        def _dummy_copy_normal(*args, **kwargs):
+            return None
+
         file_worker_module.delete_knowledge_file_celery = _DummyFileWorkerTask()
         file_worker_module.parse_knowledge_file_celery = _DummyFileWorkerTask()
+        file_worker_module.copy_normal = _dummy_copy_normal
         sys.modules['bisheng.worker.knowledge.file_worker'] = file_worker_module
         sys.modules['bisheng.worker.knowledge'].file_worker = file_worker_module
 
@@ -471,6 +479,1169 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
     assert result['sections']['最新精选'][0]['space_id'] == 12
     assert result['sections']['典型案例'][0]['space_id'] == 18
     assert result['tags'] == ['最新精选', '典型案例']
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_personal_spaces_filters_to_writable_personal_spaces(service):
+    personal_space = SimpleNamespace(
+        id=7,
+        name='个人沉淀库',
+        description='个人知识空间',
+        file_num=3,
+        update_time='2026-05-15T09:30:00',
+        space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+    )
+    department_space = SimpleNamespace(
+        id=8,
+        name='部门知识空间',
+        description='部门知识空间',
+        file_num=1,
+        update_time='2026-05-15T09:30:00',
+        space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+    )
+
+    with patch.object(
+        service,
+        'get_grouped_spaces',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(personal_spaces=[personal_space, department_space]),
+    ), patch.object(
+        service,
+        '_get_effective_permission_ids',
+        new_callable=AsyncMock,
+        side_effect=[{'view_space', 'upload_file'}, {'view_space'}],
+    ):
+        result = await service.get_shougang_portal_personal_spaces()
+
+    assert result['total'] == 1
+    assert result['data'][0]['id'] == 7
+    assert result['data'][0]['file_count'] == 3
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_favorite_rejects_duplicate_by_name_or_md5(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    target_space = _make_space(space_id=7, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.md5 = 'same-md5'
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        side_effect=[source_space, target_space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_get_space_level',
+        new_callable=AsyncMock,
+        return_value=KnowledgeSpaceLevelEnum.PERSONAL,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.get_repeat_file',
+        new_callable=AsyncMock,
+        return_value=_make_file(file_id=99, knowledge_id=7, file_name='迁移指南.pdf'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.file_worker.copy_normal',
+        return_value=_make_file(file_id=100, knowledge_id=7, file_name='迁移指南.pdf'),
+        create=True,
+    ) as mock_copy:
+        with pytest.raises(SpaceFileDuplicateError):
+            await service.create_shougang_portal_favorite(
+                ShougangPortalFavoriteCreateReq(
+                    source_space_id=12,
+                    source_file_id=1580,
+                    target_space_id=7,
+                )
+            )
+
+    mock_copy.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_favorite_copies_file_to_personal_space(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    target_space = _make_space(space_id=7, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.md5 = 'md5-1580'
+    copied_file = _make_file(file_id=100, knowledge_id=7, file_name='迁移指南.pdf')
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        side_effect=[source_space, target_space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ) as mock_require_permission, patch.object(
+        service,
+        '_get_space_level',
+        new_callable=AsyncMock,
+        return_value=KnowledgeSpaceLevelEnum.PERSONAL,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.get_repeat_file',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.to_thread',
+        new_callable=AsyncMock,
+        return_value=copied_file,
+    ) as mock_to_thread, patch.object(
+        service,
+        '_initialize_child_resource_permissions',
+        new_callable=AsyncMock,
+    ) as mock_init_permissions, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+        new_callable=AsyncMock,
+    ) as mock_update_time:
+        result = await service.create_shougang_portal_favorite(
+            ShougangPortalFavoriteCreateReq(
+                source_space_id=12,
+                source_file_id=1580,
+                target_space_id=7,
+            )
+        )
+
+    assert result.file_id == 100
+    assert result.space_id == 7
+    assert result.title == '迁移指南'
+    assert mock_require_permission.await_args_list[0].args == ('knowledge_file', 1580, 'view_file')
+    assert mock_require_permission.await_args_list[1].args == ('knowledge_space', 7, 'upload_file')
+    mock_to_thread.assert_awaited_once()
+    copy_args = mock_to_thread.await_args.args
+    assert copy_args[0].__self__ is service
+    assert copy_args[0].__name__ == '_copy_shougang_portal_favorite_file'
+    assert copy_args[1:4] == (source_file, source_space, target_space)
+    assert copy_args[4]['shougang_portal_favorite']['source_file_id'] == 1580
+    mock_init_permissions.assert_awaited_once_with('knowledge_file', 100, 'knowledge_space', 7)
+    mock_update_time.assert_awaited_once_with(7)
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_favorite_copy_thread_has_event_loop(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    target_space = _make_space(space_id=7, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    copied_file = _make_file(file_id=100, knowledge_id=7, file_name='迁移指南.pdf')
+
+    def _copy_requires_event_loop(*_args, **_kwargs):
+        asyncio.get_event_loop()
+        return copied_file
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.file_worker.copy_normal',
+        side_effect=_copy_requires_event_loop,
+    ):
+        result = await asyncio.to_thread(
+            service._copy_shougang_portal_favorite_file,
+            source_file,
+            source_space,
+            target_space,
+            {'shougang_portal_favorite': {'source_file_id': 1580}},
+        )
+
+    assert result.id == 100
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_hashes_password_and_invite_code(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    saved_links = []
+
+    async def _save_share_link(share_link):
+        share_link.share_token = 'share-token-1580'
+        saved_links.append(share_link)
+        return share_link
+
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='invite_code',
+        visibility='public',
+        allow_download=False,
+        password='secret-password',
+        expire_seconds=3600,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ) as mock_require_permission, patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        side_effect=_save_share_link,
+    ):
+        result = await service.create_shougang_portal_share_link(req)
+
+    assert result.share_token == 'share-token-1580'
+    assert result.link.endswith('/share/document/share-token-1580')
+    assert len(result.invite_code) == 6
+    mock_require_permission.assert_awaited_once_with('knowledge_file', 1580, 'share_file', space_id=12)
+    meta_data = saved_links[0].meta_data
+    assert meta_data['space_id'] == 12
+    assert meta_data['file_id'] == 1580
+    assert meta_data['share_type'] == 'invite_code'
+    assert meta_data['permissions'] == {'view': True, 'download': False, 'upload': False}
+    assert meta_data['password_hash'] != 'secret-password'
+    assert meta_data['invite_code_hash'] != result.invite_code
+    assert 'secret-password' not in str(meta_data)
+    assert result.invite_code not in str(meta_data)
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_allows_file_uploader_when_share_permission_missing(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.user_id = service.login_user.user_id
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='public',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=SpacePermissionDeniedError(),
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(share_token='share-token-1580'),
+    ):
+        result = await service.create_shougang_portal_share_link(req)
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_allows_file_uploader_with_string_login_user_id(service):
+    service.login_user.user_id = str(service.login_user.user_id)
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.user_id = 7
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='public',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=SpacePermissionDeniedError(),
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(share_token='share-token-1580'),
+    ):
+        result = await service.create_shougang_portal_share_link(req)
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_allows_space_creator_when_share_permission_missing(service):
+    source_space = _make_space(space_id=12, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.user_id = 99
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='public',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=SpacePermissionDeniedError(),
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(share_token='share-token-1580'),
+    ):
+        result = await service.create_shougang_portal_share_link(req)
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_allows_space_creator_with_string_login_user_id(service):
+    service.login_user.user_id = str(service.login_user.user_id)
+    source_space = _make_space(space_id=12, user_id=7)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.user_id = 99
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='public',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=SpacePermissionDeniedError(),
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(share_token='share-token-1580'),
+    ):
+        result = await service.create_shougang_portal_share_link(req)
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_allows_space_admin_when_share_permission_missing(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.user_id = 99
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='public',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=SpacePermissionDeniedError(),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+        new_callable=AsyncMock,
+        return_value=_make_member(
+            user_id=service.login_user.user_id,
+            user_role=UserRoleEnum.ADMIN,
+            space_id=12,
+        ),
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(share_token='share-token-1580'),
+    ):
+        result = await service.create_shougang_portal_share_link(req)
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_rejects_unrelated_user_when_share_permission_missing(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    source_file.user_id = 99
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='public',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=SpacePermissionDeniedError(),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+    ) as mock_save:
+        with pytest.raises(SpacePermissionDeniedError):
+            await service.create_shougang_portal_share_link(req)
+
+    mock_save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_stores_department_id(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    saved_links = []
+
+    async def _save_share_link(share_link):
+        share_link.share_token = 'share-token-1580'
+        saved_links.append(share_link)
+        return share_link
+
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=33),
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        side_effect=_save_share_link,
+    ):
+        await service.create_shougang_portal_share_link(req)
+
+    assert saved_links[0].meta_data['department_id'] == 33
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_uses_scope_owner_when_binding_missing(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    saved_links = []
+
+    async def _save_share_link(share_link):
+        share_link.share_token = 'share-token-1580'
+        saved_links.append(share_link)
+        return share_link
+
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(
+            level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+            owner_id=44,
+        ),
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        side_effect=_save_share_link,
+    ):
+        await service.create_shougang_portal_share_link(req)
+
+    assert saved_links[0].meta_data['department_id'] == 44
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_uses_login_user_department_for_personal_space(service):
+    source_space = _make_space(space_id=12, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    saved_links = []
+
+    async def _save_share_link(share_link):
+        share_link.share_token = 'share-token-1580'
+        saved_links.append(share_link)
+        return share_link
+
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_space_department, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(
+            level=KnowledgeSpaceLevelEnum.PERSONAL,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=service.login_user.user_id,
+        ),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_primary_department',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=66),
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        side_effect=_save_share_link,
+    ):
+        await service.create_shougang_portal_share_link(req)
+
+    mock_space_department.assert_not_awaited()
+    assert saved_links[0].meta_data['department_id'] == 66
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_uses_login_user_department_when_personal_scope_missing(service):
+    source_space = _make_space(space_id=12, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    saved_links = []
+
+    async def _save_share_link(share_link):
+        share_link.share_token = 'share-token-1580'
+        saved_links.append(share_link)
+        return share_link
+
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_space_department, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_primary_department',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=66),
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        side_effect=_save_share_link,
+    ):
+        await service.create_shougang_portal_share_link(req)
+
+    mock_space_department.assert_awaited_once_with(12)
+    assert saved_links[0].meta_data['department_id'] == 66
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_falls_back_to_login_user_department_when_space_department_missing(
+        service,
+):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    saved_links = []
+
+    async def _save_share_link(share_link):
+        share_link.share_token = 'share-token-1580'
+        saved_links.append(share_link)
+        return share_link
+
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_space_department, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_primary_department',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=66),
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        side_effect=_save_share_link,
+    ):
+        await service.create_shougang_portal_share_link(req)
+
+    mock_space_department.assert_awaited_once_with(12)
+    assert saved_links[0].meta_data['department_id'] == 66
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_requires_user_department_for_personal_space(service):
+    source_space = _make_space(space_id=12, user_id=service.login_user.user_id)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(
+            level=KnowledgeSpaceLevelEnum.PERSONAL,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=service.login_user.user_id,
+        ),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_primary_department',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+    ) as mock_save:
+        with pytest.raises(SpacePermissionDeniedError):
+            await service.create_shougang_portal_share_link(req)
+
+    mock_save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_requires_user_department_when_space_department_missing(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    source_file = _make_file(file_id=1580, knowledge_id=12, file_name='迁移指南.pdf')
+    req = SimpleNamespace(
+        space_id=12,
+        file_id=1580,
+        share_type='link',
+        visibility='department',
+        allow_download=True,
+        password='',
+        expire_seconds=0,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=source_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        return_value=source_file,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_primary_department',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        '_save_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(share_token='share-token-1580'),
+    ):
+        with pytest.raises(SpacePermissionDeniedError):
+            await service.create_shougang_portal_share_link(req)
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_verify_rejects_wrong_invite_code(service):
+    share_link = SimpleNamespace(
+        share_token='share-token-1580',
+        resource_type='knowledge_space_file',
+        status='active',
+        create_time=datetime.now(),
+        expire_time=3600,
+        meta_data={
+            'space_id': 12,
+            'file_id': 1580,
+            'file_name': '迁移指南.pdf',
+            'share_type': 'invite_code',
+            'visibility': 'public',
+            'permissions': {'view': True, 'download': False, 'upload': False},
+            'password_hash': '',
+            'invite_code_hash': service._hash_shougang_portal_share_secret('ABC123'),
+        },
+    )
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ):
+        with pytest.raises(SpacePermissionDeniedError):
+            await service.verify_shougang_portal_share_link(
+                'share-token-1580',
+                SimpleNamespace(invite_code='BAD999', password=''),
+            )
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_share_link_verify_returns_access_payload(service):
+    share_link = SimpleNamespace(
+        share_token='share-token-1580',
+        resource_type='knowledge_space_file',
+        status='active',
+        create_time=datetime.now() - timedelta(seconds=30),
+        expire_time=3600,
+        meta_data={
+            'space_id': 12,
+            'file_id': 1580,
+            'file_name': '迁移指南.pdf',
+            'share_type': 'link',
+            'visibility': 'public',
+            'permissions': {'view': True, 'download': False, 'upload': False},
+            'password_hash': service._hash_shougang_portal_share_secret('secret-password'),
+            'invite_code_hash': '',
+        },
+    )
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ):
+        result = await service.verify_shougang_portal_share_link(
+            'share-token-1580',
+            SimpleNamespace(password='secret-password', invite_code=''),
+        )
+
+    assert result.space_id == 12
+    assert result.file_id == 1580
+    assert result.allow_download is False
+
+
+def _make_department_share_link(*, create_user_id: str = '99') -> SimpleNamespace:
+    return SimpleNamespace(
+        share_token='share-token-1580',
+        resource_type='knowledge_space_file',
+        status='active',
+        create_time=datetime.now(),
+        expire_time=3600,
+        create_user_id=create_user_id,
+        meta_data={
+            'space_id': 12,
+            'file_id': 1580,
+            'file_name': '迁移指南.pdf',
+            'share_type': 'link',
+            'visibility': 'department',
+            'department_id': 33,
+            'permissions': {'view': True, 'download': True, 'upload': False},
+            'password_hash': '',
+            'invite_code_hash': '',
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_allows_child_department_member(service):
+    share_link = _make_department_share_link()
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=33),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=33, path='/1/33/'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_subtree_ids',
+        new_callable=AsyncMock,
+        return_value=[33, 44],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(department_id=44)],
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.ApprovalService.get_department_space_reviewer_user_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = await service.verify_shougang_portal_share_link(
+            'share-token-1580',
+            SimpleNamespace(password='', invite_code=''),
+        )
+
+    assert result.space_id == 12
+    assert result.allow_download is True
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_allows_creator_without_department_member(service):
+    share_link = _make_department_share_link(create_user_id=str(service.login_user.user_id))
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.ApprovalService.get_department_space_reviewer_user_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = await service.verify_shougang_portal_share_link(
+            'share-token-1580',
+            SimpleNamespace(password='', invite_code=''),
+        )
+
+    assert result.file_id == 1580
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_allows_reviewer(service):
+    share_link = _make_department_share_link()
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=33),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=33, path='/1/33/'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_subtree_ids',
+        new_callable=AsyncMock,
+        return_value=[33],
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.ApprovalService.get_department_space_reviewer_user_ids',
+        new_callable=AsyncMock,
+        return_value=[service.login_user.user_id],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = await service.verify_shougang_portal_share_link(
+            'share-token-1580',
+            SimpleNamespace(password='', invite_code=''),
+        )
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_allows_department_admin(service):
+    share_link = _make_department_share_link()
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=33),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=33, path='/1/33/'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_subtree_ids',
+        new_callable=AsyncMock,
+        return_value=[33],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(id=33, path='/1/33/')],
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.ApprovalService.get_department_space_reviewer_user_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = await service.verify_shougang_portal_share_link(
+            'share-token-1580',
+            SimpleNamespace(password='', invite_code=''),
+        )
+
+    assert result.share_token == 'share-token-1580'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_department_share_link_rejects_other_department_user(service):
+    share_link = _make_department_share_link()
+
+    with patch.object(
+        service,
+        '_get_shougang_portal_share_link',
+        new_callable=AsyncMock,
+        return_value=share_link,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(department_id=33),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=33, path='/1/33/'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_subtree_ids',
+        new_callable=AsyncMock,
+        return_value=[33, 44],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(department_id=55)],
+    ), patch(
+        'bisheng.approval.domain.services.approval_service.ApprovalService.get_department_space_reviewer_user_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        with pytest.raises(SpacePermissionDeniedError):
+            await service.verify_shougang_portal_share_link(
+                'share-token-1580',
+                SimpleNamespace(password='', invite_code=''),
+            )
 
 
 def _make_member(

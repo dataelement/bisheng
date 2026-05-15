@@ -130,6 +130,87 @@ class ShougangPortalSpaceLevelsResp(BaseModel):
     levels: List[ShougangPortalSpaceLevelItem] = Field(default_factory=list)
 
 
+class ShougangPortalPersonalSpaceItemResp(BaseModel):
+    id: int = Field(..., description="Knowledge Space ID")
+    name: str = Field(..., description="Knowledge Space name")
+    description: str = Field(default="", description="Knowledge Space description")
+    file_count: int = Field(default=0, description="Successful file count")
+    updated_at: str = Field(default="", description="Last update time")
+
+
+class ShougangPortalPersonalSpacesResp(BaseModel):
+    data: List[ShougangPortalPersonalSpaceItemResp] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangPortalFavoriteCreateReq(BaseModel):
+    source_space_id: int = Field(..., gt=0, description="Source knowledge space ID")
+    source_file_id: int = Field(..., gt=0, description="Source file ID")
+    target_space_id: int = Field(..., gt=0, description="Target personal knowledge space ID")
+
+
+class ShougangPortalFavoriteCreateResp(BaseModel):
+    file_id: int = Field(..., description="Copied file ID")
+    space_id: int = Field(..., description="Target knowledge space ID")
+    title: str = Field(default="", description="Copied document title")
+
+
+class ShougangPortalShareType(str, Enum):
+    LINK = "link"
+    INVITE_CODE = "invite_code"
+
+
+class ShougangPortalShareVisibility(str, Enum):
+    DEPARTMENT = "department"
+    PUBLIC = "public"
+
+
+class ShougangPortalSharePermissions(BaseModel):
+    view: bool = Field(default=True)
+    download: bool = Field(default=False)
+    upload: bool = Field(default=False)
+
+
+class ShougangPortalShareLinkCreateReq(BaseModel):
+    space_id: int = Field(..., gt=0, description="Source knowledge space ID")
+    file_id: int = Field(..., gt=0, description="Source file ID")
+    share_type: ShougangPortalShareType = Field(default=ShougangPortalShareType.LINK)
+    visibility: ShougangPortalShareVisibility = Field(default=ShougangPortalShareVisibility.DEPARTMENT)
+    allow_download: bool = Field(default=False)
+    password: str = Field(default="", max_length=128)
+    expire_seconds: int = Field(default=0, ge=0, le=31_536_000)
+
+
+class ShougangPortalShareLinkCreateResp(BaseModel):
+    share_token: str
+    link: str
+    invite_code: str = ""
+    expire_seconds: int = 0
+
+
+class ShougangPortalShareLinkMetaResp(BaseModel):
+    share_token: str
+    file_name: str = ""
+    share_type: ShougangPortalShareType = ShougangPortalShareType.LINK
+    visibility: ShougangPortalShareVisibility = ShougangPortalShareVisibility.DEPARTMENT
+    permissions: ShougangPortalSharePermissions = Field(default_factory=ShougangPortalSharePermissions)
+    requires_password: bool = False
+    requires_invite_code: bool = False
+    expired: bool = False
+
+
+class ShougangPortalShareLinkVerifyReq(BaseModel):
+    password: str = Field(default="", max_length=128)
+    invite_code: str = Field(default="", max_length=32)
+
+
+class ShougangPortalShareLinkAccessResp(BaseModel):
+    share_token: str
+    space_id: int
+    file_id: int
+    allow_download: bool = False
+
+
 class ShougangPortalTagSearchReq(BaseModel):
     space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")

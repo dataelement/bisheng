@@ -2,13 +2,22 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalFavoriteCreateReq,
+    ShougangPortalFavoriteCreateResp,
     ShougangPortalFileSearchReq,
     ShougangPortalFileSearchResp,
     ShougangPortalHomeReq,
     ShougangPortalHomeResp,
+    ShougangPortalPersonalSpacesResp,
+    ShougangPortalShareLinkAccessResp,
+    ShougangPortalShareLinkCreateReq,
+    ShougangPortalShareLinkCreateResp,
+    ShougangPortalShareLinkMetaResp,
+    ShougangPortalShareLinkVerifyReq,
     ShougangPortalSpaceInfoReq,
     ShougangPortalSpaceInfoResp,
     ShougangPortalSpaceLevelsResp,
@@ -25,6 +34,67 @@ async def get_shougang_portal_space_levels(
 ) -> Any:
     levels = await svc.get_shougang_portal_space_levels()
     return resp_200(ShougangPortalSpaceLevelsResp(levels=levels).model_dump(mode='json'))
+
+
+@router.get('/personal-spaces')
+async def get_shougang_portal_personal_spaces(
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_shougang_portal_personal_spaces()
+    return resp_200(ShougangPortalPersonalSpacesResp(**result).model_dump(mode='json'))
+
+
+@router.post('/favorites')
+async def create_shougang_portal_favorite(
+        req: ShougangPortalFavoriteCreateReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        result = await svc.create_shougang_portal_favorite(req)
+        raw = result.model_dump() if hasattr(result, 'model_dump') else result
+        return resp_200(ShougangPortalFavoriteCreateResp(**raw).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.post('/share-links')
+async def create_shougang_portal_share_link(
+        req: ShougangPortalShareLinkCreateReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        result = await svc.create_shougang_portal_share_link(req)
+        raw = result.model_dump() if hasattr(result, 'model_dump') else result
+        return resp_200(ShougangPortalShareLinkCreateResp(**raw).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.get('/share-links/{share_token}')
+async def get_shougang_portal_share_link_meta(
+        share_token: str,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        result = await svc.get_shougang_portal_share_link_meta(share_token)
+        raw = result.model_dump() if hasattr(result, 'model_dump') else result
+        return resp_200(ShougangPortalShareLinkMetaResp(**raw).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.post('/share-links/{share_token}/verify')
+async def verify_shougang_portal_share_link(
+        share_token: str,
+        req: ShougangPortalShareLinkVerifyReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    try:
+        result = await svc.verify_shougang_portal_share_link(share_token, req)
+        raw = result.model_dump() if hasattr(result, 'model_dump') else result
+        return resp_200(ShougangPortalShareLinkAccessResp(**raw).model_dump(mode='json'))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
 
 
 @router.post('/spaces/info')
