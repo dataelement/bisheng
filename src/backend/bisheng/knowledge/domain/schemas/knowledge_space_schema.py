@@ -83,7 +83,6 @@ class ShougangPortalSpaceInfoResp(BaseModel):
         description="Knowledge Space info items",
     )
 
-
 class KnowledgeSpaceCreateOptionDepartment(BaseModel):
     id: int
     name: str
@@ -120,6 +119,46 @@ class GroupedKnowledgeSpacesResp(BaseModel):
     department_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
     team_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
     personal_spaces: List[KnowledgeSpaceInfoResp] = Field(default_factory=list)
+
+
+class ShougangPortalSpaceLevelItem(BaseModel):
+    value: KnowledgeSpaceLevelEnum
+    label: str
+
+
+class ShougangPortalSpaceLevelsResp(BaseModel):
+    levels: List[ShougangPortalSpaceLevelItem] = Field(default_factory=list)
+
+
+class ShougangPortalFileSearchReq(BaseModel):
+    q: Optional[str] = Field(default=None, description="Search keyword")
+    tag: Optional[str] = Field(default=None, description="Space tag name")
+    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
+    file_ext: Optional[str] = Field(default=None, description="File extension filter")
+    sort: str = Field(default="updated_at", description="Sort mode: relevance / updated_at")
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class ShougangPortalFileItemResp(BaseModel):
+    id: int
+    space_id: int
+    title: str
+    summary: str = ""
+    source: str = ""
+    updated_at: str = ""
+    tags: List[str] = Field(default_factory=list)
+    file_ext: str = ""
+    file_size: str = ""
+    file_encoding: str = ""
+
+
+class ShougangPortalFileSearchResp(BaseModel):
+    data: List[ShougangPortalFileItemResp] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

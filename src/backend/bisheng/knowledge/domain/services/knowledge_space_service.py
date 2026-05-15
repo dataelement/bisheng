@@ -55,6 +55,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp, KnowledgeSpaceCreateOptionsResp,
     KnowledgeSpaceCreateOptionDepartmentsResp, KnowledgeSpaceCreateOptionUserGroupsResp,
     KnowledgeSpaceCreateOptionDepartment, KnowledgeSpaceCreateOptionUserGroup,
+    ShougangPortalFileItemResp, ShougangPortalFileSearchReq,
     ShougangPortalSpaceInfoError, ShougangPortalSpaceInfoItemResp,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -1626,13 +1627,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
+    async def get_shougang_portal_space_levels(self) -> List[Dict]:
+        return [
+            {"value": KnowledgeSpaceLevelEnum.PUBLIC.value, "label": "公共空间"},
+            {"value": KnowledgeSpaceLevelEnum.DEPARTMENT.value, "label": "部门空间"},
+            {"value": KnowledgeSpaceLevelEnum.TEAM.value, "label": "团队空间"},
+            {"value": KnowledgeSpaceLevelEnum.PERSONAL.value, "label": "个人空间"},
+        ]
+
     async def get_shougang_portal_space_infos(self, space_ids: List[int]) -> List[ShougangPortalSpaceInfoItemResp]:
         if not space_ids:
             return []
 
-        unique_space_ids = list(dict.fromkeys(space_ids))
+        unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in space_ids))
         spaces = await KnowledgeDao.async_get_spaces_by_ids(unique_space_ids, order_by='update_time')
-        space_map = {int(space.id): space for space in spaces}
+        space_map = {
+            int(space.id): space
+            for space in spaces
+            if int(space.type) == KnowledgeTypeEnum.SPACE.value
+        }
 
         permission_results = await asyncio.gather(
             *[
@@ -1815,6 +1828,156 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     )
                 )
         return items
+
+    async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> Dict:
+        space_ids = await self._resolve_shougang_portal_search_space_ids(req.space_ids, req.space_level)
+        if not space_ids or (not req.q and not req.tag):
+            return {"data": [], "total": 0, "page": req.page, "page_size": req.page_size}
+
+        all_items: List[ShougangPortalFileItemResp] = []
+        for space_id in space_ids:
+            tag_ids = await self._get_shougang_portal_tag_ids(space_id, req.tag)
+            if req.tag and not tag_ids:
+                continue
+            page = 1
+            while True:
+                try:
+                    result = await self.search_space_children(
+                        space_id=space_id,
+                        tag_ids=tag_ids,
+                        keyword=req.q,
+                        page=page,
+                        page_size=100,
+                        file_status=[KnowledgeFileStatus.SUCCESS.value],
+                        order_field='update_time',
+                        order_sort='desc',
+                    )
+                except Exception as exc:
+                    logger.warning("skip shougang portal space search: space_id={} error={}", space_id, exc)
+                    break
+                batch = result.get("data") or []
+                all_items.extend(
+                    self._map_shougang_portal_file_item(space_id, item)
+                    for item in batch
+                    if self._is_shougang_portal_file_item(item, req.file_ext)
+                )
+                if not batch or len(batch) < 100 or page * 100 >= int(result.get("total") or 0):
+                    break
+                page += 1
+
+        sorted_items = self._sort_shougang_portal_file_items(all_items, req.sort, req.q)
+        start = (req.page - 1) * req.page_size
+        end = start + req.page_size
+        return {
+            "data": [item.model_dump(mode='json') for item in sorted_items[start:end]],
+            "total": len(sorted_items),
+            "page": req.page,
+            "page_size": req.page_size,
+        }
+
+    async def _resolve_shougang_portal_search_space_ids(
+        self,
+        requested_space_ids: List[int],
+        space_level: Optional[KnowledgeSpaceLevelEnum],
+    ) -> List[int]:
+        unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in requested_space_ids if int(space_id) > 0))
+        if not unique_space_ids:
+            return []
+        if space_level is None:
+            return unique_space_ids
+        scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(unique_space_ids)
+        department_bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids(unique_space_ids)
+        department_space_ids = {int(binding.space_id) for binding in department_bindings}
+        result = []
+        for space_id in unique_space_ids:
+            scope = scopes.get(space_id)
+            resolved_level = scope.level if scope else (
+                KnowledgeSpaceLevelEnum.DEPARTMENT
+                if space_id in department_space_ids
+                else KnowledgeSpaceLevelEnum.PERSONAL
+            )
+            if resolved_level == space_level:
+                result.append(space_id)
+        return result
+
+    async def _get_shougang_portal_tag_ids(self, space_id: int, tag_name: Optional[str]) -> Optional[List[int]]:
+        if not tag_name:
+            return None
+        tags = await TagDao.get_tags_by_business(
+            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            business_id=str(space_id),
+            name=tag_name,
+        )
+        return [int(tag.id) for tag in tags if tag.id is not None]
+
+    def _is_shougang_portal_file_item(self, item: Dict, file_ext: Optional[str]) -> bool:
+        if int(item.get("file_type", -1)) != FileType.FILE.value:
+            return False
+        file_name = str(item.get("file_name") or "")
+        if file_ext and self._get_file_ext(file_name) != file_ext.strip().lower().lstrip("."):
+            return False
+        return True
+
+    def _map_shougang_portal_file_item(self, space_id: int, item: Dict) -> ShougangPortalFileItemResp:
+        file_name = str(item.get("file_name") or "")
+        return ShougangPortalFileItemResp(
+            id=int(item.get("id") or 0),
+            space_id=space_id,
+            title=Path(file_name).stem or file_name,
+            summary=str(item.get("abstract") or ""),
+            source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
+            updated_at=self._serialize_datetime(item.get("update_time")),
+            tags=[str(tag.get("name")) for tag in item.get("tags") or [] if isinstance(tag, dict) and tag.get("name")],
+            file_ext=self._get_file_ext(file_name),
+            file_size=str(item.get("file_size") or ""),
+            file_encoding=str(
+                item.get("file_encoding")
+                or item.get("fileEncoding")
+                or item.get("document_code")
+                or item.get("file_no")
+                or ""
+            ),
+        )
+
+    @staticmethod
+    def _get_file_ext(file_name: str) -> str:
+        suffix = Path(file_name).suffix.lower()
+        return suffix[1:] if suffix.startswith(".") else suffix
+
+    @staticmethod
+    def _serialize_datetime(value) -> str:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, str):
+            return value
+        return ""
+
+    @staticmethod
+    def _sort_shougang_portal_file_items(
+        items: List[ShougangPortalFileItemResp],
+        sort: str,
+        keyword: Optional[str],
+    ) -> List[ShougangPortalFileItemResp]:
+        if sort == 'updated_at' or not keyword:
+            return sorted(items, key=lambda item: item.updated_at, reverse=True)
+        keyword_lower = keyword.lower()
+
+        def score(item: ShougangPortalFileItemResp) -> tuple[int, str]:
+            title = item.title.lower()
+            summary = item.summary.lower()
+            tags = [tag.lower() for tag in item.tags]
+            hit_score = 0
+            if title == keyword_lower:
+                hit_score += 4
+            if keyword_lower in title:
+                hit_score += 3
+            if keyword_lower in summary:
+                hit_score += 2
+            if any(keyword_lower in tag for tag in tags):
+                hit_score += 1
+            return hit_score, item.updated_at
+
+        return sorted(items, key=score, reverse=True)
 
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)
