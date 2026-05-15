@@ -1104,6 +1104,12 @@ export interface KnowledgeFolderNode {
 export async function listKnowledgeFolders(params: {
     space_id: string | number;
     parent_id?: string | number | null;
+    /**
+     * Status filter — must mirror what the right-side file panel sends so the
+     * tree and the panel stay consistent. For MEMBER-role users this should be
+     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     */
+    file_status?: number[];
 }): Promise<{ items: KnowledgeFolderNode[]; total: number }> {
     if (!params.space_id) return { items: [], total: 0 };
     const res = await request.get<any>(
@@ -1116,7 +1122,9 @@ export async function listKnowledgeFolders(params: {
                 page_size: 200,
                 order_field: "file_name",
                 order_sort: "asc",
+                file_status: params.file_status?.length ? params.file_status : undefined,
             },
+            paramsSerializer: request.paramsSerializer,
         }
     );
     const payload: any = res?.data ?? res ?? {};

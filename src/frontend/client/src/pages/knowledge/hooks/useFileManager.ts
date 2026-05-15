@@ -27,10 +27,20 @@ interface UseFileManagerOptions {
     enabled?: boolean;
 }
 
-const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
+export const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
 
-interface KnowledgeSpaceFilesRefreshEventDetail {
+export interface KnowledgeSpaceFilesRefreshEventDetail {
     spaceId?: number | string;
+}
+
+/** Dispatch the global "knowledge space files changed" event (folder create/delete/rename, etc). */
+export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): void {
+    window.dispatchEvent(
+        new CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>(
+            KNOWLEDGE_SPACE_FILES_REFRESH_EVENT,
+            { detail: { spaceId } },
+        ),
+    );
 }
 
 /**
