@@ -130,6 +130,30 @@ class TestLoginSyncRoute:
         payload = mocked_services.login.await_args.args[0]
         assert payload.external_user_id == 'u1'
         assert payload.ts == 1000
+        assert mocked_services.login.await_args.kwargs['row_source'] == 'wecom'
+
+    def test_explicit_source_is_forwarded_to_service(
+        self, configure_sso_secret, hmac_signer, mocked_services,
+    ):
+        app = _mount_app()
+        body = (
+            b'{"source":"wecom","external_user_id":"u1",'
+            b'"primary_dept_external_id":"D1",'
+            b'"user_attrs":{"name":"Alice"},'
+            b'"ts":1000}'
+        )
+        sig = hmac_signer('POST', LOGIN_SYNC_PATH, body)
+        with TestClient(app) as client:
+            resp = client.post(
+                LOGIN_SYNC_PATH,
+                content=body,
+                headers={
+                    'X-Signature': sig,
+                    'Content-Type': 'application/json',
+                },
+            )
+        assert resp.status_code == 200
+        assert mocked_services.login.await_args.kwargs['row_source'] == 'wecom'
 
     def test_invalid_signature_rejected(
         self, configure_sso_secret, mocked_services,
@@ -171,8 +195,30 @@ class TestDepartmentsSyncRoute:
         assert data['applied_remove'] == 1
         mocked_services.depts.assert_awaited_once()
         payload = mocked_services.depts.await_args.args[0]
+        assert mocked_services.depts.await_args.kwargs['row_source'] == 'wecom'
         assert len(payload.upsert) == 1
         assert payload.remove == ['D99']
+
+    def test_explicit_source_is_forwarded_to_service(
+        self, configure_sso_secret, hmac_signer, mocked_services,
+    ):
+        app = _mount_app()
+        body = (
+            b'{"source":"sso","upsert":[{"external_id":"D1","name":"Eng","ts":10}],'
+            b'"remove":["D99"],"source_ts":100}'
+        )
+        sig = hmac_signer('POST', DEPTS_SYNC_PATH, body)
+        with TestClient(app) as client:
+            resp = client.post(
+                DEPTS_SYNC_PATH,
+                content=body,
+                headers={
+                    'X-Signature': sig,
+                    'Content-Type': 'application/json',
+                },
+            )
+        assert resp.status_code == 200
+        assert mocked_services.depts.await_args.kwargs['row_source'] == 'sso'
 
     def test_missing_signature_rejected(
         self, configure_sso_secret, mocked_services,

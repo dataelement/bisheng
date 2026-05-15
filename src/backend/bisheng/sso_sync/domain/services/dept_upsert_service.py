@@ -26,13 +26,12 @@ from typing import Dict, Iterable, List, Optional
 
 from bisheng.common.errcode.sso_sync import SsoDeptParentMissingError
 from bisheng.database.models.department import Department, DepartmentDao
-from bisheng.sso_sync.domain.constants import SSO_SOURCE
+from bisheng.sso_sync.domain.constants import DEFAULT_SSO_SYNC_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import DepartmentUpsertItem
 
 
 class DeptUpsertService:
-
-    SOURCE = SSO_SOURCE
+    SOURCE = DEFAULT_SSO_SYNC_SOURCE
 
     # -----------------------------------------------------------------------
     # Pre-flight checks for login-sync flow
@@ -43,7 +42,7 @@ class DeptUpsertService:
         cls,
         external_ids: Iterable[str],
         *,
-        source: str = SSO_SOURCE,
+        source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> Dict[str, Department]:
         """Resolve every ``external_id`` to a Department row, raise 19312 on
         the first miss.

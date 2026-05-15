@@ -31,21 +31,20 @@ from bisheng.database.models.tenant import (
     Tenant,
     TenantDao,
 )
-from bisheng.sso_sync.domain.constants import SSO_SOURCE
+from bisheng.sso_sync.domain.constants import DEFAULT_SSO_SYNC_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import TenantMappingItem
 from bisheng.tenant.domain.constants import TenantAuditAction
 
 
 class TenantMappingHandler:
-
-    SOURCE = SSO_SOURCE
+    SOURCE = DEFAULT_SSO_SYNC_SOURCE
 
     @classmethod
     async def process(
         cls,
         mappings: Iterable[TenantMappingItem],
         request_ip: str = '',
-        dept_source: str = SSO_SOURCE,
+        dept_source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> None:
         for item in mappings or []:
             await cls._process_one(
@@ -57,7 +56,7 @@ class TenantMappingHandler:
         cls,
         item: TenantMappingItem,
         request_ip: str,
-        dept_source: str = SSO_SOURCE,
+        dept_source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> None:
         dept = await DepartmentDao.aget_by_source_external_id(
             dept_source, item.dept_external_id,
