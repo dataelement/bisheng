@@ -910,7 +910,7 @@ class TestPermissionApiIntegration:
         assert body['data'][0]['subject_id'] == 8
         assert body['data'][0]['model_id'] == 'viewer'
 
-    def test_department_space_permissions_include_implicit_display_rows(self):
+    def test_department_space_permissions_do_not_add_implicit_department_viewer_row(self):
         app = _make_app(_ViewerUser)
 
         with patch(
@@ -970,14 +970,7 @@ class TestPermissionApiIntegration:
             (item['subject_type'], item['subject_id']): item
             for item in body['data']
         }
-        assert set(rows) == {
-            ('department', 10),
-            ('user', 7),
-        }
-        assert rows[('department', 10)]['relation'] == 'viewer'
-        assert rows[('department', 10)]['model_id'] == 'viewer'
-        assert rows[('department', 10)]['subject_name'] == '财务部'
-        assert rows[('department', 10)]['include_children'] is False
+        assert set(rows) == {('user', 7)}
         assert rows[('user', 7)]['relation'] == 'manager'
         assert rows[('user', 7)]['model_id'] == 'manager'
         assert rows[('user', 7)]['subject_name'] == 'viewer'
