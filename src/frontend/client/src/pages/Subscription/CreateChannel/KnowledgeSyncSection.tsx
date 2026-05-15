@@ -16,7 +16,7 @@
  */
 import { ChevronDown, ChevronUp, PlusSquare } from "lucide-react";
 import { useMemo, useState, type RefObject } from "react";
-import { Switch } from "~/components/ui";
+import { Switch, TooltipAnchor } from "~/components/ui";
 import type {
     KnowledgeSyncConfig,
     KnowledgeSyncSpaceItem,
@@ -319,12 +319,29 @@ export default function KnowledgeSyncSection({
                                     "该子频道下的内容会自动同步到知识空间"}
                             </span>
                         </div>
-                        <Switch
-                            checked={!noSubChannels && subModeActive}
-                            disabled={noSubChannels}
-                            onCheckedChange={setSubMode}
-                            className="shrink-0"
-                        />
+                        {noSubChannels ? (
+                            <TooltipAnchor
+                                description={
+                                    localize?.("com_subscription.create_sub_channel_first") ||
+                                    "请先创建子频道"
+                                }
+                                side="top"
+                                className="shrink-0"
+                            >
+                                <Switch
+                                    checked={!noSubChannels && subModeActive}
+                                    disabled={noSubChannels}
+                                    onCheckedChange={setSubMode}
+                                />
+                            </TooltipAnchor>
+                        ) : (
+                            <Switch
+                                checked={!noSubChannels && subModeActive}
+                                disabled={noSubChannels}
+                                onCheckedChange={setSubMode}
+                                className="shrink-0"
+                            />
+                        )}
                     </div>
 
                     {!noSubChannels && subModeActive && (

@@ -1599,6 +1599,7 @@
     "sync_to_knowledge_space_hint": "Content in this channel will be automatically synced to the knowledge space",
     "per_sub_channel_sync": "Configure for each sub-channel individually",
     "per_sub_channel_sync_hint": "Content in this sub-channel will be automatically synced to the knowledge space",
+    "create_sub_channel_first": "Please create a sub-channel first",
     "delete": "Delete",
     "added_to_space_success": "Added to knowledge space",
     "ai_assistant": "AI Assistant",
