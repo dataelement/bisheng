@@ -211,6 +211,29 @@ class TagDao(Tag):
             return result.all()
 
     @classmethod
+    async def aget_tags_by_business_ids(
+            cls,
+            business_type: TagBusinessTypeEnum,
+            business_ids: List[str],
+            name: str = None,
+    ) -> Dict[str, List[Tag]]:
+        unique_business_ids = list(dict.fromkeys(str(business_id) for business_id in business_ids if business_id))
+        if not unique_business_ids:
+            return {}
+        statement = select(Tag).where(
+            Tag.business_type == business_type,
+            Tag.business_id.in_(unique_business_ids),
+        )
+        if name:
+            statement = statement.where(Tag.name == name)
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        result: Dict[str, List[Tag]] = {}
+        for tag in rows:
+            result.setdefault(str(tag.business_id), []).append(tag)
+        return result
+
+    @classmethod
     async def asearch_tags(
         cls,
         keyword: str = None,

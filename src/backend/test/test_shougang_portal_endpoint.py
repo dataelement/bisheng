@@ -72,6 +72,27 @@ class _FakeKnowledgeSpaceService:
             "page_size": req.page_size,
         }
 
+    async def get_shougang_portal_home(self, req):
+        return {
+            "sections": {
+                req.sections[0].tag: [
+                    {
+                        "id": 1580,
+                        "space_id": 12,
+                        "title": "热轧1580产线精轧机振动纹治理实践",
+                        "summary": "振动纹治理实践摘要",
+                        "source": "轧线技术案例库",
+                        "updated_at": "2026-04-13T10:30:00",
+                        "tags": ["最新精选", "热轧"],
+                        "file_ext": "pdf",
+                        "file_size": "949.33KB",
+                        "file_encoding": "GF-ZD-SC-202604-01201",
+                    }
+                ],
+            },
+            "tags": ["最新精选", "热轧"],
+        }
+
 
 def _load_shougang_portal_endpoint(monkeypatch: pytest.MonkeyPatch):
     dependencies_module = ModuleType('bisheng.knowledge.api.dependencies')
@@ -174,3 +195,27 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
     assert fake_service.search_request.space_ids == [12, 18]
     assert response.data["total"] == 1
     assert response.data["data"][0]["space_id"] == 12
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_home_accepts_section_batch_request(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        req = endpoint.ShougangPortalHomeReq(
+            space_ids=[12, 18],
+            sections=[{"tag": "最新精选", "page_size": 4}],
+            hot_tags_limit=8,
+        )
+        response = await endpoint.get_shougang_portal_home(req, svc=_FakeKnowledgeSpaceService())
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert response.data["sections"]["最新精选"][0]["space_id"] == 12
+    assert response.data["tags"] == ["最新精选", "热轧"]

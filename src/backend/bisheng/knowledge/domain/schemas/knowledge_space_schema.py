@@ -130,6 +130,15 @@ class ShougangPortalSpaceLevelsResp(BaseModel):
     levels: List[ShougangPortalSpaceLevelItem] = Field(default_factory=list)
 
 
+class ShougangPortalTagSearchReq(BaseModel):
+    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
+
+
+class ShougangPortalTagSearchResp(BaseModel):
+    tags: List[str] = Field(default_factory=list)
+
+
 class ShougangPortalFileSearchReq(BaseModel):
     q: Optional[str] = Field(default=None, description="Search keyword")
     tag: Optional[str] = Field(default=None, description="Space tag name")
@@ -159,6 +168,23 @@ class ShougangPortalFileSearchResp(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 20
+
+
+class ShougangPortalHomeSectionReq(BaseModel):
+    tag: str
+    page_size: int = Field(default=6, ge=1, le=100)
+
+
+class ShougangPortalHomeReq(BaseModel):
+    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    space_level: Optional[KnowledgeSpaceLevelEnum] = Field(default=None, description="Knowledge space level filter")
+    sections: List[ShougangPortalHomeSectionReq] = Field(default_factory=list, max_length=20)
+    hot_tags_limit: int = Field(default=8, ge=0, le=100)
+
+
+class ShougangPortalHomeResp(BaseModel):
+    sections: Dict[str, List[ShougangPortalFileItemResp]] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

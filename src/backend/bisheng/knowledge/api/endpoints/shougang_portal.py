@@ -7,9 +7,13 @@ from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileSearchReq,
     ShougangPortalFileSearchResp,
+    ShougangPortalHomeReq,
+    ShougangPortalHomeResp,
     ShougangPortalSpaceInfoReq,
     ShougangPortalSpaceInfoResp,
     ShougangPortalSpaceLevelsResp,
+    ShougangPortalTagSearchReq,
+    ShougangPortalTagSearchResp,
 )
 
 router = APIRouter(prefix='/knowledge/shougang-portal', tags=['shougang_portal'])
@@ -30,6 +34,24 @@ async def get_shougang_portal_space_infos(
 ) -> Any:
     spaces = await svc.get_shougang_portal_space_infos(req.space_ids)
     return resp_200(ShougangPortalSpaceInfoResp(spaces=spaces).model_dump(mode='json'))
+
+
+@router.post('/tags/search')
+async def search_shougang_portal_tags(
+        req: ShougangPortalTagSearchReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    tags = await svc.search_shougang_portal_tags(req.space_ids, req.space_level)
+    return resp_200(ShougangPortalTagSearchResp(tags=tags).model_dump(mode='json'))
+
+
+@router.post('/home')
+async def get_shougang_portal_home(
+        req: ShougangPortalHomeReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_shougang_portal_home(req)
+    return resp_200(ShougangPortalHomeResp(**result).model_dump(mode='json'))
 
 
 @router.post('/files/search')

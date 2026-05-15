@@ -55,7 +55,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp, KnowledgeSpaceCreateOptionsResp,
     KnowledgeSpaceCreateOptionDepartmentsResp, KnowledgeSpaceCreateOptionUserGroupsResp,
     KnowledgeSpaceCreateOptionDepartment, KnowledgeSpaceCreateOptionUserGroup,
-    ShougangPortalFileItemResp, ShougangPortalFileSearchReq,
+    ShougangPortalFileItemResp, ShougangPortalFileSearchReq, ShougangPortalHomeReq,
     ShougangPortalSpaceInfoError, ShougangPortalSpaceInfoItemResp,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -1635,6 +1635,114 @@ class KnowledgeSpaceService(KnowledgeUtils):
             {"value": KnowledgeSpaceLevelEnum.PERSONAL.value, "label": "个人空间"},
         ]
 
+    async def search_shougang_portal_tags(
+            self,
+            space_ids: List[int],
+            space_level: Optional[KnowledgeSpaceLevelEnum],
+    ) -> List[str]:
+        spaces = await self._get_shougang_portal_visible_search_spaces(space_ids, space_level)
+        if not spaces:
+            return []
+        tag_map = await TagDao.aget_tags_by_business_ids(
+            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            business_ids=[str(space.id) for space in spaces],
+        )
+        tag_names = {
+            str(tag.name)
+            for tags in tag_map.values()
+            for tag in tags
+            if tag.name
+        }
+        return sorted(tag_names)
+
+    async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> Dict:
+        spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
+        section_tags = list(dict.fromkeys(section.tag for section in req.sections if section.tag))
+        empty_sections = {section.tag: [] for section in req.sections}
+        if not spaces:
+            return {"sections": empty_sections, "tags": []}
+
+        space_ids = [int(space.id) for space in spaces]
+        space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
+        tag_map = await TagDao.aget_tags_by_business_ids(
+            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            business_ids=[str(space_id) for space_id in space_ids],
+        )
+        all_tags = [
+            tag
+            for tags in tag_map.values()
+            for tag in tags
+            if tag.id is not None and tag.name
+        ]
+        hot_tags = list(dict.fromkeys(str(tag.name) for tag in all_tags))[:req.hot_tags_limit]
+        if not section_tags:
+            return {"sections": empty_sections, "tags": hot_tags}
+
+        section_tag_ids_by_name: Dict[str, List[int]] = {
+            tag_name: [
+                int(tag.id)
+                for tag in all_tags
+                if tag.name == tag_name and tag.id is not None
+            ]
+            for tag_name in section_tags
+        }
+        section_tag_ids = [
+            tag_id
+            for tag_ids in section_tag_ids_by_name.values()
+            for tag_id in tag_ids
+        ]
+        if not section_tag_ids:
+            return {"sections": empty_sections, "tags": hot_tags}
+
+        links = await TagDao.aget_resources_by_tags(section_tag_ids, ResourceTypeEnum.SPACE_FILE)
+        file_ids_by_section: Dict[str, List[int]] = {tag_name: [] for tag_name in section_tags}
+        tag_name_by_id = {
+            tag_id: tag_name
+            for tag_name, tag_ids in section_tag_ids_by_name.items()
+            for tag_id in tag_ids
+        }
+        all_file_ids: List[int] = []
+        for link in links:
+            tag_name = tag_name_by_id.get(int(link.tag_id))
+            resource_id = str(link.resource_id or "")
+            if tag_name is None or not resource_id.isdigit():
+                continue
+            file_id = int(resource_id)
+            file_ids_by_section.setdefault(tag_name, []).append(file_id)
+            all_file_ids.append(file_id)
+
+        unique_file_ids = list(dict.fromkeys(all_file_ids))
+        if not unique_file_ids:
+            return {"sections": empty_sections, "tags": hot_tags}
+
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            knowledge_ids=space_ids,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            file_ids=unique_file_ids,
+            order_by='update_time',
+            order_sort='desc',
+        )
+        visible_files = await self._filter_shougang_portal_visible_files(files)
+        enriched_items = await self._handle_file_folder_extra_info(visible_files)
+        item_map: Dict[int, ShougangPortalFileItemResp] = {}
+        for item in enriched_items:
+            space_id = int(item.get("knowledge_id") or 0)
+            item["knowledge_name"] = space_name_map.get(space_id, str(space_id))
+            if self._is_shougang_portal_file_item(item, None):
+                mapped = self._map_shougang_portal_file_item(space_id, item)
+                item_map[mapped.id] = mapped
+
+        sections: Dict[str, List[Dict]] = {}
+        for section in req.sections:
+            ids = list(dict.fromkeys(file_ids_by_section.get(section.tag, [])))
+            items = [item_map[file_id] for file_id in ids if file_id in item_map]
+            items = self._sort_shougang_portal_file_items(items, 'updated_at', None)
+            sections[section.tag] = [
+                item.model_dump(mode='json')
+                for item in items[:section.page_size]
+            ]
+        return {"sections": sections, "tags": hot_tags}
+
     async def get_shougang_portal_space_infos(self, space_ids: List[int]) -> List[ShougangPortalSpaceInfoItemResp]:
         if not space_ids:
             return []
@@ -1830,40 +1938,45 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return items
 
     async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> Dict:
-        space_ids = await self._resolve_shougang_portal_search_space_ids(req.space_ids, req.space_level)
-        if not space_ids or (not req.q and not req.tag):
+        spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
+        if not spaces:
             return {"data": [], "total": 0, "page": req.page, "page_size": req.page_size}
 
+        space_ids = [int(space.id) for space in spaces]
+        tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
+        if req.tag and not tag_file_ids:
+            return {"data": [], "total": 0, "page": req.page, "page_size": req.page_size}
+
+        keyword_file_ids = await self._get_shougang_portal_keyword_file_ids(
+            spaces=spaces,
+            keyword=req.q,
+            filter_file_ids=tag_file_ids,
+        )
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            knowledge_ids=space_ids,
+            file_name=req.q,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            file_ids=tag_file_ids,
+            extra_file_ids=keyword_file_ids,
+            file_ext=req.file_ext,
+            order_by='update_time',
+            order_sort='desc',
+        )
+        if not files:
+            return {"data": [], "total": 0, "page": req.page, "page_size": req.page_size}
+
+        visible_files = await self._filter_shougang_portal_visible_files(files)
+        if not visible_files:
+            return {"data": [], "total": 0, "page": req.page, "page_size": req.page_size}
+
+        space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
+        enriched_items = await self._handle_file_folder_extra_info(visible_files)
         all_items: List[ShougangPortalFileItemResp] = []
-        for space_id in space_ids:
-            tag_ids = await self._get_shougang_portal_tag_ids(space_id, req.tag)
-            if req.tag and not tag_ids:
-                continue
-            page = 1
-            while True:
-                try:
-                    result = await self.search_space_children(
-                        space_id=space_id,
-                        tag_ids=tag_ids,
-                        keyword=req.q,
-                        page=page,
-                        page_size=100,
-                        file_status=[KnowledgeFileStatus.SUCCESS.value],
-                        order_field='update_time',
-                        order_sort='desc',
-                    )
-                except Exception as exc:
-                    logger.warning("skip shougang portal space search: space_id={} error={}", space_id, exc)
-                    break
-                batch = result.get("data") or []
-                all_items.extend(
-                    self._map_shougang_portal_file_item(space_id, item)
-                    for item in batch
-                    if self._is_shougang_portal_file_item(item, req.file_ext)
-                )
-                if not batch or len(batch) < 100 or page * 100 >= int(result.get("total") or 0):
-                    break
-                page += 1
+        for item in enriched_items:
+            space_id = int(item.get("knowledge_id") or 0)
+            item["knowledge_name"] = space_name_map.get(space_id, str(space_id))
+            if self._is_shougang_portal_file_item(item, req.file_ext):
+                all_items.append(self._map_shougang_portal_file_item(space_id, item))
 
         sorted_items = self._sort_shougang_portal_file_items(all_items, req.sort, req.q)
         start = (req.page - 1) * req.page_size
@@ -1874,6 +1987,54 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "page": req.page,
             "page_size": req.page_size,
         }
+
+    async def _get_shougang_portal_visible_search_spaces(
+            self,
+            requested_space_ids: List[int],
+            space_level: Optional[KnowledgeSpaceLevelEnum],
+    ) -> List[Knowledge]:
+        space_ids = await self._resolve_shougang_portal_search_space_ids(requested_space_ids, space_level)
+        if not space_ids:
+            return []
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by='update_time')
+        space_map = {
+            int(space.id): space
+            for space in spaces
+            if int(space.type) == KnowledgeTypeEnum.SPACE.value
+        }
+        ordered_spaces = [space_map[space_id] for space_id in space_ids if space_id in space_map]
+        if not ordered_spaces:
+            return []
+
+        is_global_admin = False
+        is_admin = getattr(self.login_user, 'is_admin', None)
+        if callable(is_admin):
+            is_global_admin = bool(is_admin())
+
+        visible_spaces: List[Knowledge] = []
+        permission_checks = []
+        permission_spaces: List[Knowledge] = []
+        for space in ordered_spaces:
+            if is_global_admin or int(space.user_id or 0) == int(self.login_user.user_id) or self._is_square_preview_space(space):
+                visible_spaces.append(space)
+                continue
+            permission_spaces.append(space)
+            permission_checks.append(self._get_effective_permission_ids('knowledge_space', int(space.id)))
+
+        if permission_checks:
+            permission_results = await asyncio.gather(*permission_checks, return_exceptions=True)
+            for space, permission_result in zip(permission_spaces, permission_results):
+                if isinstance(permission_result, Exception):
+                    logger.warning(
+                        "skip shougang portal space search permission check: space_id={} error={}",
+                        space.id,
+                        permission_result,
+                    )
+                    continue
+                if 'view_space' in permission_result:
+                    visible_spaces.append(space)
+        visible_space_ids = {int(space.id) for space in visible_spaces}
+        return [space for space in ordered_spaces if int(space.id) in visible_space_ids]
 
     async def _resolve_shougang_portal_search_space_ids(
         self,
@@ -1899,6 +2060,91 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if resolved_level == space_level:
                 result.append(space_id)
         return result
+
+    async def _get_shougang_portal_tag_file_ids(self, space_ids: List[int], tag_name: Optional[str]) -> Optional[List[int]]:
+        if not tag_name:
+            return None
+        tag_map = await TagDao.aget_tags_by_business_ids(
+            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            business_ids=[str(space_id) for space_id in space_ids],
+            name=tag_name,
+        )
+        tag_ids = [
+            int(tag.id)
+            for tags in tag_map.values()
+            for tag in tags
+            if tag.id is not None
+        ]
+        if not tag_ids:
+            return []
+        resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
+        file_ids: List[int] = []
+        for resource in resources:
+            resource_id = str(resource.resource_id or "")
+            if resource_id.isdigit():
+                file_ids.append(int(resource_id))
+        return list(dict.fromkeys(file_ids))
+
+    async def _get_shougang_portal_keyword_file_ids(
+            self,
+            *,
+            spaces: List[Knowledge],
+            keyword: Optional[str],
+            filter_file_ids: Optional[List[int]],
+    ) -> List[int]:
+        if not keyword:
+            return []
+        index_names = [str(space.index_name) for space in spaces if space.index_name]
+        if not index_names:
+            return []
+        query: Dict = {"match_phrase": {"text": keyword}}
+        if filter_file_ids:
+            query = {
+                "bool": {
+                    "must": [
+                        query,
+                        {"terms": {"metadata.document_id": filter_file_ids}},
+                    ]
+                }
+            }
+        try:
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=spaces[0])
+            es_result = await es_vector.client.search(index=index_names, body={
+                "query": query,
+                "aggs": {
+                    "document_ids": {
+                        "terms": {
+                            "field": "metadata.document_id",
+                            "size": 10000,
+                        }
+                    }
+                },
+                "size": 0,
+            })
+        except Exception as exc:
+            logger.warning("skip shougang portal batch es search: error={}", exc)
+            return []
+
+        aggregations = es_result.get("aggregations") or {}
+        buckets = aggregations.get("document_ids", {}).get("buckets", [])
+        file_ids = [int(one["key"]) for one in buckets if str(one.get("key", "")).isdigit()]
+        if filter_file_ids:
+            allowed = set(filter_file_ids)
+            file_ids = [file_id for file_id in file_ids if file_id in allowed]
+        return file_ids
+
+    async def _filter_shougang_portal_visible_files(self, files: List[KnowledgeFile]) -> List[KnowledgeFile]:
+        grouped_files: Dict[int, List[KnowledgeFile]] = {}
+        for file in files:
+            grouped_files.setdefault(int(file.knowledge_id), []).append(file)
+
+        visible_files: List[KnowledgeFile] = []
+        for space_id, items in grouped_files.items():
+            try:
+                visible_files.extend(await self._filter_visible_child_items(items, space_id=space_id))
+            except Exception as exc:
+                logger.warning("skip shougang portal file visibility check: space_id={} error={}", space_id, exc)
+        return visible_files
 
     async def _get_shougang_portal_tag_ids(self, space_id: int, tag_name: Optional[str]) -> Optional[List[int]]:
         if not tag_name:

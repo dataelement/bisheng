@@ -31,6 +31,8 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceOwnerTypeEnum,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalFileSearchReq,
+    ShougangPortalHomeReq,
     ShougangPortalSpaceInfoItemResp,
     SpaceSubscriptionStatusEnum,
 )
@@ -328,6 +330,147 @@ def _make_file(
         level=level,
         object_name='minio/object',
     )
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_file_search_uses_batch_file_query(service):
+    spaces = [
+        _make_space(space_id=12, user_id=7),
+        _make_space(space_id=18, user_id=7),
+    ]
+    spaces[0].name = '轧线技术案例库'
+    spaces[1].name = '冷轧技术手册'
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name='热轧1580产线精轧机振动纹治理实践.pdf'),
+        _make_file(file_id=1801, knowledge_id=18, file_name='冷轧板面缺陷处理.pdf'),
+    ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=spaces,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=files,
+    ) as mock_batch_files, patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                **files[0].model_dump(),
+                'tags': [{'id': 101, 'name': '热轧'}],
+            },
+            {
+                **files[1].model_dump(),
+                'tags': [{'id': 205, 'name': '板面缺陷'}],
+            },
+        ],
+    ), patch.object(
+        service,
+        'search_space_children',
+        new_callable=AsyncMock,
+        side_effect=AssertionError('shougang portal search should use batch file query'),
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                space_ids=[12, 18],
+                page=1,
+                page_size=10,
+                sort='updated_at',
+            )
+        )
+
+    mock_batch_files.assert_awaited_once()
+    assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
+    assert result['total'] == 2
+    assert [item['space_id'] for item in result['data']] == [12, 18]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
+    spaces = [
+        _make_space(space_id=12, user_id=7),
+        _make_space(space_id=18, user_id=7),
+    ]
+    spaces[0].name = '轧线技术案例库'
+    spaces[1].name = '冷轧技术手册'
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name='热轧1580产线精轧机振动纹治理实践.pdf'),
+        _make_file(file_id=1801, knowledge_id=18, file_name='冷轧板面缺陷处理.pdf'),
+    ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=spaces,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_tags_by_business_ids',
+        new_callable=AsyncMock,
+        return_value={
+            '12': [SimpleNamespace(id=101, name='最新精选')],
+            '18': [SimpleNamespace(id=102, name='典型案例')],
+        },
+    ) as mock_batch_tags, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aget_resources_by_tags',
+        new_callable=AsyncMock,
+        return_value=[
+            SimpleNamespace(tag_id=101, resource_id='1580'),
+            SimpleNamespace(tag_id=102, resource_id='1801'),
+        ],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=files,
+    ) as mock_batch_files, patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                **files[0].model_dump(),
+                'tags': [{'id': 101, 'name': '最新精选'}],
+            },
+            {
+                **files[1].model_dump(),
+                'tags': [{'id': 102, 'name': '典型案例'}],
+            },
+        ],
+    ), patch.object(
+        service,
+        'search_space_children',
+        new_callable=AsyncMock,
+        side_effect=AssertionError('home aggregation should use batch file query'),
+    ):
+        result = await service.get_shougang_portal_home(
+            ShougangPortalHomeReq(
+                space_ids=[12, 18],
+                sections=[
+                    {'tag': '最新精选', 'page_size': 4},
+                    {'tag': '典型案例', 'page_size': 4},
+                ],
+                hot_tags_limit=8,
+            )
+        )
+
+    mock_batch_tags.assert_awaited_once()
+    mock_batch_files.assert_awaited_once()
+    assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
+    assert mock_batch_files.await_args.kwargs['file_ids'] == [1580, 1801]
+    assert result['sections']['最新精选'][0]['space_id'] == 12
+    assert result['sections']['典型案例'][0]['space_id'] == 18
+    assert result['tags'] == ['最新精选', '典型案例']
 
 
 def _make_member(

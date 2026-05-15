@@ -444,6 +444,35 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return (await session.exec(statement)).all()
 
     @classmethod
+    async def aget_file_by_space_filters(cls, knowledge_ids: List[int], file_name: str = None,
+                                         status: List[int] = None, file_ids: List[int] = None,
+                                         extra_file_ids: List[int] = None, file_ext: str = None,
+                                         order_by: str = None, order_field: str = None,
+                                         order_sort: str = "desc") -> List[KnowledgeFile]:
+        unique_knowledge_ids = list(dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id))
+        if not unique_knowledge_ids:
+            return []
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id.in_(unique_knowledge_ids),
+            KnowledgeFile.file_type == FileType.FILE.value,
+        )
+        statement = cls._build_file_filters_statement(
+            statement,
+            file_name,
+            status,
+            file_ids,
+            extra_file_ids=extra_file_ids,
+            order_by=order_by,
+            order_field=order_field,
+            order_sort=order_sort,
+        )
+        normalized_ext = (file_ext or '').strip().lower().lstrip('.')
+        if normalized_ext:
+            statement = statement.where(func.lower(KnowledgeFile.file_name).like(f'%.{normalized_ext}'))
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
                                      file_ids: List[int] = None, extra_file_ids: List[int] = None,
                                      file_level_path: str = None) -> int:
