@@ -373,6 +373,41 @@ class FlowDao(FlowBase):
                                  flow_type=flow_type)
 
     @classmethod
+    async def aget_user_access_online_flows(cls,
+                                            user_id: int,
+                                            page: int = 0,
+                                            limit: int = 0,
+                                            keyword: str = None,
+                                            flow_ids: List[str] = None,
+                                            flow_type: int = FlowType.WORKFLOW.value) -> List[Flow]:
+        """Async variant of ``get_user_access_online_flows`` for async callers."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.user.domain.services.auth import LoginUser
+
+        login_user = await LoginUser.init_login_user(
+            user_id=user_id,
+            user_name='',
+        )
+        accessible_ids = await PermissionService.list_accessible_ids(
+            user_id=user_id,
+            relation='can_read',
+            object_type='workflow',
+            login_user=login_user,
+        )
+        if accessible_ids is None:
+            flow_id_extra = 'admin'
+        else:
+            flow_id_extra = list(accessible_ids)
+        return FlowDao.get_flows(user_id,
+                                 flow_id_extra,
+                                 keyword,
+                                 FlowStatus.ONLINE.value,
+                                 flow_ids=flow_ids,
+                                 page=page,
+                                 limit=limit,
+                                 flow_type=flow_type)
+
+    @classmethod
     def filter_flows_by_ids(cls, flow_ids: List[str], keyword: str = None,
                             page: int = 0, limit: int = 0, flow_type: int = FlowType.WORKFLOW.value) \
         -> (List[Flow], int):

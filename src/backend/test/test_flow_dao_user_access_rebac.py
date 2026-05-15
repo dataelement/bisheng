@@ -10,7 +10,7 @@ Verifies:
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -94,3 +94,36 @@ def test_non_admin_no_accessible_passes_empty_list(monkeypatch):
     FlowDao.get_user_access_online_flows(user_id=7)
 
     assert captured['flow_id_extra'] == []
+
+
+@pytest.mark.asyncio
+async def test_async_non_admin_passes_accessible_ids_list(monkeypatch):
+    from bisheng.permission.domain.services.permission_service import PermissionService
+    from bisheng.user.domain.services import auth as auth_mod
+
+    fake_login_user = SimpleNamespace(user_id=7, user_name='')
+    monkeypatch.setattr(
+        auth_mod.LoginUser,
+        'init_login_user',
+        AsyncMock(return_value=fake_login_user),
+    )
+    monkeypatch.setattr(
+        PermissionService,
+        'list_accessible_ids',
+        AsyncMock(return_value=['wf-1', 'wf-2']),
+    )
+
+    captured = {}
+
+    def fake_get_flows(user_id, flow_id_extra, *args, **kwargs):
+        captured['user_id'] = user_id
+        captured['flow_id_extra'] = flow_id_extra
+        return ['flow-row']
+
+    monkeypatch.setattr(FlowDao, 'get_flows', fake_get_flows)
+
+    out = await FlowDao.aget_user_access_online_flows(user_id=7, page=1, limit=50)
+
+    assert out == ['flow-row']
+    assert captured['user_id'] == 7
+    assert captured['flow_id_extra'] == ['wf-1', 'wf-2']
