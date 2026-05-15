@@ -47,7 +47,10 @@ from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
-from bisheng.sso_sync.domain.constants import SSO_SOURCE, WECOM_SOURCE
+from bisheng.sso_sync.domain.constants import (
+    DEFAULT_SSO_SYNC_SOURCE,
+    WECOM_SOURCE,
+)
 from bisheng.sso_sync.domain.schemas.payloads import (
     LoginSyncRequest,
     LoginSyncResponse,
@@ -74,7 +77,7 @@ _USER_LOCK_KEY = 'user:sso_lock:{external_user_id}'
 
 
 class LoginSyncService:
-    SOURCE = SSO_SOURCE
+    SOURCE = DEFAULT_SSO_SYNC_SOURCE
 
     @staticmethod
     def _disable_source_for_row(row_source: str, want_delete: int) -> Optional[str]:
@@ -89,7 +92,7 @@ class LoginSyncService:
         cls,
         payload: LoginSyncRequest,
         request_ip: str = '',
-        row_source: str = SSO_SOURCE,
+        row_source: str = DEFAULT_SSO_SYNC_SOURCE,
     ) -> LoginSyncResponse:
         ttl = int(
             getattr(settings.sso_sync, 'user_lock_ttl_seconds', 30) or 30

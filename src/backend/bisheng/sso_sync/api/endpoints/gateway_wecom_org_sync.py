@@ -78,13 +78,15 @@ async def gateway_wecom_org_sync(
     request_ip = get_request_ip(request)
     buffer = OrgSyncLogBuffer()
 
-    # Always treat Gateway WeCom push as authoritative full tree (PRD §5 absent
-    # ids), even if an older gateway JAR omits ``full_snapshot`` in JSON.
-    dept_augmented = _merge_member_department_ids_into_snapshot(
+    # Honour the caller's ``full_snapshot`` flag so a Gateway pushing in
+    # batches can send incremental envelopes (full_snapshot=false) for the
+    # leading batches and a final authoritative envelope (full_snapshot=true
+    # with full ``snapshot_external_ids`` + full ``members``) to trigger
+    # department and user absent reconcile only on the last batch.
+    dept_payload = _merge_member_department_ids_into_snapshot(
         payload.departments,
         payload.members,
     )
-    dept_payload = dept_augmented.model_copy(update={'full_snapshot': True})
     dept_result = await DepartmentsSyncService.execute(
         dept_payload,
         request_ip=request_ip,
@@ -136,12 +138,16 @@ async def gateway_wecom_org_sync(
             if admins:
                 members_with_leader_depts += 1
 
-    # PRD: 第三方同步人员不在本次导入名单中 → 已禁用 + 强退
+    # PRD: 第三方同步人员不在本次导入名单中 → 已禁用 + 强退。
+    # Only the authoritative batch (full_snapshot=true) carries the complete
+    # member roster; incremental batches must skip this reconcile or they'd
+    # disable every user not in the current chunk.
     absent_disabled = 0
-    try:
-        absent_disabled = await disable_wecom_users_absent_from_import(seen_external)
-    except Exception as e:  # noqa: BLE001
-        buffer.error('absent_reconcile', '', str(e))
+    if payload.departments.full_snapshot:
+        try:
+            absent_disabled = await disable_wecom_users_absent_from_import(seen_external)
+        except Exception as e:  # noqa: BLE001
+            buffer.error('absent_reconcile', '', str(e))
 
     buffer.member_updated = member_ok
     buffer.warn(

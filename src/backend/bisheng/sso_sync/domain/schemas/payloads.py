@@ -23,6 +23,17 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
+from bisheng.sso_sync.domain.constants import SSO_SOURCE, WECOM_SOURCE
+
+
+def _normalize_sync_source(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    source = value.strip().lower()
+    if source in {SSO_SOURCE, WECOM_SOURCE}:
+        return source
+    raise ValueError(f'source must be one of: {SSO_SOURCE}, {WECOM_SOURCE}')
+
 
 class UserAttrsDTO(BaseModel):
     """Soft user attributes pushed alongside SSO login. All fields optional
@@ -46,6 +57,14 @@ class TenantMappingItem(BaseModel):
 
 
 class LoginSyncRequest(BaseModel):
+    source: Optional[str] = Field(
+        default=None,
+        description=(
+            'Optional upstream source override for single-user login-sync. '
+            'When omitted, bisheng defaults to ``sso``; send ``wecom`` to '
+            'bind against WeCom-synced departments/users.'
+        ),
+    )
     external_user_id: str = Field(
         ...,
         description=(
@@ -112,6 +131,11 @@ class LoginSyncRequest(BaseModel):
         description='Internal: suppress per-call org_sync_log flush (batch endpoint).',
     )
 
+    @field_validator('source')
+    @classmethod
+    def _validate_source(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_sync_source(v)
+
 
 class LoginSyncResponse(BaseModel):
     user_id: int
@@ -137,6 +161,14 @@ class DepartmentUpsertItem(BaseModel):
 
 
 class DepartmentsSyncRequest(BaseModel):
+    source: Optional[str] = Field(
+        default=None,
+        description=(
+            'Optional upstream source override for batch department sync. '
+            'When omitted, bisheng uses the same default source as single-user '
+            'login-sync.'
+        ),
+    )
     upsert: List[DepartmentUpsertItem] = Field(default_factory=list)
     remove: List[str] = Field(default_factory=list)
     source_ts: Optional[int] = Field(
@@ -178,6 +210,11 @@ class DepartmentsSyncRequest(BaseModel):
             if s:
                 out.append(s)
         return out
+
+    @field_validator('source')
+    @classmethod
+    def _validate_source(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_sync_source(v)
 
 
 class GatewayWecomOrgSyncRequest(BaseModel):

@@ -43,22 +43,42 @@ const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgCl
     4: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
     5: { labelKey: "queuing", colorClass: "text-yellow-500", bgClass: "bg-yellow-500" },
     6: { labelKey: "timeout", colorClass: "text-red-500", bgClass: "bg-red-500" },
+    7: { labelKey: "violation", colorClass: "text-red-500", bgClass: "bg-red-500" },
 };
+
+function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?: Record<string, any>) => string) {
+    const words = hits
+        .map((item) => String(item?.word ?? "").trim())
+        .filter(Boolean)
+        .filter((word, index, arr) => arr.indexOf(word) === index);
+
+    if (!words.length) {
+        return t("sensitiveViolationMessage", { ns: "knowledge" });
+    }
+
+    return `${t("sensitiveViolationMessagePrefix", { ns: "knowledge" })}{${words.join(",")}}${t("sensitiveViolationMessageSuffix", { ns: "knowledge" })}`;
+}
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
     const { t } = useTranslation()
     const config = STATUS_CONFIG[status];
     const reason = useMemo(() => {
-        if (remark?.indexOf('{') === 0) {
+        const trimmedRemark = remark?.trim();
+        if (!trimmedRemark) return "";
+
+        if (trimmedRemark.indexOf('{') === 0) {
             try {
-                const obj = JSON.parse(remark)
+                const obj = JSON.parse(trimmedRemark)
+                if (status === 7 && obj?.reason === "sensitive_check") {
+                    return formatSensitiveViolationMessage(Array.isArray(obj?.hits) ? obj.hits : [], t);
+                }
                 return t(`errors.${obj.status_code}`, obj.data)
             } catch (error) {
-                return remark
+                return trimmedRemark
             }
         }
-        return remark
-    }, [remark, t])
+        return trimmedRemark
+    }, [remark, status, t])
 
     // 如果状态不在定义中，返回 null 或默认 UI
     if (!config) return null;
@@ -99,6 +119,23 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
             </span>
         </div>
     );
+
+    if (status === 7 && reason) {
+        return (
+            <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {BadgeContent}
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="whitespace-pre-line">
+                        <div className="max-w-96 text-left break-all whitespace-normal">
+                            {reason}
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
 
     // 其他状态直接渲染内容
     return BadgeContent;
@@ -542,6 +579,19 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                                                 <span className="size-[6px] rounded-full bg-red-500"></span>
                                                                 <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
                                                                     {t("parseFailed")}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    },
+                                                    {
+                                                        value: 7,
+                                                        label: 'Violation',
+                                                        color: 'text-red-500',
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
+                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
+                                                                    {t("violation")}
                                                                 </span>
                                                             </div>
                                                         )

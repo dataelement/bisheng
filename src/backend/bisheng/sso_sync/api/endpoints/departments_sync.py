@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Request
 
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.sso_sync.domain.constants import DEFAULT_SSO_SYNC_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     BatchResult,
     DepartmentsSyncRequest,
@@ -35,7 +36,9 @@ async def departments_sync(
     per-item isolated (AC-11), and returns the aggregated summary.
     """
     result = await DepartmentsSyncService.execute(
-        payload, request_ip=get_request_ip(request),
+        payload,
+        request_ip=get_request_ip(request),
+        row_source=payload.source or DEFAULT_SSO_SYNC_SOURCE,
     )
     # Single summary row in ``org_sync_log`` per request.
     buffer = OrgSyncLogBuffer(

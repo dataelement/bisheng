@@ -15,6 +15,7 @@ from bisheng.api.v1.schemas import (
     SubscriptionConfig,
     ToolConfig,
     WorkstationConfig,
+    WSPrompt,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
@@ -92,6 +93,58 @@ class WorkStationService(BaseService):
         if models is not None:
             config.models = models
         return config
+
+    @classmethod
+    async def _abuild_default_daily_config(cls) -> WorkstationConfig:
+        """Return the historical daily-chat defaults when no workstation config exists."""
+        current_tenant_id = cls._current_tenant_id()
+        web_search_db = None
+        parent = None
+
+        try:
+            with strict_tenant_filter():
+                web_search_db = GptsToolsDao.get_tool_by_tool_key('web_search')
+        except Exception:
+            web_search_db = None
+
+        if web_search_db is None and cls._multi_tenant_enabled() and current_tenant_id != DEFAULT_TENANT_ID:
+            try:
+                await cls.acopy_root_builtin_tools_to_tenant(current_tenant_id)
+                with strict_tenant_filter():
+                    web_search_db = GptsToolsDao.get_tool_by_tool_key('web_search')
+            except Exception:
+                web_search_db = None
+
+        if web_search_db is not None:
+            try:
+                parent_types = GptsToolsDao.get_all_tool_type([web_search_db.type])
+                parent = parent_types[0] if parent_types else None
+            except Exception:
+                parent = None
+
+        tools = None
+        if web_search_db is not None:
+            tools = [ToolConfig(
+                id=web_search_db.type,
+                name=parent.name if parent else '联网搜索',
+                is_preset=parent.is_preset if parent else 1,
+                description=parent.description if parent else 'Search the internet for real-time information',
+                default_checked=True,
+                children=[{
+                    'id': web_search_db.id,
+                    'name': web_search_db.name,
+                    'tool_key': web_search_db.tool_key,
+                    'desc': web_search_db.desc,
+                }],
+            )]
+
+        return WorkstationConfig(
+            knowledgeBase=WSPrompt(enabled=True, prompt=''),
+            fileUpload=WSPrompt(enabled=True, prompt=''),
+            webSearch=WSPrompt(enabled=True, prompt=''),
+            tools=tools,
+            orgKbs=[],
+        )
 
     @classmethod
     def update_config(
@@ -535,6 +588,8 @@ class WorkStationService(BaseService):
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type('TenantConfigValue', (), {'value': value}) if value else None
         ret = cls.parse_config(config)
+        if ret is None:
+            ret = await cls._abuild_default_daily_config()
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
@@ -547,6 +602,8 @@ class WorkStationService(BaseService):
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type('TenantConfigValue', (), {'value': value}) if value else None
         ret = cls.parse_config(config)
+        if ret is None:
+            ret = await cls._abuild_default_daily_config()
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
@@ -568,6 +625,8 @@ class WorkStationService(BaseService):
         value, inherited, source_tenant_id, has_override = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type('TenantConfigValue', (), {'value': value}) if value else None
         ret = cls.parse_config(config)
+        if ret is None:
+            ret = await cls._abuild_default_daily_config()
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
