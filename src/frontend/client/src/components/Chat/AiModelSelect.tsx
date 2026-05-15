@@ -17,28 +17,41 @@ interface AiModelSelectProps {
 
 const AiModelSelect = memo(
     ({ options, value, disabled, onChange }: AiModelSelectProps) => {
+        // Dedup by model id — multiple LLM servers can expose the same model,
+        // which otherwise produces duplicate entries in the dropdown.
+        const uniqueOptions = useMemo(() => {
+            if (!options) return [];
+            const seen = new Set<string>();
+            return options.filter((opt) => {
+                const id = String(opt.id);
+                if (seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+        }, [options]);
+
         const label = useMemo(() => {
-            if (!options || options.length === 0 || value == null) return "";
-            const currentOpt = options.find(
+            if (uniqueOptions.length === 0 || value == null) return "";
+            const currentOpt = uniqueOptions.find(
                 (opt) => String(opt.id) === String(value)
             );
             return currentOpt?.displayName ?? "";
-        }, [options, value]);
+        }, [uniqueOptions, value]);
 
         // Auto-select first option when current value is invalid
         useEffect(() => {
-            if (!options || options.length === 0) return;
-            const hasCurrent = options.find(
+            if (uniqueOptions.length === 0) return;
+            const hasCurrent = uniqueOptions.find(
                 (opt) => String(opt.id) === String(value)
             );
             if (!hasCurrent) {
                 // Spec: default falls back to the "latest" configured model,
                 // which is the last entry in the admin-ordered list.
-                onChange(String(options[options.length - 1].id));
+                onChange(String(uniqueOptions[uniqueOptions.length - 1].id));
             } else {
                 onChange(hasCurrent.id);
             }
-        }, [options, value]);
+        }, [uniqueOptions, value]);
 
         return (
             <Select
@@ -54,8 +67,8 @@ const AiModelSelect = memo(
                     </div>
                 </SelectTrigger>
                 <SelectContent className="bg-white">
-                    {options?.map((opt) => (
-                        <SelectItem key={opt.key} value={opt.id + ""}>
+                    {uniqueOptions.map((opt) => (
+                        <SelectItem key={opt.id + ""} value={opt.id + ""}>
                             {opt.displayName}
                         </SelectItem>
                     ))}

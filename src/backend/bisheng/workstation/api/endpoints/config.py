@@ -38,6 +38,13 @@ async def get_config(request: Request, login_user=LoginUserDep):
         ret['shougang'] = {**shougang_raw, 'enabled': enabled}
     else:
         ret['shougang'] = None
+    # 知识空间目录树展示开关：透传给前端 sidebar (KnowledgeSpaceItem) 做门控。
+    # 缺省视为 true；中粮场内部署设 false 时只展示空间、不展开文件夹树。
+    ks_raw = (await bisheng_settings.aget_all_config()).get('knowledge_space', None)
+    tree_display = True
+    if isinstance(ks_raw, dict):
+        tree_display = bool(ks_raw.get('tree_structured_directory_display', True))
+    ret['knowledge_space'] = {'tree_structured_directory_display': tree_display}
     return resp_200(data=ret)
 
 
