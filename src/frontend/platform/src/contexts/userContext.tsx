@@ -1,6 +1,5 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { resolveRoutePermissions } from "@/routes";
-import { navigateBackOrFallback } from "@/utils/navigation";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
@@ -174,7 +173,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     variant: 'error',
                     description: i18next.t('menu.noAdminConsoleAccess'),
                 })
-                navigateBackOrFallback(getWorkspaceClientUrl('/'))
+                // Hard-navigate to the workspace client. Must NOT use history.back()
+                // here: under the SSO flow the previous history entry is the IdP /
+                // portal page, so "going back" silently re-triggers SSO and produces
+                // an infinite redirect loop for non-admin users. replace() also drops
+                // the un-usable platform URL from history.
+                window.location.replace(getWorkspaceClientUrl('/'))
                 return
             }
 

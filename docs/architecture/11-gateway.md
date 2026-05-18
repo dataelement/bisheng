@@ -186,7 +186,7 @@ sequenceDiagram
     Gateway->>SSO: POST userInfoUrl (Bearer access_token)
     SSO-->>Gateway: {user_name, ...}
 
-    Gateway->>Backend: POST /api/v1/user/sso {user_name}
+    Gateway->>Backend: POST /api/v1/internal/sso/login-sync {external_user_id, ...}
     Backend-->>Gateway: {access_token, refresh_token}
 
     Gateway-->>Browser: Set-Cookie: access_token_cookie=xxx + 302 → home
@@ -197,7 +197,7 @@ sequenceDiagram
 1. **前端获取登录方式**: `GET /api/oauth2/list` 根据 `CustomerConfig` 中配置的 SSO/微信/LDAP 返回可用登录入口
 2. **重定向到 SSO**: Gateway 构造 OAuth2 authorize URL（包含 client_id、redirect_uri、state），302 重定向浏览器
 3. **SSO 回调处理**: JustAuth 框架自动完成 code → access_token → user_info 的 OAuth2 标准流程
-4. **注册/登录 bisheng**: Gateway 调用 `BsClient.createUser()` → `POST /api/v1/user/sso` 将用户名传给后端，后端自动注册（不存在则创建）并返回 JWT
+4. **注册/登录 bisheng**: Gateway 调用新的 HMAC SSO 同步链路 → `POST /api/v1/internal/sso/login-sync`，将第三方稳定用户标识、部门信息与用户属性同步给后端，后端完成用户补齐/绑定并返回 JWT
 5. **写入 Cookie**: Gateway 将后端返回的 `access_token` 和 `refresh_token` 写入浏览器 Cookie，302 跳转首页
 
 ### 5.2 三种 SSO Provider
@@ -211,7 +211,7 @@ sequenceDiagram
 
 **自定义 SSO** (`AuthCustomSSORequest`): 继承 JustAuth 的 `AuthDefaultRequest`，可配置 4 个端点 URL（authorizeUrl, accessTokenUrl, userInfoUrl, refreshUrl），适配任意标准 OAuth2 Provider。通过 `CustomSsoConfig.userName` 字段指定从 userInfo 响应中提取用户名的 JSON 路径。
 
-**LDAP**: 不走 OAuth 流程，前端 POST 用户名和 RSA 加密密码，Gateway 解密后直接调用 `LdapUtil` 进行 LDAP bind 校验，成功后走同样的 `BsClient.createUser()` 注册登录流程。
+**LDAP**: 不走 OAuth 流程，前端 POST 用户名和 RSA 加密密码，Gateway 解密后直接调用 `LdapUtil` 进行 LDAP bind 校验，成功后走同样的 `login-sync` 登录同步流程。
 
 ### 5.3 密码加密
 
@@ -308,8 +308,8 @@ PathRateGlobalFilter → Backend → 响应       响应 → 返回浏览器
 ```java
 @HttpExchange(url = "/api", accept = "application/json", contentType = "application/json")
 public interface BsClient {
-    @PostExchange("/v1/user/sso")        // SSO 用户注册/登录
-    Flux<String> createUser(@RequestBody Map<String, String> body);
+    @PostExchange("/v1/internal/sso/login-sync")        // SSO 用户同步登录
+    Flux<String> loginSync(@RequestBody LoginSyncRequest body);
 
     @GetExchange("/v1/user/info")        // 获取用户信息
     Flux<String> info(@RequestHeader("Cookie") String cookie);
@@ -320,8 +320,8 @@ public interface BsClient {
     @GetExchange("/v1/group/get_group_resources")  // 获取组资源
     Mono<String> resourceList(...);
 
-    @PostExchange("/v2/group/sync")      // 同步企业微信组织结构
-    Flux<String> syncUsers(@RequestBody List<Department> tree);
+    @PostExchange("/v1/internal/sso/gateway-wecom-org-sync")      // 企微部门+成员整批同步
+    Flux<String> syncUsers(@RequestBody GatewayWecomOrgSyncRequest body);
 }
 ```
 
@@ -329,10 +329,10 @@ public interface BsClient {
 
 | 场景 | Gateway 调用 | Backend 端点 | 说明 |
 |------|-------------|-------------|------|
-| SSO 登录 | `BsClient.createUser({user_name})` | `POST /api/v1/user/sso` | 自动注册/登录，返回 JWT |
+| SSO 登录 | `BsClient.loginSync(LoginSyncRequest)` | `POST /api/v1/internal/sso/login-sync` | 同步用户/部门信息后登录，返回 JWT |
 | 用户信息查询 | `BsClient.info(cookie)` | `GET /api/v1/user/info` | 验证用户身份 |
 | 组列表同步 | `BsClient.userGroupList()` | `GET /api/v1/group/list` | Gateway 管理界面展示 |
-| 企业微信同步 | `BsClient.syncUsers(tree)` | `POST /api/v2/group/sync` | 部门+用户树同步 |
+| 企业微信同步 | `BsClient.syncUsers(GatewayWecomOrgSyncRequest)` | `POST /api/v1/internal/sso/gateway-wecom-org-sync` | 部门+成员整批同步 |
 
 ### 8.3 缓存同步
 
