@@ -67,7 +67,7 @@ class RedisCallback(BaseCallback):
         def replace_param(one_params: List[Dict], one_node_id: str):
             for param in one_params:
                 param_key = param.get('key')
-                if param_key not in override[node_id]:
+                if param_key not in override[one_node_id]:
                     continue
                 param['value'] = override[one_node_id][param_key]
 
