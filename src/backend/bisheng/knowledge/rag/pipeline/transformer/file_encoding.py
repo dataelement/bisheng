@@ -10,6 +10,7 @@ import asyncio
 import re
 import threading
 from datetime import datetime
+from dataclasses import dataclass
 from typing import Any, Sequence
 
 from langchain_core.documents import BaseDocumentTransformer, Document
@@ -151,20 +152,30 @@ CLASSIFY_PROMPT = """# 角色
 - 不要输出多余文字
 - 输出格式必须严格为: 文档类型编码-业务域编码, 例如: RPT-PP"""
 
-VALID_PATTERN = re.compile(
+VALID_PATTERN_TEXT = (
     r'^(POL|STD|PRO|SPC|RPT|CAS|DGN|PAT|TRN|NEW)-'
     r'(PP|QM|PM|EM|SA|EN|IM|RD|MM|SD|FI|HR|IT|AD)$'
 )
+VALID_PATTERN = re.compile(VALID_PATTERN_TEXT)
 DEFAULT_COMPANY_CODE = "SGGF"
 FALLBACK = "STD-PP"
 SEQ_CAP = 99999999
+DEFAULT_USER_CONTENT_TEMPLATE = "标题: {file_name}\n摘要: {abstract}"
+
+
+@dataclass(frozen=True)
+class FileEncodingRuntimeConfig:
+    classify_prompt: str
+    user_content_template: str
+    valid_pattern: re.Pattern
+    fallback_code: str
+    seq_cap: int
 
 
 class FileEncodingTransformer(BaseDocumentTransformer):
     """Generate file_encoding using LLM classification + monthly sequence.
 
-    Skips when shougang is disabled or knowledge_file already has an encoding
-    (idempotent for retries).
+    Skips when knowledge_file already has an encoding (idempotent for retries).
     """
 
     def __init__(self, invoke_user_id: int, knowledge_file: KnowledgeFile) -> None:
@@ -190,14 +201,15 @@ class FileEncodingTransformer(BaseDocumentTransformer):
 
     async def _do_work(self) -> None:
         shougang_conf = await bisheng_settings.aget_shougang_conf()
+        encoding_config = self._resolve_encoding_config(shougang_conf)
         company_code = self._resolve_company_code(shougang_conf)
 
         if self.knowledge_file.file_encoding:
             return
 
         try:
-            type_business_code = await self._classify_with_llm()
-            seq = await self._compute_seq()
+            type_business_code = await self._classify_with_llm(encoding_config)
+            seq = await self._compute_seq(encoding_config.seq_cap)
             self.knowledge_file.file_encoding = self._compose_encoding(
                 company_code, type_business_code,
                 self.knowledge_file.create_time, seq,
@@ -211,9 +223,9 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             # Fallback: even if LLM fails entirely, attempt to write a fallback
             # encoding as long as the sequence number can be computed.
             try:
-                seq = await self._compute_seq()
+                seq = await self._compute_seq(encoding_config.seq_cap)
                 self.knowledge_file.file_encoding = self._compose_encoding(
-                    company_code, FALLBACK,
+                    company_code, encoding_config.fallback_code,
                     self.knowledge_file.create_time, seq,
                 )
                 logger.warning(
@@ -226,7 +238,8 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                     f"abandoned: outer={e} inner={inner}"
                 )
 
-    async def _classify_with_llm(self) -> str:
+    async def _classify_with_llm(self, encoding_config: FileEncodingRuntimeConfig | None = None) -> str:
+        encoding_config = encoding_config or self._resolve_encoding_config(None)
         try:
             from bisheng.llm.domain.services.llm import LLMService
 
@@ -243,7 +256,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                     f"[shougang.encoding] file_id={self.knowledge_file.id} "
                     f"fallback: chat_title_llm_unset"
                 )
-                return FALLBACK
+                return encoding_config.fallback_code
 
             llm = await LLMService.get_bisheng_llm(
                 model_id=llm_conf.chat_title_llm.id,
@@ -253,29 +266,125 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                 user_id=self.invoke_user_id,
             )
 
-            content = (
-                f"标题: {self.knowledge_file.file_name}\n"
-                f"摘要: {self.knowledge_file.abstract or ''}"
-            )
-            response = await llm.ainvoke([
-                {"role": "system", "content": CLASSIFY_PROMPT},
-                {"role": "user", "content": content},
-            ])
+            response = await llm.ainvoke(self._build_classify_messages(encoding_config))
             result = (response.content or "").strip()
 
-            if VALID_PATTERN.match(result):
+            if encoding_config.valid_pattern.match(result):
                 return result
             logger.warning(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
                 f"fallback: invalid_format raw={result!r}"
             )
-            return FALLBACK
+            return encoding_config.fallback_code
         except Exception as e:
             logger.warning(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
                 f"fallback: llm_error {e}"
             )
-            return FALLBACK
+            return encoding_config.fallback_code
+
+    def _resolve_encoding_config(self, shougang_conf: Any) -> FileEncodingRuntimeConfig:
+        raw_config = getattr(shougang_conf, 'file_encoding', None) if shougang_conf is not None else None
+        classify_prompt = self._resolve_nonempty_str(
+            raw_config, 'classify_prompt', CLASSIFY_PROMPT,
+        )
+        user_content_template = self._resolve_user_content_template(raw_config)
+        valid_pattern = self._resolve_valid_pattern(raw_config)
+        fallback_code = self._resolve_fallback_code(raw_config, valid_pattern)
+        seq_cap = self._resolve_seq_cap(raw_config)
+        return FileEncodingRuntimeConfig(
+            classify_prompt=classify_prompt,
+            user_content_template=user_content_template,
+            valid_pattern=valid_pattern,
+            fallback_code=fallback_code,
+            seq_cap=seq_cap,
+        )
+
+    def _build_classify_messages(self, encoding_config: FileEncodingRuntimeConfig) -> list[dict[str, str]]:
+        return [
+            {"role": "system", "content": encoding_config.classify_prompt},
+            {"role": "user", "content": self._format_user_content(encoding_config.user_content_template)},
+        ]
+
+    def _format_user_content(self, template: str) -> str:
+        file_name = self.knowledge_file.file_name or ''
+        abstract = self.knowledge_file.abstract or ''
+        try:
+            return template.format(file_name=file_name, abstract=abstract)
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"invalid user_content_template, fallback to default: {e}"
+            )
+            return DEFAULT_USER_CONTENT_TEMPLATE.format(file_name=file_name, abstract=abstract)
+
+    def _resolve_user_content_template(self, raw_config: Any) -> str:
+        template = self._resolve_nonempty_str(
+            raw_config, 'user_content_template', DEFAULT_USER_CONTENT_TEMPLATE,
+        )
+        try:
+            template.format(file_name='', abstract='')
+            return template
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"invalid user_content_template config, fallback to default: {e}"
+            )
+            return DEFAULT_USER_CONTENT_TEMPLATE
+
+    def _resolve_valid_pattern(self, raw_config: Any) -> re.Pattern:
+        pattern_text = self._get_config_value(raw_config, 'valid_pattern')
+        if not isinstance(pattern_text, str) or not pattern_text.strip():
+            return VALID_PATTERN
+        try:
+            return re.compile(pattern_text.strip())
+        except re.error as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"invalid valid_pattern config, fallback to default: {e}"
+            )
+            return VALID_PATTERN
+
+    def _resolve_fallback_code(self, raw_config: Any, valid_pattern: re.Pattern) -> str:
+        fallback_code = self._get_config_value(raw_config, 'fallback_code')
+        if isinstance(fallback_code, str) and fallback_code.strip():
+            fallback_code = fallback_code.strip()
+            if valid_pattern.match(fallback_code):
+                return fallback_code
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"invalid fallback_code config, fallback to default: {fallback_code!r}"
+            )
+        return FALLBACK
+
+    def _resolve_seq_cap(self, raw_config: Any) -> int:
+        seq_cap = self._get_config_value(raw_config, 'seq_cap')
+        try:
+            seq_cap = int(seq_cap)
+        except (TypeError, ValueError):
+            return SEQ_CAP
+        if seq_cap > 0:
+            return seq_cap
+        logger.warning(
+            f"[shougang.encoding] file_id={self.knowledge_file.id} "
+            f"invalid seq_cap config, fallback to default: {seq_cap!r}"
+        )
+        return SEQ_CAP
+
+    @classmethod
+    def _resolve_nonempty_str(cls, raw_config: Any, key: str, default: str) -> str:
+        value = cls._get_config_value(raw_config, key)
+        if isinstance(value, str) and value.strip():
+            return value
+        return default
+
+    @staticmethod
+    def _get_config_value(raw_config: Any, key: str) -> Any:
+        if raw_config is None:
+            return None
+        if isinstance(raw_config, dict):
+            return raw_config.get(key)
+        return getattr(raw_config, key, None)
 
     def _month_window(self) -> tuple[datetime, datetime]:
         ct = self.knowledge_file.create_time
@@ -286,7 +395,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             end = start.replace(month=start.month + 1)
         return start, end
 
-    async def _compute_seq(self) -> int:
+    async def _compute_seq(self, seq_cap: int = SEQ_CAP) -> int:
         start, end = self._month_window()
         async with get_async_db_session() as session:
             count = await session.scalar(
@@ -304,14 +413,14 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                     ),
                 )
             )
-        return self._cap_seq(count or 0)
+        return self._cap_seq(count or 0, seq_cap=seq_cap)
 
     @staticmethod
-    def _cap_seq(count: int) -> int:
+    def _cap_seq(count: int, seq_cap: int = SEQ_CAP) -> int:
         if count < 1:
             return 1
-        if count > SEQ_CAP:
-            return SEQ_CAP
+        if count > seq_cap:
+            return seq_cap
         return count
 
     @staticmethod

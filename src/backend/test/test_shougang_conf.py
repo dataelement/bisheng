@@ -43,6 +43,12 @@ def test_shougang_conf_accepts_unused_fields():
     assert conf.portal_admin_url == "/portal-admin/"
 
 
+def test_shougang_conf_ignores_invalid_file_encoding_block():
+    conf = ShougangConf(prefix="GF", file_encoding=None)
+    assert conf.enabled is True
+    assert conf.prefix == "GF"
+
+
 @pytest.mark.asyncio
 async def test_aget_shougang_conf_returns_default_when_block_missing():
     with patch.object(ConfigService, "aget_all_config", AsyncMock(return_value={})):

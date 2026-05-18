@@ -2,7 +2,7 @@ import ast
 import json
 import os
 import re
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from celery.schedules import crontab
 from cryptography.fernet import Fernet
@@ -296,6 +296,14 @@ class DailyChatConf(BaseModel):
         return n if n > 0 else 8000
 
 
+class ShougangFileEncodingConf(BaseModel):
+    classify_prompt: Optional[Any] = Field(default=None)
+    user_content_template: Optional[Any] = Field(default=None)
+    valid_pattern: Optional[Any] = Field(default=None)
+    fallback_code: Optional[Any] = Field(default=None)
+    seq_cap: Optional[Any] = Field(default=None)
+
+
 class ShougangConf(BaseModel):
     """ Shougang (首钢) deployment-specific configuration.
 
@@ -310,10 +318,20 @@ class ShougangConf(BaseModel):
     # consumed by the file-encoding pipeline. Kept here so the model accepts them.
     deployment_label: Optional[str] = Field(default=None)
     portal_admin_url: Optional[str] = Field(default=None)
+    file_encoding: ShougangFileEncodingConf = Field(default_factory=ShougangFileEncodingConf)
 
     @property
     def enabled(self) -> bool:
         return bool(self.prefix and self.prefix.strip())
+
+    @field_validator('file_encoding', mode='before')
+    @classmethod
+    def _coerce_file_encoding(cls, v):
+        if v is None:
+            return {}
+        if isinstance(v, (dict, ShougangFileEncodingConf)):
+            return v
+        return {}
 
 
 class CookieConf(BaseModel):
