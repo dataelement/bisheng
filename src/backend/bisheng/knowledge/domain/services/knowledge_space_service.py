@@ -22,7 +22,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceSubscribePrivateError, SpaceSubscribeLimitError,
     SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
     SpaceInvalidLevelError, SpaceInvalidScopeOwnerError, SpaceCreatePublicDeniedError, SpaceCreateDepartmentDeniedError,
-    SpaceCreateTeamDeniedError,
+    SpaceCreateTeamDeniedError, SpaceNameDuplicateError,
 )
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.utils import util as common_util
@@ -422,6 +422,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_id=owner_id,
             created_by=int(self.login_user.user_id),
         )
+
+    async def _ensure_space_name_unique_in_scope(
+        self,
+        *,
+        name: str,
+        level: KnowledgeSpaceLevelEnum,
+        owner_type: KnowledgeSpaceOwnerTypeEnum,
+        owner_id: int,
+        exclude_id: Optional[int] = None,
+        tenant_id: Optional[int] = None,
+    ) -> None:
+        existing_space = await KnowledgeDao.async_get_space_by_scope_name(
+            tenant_id=int(tenant_id or self.login_user.tenant_id),
+            level=level,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            name=name,
+            exclude_id=exclude_id,
+        )
+        if existing_space:
+            raise SpaceNameDuplicateError()
 
     async def _grant_default_scope_permissions(
         self,
@@ -1536,6 +1557,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_level=space_level,
             department_id=department_id,
             user_group_id=user_group_id,
+        )
+        await self._ensure_space_name_unique_in_scope(
+            name=name,
+            level=level,
+            owner_type=owner_type,
+            owner_id=owner_id,
         )
 
         db_knowledge = Knowledge(
@@ -2845,6 +2872,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         old_auth_type = space.auth_type
 
+        if name is not None and name != space.name:
+            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+            if scope is None:
+                raise SpaceInvalidScopeOwnerError(msg='Knowledge space scope does not exist')
+            await self._ensure_space_name_unique_in_scope(
+                name=name,
+                level=scope.level,
+                owner_type=scope.owner_type,
+                owner_id=int(scope.owner_id),
+                exclude_id=space_id,
+                tenant_id=int(scope.tenant_id or space.tenant_id or self.login_user.tenant_id),
+            )
         if name is not None:
             space.name = name
         if description is not None:

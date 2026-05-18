@@ -46,6 +46,7 @@ def _install_service_stubs() -> None:
         schemas_module.KnowledgeFileOne = _DummySchema
         schemas_module.FileProcessBase = _DummySchema
         schemas_module.ExcelRule = _DummySchema
+        schemas_module.WSModel = _DummySchema
         sys.modules['bisheng.api.v1.schemas'] = schemas_module
 
     if 'bisheng.api.services' not in sys.modules:
@@ -132,6 +133,17 @@ def _install_service_stubs() -> None:
 
         knowledge_utils_module.KnowledgeUtils = _DummyKnowledgeUtils
         sys.modules['bisheng.knowledge.domain.services.knowledge_utils'] = knowledge_utils_module
+
+    if 'bisheng.llm.domain' not in sys.modules:
+        llm_domain_module = ModuleType('bisheng.llm.domain')
+
+        class _DummyLLMService:
+            @staticmethod
+            async def get_workbench_llm(*args, **kwargs):
+                return None
+
+        llm_domain_module.LLMService = _DummyLLMService
+        sys.modules['bisheng.llm.domain'] = llm_domain_module
 
     if 'bisheng.worker' not in sys.modules:
         worker_module = ModuleType('bisheng.worker')

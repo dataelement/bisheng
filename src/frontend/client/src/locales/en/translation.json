@@ -1314,6 +1314,7 @@
     "17015": "Corresponding operator configuration not found",
     "18000": "Knowledge Space does not exist",
     "18001": "You can create a maximum of 200 Knowledge Spaces",
+    "18003": "Knowledge space name already exists",
     "18010": "Folder does not exist",
     "18011": "Directory depth cannot exceed 10 levels",
     "18012": "Folder name already exists in this directory",

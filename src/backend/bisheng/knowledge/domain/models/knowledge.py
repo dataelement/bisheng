@@ -587,6 +587,41 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).first()
 
     @classmethod
+    async def async_get_space_by_scope_name(
+            cls,
+            *,
+            tenant_id: int,
+            level: Any,
+            owner_type: Any,
+            owner_id: int,
+            name: str,
+            exclude_id: Optional[int] = None) -> Optional[Knowledge]:
+        """Query a knowledge space by its scoped display name."""
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScope
+
+        level_value = getattr(level, 'value', level)
+        owner_type_value = getattr(owner_type, 'value', owner_type)
+        statement = (
+            select(Knowledge)
+            .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+            .where(
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.tenant_id == int(tenant_id),
+                Knowledge.name == name,
+                KnowledgeSpaceScope.tenant_id == int(tenant_id),
+                KnowledgeSpaceScope.level == str(level_value),
+                KnowledgeSpaceScope.owner_type == str(owner_type_value),
+                KnowledgeSpaceScope.owner_id == int(owner_id),
+            )
+            .limit(1)
+        )
+        if exclude_id is not None:
+            statement = statement.where(Knowledge.id != int(exclude_id))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
         """
         Delete or empty the knowledge base

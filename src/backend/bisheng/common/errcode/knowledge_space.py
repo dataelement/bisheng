@@ -17,6 +17,11 @@ class DepartmentKnowledgeSpaceExistsError(BaseErrorCode):
     Msg: str = 'Department knowledge space already exists'
 
 
+class SpaceNameDuplicateError(BaseErrorCode):
+    Code: int = 18003
+    Msg: str = '知识空间名称已存在'
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = 'Folder does not exist'
