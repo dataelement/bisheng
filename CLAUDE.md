@@ -59,6 +59,15 @@ Vite 5 + React 18 + TypeScript + TailwindCSS 3 + Radix UI + **Zustand** + **reac
 ## Backend (`src/backend/`)
 
 - Python ≥ 3.10, managed by `uv` (lockfile `uv.lock`).
+- New backend features must remain compatible with both **MySQL** and **DaMeng (DM8)**. Do not assume MySQL is the only production database.
+- Prefer the layered path `api -> service -> repository -> database`. New backend features should introduce/use a repository layer instead of calling DAO/database helpers directly from service or endpoint code.
+- DAO-style access is a legacy compatibility layer and should be phased out gradually. Do not expand DAO usage for new business flows unless you are only adapting existing legacy code in place.
+- For structured JSON-like fields, use `bisheng.core.database.dialect_helpers.JsonType`. For large text, use `LargeText`. For `update_time`, use `UPDATE_TIME_SERVER_DEFAULT`.
+- Do not introduce raw MySQL-only model or migration patterns such as direct `JSON`, `LONGTEXT`, or handwritten `ON UPDATE CURRENT_TIMESTAMP` when an existing dialect helper already covers the case.
+- Do not rely on MySQL-only SQL such as `JSON_EXTRACT`, `JSON_UNQUOTE`, `JSON_CONTAINS`, `JSON_SEARCH`, `information_schema`, or `DATABASE()` unless you also provide and test a DaMeng-compatible branch.
+- For searchable / filterable business fields, prefer explicit relational columns over querying JSON/CLOB snapshots.
+- New backend specs and tasks must explicitly mention MySQL + DaMeng compatibility whenever they add tables, migrations, or dialect-sensitive queries.
+- New backend tests should be organized by module under `src/backend/test/<module>/...` instead of piling new files into `src/backend/test/` root. Only keep root-level tests for true cross-module or legacy cases.
 ---
 
 ## Skills
