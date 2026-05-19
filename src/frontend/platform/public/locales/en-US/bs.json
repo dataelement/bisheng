@@ -130,6 +130,7 @@
     "workbench1": "Subscribe",
     "workbench2": "Knowledge Space",
     "annotation": "Annotation",
+    "approval": "Approval",
     "models": "Models",
     "system": "System",
     "log": "Logs",
@@ -1266,7 +1267,8 @@
       "knowledgeSpace": "Knowledge Space",
       "knowledge_space": "Knowledge Space",
       "tenant": "Tenant Management",
-      "llm": "Model Management"
+      "llm": "Model Management",
+      "approval": "Approval Management"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1325,7 +1327,12 @@
       "tenantDisable": "Disable Child Tenant",
       "llmServerCreate": "Create Model Provider",
       "llmServerUpdate": "Update Model Provider",
-      "llmServerDelete": "Delete Model Provider"
+      "llmServerDelete": "Delete Model Provider",
+      "approvalScenarioCreate": "Create Approval Scenario",
+      "approvalTaskApprove": "Approve Task",
+      "approvalTaskReject": "Reject Task",
+      "approvalInstanceWithdraw": "Withdraw Approval Request",
+      "approvalExceptionRetry": "Retry Approval Exception"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -2204,6 +2211,36 @@
     "autoDistributeLabel": "Auto-distribute Root-shared resources",
     "autoDistributeHint": "When OFF, this Child starts with NO Root-shared resources visible; super admin must open each share individually.",
     "previewTitle": "Resources that will become visible"
+  },
+  "approvalPage": {
+    "title": "Approval Management",
+    "subtitle": "Review approval scenarios, route branches, and exception queues in one place for the Client approval module.",
+    "presetTitle": "Scenario Presets",
+    "presetDesc": "Create tenant scenarios from built-in presets, then continue with route and node configuration.",
+    "presetSelect": "Select a preset",
+    "createScenario": "Create Scenario",
+    "handlerKey": "Handler",
+    "conditionFields": "Condition fields",
+    "approverSources": "Approver sources",
+    "exceptionTitle": "Exception Queue",
+    "exceptionDesc": "Handle route_missing, approver_empty, scenario_disabled, and similar exceptions centrally.",
+    "scenarioTitle": "Scenarios",
+    "scenarioDesc": "Approval scenarios enabled or pending configuration for this tenant.",
+    "routeTitle": "Route Branches",
+    "routeDesc": "Route list for the selected scenario. Node editing can continue from here.",
+    "retryAction": "Retry",
+    "routeFallback": "Route",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "emptyScenarios": "No approval scenarios yet",
+    "emptyRoutes": "No routes configured for this scenario",
+    "emptyExceptions": "No pending approval exceptions",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load approval management data",
+    "createSuccess": "Approval scenario created",
+    "createFailed": "Failed to create approval scenario",
+    "retrySuccess": "Exception retry triggered",
+    "retryFailed": "Failed to retry exception"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

@@ -124,6 +124,7 @@
     "knowledge": "知  識",
     "evaluation": "評  価",
     "annotation": "注  釈",
+    "approval": "承  認",
     "board": "統  計",
     "workbenchHome": "ホーム",
     "workbenchApps": "アプリ",
@@ -1249,7 +1250,8 @@
       "knowledgeSpace": "ナレッジスペース",
       "knowledge_space": "ナレッジスペース",
       "tenant": "テナント管理",
-      "llm": "モデル管理"
+      "llm": "モデル管理",
+      "approval": "承認管理"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1308,7 +1310,12 @@
       "tenantDisable": "子テナントを停止",
       "llmServerCreate": "モデルプロバイダ作成",
       "llmServerUpdate": "モデルプロバイダ更新",
-      "llmServerDelete": "モデルプロバイダ削除"
+      "llmServerDelete": "モデルプロバイダ削除",
+      "approvalScenarioCreate": "承認シナリオを作成",
+      "approvalTaskApprove": "承認タスクを承認",
+      "approvalTaskReject": "承認タスクを却下",
+      "approvalInstanceWithdraw": "承認申請を撤回",
+      "approvalExceptionRetry": "承認例外を再試行"
     },
     "objectTypeEnum": {
       "none": "なし",
@@ -2154,5 +2161,35 @@
     "autoDistributeLabel": "Root 共有リソースを自動配布",
     "autoDistributeHint": "無効にすると、この子会社は Root の共有リソースを初期状態で閲覧できません。スーパー管理者が各リソースを個別に開く必要があります。",
     "previewTitle": "自動共有されるリソース"
+  },
+  "approvalPage": {
+    "title": "承認管理",
+    "subtitle": "Client 側の承認モジュール向けに、承認シナリオ、条件分岐、例外フローを一元管理します。",
+    "presetTitle": "シナリオプリセット",
+    "presetDesc": "内蔵プリセットからテナント用シナリオを作成し、その後に分岐やノード設定を進めます。",
+    "presetSelect": "プリセットを選択",
+    "createScenario": "シナリオを作成",
+    "handlerKey": "ハンドラー",
+    "conditionFields": "条件フィールド",
+    "approverSources": "承認者ソース",
+    "exceptionTitle": "例外フロー",
+    "exceptionDesc": "route_missing、approver_empty、scenario_disabled などの例外を集中処理します。",
+    "scenarioTitle": "承認シナリオ",
+    "scenarioDesc": "このテナントで有効化済み、または設定待ちの承認シナリオです。",
+    "routeTitle": "条件分岐",
+    "routeDesc": "選択中シナリオの分岐一覧です。ノード編集はこの画面を起点に後続で追加できます。",
+    "retryAction": "再試行",
+    "routeFallback": "分岐",
+    "enabled": "有効",
+    "disabled": "無効",
+    "emptyScenarios": "承認シナリオはまだありません",
+    "emptyRoutes": "このシナリオにはまだ条件分岐がありません",
+    "emptyExceptions": "処理待ちの例外フローはありません",
+    "loading": "読み込み中...",
+    "loadFailed": "承認管理データの読み込みに失敗しました",
+    "createSuccess": "承認シナリオを作成しました",
+    "createFailed": "承認シナリオの作成に失敗しました",
+    "retrySuccess": "例外フローの再試行を開始しました",
+    "retryFailed": "例外フローの再試行に失敗しました"
   }
 }

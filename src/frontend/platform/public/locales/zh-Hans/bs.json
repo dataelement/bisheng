@@ -130,6 +130,7 @@
     "workbench1": "订阅",
     "workbench2": "知识空间",
     "annotation": "标  注",
+    "approval": "审  批",
     "models": "模  型",
     "system": "系  统",
     "log": "审  计",
@@ -258,6 +259,7 @@
     "menuPermissionHint": "关闭「管理后台」后，其下各业务菜单将不可用；关闭「工作台」则用户无法从入口进入工作台。",
     "menuApprovalMode": "显示未授权菜单（支持申请）",
     "menuApprovalModeHint": "开启后，未授权的菜单入口依然可见，用户可发起权限申请；关闭则自动隐藏所有无权限的菜单。",
+    "approvalEntryHint": "审批流程配置、异常处理与站内信联动统一在“审批”模块维护。",
     "roleMenuLoading": "正在加载该角色的菜单权限…",
     "roleMenuLoadFailed": "角色菜单权限加载失败，当前不允许保存，请重试后再编辑。",
     "workbenchEntry": "工作台入口",
@@ -1248,7 +1250,8 @@
       "knowledgeSpace": "知识空间",
       "knowledge_space": "知识空间",
       "tenant": "租户管理",
-      "llm": "模型管理"
+      "llm": "模型管理",
+      "approval": "审批管理"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1307,7 +1310,12 @@
       "tenantDisable": "禁用子租户",
       "llmServerCreate": "新建模型供应方",
       "llmServerUpdate": "更新模型供应方",
-      "llmServerDelete": "删除模型供应方"
+      "llmServerDelete": "删除模型供应方",
+      "approvalScenarioCreate": "创建审批场景",
+      "approvalTaskApprove": "审批通过",
+      "approvalTaskReject": "审批拒绝",
+      "approvalInstanceWithdraw": "撤回审批申请",
+      "approvalExceptionRetry": "重试异常流程"
     },
     "objectTypeEnum": {
       "none": "无",
@@ -2153,5 +2161,35 @@
     "autoDistributeLabel": "自动分发 Root 共享资源",
     "autoDistributeHint": "关闭后，本子公司初始无法看到任何 Root 共享资源；全局超管需逐个资源手工开启共享。",
     "previewTitle": "将自动共享的资源"
+  },
+  "approvalPage": {
+    "title": "审批管理",
+    "subtitle": "统一查看审批场景、条件路由和异常流程，作为 Client 前台审批模块的后台配置中心。",
+    "presetTitle": "场景预设",
+    "presetDesc": "先从内置预设创建审批场景，再补充条件分支和流程节点。",
+    "presetSelect": "选择预设场景",
+    "createScenario": "创建场景",
+    "handlerKey": "处理器",
+    "conditionFields": "条件字段",
+    "approverSources": "审批人来源",
+    "exceptionTitle": "异常流程",
+    "exceptionDesc": "集中处理 route_missing、approver_empty、scenario_disabled 等异常实例。",
+    "scenarioTitle": "审批场景",
+    "scenarioDesc": "当前租户已启用或待配置的审批场景。",
+    "routeTitle": "条件分支",
+    "routeDesc": "当前场景下的路由列表。后续可继续补充节点和分支编辑能力。",
+    "retryAction": "重试",
+    "routeFallback": "流程分支",
+    "enabled": "启用",
+    "disabled": "未启用",
+    "emptyScenarios": "当前还没有审批场景",
+    "emptyRoutes": "当前场景还没有配置条件分支",
+    "emptyExceptions": "当前没有待处理异常流程",
+    "loading": "加载中...",
+    "loadFailed": "审批管理数据加载失败",
+    "createSuccess": "审批场景已创建",
+    "createFailed": "审批场景创建失败",
+    "retrySuccess": "异常流程已触发重试",
+    "retryFailed": "异常流程重试失败"
   }
 }

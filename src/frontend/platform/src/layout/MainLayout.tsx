@@ -18,7 +18,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
-import { Check, ChevronDown, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
+import { Check, ChevronDown, FileClock, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -215,6 +215,12 @@ export default function MainLayout() {
                             showAdminNav('log') &&
                             <NavLink to={isMenu('log') ? '/log' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.log')}</span>
+                            </NavLink>
+                        }
+                        {
+                            showAdminNav('sys') &&
+                            <NavLink to={isMenu('sys') ? '/approval' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <FileClock className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.approval')}</span>
                             </NavLink>
                         }
                         {
