@@ -15,6 +15,7 @@ from typing_extensions import Self
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
+from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.group import GroupDao
@@ -28,10 +29,15 @@ from ..models.user_role import UserRoleDao
 logger = logging.getLogger(__name__)
 
 # 部门管理员：工作台 + 管理后台全量菜单（含路由用的 sys、仅 UI 的 log/system_config）
-_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
-    {e.value for e in WebMenuResource}
-    | {'log', 'system_config', 'sys'}
-)
+_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset({
+    'workstation', 'admin',
+    'build', 'create_app', 'knowledge', 'create_knowledge',
+    'knowledge_space', 'model', 'tool', 'mcp', 'channel',
+    'evaluation', 'dataset', 'mark_task', 'board', 'subscription',
+    'home', 'apps',
+    'frontend', 'backend', 'create_dashboard',
+    'log', 'system_config', 'sys',
+})
 
 # 角色管理 UI：一级「工作台 / 管理后台」关闭时，二级项仍存库但不应对用户生效（与 Roles.tsx 一致）
 _WORKBENCH_ENTRY_KEYS = frozenset({'workstation', 'frontend'})
@@ -46,14 +52,19 @@ _ROLE_UI_ADMIN_CHILDREN = frozenset({
 
 # 登录校验：任一侧有「可生效」菜单即允许（含仅一级 workstation/admin，供需审批模式）
 _WEB_MENU_WORKBENCH_ALL = frozenset({
-    WebMenuResource.WORKSTATION.value,
-    WebMenuResource.FRONTEND.value,
-    WebMenuResource.HOME.value,
-    WebMenuResource.APPS.value,
-    WebMenuResource.SUBSCRIPTION.value,
-    WebMenuResource.KNOWLEDGE_SPACE.value,
+    'workstation',
+    'frontend',
+    'home',
+    'apps',
+    'subscription',
+    'knowledge_space',
 })
-_WEB_MENU_ADMIN_ALL = frozenset(e.value for e in WebMenuResource) - _WEB_MENU_WORKBENCH_ALL
+_WEB_MENU_ADMIN_ALL = frozenset({
+    'admin', 'backend',
+    'build', 'create_app', 'knowledge', 'create_knowledge',
+    'model', 'tool', 'mcp', 'channel',
+    'evaluation', 'dataset', 'mark_task', 'board', 'create_dashboard',
+})
 
 
 def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
@@ -618,6 +629,11 @@ class LoginUser(BaseModel):
             # AC-13: union of all roles' menu permissions
             web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
             web_menu = list({one.third_id for one in web_menu})
+            personal_menu = await UserMenuAccessService.list_effective_menu_grants(
+                user.tenant_id or DEFAULT_TENANT_ID,
+                user.user_id,
+            )
+            web_menu = list(set(web_menu) | set(personal_menu))
             if is_department_admin:
                 web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_FULL))
             else:

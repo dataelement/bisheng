@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from "@/test/test-utils";
-import { DepartmentKnowledgeSpaceApprovalDialog } from "@/pages/BuildPage/bench/DepartmentKnowledgeSpaceApprovalDialog";
 import { DepartmentKnowledgeSpaceManagerDialog } from "@/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog";
 import KnowledgeSpace from "@/pages/BuildPage/bench/KnowledgeSpace";
 import { userContext } from "@/contexts/userContext";
@@ -54,8 +53,6 @@ vi.mock("@/controllers/API/department", () => ({
 vi.mock("@/controllers/API/departmentKnowledgeSpace", () => ({
   batchCreateDepartmentKnowledgeSpacesApi: vi.fn(),
   getDepartmentKnowledgeSpacesApi: vi.fn(),
-  getDepartmentKnowledgeSpaceApprovalSettingsApi: vi.fn(),
-  updateDepartmentKnowledgeSpaceApprovalSettingsApi: vi.fn(),
 }));
 
 vi.mock("@/controllers/API", () => ({
@@ -65,15 +62,11 @@ vi.mock("@/controllers/API", () => ({
 
 import { getKnowledgeConfigApi } from "@/controllers/API";
 import { getDepartmentTreeApi } from "@/controllers/API/department";
-import {
-  getDepartmentKnowledgeSpaceApprovalSettingsApi,
-  getDepartmentKnowledgeSpacesApi,
-} from "@/controllers/API/departmentKnowledgeSpace";
+import { getDepartmentKnowledgeSpacesApi } from "@/controllers/API/departmentKnowledgeSpace";
 
 const mockedGetKnowledgeConfigApi = vi.mocked(getKnowledgeConfigApi);
 const mockedGetDepartmentTreeApi = vi.mocked(getDepartmentTreeApi);
 const mockedGetDepartmentKnowledgeSpacesApi = vi.mocked(getDepartmentKnowledgeSpacesApi);
-const mockedGetDepartmentKnowledgeSpaceApprovalSettingsApi = vi.mocked(getDepartmentKnowledgeSpaceApprovalSettingsApi);
 
 describe("department knowledge space dialogs", () => {
   beforeEach(() => {
@@ -124,45 +117,13 @@ describe("department knowledge space dialogs", () => {
     expect(childRow).toHaveAttribute("data-depth", "1");
   });
 
-  it("hides the content safety switch when the frontend flag is off", async () => {
-    mockedGetDepartmentKnowledgeSpaceApprovalSettingsApi.mockResolvedValue({
-      approval_enabled: true,
-      sensitive_check_enabled: false,
-    });
-
-    render(
-      <DepartmentKnowledgeSpaceApprovalDialog
-        open
-        onOpenChange={() => {}}
-        space={{
-          id: 10,
-          name: "研发知识空间",
-          department_id: 1,
-          department_name: "研发部",
-        }}
-        showSensitiveCheckControl={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mockedGetDepartmentKnowledgeSpaceApprovalSettingsApi).toHaveBeenCalledWith(10);
-    });
-
-    expect(screen.getByText("开启部门知识空间上传审批")).toBeInTheDocument();
-    expect(screen.queryByText("开启内容安全检测")).not.toBeInTheDocument();
-    expect(screen.queryByText("开启后，上传文件会先做内容安全检测，通过后才会进入人工审批。")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("switch")).toHaveLength(1);
-  });
-
-  it("hides the content safety status tag in the department knowledge space list", async () => {
+  it("does not render approval settings controls in the department knowledge space list", async () => {
     mockedGetDepartmentKnowledgeSpacesApi.mockResolvedValue([
       {
         id: 10,
         name: "研发知识空间",
         department_id: 1,
         department_name: "研发部",
-        approval_enabled: false,
-        sensitive_check_enabled: false,
       },
     ]);
 
@@ -183,7 +144,12 @@ describe("department knowledge space dialogs", () => {
 
     await screen.findByText("研发知识空间");
 
-    expect(screen.getByText("审批关闭")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedGetDepartmentKnowledgeSpacesApi).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText("审批设置")).not.toBeInTheDocument();
+    expect(screen.queryByText("审批关闭")).not.toBeInTheDocument();
     expect(screen.queryByText("内容安全关闭")).not.toBeInTheDocument();
   });
 });
