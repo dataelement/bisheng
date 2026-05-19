@@ -1296,11 +1296,13 @@ async def _agent_stream_chat_completion(
                 content_payload = user_text
 
             sys_prompt = None
-            if ws_config.systemPrompt:
+            request_system_prompt = str(getattr(data, 'system_prompt', '') or '').strip()
+            raw_system_prompt = request_system_prompt or ws_config.systemPrompt
+            if raw_system_prompt:
                 # Use plain `replace` instead of `str.format` — admin prompts can
                 # legitimately contain `{...}` JSON snippets (e.g. a tool-call
                 # schema example) that would otherwise trip KeyError.
-                sys_prompt = ws_config.systemPrompt.replace(
+                sys_prompt = raw_system_prompt.replace(
                     '{cur_date}',
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 )
