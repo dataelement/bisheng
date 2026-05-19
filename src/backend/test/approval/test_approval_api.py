@@ -51,29 +51,37 @@ def _make_app(user_cls):
 def test_user_approval_endpoints():
     app = _make_app(MockUser)
     with patch(
-        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.list_my_tasks',
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.list_my_tasks',
         new_callable=AsyncMock,
         return_value={'data': [{'task_id': 11}], 'total': 1},
     ), patch(
-        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.get_task_detail',
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.get_task_detail',
         new_callable=AsyncMock,
         return_value={'task_id': 11, 'status': 'pending'},
     ), patch(
-        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.decide_task_api',
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.decide_task_api',
         new_callable=AsyncMock,
         return_value={'task_id': 11, 'status': 'approved'},
     ), patch(
-        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.list_my_requests',
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.list_my_requests',
         new_callable=AsyncMock,
         return_value={'data': [{'instance_id': 21}], 'total': 1},
     ), patch(
-        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.get_instance_detail',
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.get_instance_detail',
         new_callable=AsyncMock,
         return_value={'instance_id': 21, 'status': 'pending'},
     ), patch(
-        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.withdraw_instance',
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.withdraw_instance',
         new_callable=AsyncMock,
         return_value={'instance_id': 21, 'status': 'withdrawn'},
+    ), patch(
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.apply_menu_access_request',
+        new_callable=AsyncMock,
+        return_value={'decision': 'pending', 'instance_id': 31},
+    ), patch(
+        'bisheng.approval.api.endpoints.approval_user.ApprovalCenterService.revoke_menu_grant',
+        new_callable=AsyncMock,
+        return_value={'instance_id': 31, 'revoked_keys': ['knowledge']},
     ):
         with TestClient(app) as c:
             assert c.get('/api/v1/approval/my-tasks').json()['data']['total'] == 1
@@ -82,32 +90,34 @@ def test_user_approval_endpoints():
             assert c.get('/api/v1/approval/my-requests').json()['data']['total'] == 1
             assert c.get('/api/v1/approval/instances/21').json()['data']['instance_id'] == 21
             assert c.post('/api/v1/approval/instances/21/withdraw', json={'reason': 'cancel'}).json()['data']['status'] == 'withdrawn'
+            assert c.post('/api/v1/approval/menu-access/apply', json={'menu_key': 'knowledge', 'menu_name': '知识管理'}).json()['data']['instance_id'] == 31
+            assert c.post('/api/v1/approval/menu-access/31/revoke-grant', json={'reason': 'revoke'}).json()['data']['revoked_keys'] == ['knowledge']
 
 
 def test_admin_approval_endpoints():
     app = _make_app(MockAdminUser)
     with patch(
-        'bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioAdminService.list_presets',
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_presets',
         new_callable=AsyncMock,
         return_value=[{'scenario_code': 'menu_access_request'}],
     ), patch(
-        'bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioAdminService.list_scenarios',
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_scenarios',
         new_callable=AsyncMock,
         return_value=[{'id': 1, 'scenario_code': 'menu_access_request'}],
     ), patch(
-        'bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioAdminService.create_scenario',
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.create_scenario',
         new_callable=AsyncMock,
         return_value={'id': 1, 'scenario_code': 'menu_access_request'},
     ), patch(
-        'bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioAdminService.list_routes',
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_routes',
         new_callable=AsyncMock,
         return_value=[{'id': 9, 'route_type': 'flow'}],
     ), patch(
-        'bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioAdminService.list_open_exceptions',
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_open_exceptions',
         new_callable=AsyncMock,
         return_value=[{'id': 88, 'exception_type': 'route_missing'}],
     ), patch(
-        'bisheng.approval.domain.services.approval_exception_service.ApprovalExceptionService.retry_exception_api',
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalExceptionService.retry_exception_api',
         new_callable=AsyncMock,
         return_value={'exception_id': 88, 'status': 'resolved'},
     ):

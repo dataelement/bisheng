@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import bisheng.approval.domain.services.user_menu_access_service as user_menu_access_service_module
+import bisheng.approval.domain.services.approval_center_service as approval_center_service_module
 import bisheng.user.domain.services.auth as auth_module
 from bisheng.common.errcode.approval import ApprovalMenuApplyDisabledError
 
@@ -84,6 +85,74 @@ async def test_revoke_menu_access_records_revoke_on_leaf_first():
     assert [row.menu_key for row in rows] == ['create_knowledge', 'knowledge', 'admin']
     assert recorded[0]['revoked_reason'] == 'manual revoke'
     assert recorded[-1]['revoked_reason'] is None
+
+
+@pytest.mark.asyncio
+async def test_apply_menu_access_request_uses_gate_when_mode_enabled():
+    ApprovalCenterService = importlib.reload(approval_center_service_module).ApprovalCenterService
+    login_user = SimpleNamespace(user_id=7, user_name='alice', tenant_id=1)
+    db_user = SimpleNamespace(user_id=7, tenant_id=1)
+
+    with patch(
+        'bisheng.approval.domain.services.approval_center_service.UserDao.aget_user',
+        new_callable=AsyncMock,
+        return_value=db_user,
+    ), patch(
+        'bisheng.approval.domain.services.approval_center_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.approval.domain.services.approval_center_service.LoginUser.get_roles_web_menu',
+        new_callable=AsyncMock,
+        return_value=([2], ['apps']),
+    ), patch(
+        'bisheng.approval.domain.services.approval_center_service.LoginUser.compute_menu_approval_mode',
+        new_callable=AsyncMock,
+        return_value=True,
+    ), patch(
+        'bisheng.approval.domain.services.approval_center_service.ApprovalGate.request_or_pass',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(model_dump=lambda: {'decision': 'pending', 'instance_id': 99}),
+    ) as mock_request:
+        result = await ApprovalCenterService.apply_menu_access_request(
+            login_user=login_user,
+            menu_key='knowledge',
+            menu_name='知识管理',
+            reason='need access',
+        )
+
+    assert result['instance_id'] == 99
+    req = mock_request.await_args.kwargs if mock_request.await_args and mock_request.await_args.kwargs else mock_request.await_args.args[0]
+    assert req.scenario_code == 'menu_access_request'
+    assert req.payload_snapshot['menu_key'] == 'knowledge'
+
+
+@pytest.mark.asyncio
+async def test_revoke_menu_grant_uses_instance_payload_menu_key():
+    ApprovalCenterService = importlib.reload(approval_center_service_module).ApprovalCenterService
+
+    with patch(
+        'bisheng.approval.domain.services.approval_center_service.ApprovalInstanceRepository.get_instance',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(
+            id=22,
+            tenant_id=1,
+            applicant_user_id=7,
+            payload_snapshot={'menu_key': 'knowledge'},
+        ),
+    ), patch(
+        'bisheng.approval.domain.services.approval_center_service.UserMenuAccessService.revoke_menu_access',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(menu_key='knowledge')],
+    ) as mock_revoke:
+        result = await ApprovalCenterService.revoke_menu_grant(
+            instance_id=22,
+            operator_user_id=1,
+            reason='manual revoke',
+        )
+
+    assert result['revoked_keys'] == ['knowledge']
+    mock_revoke.assert_awaited_once()
 
 
 @pytest.mark.asyncio

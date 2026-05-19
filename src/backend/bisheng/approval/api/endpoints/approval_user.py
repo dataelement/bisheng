@@ -19,6 +19,12 @@ class ApprovalResubmitReq(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class MenuAccessApplyReq(BaseModel):
+    menu_key: str
+    menu_name: str
+    reason: str | None = Field(default=None, max_length=2000)
+
+
 @router.get('/my-tasks')
 async def list_my_tasks(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     data = await ApprovalCenterService.list_my_tasks(
@@ -92,3 +98,30 @@ async def resubmit_instance(
     )
     return resp_200(data)
 
+
+@router.post('/menu-access/apply')
+async def apply_menu_access(
+    req: MenuAccessApplyReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    data = await ApprovalCenterService.apply_menu_access_request(
+        login_user=login_user,
+        menu_key=req.menu_key,
+        menu_name=req.menu_name,
+        reason=req.reason,
+    )
+    return resp_200(data)
+
+
+@router.post('/menu-access/{instance_id}/revoke-grant')
+async def revoke_menu_grant(
+    instance_id: int,
+    req: ApprovalResubmitReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    data = await ApprovalCenterService.revoke_menu_grant(
+        instance_id=instance_id,
+        operator_user_id=login_user.user_id,
+        reason=req.reason,
+    )
+    return resp_200(data)
