@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalInstanceStatus,
@@ -8,6 +10,16 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
+from bisheng.approval.domain.models.approval_scenario import ApprovalNodeDefinition, ApprovalRouteRule
+from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
+from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import KnowledgeSpaceSubscribeScenarioHandler
+from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
+from bisheng.common.models.space_channel_member import BusinessTypeEnum, SpaceChannelMemberDao
+from bisheng.common.repositories.implementations.space_channel_member_repository_impl import SpaceChannelMemberRepositoryImpl
+from bisheng.core.database import get_async_db_session
 
 
 class ApprovalExceptionService:
@@ -16,7 +28,67 @@ class ApprovalExceptionService:
 
     @classmethod
     async def retry_exception_api(cls, *, exception_id: int, action: str, operator_user_id: int):
-        raise NotImplementedError
+        if action != 'retry':
+            raise ValueError(f'unsupported exception action: {action}')
+
+        service = cls(instance_repository=ApprovalInstanceRepository)
+        exception = await service._get_exception(exception_id)
+        instance = await service._get_instance(exception.instance_id)
+
+        if exception.exception_type == 'execute_failed':
+            retried = await service.retry_execute_failed_api(
+                exception_id=exception_id,
+                resolved_by_user_id=operator_user_id,
+                scenario_code=instance.scenario_code,
+            )
+            return {
+                'exception_id': exception_id,
+                'instance_id': instance.id,
+                'status': 'resolved' if retried else 'open',
+                'exception_type': exception.exception_type,
+            }
+
+        route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
+        handler = await service._build_handler(instance.scenario_code)
+        req = service._build_gate_request(instance)
+
+        approver_user_ids = await handler.resolve_approvers(getattr(node, 'approver_config', {}) or {}, req)
+        if not approver_user_ids:
+            raise ValueError(f'no approvers resolved for exception {exception_id}')
+
+        if exception.exception_type == 'scenario_disabled':
+            await service.retry_scenario_disabled(
+                exception_id=exception_id,
+                flow_version_id=flow_version_id,
+                route_rule_id=route_rule.id,
+                node=node,
+                approver_user_ids=approver_user_ids,
+                resolved_by_user_id=operator_user_id,
+            )
+        elif exception.exception_type == 'route_missing':
+            await service.assign_flow(
+                exception_id=exception_id,
+                flow_version_id=flow_version_id,
+                route_rule_id=route_rule.id,
+                node=node,
+                approver_user_ids=approver_user_ids,
+                resolved_by_user_id=operator_user_id,
+            )
+        elif exception.exception_type == 'approver_empty':
+            await service.assign_approvers(
+                exception_id=exception_id,
+                approver_user_ids=approver_user_ids,
+                resolved_by_user_id=operator_user_id,
+            )
+        else:
+            raise ValueError(f'unsupported exception type: {exception.exception_type}')
+
+        return {
+            'exception_id': exception_id,
+            'instance_id': instance.id,
+            'status': 'resolved',
+            'exception_type': exception.exception_type,
+        }
 
     async def retry_scenario_disabled(
         self,
@@ -105,6 +177,37 @@ class ApprovalExceptionService:
             await self.instance_repository.update_instance(instance)
             await self._resolve_exception(exception, resolved_by_user_id, 'retry_execute_failed')
 
+    async def retry_execute_failed_api(
+        self,
+        *,
+        exception_id: int,
+        resolved_by_user_id: int,
+        scenario_code: str,
+    ) -> bool:
+        exception = await self._get_exception(exception_id)
+        instance = await self._get_instance(exception.instance_id)
+        outboxes = await self.instance_repository.list_outbox(instance.id)
+        if not outboxes:
+            raise ValueError(f'outbox not found for instance: {instance.id}')
+        outbox = outboxes[-1]
+        handler = await self._build_handler(scenario_code)
+        try:
+            await handler.on_approved(instance.id, outbox.payload_snapshot)
+        except Exception as exc:  # noqa: BLE001
+            outbox.status = ApprovalOutboxStatus.FAILED
+            outbox.retry_count += 1
+            outbox.error_summary = str(exc)
+            await self.instance_repository.update_outbox(outbox)
+            return False
+
+        outbox.status = ApprovalOutboxStatus.SUCCESS
+        outbox.error_summary = None
+        await self.instance_repository.update_outbox(outbox)
+        instance.status = ApprovalInstanceStatus.EXECUTED
+        await self.instance_repository.update_instance(instance)
+        await self._resolve_exception(exception, resolved_by_user_id, 'retry_execute_failed')
+        return True
+
     async def _create_tasks(self, *, instance_id: int, tenant_id: int, flow_version_id: int, node, approver_user_ids: list[int]) -> None:
         for approver_user_id in approver_user_ids:
             await self.instance_repository.create_task(
@@ -149,3 +252,71 @@ class ApprovalExceptionService:
         if instance is None:
             raise ValueError(f'instance not found: {instance_id}')
         return instance
+
+    async def _resolve_retry_route(self, instance) -> tuple[ApprovalRouteRule, int, ApprovalNodeDefinition]:
+        scenario = await ApprovalScenarioRepository.get_scenario_by_code(instance.tenant_id, instance.scenario_code)
+        if scenario is None or not scenario.enabled:
+            raise ValueError(f'scenario not enabled: {instance.scenario_code}')
+
+        route_rules = await ApprovalScenarioRepository.list_route_rules(instance.tenant_id, scenario.id)
+        route_rule = next((row for row in route_rules if row.route_type == 'flow'), None)
+        if route_rule is None or route_rule.flow_definition_id is None:
+            raise ValueError(f'flow route not found for scenario: {instance.scenario_code}')
+
+        flow_version = await ApprovalScenarioRepository.get_active_flow_version(
+            instance.tenant_id,
+            route_rule.flow_definition_id,
+        )
+        if flow_version is None:
+            raise ValueError(f'active flow version not found for scenario: {instance.scenario_code}')
+
+        node_definitions = await ApprovalScenarioRepository.list_node_definitions(instance.tenant_id, flow_version.id)
+        if not node_definitions:
+            raise ValueError(f'flow nodes not found for flow version: {flow_version.id}')
+        return route_rule, flow_version.id, node_definitions[0]
+
+    @staticmethod
+    def _build_gate_request(instance) -> ApprovalGateRequest:
+        return ApprovalGateRequest(
+            tenant_id=instance.tenant_id,
+            scenario_code=instance.scenario_code,
+            business_key=instance.business_key,
+            business_resource_type=instance.business_resource_type,
+            business_resource_id=instance.business_resource_id,
+            business_name=instance.business_name,
+            applicant_user_id=instance.applicant_user_id,
+            applicant_user_name=instance.applicant_user_name,
+            applicant_department_id=instance.applicant_department_id,
+            reason=instance.reason,
+            payload_snapshot=instance.payload_snapshot or {},
+            detail_snapshot=instance.detail_snapshot or {},
+        )
+
+    async def _build_handler(self, scenario_code: str) -> Any:
+        if scenario_code == 'menu_access_request':
+            return MenuAccessApprovalHandler()
+        if scenario_code == 'channel_subscribe_request':
+            return ChannelSubscribeScenarioHandler(_AsyncSpaceChannelMembershipAdapter())
+        if scenario_code == 'knowledge_space_subscribe_request':
+            from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+            return KnowledgeSpaceSubscribeScenarioHandler(
+                find_member=SpaceChannelMemberDao.async_find_member,
+                update_member=SpaceChannelMemberDao.update,
+                sync_permissions=KnowledgeSpaceService.sync_direct_space_user_permissions,
+            )
+        raise KeyError(f'handler not registered for scenario_code={scenario_code}')
+
+
+class _AsyncSpaceChannelMembershipAdapter:
+    async def find_membership(self, business_id: str, business_type: BusinessTypeEnum, user_id: int):
+        async with get_async_db_session() as session:
+            repository = SpaceChannelMemberRepositoryImpl(session)
+            return await repository.find_membership(
+                business_id=business_id,
+                business_type=business_type,
+                user_id=user_id,
+            )
+
+    async def update(self, membership):
+        return await SpaceChannelMemberDao.update(membership)

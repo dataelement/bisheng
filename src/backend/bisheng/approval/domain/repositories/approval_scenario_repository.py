@@ -31,6 +31,21 @@ class ApprovalScenarioRepository:
             return (await session.exec(statement)).first()
 
     @classmethod
+    async def get_scenario(cls, scenario_id: int) -> ApprovalScenario | None:
+        async with get_async_db_session() as session:
+            return await session.get(ApprovalScenario, scenario_id)
+
+    @classmethod
+    async def list_scenarios(cls, tenant_id: int) -> list[ApprovalScenario]:
+        statement = (
+            select(ApprovalScenario)
+            .where(ApprovalScenario.tenant_id == tenant_id)
+            .order_by(ApprovalScenario.id.desc())
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def create_route_rule(cls, row: ApprovalRouteRule) -> ApprovalRouteRule:
         async with get_async_db_session() as session:
             session.add(row)

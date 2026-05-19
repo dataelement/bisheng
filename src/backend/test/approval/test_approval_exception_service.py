@@ -11,6 +11,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalInstance,
     ApprovalInstanceStatus,
     ApprovalOutbox,
+    ApprovalOutboxStatus,
     ApprovalTask,
     ApprovalTaskStatus,
 )
@@ -31,6 +32,7 @@ class FakeApprovalRepo:
         self.instances: dict[int, ApprovalInstance] = {}
         self.tasks: dict[int, ApprovalTask] = {}
         self.exceptions: dict[int, ApprovalException] = {}
+        self.outboxes: dict[int, ApprovalOutbox] = {}
         self.action_logs: list[dict] = []
         self.outbox_payloads: list[dict] = []
         self._task_id = 100
@@ -70,6 +72,13 @@ class FakeApprovalRepo:
 
     async def create_outbox(self, payload: ApprovalOutbox) -> None:
         self.outbox_payloads.append(payload)
+
+    async def list_outbox(self, instance_id: int) -> list[ApprovalOutbox]:
+        return [outbox for outbox in self.outboxes.values() if outbox.instance_id == instance_id]
+
+    async def update_outbox(self, outbox: ApprovalOutbox) -> ApprovalOutbox:
+        self.outboxes[outbox.id] = outbox
+        return outbox
 
 
 def _build_instance(status: str = ApprovalInstanceStatus.PENDING) -> ApprovalInstance:
@@ -276,4 +285,85 @@ async def test_execute_failed_retry_success_and_failure():
     )
     await service.retry_execute_failed(exception_id=2, resolved_by_user_id=1, executor=lambda instance_id: False)
     assert repo.instances[2].status == ApprovalInstanceStatus.EXECUTE_FAILED
+    assert repo.exceptions[2].status == 'open'
+
+
+@pytest.mark.asyncio
+async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
+    repo = FakeApprovalRepo()
+    repo.instances[1] = _build_instance(status=ApprovalInstanceStatus.EXECUTE_FAILED)
+    repo.exceptions[1] = ApprovalException(
+        id=1,
+        tenant_id=1,
+        instance_id=1,
+        exception_type=ApprovalExceptionType.EXECUTE_FAILED,
+        status='open',
+        detail={},
+    )
+    repo.outboxes[1] = ApprovalOutbox(
+        id=1,
+        tenant_id=1,
+        instance_id=1,
+        handler_key='knowledge_space_subscribe_request',
+        status=ApprovalOutboxStatus.FAILED,
+        payload_snapshot={'space_id': 12, 'applicant_user_id': 7},
+    )
+    service = ApprovalExceptionService(instance_repository=repo)
+
+    class _SuccessHandler:
+        async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
+            return {'instance_id': instance_id, 'payload': payload_snapshot}
+
+    async def _build_success_handler(_scenario_code: str):
+        return _SuccessHandler()
+
+    service._build_handler = _build_success_handler  # type: ignore[method-assign]
+    success = await service.retry_execute_failed_api(
+        exception_id=1,
+        resolved_by_user_id=1,
+        scenario_code='knowledge_space_subscribe_request',
+    )
+
+    assert success is True
+    assert repo.instances[1].status == ApprovalInstanceStatus.EXECUTED
+    assert repo.outboxes[1].status == ApprovalOutboxStatus.SUCCESS
+    assert repo.exceptions[1].status == 'resolved'
+
+    repo.instances[2] = _build_instance(status=ApprovalInstanceStatus.EXECUTE_FAILED)
+    repo.instances[2].id = 2
+    repo.exceptions[2] = ApprovalException(
+        id=2,
+        tenant_id=1,
+        instance_id=2,
+        exception_type=ApprovalExceptionType.EXECUTE_FAILED,
+        status='open',
+        detail={},
+    )
+    repo.outboxes[2] = ApprovalOutbox(
+        id=2,
+        tenant_id=1,
+        instance_id=2,
+        handler_key='knowledge_space_subscribe_request',
+        status=ApprovalOutboxStatus.FAILED,
+        payload_snapshot={'space_id': 12, 'applicant_user_id': 7},
+    )
+
+    class _FailHandler:
+        async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
+            raise RuntimeError('retry failed')
+
+    async def _build_fail_handler(_scenario_code: str):
+        return _FailHandler()
+
+    service._build_handler = _build_fail_handler  # type: ignore[method-assign]
+    success = await service.retry_execute_failed_api(
+        exception_id=2,
+        resolved_by_user_id=1,
+        scenario_code='knowledge_space_subscribe_request',
+    )
+
+    assert success is False
+    assert repo.instances[2].status == ApprovalInstanceStatus.EXECUTE_FAILED
+    assert repo.outboxes[2].status == ApprovalOutboxStatus.FAILED
+    assert repo.outboxes[2].error_summary == 'retry failed'
     assert repo.exceptions[2].status == 'open'

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
+from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
+from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 
 
@@ -10,16 +13,32 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def list_scenarios(cls, *, tenant_id: int):
-        raise NotImplementedError
+        rows = await ApprovalScenarioRepository.list_scenarios(tenant_id)
+        return [row.model_dump() for row in rows]
 
     @classmethod
     async def create_scenario(cls, *, tenant_id: int, payload: dict):
-        raise NotImplementedError
+        scenario_code = str(payload['scenario_code'])
+        existing = await ApprovalScenarioRepository.get_scenario_by_code(tenant_id, scenario_code)
+        if existing:
+            return existing.model_dump()
+        row = await ApprovalScenarioRepository.create_scenario(
+            ApprovalScenario(
+                tenant_id=tenant_id,
+                scenario_code=scenario_code,
+                scenario_name=payload['scenario_name'],
+                enabled=bool(payload.get('enabled', False)),
+                display_name=payload.get('display_name'),
+            )
+        )
+        return row.model_dump()
 
     @classmethod
     async def list_routes(cls, *, tenant_id: int, scenario_id: int):
-        raise NotImplementedError
+        rows = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
+        return [row.model_dump() for row in rows]
 
     @classmethod
     async def list_open_exceptions(cls, *, tenant_id: int):
-        raise NotImplementedError
+        rows = await ApprovalQueryRepository.list_open_exceptions(tenant_id)
+        return [row.model_dump() for row in rows]
