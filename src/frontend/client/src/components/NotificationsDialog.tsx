@@ -6,13 +6,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TooltipAnchor } from "~/components/ui/Tooltip";
-import { Textarea } from "~/components/ui/Textarea";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import type { MessageItem, MessageTab } from "~/api/message";
-import { decideApprovalRequestApi } from "~/api/approval";
 import {
-    approveMessageApi,
     deleteMessageApi,
     getMessageListApi,
     markAllMessageReadApi,
@@ -27,10 +24,14 @@ export interface NotificationsDialogProps {
     onOpenChange?: (open: boolean) => void;
     /** Forward-compat: message id to focus when dialog opens (v2 will scroll + highlight). */
     focusedMessageId?: number | null;
+    onOpenApprovalCenter?: (target: {
+        tab: "my_tasks" | "my_requests";
+        taskId?: number | null;
+        instanceId?: number | null;
+    }) => void;
 }
 
 const PAGE_SIZE = 20;
-const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
 
 function resolveMessageTimeLocale(lang: string) {
     if (lang.startsWith("zh")) return "zh-CN";
@@ -53,7 +54,12 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     sensitive_rejected_department_knowledge_space_upload: "com_notifications_action_sensitive_rejected_department_knowledge_space_upload",
 };
 
-export function NotificationsDialog({ open = false, onOpenChange, focusedMessageId }: NotificationsDialogProps) {
+export function NotificationsDialog({
+    open = false,
+    onOpenChange,
+    focusedMessageId,
+    onOpenApprovalCenter,
+}: NotificationsDialogProps) {
     const localize = useLocalize();
     const { i18n } = useTranslation();
     const formatMessageTime = (createdAt: string) =>
@@ -75,9 +81,6 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [rejectTarget, setRejectTarget] = useState<null | { notificationId: string; requestId: number; targetName: string }>(null);
-    const [rejectReason, setRejectReason] = useState("");
-    const [decisionSubmitting, setDecisionSubmitting] = useState(false);
     const [isNarrowMobileLayout, setIsNarrowMobileLayout] = useState(false);
     const [canHover, setCanHover] = useState(false);
     const [hasTouchInput, setHasTouchInput] = useState(false);
@@ -100,10 +103,8 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
         actionCode === "request_knowledge_space" ||
         actionCode === "approved_knowledge_space" ||
         actionCode === "rejected_knowledge_space";
-    const isDepartmentUploadApprovalActionCode = (actionCode?: string) =>
-        actionCode === "request_department_knowledge_space_upload";
     const isApprovalMessageType = (messageType?: string, actionCode?: string) =>
-        messageType === "request" || messageType === "approve" || isKnowledgeSpaceApprovalActionCode(actionCode) || isDepartmentUploadApprovalActionCode(actionCode);
+        messageType === "request" || messageType === "approve" || isKnowledgeSpaceApprovalActionCode(actionCode);
     const isPendingApprovalStatus = (status?: string) =>
         !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
     const isApprovedStatus = (status?: string) =>
@@ -292,26 +293,6 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
         }
     };
 
-    const handleApproval = async (notificationId: string, status: "approved" | "rejected") => {
-        try {
-            await approveMessageApi({
-                message_id: Number(notificationId),
-                action: status === "approved" ? "agree" : "reject",
-            });
-            await markMessageReadApi([Number(notificationId)]);
-            setNotifications(prev =>
-                prev.map(n =>
-                    String(n.id) === notificationId
-                        ? { ...n, status, is_read: true }
-                        : n
-                )
-            );
-            showToast({ message: localize("com_notifications_toast_success"), severity: NotificationSeverity.SUCCESS });
-        } catch {
-            showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
-        }
-    };
-
     const getApprovalRequestId = (notification: MessageItem): number | null => {
         const parts = Array.isArray(notification.content) ? notification.content : [];
         for (const part of parts) {
@@ -329,47 +310,49 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
         return null;
     };
 
-    const handleDepartmentUploadApproval = async (
-        notification: MessageItem,
-        action: "approved" | "rejected",
-        reason?: string,
-    ) => {
-        const requestId = getApprovalRequestId(notification);
-        const notificationId = String(notification.id);
-        if (!requestId) {
-            showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
-            return;
+    const resolveApprovalCenterTarget = (notification: MessageItem) => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        let taskId: number | null = null;
+        let instanceId: number | null = null;
+
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            const data = metadata?.data ?? {};
+            const candidates = [
+                [metadata?.business_type, data],
+                [metadata?.type, data],
+            ] as const;
+
+            for (const [businessType, payload] of candidates) {
+                const normalizedType = String(businessType || "");
+                if (!taskId && /approval_task_id|task_id/i.test(normalizedType)) {
+                    const rawTaskId =
+                        payload?.approval_task_id ??
+                        payload?.task_id ??
+                        metadata?.business_id ??
+                        payload?.business_id;
+                    const parsedTaskId = Number(rawTaskId);
+                    if (Number.isFinite(parsedTaskId)) taskId = parsedTaskId;
+                }
+                if (!instanceId && /approval_instance_id|instance_id|approval_request_id/i.test(normalizedType)) {
+                    const rawInstanceId =
+                        payload?.approval_instance_id ??
+                        payload?.instance_id ??
+                        payload?.approval_request_id ??
+                        metadata?.business_id ??
+                        payload?.business_id;
+                    const parsedInstanceId = Number(rawInstanceId);
+                    if (Number.isFinite(parsedInstanceId)) instanceId = parsedInstanceId;
+                }
+            }
         }
 
-        try {
-            const approvalRequest = await decideApprovalRequestApi(requestId, {
-                action: action === "approved" ? "approve" : "reject",
-                reason,
-            });
-            if (approvalRequest?.space_id && typeof window !== "undefined") {
-                const finalizedFileIds = Array.isArray(approvalRequest.payload_json?.finalized_file_ids)
-                    ? approvalRequest.payload_json.finalized_file_ids
-                    : [];
-                window.dispatchEvent(new CustomEvent(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, {
-                    detail: {
-                        spaceId: approvalRequest.space_id,
-                        parentFolderId: approvalRequest.parent_folder_id ?? undefined,
-                        fileIds: finalizedFileIds,
-                    },
-                }));
-            }
-            await markMessageReadApi([Number(notificationId)]);
-            setNotifications(prev =>
-                prev.map(n =>
-                    String(n.id) === notificationId
-                        ? { ...n, status: action === "approved" ? "approved" : "rejected", is_read: true }
-                        : n
-                )
-            );
-            showToast({ message: localize("com_notifications_toast_success"), severity: NotificationSeverity.SUCCESS });
-        } catch {
-            showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
-        }
+        const tab = isPendingApprovalStatus(notification.status) ? "my_tasks" : "my_requests";
+        return {
+            tab,
+            taskId,
+            instanceId: instanceId ?? getApprovalRequestId(notification),
+        } as const;
     };
 
     const getTargetName = (notification: MessageItem): string => {
@@ -640,7 +623,7 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
         const canShowDeleteInDateSlot =
             isNotifyMessage ||
             isSelfApplicationDecision ||
-            showApproval ||
+            isApprovalMessageType(notification.message_type, notification.action_code) ||
             isCompletedApprovalItem ||
             (!showApproval &&
                 !isApprovalMessageType(notification.message_type, notification.action_code) &&
@@ -666,6 +649,10 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
         };
 
         const showRightSlotDelete = dateSlotHoverId === id && canShowDeleteInDateSlot;
+        const approvalCenterTarget = isApprovalMessageType(notification.message_type, notification.action_code)
+            ? resolveApprovalCenterTarget(notification)
+            : null;
+        const canOpenApprovalCenter = Boolean(onOpenApprovalCenter && approvalCenterTarget);
 
         return (
             <div
@@ -886,81 +873,31 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
                     </div>
                 </div>
 
-                {/* Row 2: approval buttons (pending) / completed status (已同意/已拒绝) */}
-                {showApproval ? (
+                {canOpenApprovalCenter ? (
                     <div className="flex items-center justify-end gap-3">
                         <button
                             type="button"
                             onClick={() => {
                                 if (!notification.is_read) markOneAsRead(id);
-                                if (isDepartmentUploadApprovalActionCode(notification.action_code)) {
-                                    const requestId = getApprovalRequestId(notification);
-                                    if (!requestId) {
-                                        showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
-                                        return;
-                                    }
-                                    setRejectReason("");
-                                    setRejectTarget({
-                                        notificationId: id,
-                                        requestId,
-                                        targetName: targetName || "",
-                                    });
-                                    return;
-                                }
-                                handleApproval(id, "rejected");
+                                onOpenApprovalCenter?.(approvalCenterTarget);
+                                onOpenChange?.(false);
                             }}
-                            className={cn(
-                                "inline-flex items-center gap-1 rounded-[6px] px-3 text-[14px] transition-colors active:translate-y-0",
-                                isTouchMobile
-                                    ? "h-8 border border-[#EBECF0] bg-white/50 py-[3px] text-[#FF3939] [backdrop-filter:blur(8px)] hover:bg-[#fff2f0]"
-                                    : "h-7 border border-[#F2F3F5] bg-white py-0 text-[#f53f3f] [backdrop-filter:none] hover:bg-[#fff2f0]",
-                            )}
+                            className="inline-flex h-7 items-center rounded-[6px] border border-[#165dff] px-3 py-0 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"
                         >
-                            <XIcon className="size-4" />
-                            {localize("com_notifications_reject")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                if (isDepartmentUploadApprovalActionCode(notification.action_code)) {
-                                    handleDepartmentUploadApproval(notification, "approved");
-                                    return;
-                                }
-                                handleApproval(id, "approved");
-                            }}
-                            className={cn(
-                                "inline-flex items-center gap-1 rounded-[6px] px-3 text-[14px] transition-colors active:translate-y-0",
-                                isTouchMobile
-                                    ? "h-8 border border-[#EBECF0] bg-white/50 py-[3px] text-[#06B770] [backdrop-filter:blur(8px)] hover:bg-[#e8ffea]"
-                                    : "h-7 border border-[#F2F3F5] bg-white py-0 text-[#00b42a] [backdrop-filter:none] hover:bg-[#e8ffea]",
-                            )}
-                        >
-                            <Check className="size-4" />
-                            {localize("com_notifications_accept")}
+                            {localize("com_notifications_view_approval")}
                         </button>
                     </div>
                 ) : isCompletedApprovalItem && !isSelfApplicationDecision && !isNotifyMessage ? (
                     <div className="flex justify-end">
-                        {isApprovedStatus(approvalStatus) ? (
-                            <button
-                                type="button"
-                                disabled
-                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
-                            >
-                                <Check className="size-4" />
-                                {localize("com_notifications_approved")}
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                disabled
-                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
-                            >
-                                <XIcon className="size-4" />
-                                {localize("com_notifications_rejected")}
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            disabled
+                            className="h-7 cursor-default rounded-[6px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 text-[14px] text-[#86909C]"
+                        >
+                            {isApprovedStatus(approvalStatus)
+                                ? localize("com_notifications_approved")
+                                : localize("com_notifications_rejected")}
+                        </button>
                     </div>
                 ) : null}
 
@@ -1204,63 +1141,6 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
                 </div>
             </DialogContent>
 
-            <Dialog open={!!rejectTarget} onOpenChange={(next) => {
-                if (!next) {
-                    setRejectTarget(null);
-                    setRejectReason("");
-                }
-            }}>
-                <DialogContent className="max-w-[420px] rounded-2xl p-0">
-                    <div className="px-6 py-5">
-                        <DialogHeader className="text-left">
-                            <DialogTitle className="text-[18px] font-medium text-[#212121]">
-                                {localize("com_notifications_reject")}
-                            </DialogTitle>
-                        </DialogHeader>
-                        <div className="mt-4 space-y-3">
-                            <div className="text-[14px] leading-6 text-[#4E5969]">
-                                {localize("com_notifications_reject_reason")}
-                            </div>
-                            <Textarea
-                                value={rejectReason}
-                                onChange={(e) => setRejectReason(e.target.value)}
-                                maxLength={500}
-                                placeholder={localize("com_notifications_reject_reason_placeholder")}
-                                className="min-h-[120px] resize-none bg-white"
-                            />
-                        </div>
-                        <div className="mt-5 flex justify-end gap-3">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                    setRejectTarget(null);
-                                    setRejectReason("");
-                                }}
-                            >
-                                {localize("com_ui_cancel")}
-                            </Button>
-                            <Button
-                                type="button"
-                                disabled={decisionSubmitting || !rejectReason.trim()}
-                                onClick={async () => {
-                                    if (!rejectTarget) return;
-                                    setDecisionSubmitting(true);
-                                    const notification = notifications.find(n => String(n.id) === rejectTarget.notificationId);
-                                    if (notification) {
-                                        await handleDepartmentUploadApproval(notification, "rejected", rejectReason.trim());
-                                    }
-                                    setDecisionSubmitting(false);
-                                    setRejectTarget(null);
-                                    setRejectReason("");
-                                }}
-                            >
-                                {localize("com_notifications_submit")}
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
         </Dialog>
     );
 }

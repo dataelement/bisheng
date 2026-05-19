@@ -7,6 +7,54 @@ interface ApiResponse<T> {
   data: T;
 }
 
+export type ApprovalCenterTab = "my_tasks" | "my_requests";
+
+export interface ApprovalTaskItem {
+  task_id?: number;
+  id?: number;
+  instance_id?: number;
+  scenario_code?: string;
+  business_name?: string;
+  status?: string;
+  applicant_user_name?: string;
+  create_time?: string;
+  update_time?: string;
+}
+
+export interface ApprovalInstanceItem {
+  instance_id?: number;
+  id?: number;
+  scenario_code?: string;
+  business_name?: string;
+  status?: string;
+  applicant_user_name?: string;
+  create_time?: string;
+  update_time?: string;
+}
+
+export interface ApprovalTaskDetail extends ApprovalTaskItem {
+  comment?: string | null;
+  detail_snapshot?: Record<string, any>;
+  payload_snapshot?: Record<string, any>;
+  detail?: Record<string, any>;
+}
+
+export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
+  reason?: string | null;
+  granted_keys?: string[];
+  revoked_keys?: string[];
+  payload_snapshot?: Record<string, any>;
+  detail_snapshot?: Record<string, any>;
+  tasks?: ApprovalTaskItem[];
+  action_logs?: Array<{
+    id?: number;
+    action?: string;
+    operator_user_name?: string;
+    create_time?: string;
+    detail?: Record<string, any>;
+  }>;
+}
+
 export interface ApprovalSettings {
   approval_enabled: boolean;
   sensitive_check_enabled: boolean;
@@ -34,9 +82,101 @@ export interface ApprovalRequestItem {
   update_time?: string;
 }
 
+function unwrapPayload<T>(response: ApiResponse<T> | T): T {
+  return ((response as ApiResponse<T>)?.data ?? response) as T;
+}
+
+function unwrapPaged<T>(response: any): { data: T[]; total: number } {
+  const payload = response?.data ?? response ?? {};
+  return {
+    data: Array.isArray(payload?.data) ? payload.data : [],
+    total: Number(payload?.total ?? 0),
+  };
+}
+
+export async function listMyApprovalTasksApi(): Promise<{ data: ApprovalTaskItem[]; total: number }> {
+  const response = await request.get<ApiResponse<{ data: ApprovalTaskItem[]; total: number }>>(
+    "/api/v1/approval/my-tasks",
+  );
+  return unwrapPaged<ApprovalTaskItem>(response);
+}
+
+export async function getMyApprovalTaskDetailApi(taskId: number): Promise<ApprovalTaskDetail> {
+  const response = await request.get<ApiResponse<ApprovalTaskDetail>>(`/api/v1/approval/my-tasks/${taskId}`);
+  return unwrapPayload(response);
+}
+
+export async function decideApprovalTaskApi(
+  taskId: number,
+  data: { action: "approve" | "reject"; comment?: string },
+): Promise<ApprovalTaskDetail> {
+  const response = await request.post<ApiResponse<ApprovalTaskDetail>>(
+    `/api/v1/approval/tasks/${taskId}/decision`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function listMyApprovalRequestsApi(): Promise<{ data: ApprovalInstanceItem[]; total: number }> {
+  const response = await request.get<ApiResponse<{ data: ApprovalInstanceItem[]; total: number }>>(
+    "/api/v1/approval/my-requests",
+  );
+  return unwrapPaged<ApprovalInstanceItem>(response);
+}
+
+export async function getApprovalInstanceDetailApi(instanceId: number): Promise<ApprovalInstanceDetail> {
+  const response = await request.get<ApiResponse<ApprovalInstanceDetail>>(`/api/v1/approval/instances/${instanceId}`);
+  return unwrapPayload(response);
+}
+
+export async function withdrawApprovalInstanceApi(
+  instanceId: number,
+  data: { reason?: string },
+): Promise<ApprovalInstanceDetail> {
+  const response = await request.post<ApiResponse<ApprovalInstanceDetail>>(
+    `/api/v1/approval/instances/${instanceId}/withdraw`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function resubmitApprovalInstanceApi(
+  instanceId: number,
+  data: { reason?: string },
+): Promise<ApprovalInstanceDetail> {
+  const response = await request.post<ApiResponse<ApprovalInstanceDetail>>(
+    `/api/v1/approval/instances/${instanceId}/resubmit`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function applyMenuAccessApi(data: {
+  menu_key: string;
+  menu_name: string;
+  reason?: string;
+}): Promise<Record<string, any>> {
+  const response = await request.post<ApiResponse<Record<string, any>>>(
+    "/api/v1/approval/menu-access/apply",
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function revokeMenuAccessGrantApi(
+  instanceId: number,
+  data: { reason?: string },
+): Promise<Record<string, any>> {
+  const response = await request.post<ApiResponse<Record<string, any>>>(
+    `/api/v1/approval/menu-access/${instanceId}/revoke-grant`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
 export async function getDepartmentKnowledgeSpaceApprovalSettingsApi(): Promise<ApprovalSettings> {
   const res = await request.get<ApiResponse<ApprovalSettings>>(`/api/v1/approval/department-knowledge-space/settings`);
-  return (res as any)?.data ?? res;
+  return unwrapPayload(res);
 }
 
 export async function updateDepartmentKnowledgeSpaceApprovalSettingsApi(
@@ -46,7 +186,7 @@ export async function updateDepartmentKnowledgeSpaceApprovalSettingsApi(
     `/api/v1/approval/department-knowledge-space/settings`,
     data,
   );
-  return (res as any)?.data ?? res;
+  return unwrapPayload(res);
 }
 
 export async function listApprovalRequestsApi(params?: {
@@ -59,16 +199,12 @@ export async function listApprovalRequestsApi(params?: {
     params,
     paramsSerializer: request.paramsSerializer,
   });
-  const payload = res?.data ?? res ?? {};
-  return {
-    data: Array.isArray(payload?.data) ? payload.data : [],
-    total: Number(payload?.total ?? 0),
-  };
+  return unwrapPaged<ApprovalRequestItem>(res);
 }
 
 export async function getApprovalRequestApi(requestId: number): Promise<ApprovalRequestItem> {
   const res: any = await request.get(`/api/v1/approval/requests/${requestId}`);
-  return (res?.data ?? res) as ApprovalRequestItem;
+  return unwrapPayload(res) as ApprovalRequestItem;
 }
 
 export async function decideApprovalRequestApi(
@@ -79,7 +215,7 @@ export async function decideApprovalRequestApi(
     `/api/v1/approval/requests/${requestId}/decision`,
     data,
   );
-  return (res?.data ?? res) as ApprovalRequestItem;
+  return unwrapPayload(res) as ApprovalRequestItem;
 }
 
 function fileTypeFromName(fileName: string): FileType {
@@ -130,22 +266,22 @@ function numberOrUndefined(value: unknown): number | undefined {
 }
 
 export function approvalRequestToKnowledgeFiles(
-  request: ApprovalRequestItem,
+  requestItem: ApprovalRequestItem,
   spaceId: string,
 ): KnowledgeFile[] {
-  const files = Array.isArray(request.payload_json?.files)
-    ? request.payload_json.files
+  const files = Array.isArray(requestItem.payload_json?.files)
+    ? requestItem.payload_json.files
     : [];
   return files.map((item: any, index: number) => {
     const name = String(item?.file_name || item?.name || `pending-${index + 1}`);
-    const parentId = item?.parent_id ?? request.parent_folder_id;
+    const parentId = item?.parent_id ?? requestItem.parent_folder_id;
     return {
-      id: String(-(request.id * 1000 + index + 1)),
+      id: String(-(requestItem.id * 1000 + index + 1)),
       name,
       type: fileTypeFromName(name),
       size: numberOrUndefined(item?.file_size ?? item?.size),
       status:
-        request.status === "pending_review"
+        requestItem.status === "pending_review"
           ? FileStatus.WAITING
           : FileStatus.FAILED,
       tags: [],
@@ -155,12 +291,12 @@ export function approvalRequestToKnowledgeFiles(
           ? String(parentId)
           : undefined,
       spaceId,
-      createdAt: request.create_time || "",
-      updatedAt: request.update_time || request.create_time || "",
-      approvalRequestId: request.id,
-      approvalStatus: request.status,
-      approvalReason: request.decision_reason || request.safety_reason || undefined,
-      isPendingApproval: request.status === "pending_review",
+      createdAt: requestItem.create_time || "",
+      updatedAt: requestItem.update_time || requestItem.create_time || "",
+      approvalRequestId: requestItem.id,
+      approvalStatus: requestItem.status,
+      approvalReason: requestItem.decision_reason || requestItem.safety_reason || undefined,
+      isPendingApproval: requestItem.status === "pending_review",
     };
   });
 }

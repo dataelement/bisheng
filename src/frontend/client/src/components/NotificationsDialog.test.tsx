@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { decideApprovalRequestApi } from "~/api/approval";
 import {
   getMessageListApi,
   markMessageReadApi,
@@ -20,15 +19,10 @@ jest.mock("~/Providers", () => ({
   useToastContext: () => ({ showToast: jest.fn() }),
 }));
 
-jest.mock("~/api/approval", () => ({
-  decideApprovalRequestApi: jest.fn(),
-}));
-
 jest.mock("~/api/message", () => ({
   getMessageListApi: jest.fn(),
   markMessageReadApi: jest.fn(),
   markAllMessageReadApi: jest.fn(),
-  approveMessageApi: jest.fn(),
   deleteMessageApi: jest.fn(),
 }));
 
@@ -66,11 +60,7 @@ jest.mock("~/components/ui/Tooltip", () => ({
   TooltipAnchor: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-jest.mock("~/components/ui/Textarea", () => ({
-  Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
-}));
-
-describe("NotificationsDialog department upload approval", () => {
+describe("NotificationsDialog approval jump", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     Object.defineProperty(window, "matchMedia", {
@@ -89,7 +79,7 @@ describe("NotificationsDialog department upload approval", () => {
     (global as any).IntersectionObserver = MockIntersectionObserver;
   });
 
-  it("requests a knowledge-space file list refresh after approving department upload", async () => {
+  it("opens approval center instead of inline approving request messages", async () => {
     jest.mocked(getMessageListApi).mockResolvedValue({
       total: 1,
       data: [{
@@ -97,60 +87,38 @@ describe("NotificationsDialog department upload approval", () => {
         sender: 7,
         sender_name: "Alice",
         message_type: "request",
-        action_code: "request_department_knowledge_space_upload",
+        action_code: "request_knowledge_space",
         status: "pending",
         is_read: false,
         create_time: "2026-04-27T10:00:00Z",
         update_time: "2026-04-27T10:00:00Z",
         content: [{
           type: "business_url",
-          content: "部门空间（1个文件）",
+          content: "知识空间订阅申请",
           metadata: {
-            business_type: "approval_request_id",
-            data: { approval_request_id: 99 },
+            business_type: "approval_instance_id",
+            data: { approval_instance_id: 99 },
           },
         }],
       }],
     });
     jest.mocked(markMessageReadApi).mockResolvedValue({});
-    jest.mocked(decideApprovalRequestApi).mockResolvedValue({
-      id: 99,
-      request_type: "department_knowledge_space_file_upload",
-      status: "finalized",
-      review_mode: "first_response_wins",
-      space_id: 12,
-      department_id: 3,
-      parent_folder_id: 45,
-      applicant_user_id: 7,
-      applicant_user_name: "Alice",
-      reviewer_user_ids: [8],
-      file_count: 1,
-      payload_json: { finalized_file_ids: [88] },
-      safety_status: "passed",
-    });
-    const refreshListener = jest.fn();
-    window.addEventListener("knowledge-space-files:refresh", refreshListener);
+    const openApprovalCenter = jest.fn();
 
-    try {
-      render(<NotificationsDialog open />);
+    render(<NotificationsDialog open onOpenApprovalCenter={openApprovalCenter} />);
 
-      fireEvent.click(await screen.findByText("com_notifications_accept"));
+    expect(await screen.findByText("com_notifications_view_approval")).toBeInTheDocument();
+    expect(screen.queryByText("com_notifications_accept")).not.toBeInTheDocument();
+    expect(screen.queryByText("com_notifications_reject")).not.toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(decideApprovalRequestApi).toHaveBeenCalledWith(99, {
-          action: "approve",
-          reason: undefined,
-        });
+    fireEvent.click(screen.getByText("com_notifications_view_approval"));
+
+    await waitFor(() => {
+      expect(openApprovalCenter).toHaveBeenCalledWith({
+        tab: "my_tasks",
+        taskId: null,
+        instanceId: 99,
       });
-      expect(refreshListener).toHaveBeenCalledWith(expect.objectContaining({
-        detail: {
-          spaceId: 12,
-          parentFolderId: 45,
-          fileIds: [88],
-        },
-      }));
-    } finally {
-      window.removeEventListener("knowledge-space-files:refresh", refreshListener);
-    }
+    });
   });
 });

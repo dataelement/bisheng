@@ -26,7 +26,7 @@ export default function MenuApprovalPluginGate({
     return <>{children}</>;
   }
   if (menuApprovalMode && !plugins.includes(pluginId)) {
-    return <Navigate to="/menu-unavailable" replace />;
+    return <Navigate to={`/menu-unavailable?plugin=${encodeURIComponent(pluginId)}`} replace />;
   }
   return <>{children}</>;
 }

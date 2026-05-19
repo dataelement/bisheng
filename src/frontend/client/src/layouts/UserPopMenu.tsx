@@ -1,8 +1,9 @@
-import { Bell, Check, ChevronRight, Globe, LogOut } from "lucide-react";
+import { Bell, Check, ChevronRight, FileCheck2, Globe, LogOut, SendToBack } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
 import { NotificationsDialog } from "~/components/NotificationsDialog";
+import { ApprovalCenterDialog } from "~/components/approval/ApprovalCenterDialog";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import {
     DropdownMenu,
@@ -26,6 +27,12 @@ export interface UserPopMenuProps {
     variant?: UserPopMenuVariant;
 }
 
+type ApprovalCenterTarget = {
+    tab: "my_tasks" | "my_requests";
+    taskId?: number | null;
+    instanceId?: number | null;
+};
+
 /** 抽屉内：内联菜单，盖住头像行且不超出侧栏宽度（不用 Portal） */
 function UserPopMenuDrawer() {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -43,6 +50,8 @@ function UserPopMenuDrawer() {
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+    const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+    const [approvalDialogTarget, setApprovalDialogTarget] = useState<ApprovalCenterTarget>({ tab: "my_tasks" });
     const {
         open: notificationsDialogOpen,
         setOpen: setNotificationsDialogOpen,
@@ -56,6 +65,13 @@ function UserPopMenuDrawer() {
 
     const handleNotificationsClick = () => {
         setNotificationsDialogOpen(true);
+        setMenuOpen(false);
+    };
+
+    const openApprovalCenter = (target: ApprovalCenterTarget) => {
+        setApprovalDialogTarget(target);
+        setApprovalDialogOpen(true);
+        setNotificationsDialogOpen(false);
         setMenuOpen(false);
     };
 
@@ -155,6 +171,28 @@ function UserPopMenuDrawer() {
                     <button
                         type="button"
                         className="group flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left outline-none hover:bg-gray-50"
+                        onClick={() => openApprovalCenter({ tab: "my_tasks" })}
+                    >
+                        <div className="flex items-center gap-3">
+                            <FileCheck2 className="size-[18px] text-gray-600" />
+                            <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_approval_my_tasks")}</span>
+                        </div>
+                    </button>
+
+                    <button
+                        type="button"
+                        className="group flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left outline-none hover:bg-gray-50"
+                        onClick={() => openApprovalCenter({ tab: "my_requests" })}
+                    >
+                        <div className="flex items-center gap-3">
+                            <SendToBack className="size-[18px] text-gray-600" />
+                            <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_approval_my_requests")}</span>
+                        </div>
+                    </button>
+
+                    <button
+                        type="button"
+                        className="group flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left outline-none hover:bg-gray-50"
                         onClick={handleNotificationsClick}
                     >
                         <div className="flex items-center gap-3">
@@ -241,6 +279,13 @@ function UserPopMenuDrawer() {
                 open={notificationsDialogOpen}
                 onOpenChange={handleNotificationsClose}
                 focusedMessageId={focusedMessageId}
+                onOpenApprovalCenter={openApprovalCenter}
+            />
+
+            <ApprovalCenterDialog
+                open={approvalDialogOpen}
+                onOpenChange={setApprovalDialogOpen}
+                target={approvalDialogTarget}
             />
         </div>
     );
@@ -252,6 +297,8 @@ function UserPopMenuRail() {
     const [menuSideOffset, setMenuSideOffset] = useState(0);
     const triggerRef = useRef<HTMLDivElement>(null);
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+    const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+    const [approvalDialogTarget, setApprovalDialogTarget] = useState<ApprovalCenterTarget>({ tab: "my_tasks" });
     const {
         open: notificationsDialogOpen,
         setOpen: setNotificationsDialogOpen,
@@ -275,6 +322,13 @@ function UserPopMenuRail() {
 
     const handleNotificationsClick = () => {
         setNotificationsDialogOpen(true);
+    };
+
+    const openApprovalCenter = (target: ApprovalCenterTarget) => {
+        setApprovalDialogTarget(target);
+        setApprovalDialogOpen(true);
+        setDropdownOpen(false);
+        setNotificationsDialogOpen(false);
     };
 
     const handleNotificationsClose = (open: boolean) => {
@@ -397,6 +451,22 @@ function UserPopMenuRail() {
                     <div className="flex flex-col gap-1 p-2 pt-1.5">
                         {/* 3. 消息提醒 (保留逻辑) */}
                         <DropdownMenuItem
+                            className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
+                            onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_tasks" }))}
+                        >
+                            <FileCheck2 className="size-[18px] text-gray-600" />
+                            <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_my_tasks")}</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                            className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
+                            onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_requests" }))}
+                        >
+                            <SendToBack className="size-[18px] text-gray-600" />
+                            <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_my_requests")}</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
                             className="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
                             onSelect={runMenuItemSelect(handleNotificationsClick)}
                         >
@@ -460,6 +530,13 @@ function UserPopMenuRail() {
                 open={notificationsDialogOpen}
                 onOpenChange={handleNotificationsClose}
                 focusedMessageId={focusedMessageId}
+                onOpenApprovalCenter={openApprovalCenter}
+            />
+
+            <ApprovalCenterDialog
+                open={approvalDialogOpen}
+                onOpenChange={setApprovalDialogOpen}
+                target={approvalDialogTarget}
             />
         </>
     );
