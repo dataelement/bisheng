@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from bisheng.common.errcode.approval import ApprovalMenuApplyDisabledError
 from bisheng.approval.domain.models.user_menu_access import UserMenuAccess
 from bisheng.approval.domain.repositories.user_menu_access_repository import (
     UserMenuAccessRepository,
 )
+
+
 class UserMenuAccessService:
     _PARENT_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         'home': ('workstation',),
@@ -37,6 +40,11 @@ class UserMenuAccessService:
         for key in menu_keys:
             _visit(key)
         return resolved
+
+    @classmethod
+    def ensure_application_allowed(cls, *, menu_approval_mode: bool, has_menu_access: bool) -> None:
+        if not menu_approval_mode or has_menu_access:
+            raise ApprovalMenuApplyDisabledError()
 
     @classmethod
     async def list_effective_menu_grants(cls, tenant_id: int, user_id: int) -> list[str]:

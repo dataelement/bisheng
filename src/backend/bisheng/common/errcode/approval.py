@@ -24,3 +24,13 @@ class ApprovalRejectReasonRequiredError(BaseErrorCode):
 class ApprovalSettingsPermissionDeniedError(BaseErrorCode):
     Code: int = 18104
     Msg: str = 'Only super admin can modify approval settings'
+
+
+class ApprovalGrantNotRevokableError(BaseErrorCode):
+    Code: int = 18110
+    Msg: str = 'Current menu grant cannot be revoked'
+
+
+class ApprovalMenuApplyDisabledError(BaseErrorCode):
+    Code: int = 18111
+    Msg: str = 'Menu approval mode is disabled for this menu request'
