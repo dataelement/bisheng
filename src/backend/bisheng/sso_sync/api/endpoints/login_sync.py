@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Request
 
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.sso_sync.domain.constants import DEFAULT_SSO_SYNC_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     LoginSyncRequest,
     LoginSyncResponse,
@@ -16,7 +17,6 @@ from bisheng.sso_sync.domain.services.org_sync_log_writer import (
     flush_log,
 )
 from bisheng.utils import get_request_ip
-
 
 router = APIRouter(tags=['SSO Sync'])
 
@@ -36,7 +36,9 @@ async def login_sync(
     returns a freshly signed JWT.
     """
     result = await LoginSyncService.execute(
-        payload, request_ip=get_request_ip(request),
+        payload,
+        request_ip=get_request_ip(request),
+        row_source=payload.source or DEFAULT_SSO_SYNC_SOURCE,
     )
     # Best-effort per-request audit row. ``skip_org_sync_log`` is used when
     # Gateway calls ``gateway_wecom_org_sync`` which flushes a single row.

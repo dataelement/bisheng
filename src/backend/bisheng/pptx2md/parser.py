@@ -16,6 +16,7 @@ from __future__ import print_function
 
 import logging
 import os
+import re
 from functools import partial
 from operator import attrgetter
 from typing import List, Union
@@ -111,13 +112,34 @@ def is_textbox_title(shape):
     return is_bold or max_font_size >= 14
 
 
+def has_meaningful_shape_text(text: str) -> bool:
+    if not text or not text.strip():
+        return False
+
+    cleaned = re.sub(r"[\s|•·…\-_/\\()\[\]{}<>:：;；,，.。!！?？]+", "", text)
+    if not cleaned:
+        return False
+
+    # Skip purely decorative badges like "1", "2", etc.
+    if cleaned.isdigit():
+        return False
+
+    # Single-character remnants are usually layout noise rather than knowledge content.
+    if len(cleaned) == 1:
+        return False
+
+    return True
+
+
 def is_text_block(config: ConversionConfig, shape):
-    if shape.has_text_frame:
-        if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and shape.text.strip():
+    if shape.has_text_frame and has_meaningful_shape_text(shape.text):
+        if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX:
             return True
         if shape.is_placeholder and shape.placeholder_format.type == PP_PLACEHOLDER.BODY:
             return True
         if len(shape.text) > config.min_block_size:
+            return True
+        if shape.shape_type in {MSO_SHAPE_TYPE.AUTO_SHAPE, MSO_SHAPE_TYPE.FREEFORM}:
             return True
     return False
 

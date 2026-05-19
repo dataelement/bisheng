@@ -3,12 +3,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict
 
-from sqlalchemy import Enum as SQLEnum, DateTime, text, JSON
+from sqlalchemy import Enum as SQLEnum, DateTime, text
 from sqlalchemy import CHAR, Column, Integer
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 
+
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 class ResourceTypeEnum(str, Enum):
     """Resource Type Enumeration"""
@@ -62,7 +64,7 @@ class ShareLink(SQLModelSerializable, table=True):
     status: ShareLinkStatusEnum = Field(default=ShareLinkStatusEnum.ACTIVE,
                                         sa_column=Column(SQLEnum(ShareLinkStatusEnum)), description='Share link status')
     access_count: int = Field(default=0, description='Number of visits')
-    meta_data: Optional[Dict] = Field(default=None, description='Shared link metadata', sa_type=JSON, nullable=True)
+    meta_data: Optional[Dict] = Field(default=None, description='Shared link metadata', sa_column=Column(JsonType, nullable=True))
     expire_time: int = Field(default=0, description='Expiration time, in seconds,0Indicates never expires')
 
     create_user_id: str = Field(..., sa_column=Column(CHAR(36)), description='Create UserID')
@@ -77,4 +79,4 @@ class ShareLink(SQLModelSerializable, table=True):
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))

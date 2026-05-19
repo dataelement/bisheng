@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional
 
 from sqlalchemy import Column, DateTime, text
-from sqlalchemy.dialects.mysql import LONGTEXT
+from bisheng.core.database.dialect_helpers import LargeText
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -28,7 +28,7 @@ class ConfigKeyEnum(Enum):
 
 class ConfigBase(SQLModelSerializable):
     key: str = Field(index=True, unique=True)
-    value: str = Field(sa_column=Column(LONGTEXT))
+    value: str = Field(sa_column=Column(LargeText))
     comment: Optional[str] = Field(default=None, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

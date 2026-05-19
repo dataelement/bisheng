@@ -16,7 +16,8 @@ from bisheng.channel.domain.es.article_index import (
 from bisheng.channel.domain.schemas.article_schema import (
     ArticleDocument,
     ArticleSearchResultItem,
-    ArticleSearchPageResponse, ArticleDetailResponse,
+    ArticleSearchPageResponse,
+    ArticleFullDocument,
 )
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
 
@@ -160,7 +161,7 @@ class ArticleEsService:
     #  Read
     # ──────────────────────────────────────────
 
-    async def get_article(self, doc_id: str) -> Optional[ArticleDetailResponse]:
+    async def get_article(self, doc_id: str) -> Optional[ArticleFullDocument]:
         """
         Get article by document ID.
 
@@ -174,7 +175,7 @@ class ArticleEsService:
         try:
             result = await client.get(index=ARTICLE_INDEX_NAME, id=doc_id)
             source = result["_source"]
-            return ArticleDetailResponse(doc_id=result["_id"], **source)
+            return ArticleFullDocument(doc_id=result["_id"], **source)
         except Exception:
             logger.debug(f"Article not found: {doc_id}")
             return None
@@ -504,6 +505,7 @@ class ArticleEsService:
             page: int = 1,
             page_size: int = 20,
             exclude_article_ids: Optional[List[str]] = None,
+            include_content: bool = False,
     ) -> ArticleSearchPageResponse:
         """
         Search articles, supports source filtering, keyword search, filter rules, highlighting, and pagination.
@@ -515,6 +517,7 @@ class ArticleEsService:
             page: Page number (starts from 1)
             page_size: Page size
             exclude_article_ids: List of article IDs to exclude
+            include_content: Include full plain text internally for server-side review.
 
         Returns:
             ArticleSearchPageResponse
@@ -597,22 +600,26 @@ class ArticleEsService:
 
         # Build request body
         from_offset = (page - 1) * page_size
+        source_fields = [
+            "source_type",
+            "source_id",
+            "title",
+            "content_preview",
+            "cover_image",
+            "publish_time",
+            "source_url",
+            "create_time",
+            "update_time",
+        ]
+        if include_content:
+            source_fields.append("content")
+
         body: Dict[str, Any] = {
             "query": query,
             "sort": [{"publish_time": {"order": "desc"}}],
             "from": from_offset,
             "size": page_size,
-            "_source": [
-                "source_type",
-                "source_id",
-                "title",
-                "content_preview",
-                "cover_image",
-                "publish_time",
-                "source_url",
-                "create_time",
-                "update_time",
-            ],
+            "_source": source_fields,
         }
         if highlight_config:
             body["highlight"] = highlight_config
@@ -631,12 +638,16 @@ class ArticleEsService:
         for hit in response["hits"]["hits"]:
             source = dict(hit["_source"])
             highlight = hit.get("highlight")
-            source["content"] = source.pop("content_preview", "")
+            review_content = source.pop("content", "")
+            source["content_preview"] = (
+                source.pop("content_preview", "") or self._build_content_preview(review_content)
+            )
 
             item = ArticleSearchResultItem(
                 doc_id=hit["_id"],
                 score=hit.get("_score"),
                 highlight=highlight,
+                review_content=review_content,
                 **source,
             )
             items.append(item)

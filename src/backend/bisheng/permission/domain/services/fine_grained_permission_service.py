@@ -268,6 +268,7 @@ class FineGrainedPermissionService:
         relation: str,
         bindings: list[dict],
         binding_department_paths: dict[int, str],
+        tuple_department_paths: dict[int, str] | None = None,
     ) -> dict | None:
         subject_type, subject_id, _suffix = cls._subject_parts(tuple_user)
 
@@ -283,8 +284,14 @@ class FineGrainedPermissionService:
                     return binding
 
         if subject_type == 'department' and subject_id is not None:
-            tuple_department_rows = await DepartmentDao.aget_by_ids([subject_id])
-            tuple_department_path = tuple_department_rows[0].path if tuple_department_rows else ''
+            tuple_department_path = ''
+            if tuple_department_paths is not None and subject_id in tuple_department_paths:
+                tuple_department_path = tuple_department_paths[subject_id]
+            else:
+                tuple_department_rows = await DepartmentDao.aget_by_ids([subject_id])
+                tuple_department_path = tuple_department_rows[0].path if tuple_department_rows else ''
+                if tuple_department_paths is not None:
+                    tuple_department_paths[subject_id] = tuple_department_path
             for binding in bindings:
                 if binding.get('resource_type') != resource_type:
                     continue
@@ -354,6 +361,8 @@ class FineGrainedPermissionService:
         nearest_binding_wins: bool = False,
         return_match_metadata: bool = False,
         use_permission_level_fallback: bool = True,
+        tuple_cache: dict[str, list[dict]] | None = None,
+        tuple_department_paths: dict[int, str] | None = None,
     ) -> set[str]:
         if models is None:
             models = await cls.get_relation_models_map()
@@ -377,7 +386,13 @@ class FineGrainedPermissionService:
                     level_permissions: set[str] = set()
                     level_saw_tuple = False
                     for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
-                        tuples = await fga.read_tuples(object=f'{tuple_resource_type}:{resource_id}')
+                        tuple_object = f'{tuple_resource_type}:{resource_id}'
+                        if tuple_cache is not None and tuple_object in tuple_cache:
+                            tuples = tuple_cache[tuple_object]
+                        else:
+                            tuples = await fga.read_tuples(object=tuple_object)
+                            if tuple_cache is not None:
+                                tuple_cache[tuple_object] = tuples
                         binding_resource_type = (
                             resource_type
                             if tuple_resource_type != 'knowledge_space' or resource_type != 'knowledge_library'
@@ -395,6 +410,7 @@ class FineGrainedPermissionService:
                                 relation,
                                 bindings,
                                 binding_department_paths,
+                                tuple_department_paths,
                             )
                             if cls._is_legacy_subscription_viewer_tuple(
                                 tuple_resource_type,

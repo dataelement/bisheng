@@ -89,92 +89,122 @@ export function TopBar({
         }
     };
 
+    // Touch-device detection (initialized synchronously to avoid first-paint flash).
+    // Hides zoom controls on phones/tablets (pinch-to-zoom is the natural gesture there)
+    // and suppresses the in-page narrow-viewport title row that targets PC users only.
+    const [isMobileDevice] = useState(() =>
+        typeof window !== "undefined" &&
+        window.matchMedia("(hover: none) and (pointer: coarse)").matches
+    );
+
     return (
-        <div className="flex items-center justify-between border-b border-[#ececec] bg-white px-4 py-4 shrink-0 select-none z-50">
-            {/* ===== Left: TOC toggle + File name ===== */}
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-                {showSidebar && (
-                    <div className="flex items-center relative shrink-0">
-                        <Button
-                            variant="ghost"
-                            className={cn(
-                                "group h-8 w-8 rounded-md border p-1.5",
-                                sidebarOpen
-                                    ? "border-primary bg-primary/10"
-                                    : "border-[#e5e6eb] bg-white hover:bg-[#f7f8fa]"
-                            )}
-                            onClick={onToggleSidebar}
-                        >
-                            <SidebarToggleIcon
+        <div className="border-b border-[#ececec] bg-white shrink-0 select-none z-50">
+            {/* ===== PC-narrow top row: filename only (PC <768px; hidden on mobile devices) ===== */}
+            {!isMobileDevice && (
+                <div className="flex md:hidden items-center justify-center px-4 py-3 pb-0">
+                    <span
+                        className="block min-w-0 truncate text-sm font-semibold text-gray-800 text-center"
+                        title={fileName}
+                    >
+                        {fileName}
+                    </span>
+                </div>
+            )}
+
+            {/* ===== Main row ===== */}
+            <div className="flex items-center justify-between px-4 py-4">
+                {/* ===== Left: TOC toggle + filename ===== */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {showSidebar && (
+                        <div className="flex items-center relative shrink-0">
+                            <Button
+                                variant="ghost"
                                 className={cn(
-                                    "transition-colors",
-                                    sidebarOpen ? "text-primary" : "text-[#86909c] group-hover:text-[#4e5969]"
+                                    "group h-8 w-8 rounded-md border p-1.5",
+                                    sidebarOpen
+                                        ? "border-primary bg-primary/10"
+                                        : "border-[#e5e6eb] bg-white hover:bg-[#f7f8fa]"
                                 )}
-                            />
-                        </Button>
-                    </div>
-                )}
-                <span className="text-xl font-semibold text-gray-800 flex-1 break-all">
-                    {fileName}
-                </span>
-            </div>
+                                onClick={onToggleSidebar}
+                            >
+                                <SidebarToggleIcon
+                                    className={cn(
+                                        "transition-colors",
+                                        sidebarOpen ? "text-primary" : "text-[#86909c] group-hover:text-[#4e5969]"
+                                    )}
+                                />
+                            </Button>
+                        </div>
+                    )}
+                    {/* Title in main row: PC ≥md only.
+                        Mobile devices hide it; PC <md uses the dedicated top row above. */}
+                    {!isMobileDevice && (
+                        <span
+                            className="hidden md:block min-w-0 flex-1 truncate text-xl font-semibold text-gray-800"
+                            title={fileName}
+                        >
+                            {fileName}
+                        </span>
+                    )}
+                </div>
 
-            {/* ===== Center: Zoom + Pagination ===== */}
-            <div className="flex gap-[16px] items-center relative shrink-0 justify-center flex-1">
-                {showZoom && (
-                    <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
-                        <Button onClick={onZoomOut} disabled={zoomLevel <= 25}
-                            variant="ghost" className="w-8 h-8 p-2">
-                            <ZoomOutIcon className="text-[#64698b]" />
-                        </Button>
+                {/* ===== Center: Zoom + Pagination ===== */}
+                <div className="flex gap-[16px] items-center relative shrink-0 justify-center flex-1">
+                    {showZoom && !isMobileDevice && (
+                        <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
+                            <Button onClick={onZoomOut} disabled={zoomLevel <= 25}
+                                variant="ghost" className="w-8 h-8 p-2">
+                                <ZoomOutIcon className="text-[#64698b]" />
+                            </Button>
 
-                        <div className="bg-white border hover:border-[#335cff] cursor-pointer transition-colors border-[#ececec] border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[88px] h-[32px]">
-                            <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
-                                <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-[#212121] text-[14px] whitespace-nowrap">
-                                    {zoomLevel}%
-                                </p>
+                            <div className="bg-white border hover:border-[#335cff] cursor-pointer transition-colors border-[#ececec] border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[88px] h-[32px]">
+                                <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
+                                    <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-[#212121] text-[14px] whitespace-nowrap">
+                                        {zoomLevel}%
+                                    </p>
+                                </div>
                             </div>
-                        </div>
 
-                        <Button onClick={onZoomIn} disabled={zoomLevel >= 500}
-                            variant="ghost" className="w-8 h-8 p-2">
-                            <ZoomInIcon className="text-[#64698b]" />
+                            <Button onClick={onZoomIn} disabled={zoomLevel >= 500}
+                                variant="ghost" className="w-8 h-8 p-2">
+                                <ZoomInIcon className="text-[#64698b]" />
+                            </Button>
+                        </div>
+                    )}
+
+                    {showPagination && totalPages > 0 && (
+                        <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
+                            <div className="bg-[#fbfbfb] content-stretch flex items-center overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[40px] h-[28px]">
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={pageInput}
+                                    onChange={(e) => setPageInput(e.target.value)}
+                                    onBlur={handlePageSubmit}
+                                    onKeyDown={handleKeyDown}
+                                    className="w-full text-center bg-transparent outline-none font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-[#212121] text-[14px]"
+                                />
+                            </div>
+                            <div className="relative shrink-0 size-[12px] flex items-center justify-center text-[#86909c]">
+                                /
+                            </div>
+                            <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-[#212121] text-[14px] whitespace-nowrap pl-1">
+                                {totalPages}
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                {/* ===== Right: actions slot + Download ===== */}
+                <div className="content-stretch flex gap-[12px] items-center justify-end relative shrink-0 flex-1">
+                    {actions}
+                    {onDownload && (
+                        <Button onClick={onDownload}
+                            variant="outline" className="w-8 h-8 p-2">
+                            <DownloadIcon />
                         </Button>
-                    </div>
-                )}
-
-                {showPagination && totalPages > 0 && (
-                    <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
-                        <div className="bg-[#fbfbfb] content-stretch flex items-center overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[40px] h-[28px]">
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={pageInput}
-                                onChange={(e) => setPageInput(e.target.value)}
-                                onBlur={handlePageSubmit}
-                                onKeyDown={handleKeyDown}
-                                className="w-full text-center bg-transparent outline-none font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-[#212121] text-[14px]"
-                            />
-                        </div>
-                        <div className="relative shrink-0 size-[12px] flex items-center justify-center text-[#86909c]">
-                            /
-                        </div>
-                        <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-[#212121] text-[14px] whitespace-nowrap pl-1">
-                            {totalPages}
-                        </p>
-                    </div>
-                )}
-            </div>
-
-            {/* ===== Right: actions slot + Download ===== */}
-            <div className="content-stretch flex gap-[12px] items-center justify-end relative shrink-0 flex-1">
-                {actions}
-                {onDownload && (
-                    <Button onClick={onDownload}
-                        variant="outline" className="w-8 h-8 p-2">
-                        <DownloadIcon />
-                    </Button>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

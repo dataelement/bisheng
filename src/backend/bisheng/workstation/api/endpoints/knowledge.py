@@ -8,6 +8,8 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.role.domain.services.quota_service import QuotaService
+from bisheng.utils.util import sync_func_to_async
 from bisheng.workstation.domain.services import WorkStationService
 
 from ..dependencies import LoginUserDep
@@ -16,19 +18,21 @@ router = APIRouter()
 
 
 @router.post('/knowledgeUpload')
-def knowledge_upload(
+async def knowledge_upload(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     login_user=LoginUserDep,
 ):
     try:
-        file_path = save_download_file(file.file, 'bisheng', file.filename)
-        res = WorkStationService.uploadPersonalKnowledge(
+        file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file.filename)
+        upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+        res = await WorkStationService.uploadPersonalKnowledge(
             request,
             login_user,
             file_path=file_path,
             background_tasks=background_tasks,
+            upload_limit_bytes=upload_limit_bytes,
         )
         return resp_200(data=res[0])
     except Exception as exc:

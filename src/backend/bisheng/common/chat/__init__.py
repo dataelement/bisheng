@@ -1,5 +1,4 @@
 from bisheng.common.chat.client import ChatClient
-from bisheng.common.chat.manager import ChatManager
 from bisheng.common.chat.types import IgnoreException, WorkType
 from bisheng.common.chat.utils import (
     SourceType,
@@ -26,3 +25,11 @@ __all__ = [
     "sync_judge_source",
     "sync_process_source_document",
 ]
+
+
+def __getattr__(name):
+    if name == "ChatManager":
+        from bisheng.common.chat.manager import ChatManager
+
+        return ChatManager
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

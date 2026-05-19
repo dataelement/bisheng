@@ -10,6 +10,8 @@ from bisheng.core.database import get_async_db_session
 from bisheng.user.domain.models.user import User
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class BusinessTypeEnum(str, Enum):
     SPACE = 'space'
     CHANNEL = 'channel'
@@ -73,7 +75,7 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     @property
     def is_active(self) -> bool:

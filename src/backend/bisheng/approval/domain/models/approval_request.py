@@ -4,16 +4,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, or_, text
+from sqlalchemy import Column, DateTime, Integer, String, Text, or_, text
 from sqlmodel import Field, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
-
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 
 class ApprovalRequestTypeEnum(str, Enum):
     DEPARTMENT_KNOWLEDGE_SPACE_FILE_UPLOAD = 'department_knowledge_space_file_upload'
-
 
 class ApprovalRequestStatusEnum(str, Enum):
     PENDING_REVIEW = 'pending_review'
@@ -23,16 +22,13 @@ class ApprovalRequestStatusEnum(str, Enum):
     FINALIZED = 'finalized'
     FINALIZE_FAILED = 'finalize_failed'
 
-
 class ApprovalSafetyStatusEnum(str, Enum):
     SKIPPED = 'skipped'
     PASSED = 'passed'
     REJECTED = 'rejected'
 
-
 class ApprovalReviewModeEnum(str, Enum):
     FIRST_RESPONSE_WINS = 'first_response_wins'
-
 
 class ApprovalRequestBase(SQLModelSerializable):
     tenant_id: Optional[int] = Field(
@@ -57,9 +53,9 @@ class ApprovalRequestBase(SQLModelSerializable):
     parent_folder_id: Optional[int] = Field(default=None, index=True)
     applicant_user_id: int = Field(default=0, index=True)
     applicant_user_name: str = Field(default='', sa_column=Column(String(255), nullable=False))
-    reviewer_user_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    reviewer_user_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JsonType, nullable=True))
     file_count: int = Field(default=0, index=False)
-    payload_json: Dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    payload_json: Dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     safety_status: str = Field(
         default=ApprovalSafetyStatusEnum.SKIPPED.value,
         sa_column=Column(String(32), nullable=False, server_default=text("'skipped'")),
@@ -79,15 +75,13 @@ class ApprovalRequestBase(SQLModelSerializable):
         sa_column=Column(
             DateTime,
             nullable=False,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
-
 
 class ApprovalRequest(ApprovalRequestBase, table=True):
     __tablename__ = 'approval_request'
     id: Optional[int] = Field(default=None, primary_key=True)
-
 
 class ApprovalRequestDao(ApprovalRequestBase):
     @classmethod

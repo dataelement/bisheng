@@ -2,6 +2,33 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Export Scripts
+
+### `export_daily_chat_messages.py`
+
+Export 日常模式（`flow_type = 15`）对话内容，默认导出最近 30 天消息并按会话聚合为 JSON。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/export_daily_chat_messages.py
+PYTHONPATH=./ .venv/bin/python scripts/export_daily_chat_messages.py --days 7
+PYTHONPATH=./ .venv/bin/python scripts/export_daily_chat_messages.py --format csv
+PYTHONPATH=./ .venv/bin/python scripts/export_daily_chat_messages.py --tenant-id 3
+PYTHONPATH=./ .venv/bin/python scripts/export_daily_chat_messages.py --full-session
+```
+
+Options:
+
+- `--config`: 指定配置文件，默认取环境变量 `config`，否则使用 `config.yaml`
+- `--days`: 最近多少天，默认 `30`
+- `--format`: `json` 或 `csv`
+- `--tenant-id`: 仅导出指定租户
+- `--user-id`: 仅导出指定用户
+- `--chat-id`: 仅导出指定会话
+- `--include-deleted`: 包含已删除会话
+- `--full-session`: 只要会话在时间窗口内活跃，就导出该会话的全部消息
+
 ## Permission Scripts
 
 ### `migrate_workstation_models_to_workbench.py`

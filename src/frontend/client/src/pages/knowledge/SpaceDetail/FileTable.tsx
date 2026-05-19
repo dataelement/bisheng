@@ -172,7 +172,7 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
         return (
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <div className="inline-flex max-w-full cursor-help">
+                    <div className="inline-flex max-w-full">
                         {node}
                     </div>
                 </TooltipTrigger>
@@ -204,6 +204,7 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
         [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
         [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
         [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+        [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
     };
     const item = config[status] || config[FileStatus.WAITING];
     return wrapWithReason(
@@ -755,6 +756,7 @@ function FileRow({
     const hasRetryOption = Boolean(
         (
             file.status === FileStatus.FAILED ||
+            file.status === FileStatus.VIOLATION ||
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );

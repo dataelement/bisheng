@@ -19,6 +19,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { getFileTypeFromName, isKnowledgeItemPending, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
+import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
 
 /**
  * Resolve a human-friendly reason from an upload error.
@@ -338,6 +339,8 @@ export function useFileUpload({
                     setFiles(prev => [created, ...prev]);
                     setTotal(prev => prev + 1);
                     setCreatingFolder(null);
+                    // Keep the left-side folder tree in sync.
+                    dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
                 } catch {
                     if (activeSpaceIdRef.current !== requestSpaceId) {
                         return;
@@ -358,6 +361,10 @@ export function useFileUpload({
                     await renameFileApi(activeSpace.id, fileId, newName);
                 }
                 setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
+                if (target.type === FileType.FOLDER) {
+                    // Folder rename changes a tree node label — sync the left tree.
+                    dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+                }
                 showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS } as any);
             } catch {
                 showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.ERROR });
@@ -388,6 +395,10 @@ export function useFileUpload({
                 }
                 setFiles(prev => prev.filter(f => f.id !== fileId));
                 setTotal(prev => Math.max(0, prev - 1));
+                if (target.type === FileType.FOLDER) {
+                    // Folder removed — sync the left tree.
+                    dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+                }
                 showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
             } catch {
                 showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });

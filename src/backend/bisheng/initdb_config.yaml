@@ -212,3 +212,8 @@ information_conf:
 
 mcp:
   enable_stdio: true
+
+knowledge_space:
+  # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）
+  # 默认 true；中粮场内部署改为 false 走原 Tab 布局
+  tree_structured_directory_display: true

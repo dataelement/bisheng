@@ -10,6 +10,8 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class VariableBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='Belonging Skills')
     version_id: int = Field(description='Version of the skill to which it belongs')
@@ -26,7 +28,7 @@ class VariableBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     @field_validator('variable_name')
     @classmethod

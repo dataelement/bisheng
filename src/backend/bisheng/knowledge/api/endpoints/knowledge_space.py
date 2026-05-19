@@ -274,10 +274,12 @@ async def list_space_children(
         file_status: List[int] = Query(default=None, description="文件状态列表"),
         page: int = 1,
         page_size: int = 20,
+        file_type: Optional[int] = Query(default=None, description="0=DIR only, 1=FILE only, empty=both"),
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.list_space_children(space_id, parent_id, file_ids, order_field, order_sort,
-                                           file_status=file_status, page=page, page_size=page_size)
+                                           file_status=file_status, page=page, page_size=page_size,
+                                           file_type=file_type)
     return resp_200(result)
 
 

@@ -10,33 +10,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import index_exists, table_exists, update_time_server_default
+
 revision: str = 'f004_rebac'
 down_revision: Union[str, Sequence[str], None] = 'f003_user_group'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLES "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
-    ), {'t': table_name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.STATISTICS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
     """Create failed_tuple table."""
-    if not _table_exists('failed_tuple'):
+    conn = op.get_bind()
+    if not table_exists(conn, 'failed_tuple'):
         op.create_table(
             'failed_tuple',
             sa.Column('id', sa.BigInteger, primary_key=True, autoincrement=True),
@@ -57,19 +41,19 @@ def upgrade() -> None:
             sa.Column('create_time', sa.DateTime, nullable=False,
                       server_default=sa.text('CURRENT_TIMESTAMP')),
             sa.Column('update_time', sa.DateTime, nullable=False,
-                      server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+                      server_default=update_time_server_default(conn)),
         )
-    if not _index_exists('failed_tuple', 'idx_status_retry'):
+    if not index_exists(conn, 'failed_tuple', 'idx_status_retry'):
         op.create_index('idx_status_retry', 'failed_tuple', ['status', 'retry_count'])
-    if not _index_exists('failed_tuple', 'idx_tenant'):
+    if not index_exists(conn, 'failed_tuple', 'idx_tenant'):
         op.create_index('idx_tenant', 'failed_tuple', ['tenant_id'])
-
 
 def downgrade() -> None:
     """Drop failed_tuple table."""
-    if _index_exists('failed_tuple', 'idx_tenant'):
+    conn = op.get_bind()
+    if index_exists(conn, 'failed_tuple', 'idx_tenant'):
         op.drop_index('idx_tenant', table_name='failed_tuple')
-    if _index_exists('failed_tuple', 'idx_status_retry'):
+    if index_exists(conn, 'failed_tuple', 'idx_status_retry'):
         op.drop_index('idx_status_retry', table_name='failed_tuple')
-    if _table_exists('failed_tuple'):
+    if table_exists(conn, 'failed_tuple'):
         op.drop_table('failed_tuple')

@@ -1240,13 +1240,13 @@ async def _add_implicit_permission_entries(
     model_map: dict,
     login_user: UserPayload,
 ) -> list[ResourcePermissionItem]:
-    """Show department-space implicit access sources in the permission dialog.
+    """Show implicit caller access sources in the permission dialog.
 
-    Department knowledge spaces can be accessible through the
-    department_knowledge_space binding or implicit permission shortcuts even
-    when older data has no explicit OpenFGA tuple to list. The authorization
-    checks already honor those paths; this keeps the management dialog aligned
-    with the effective permission model.
+    Some department knowledge spaces remain accessible to the current caller
+    through implicit permission shortcuts even when no explicit OpenFGA tuple
+    exists to list. The authorization checks already honor those paths; this
+    keeps the management dialog aligned with the effective permission model
+    without synthesizing department viewer rows that look like stored grants.
     """
     out = list(permissions)
     if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
@@ -1261,30 +1261,6 @@ async def _add_implicit_permission_entries(
         return out
     if binding is None:
         return out
-
-    existing = {_permission_subject_key(item) for item in out}
-
-    department_id = int(binding.department_id)
-    department_key = ('department', department_id, 'viewer')
-    if department_key not in existing:
-        department_name = None
-        try:
-            from bisheng.database.models.department import DepartmentDao
-
-            dept = await DepartmentDao.aget_by_id(department_id)
-            department_name = getattr(dept, 'name', None) if dept else None
-        except Exception as e:
-            logger.debug('Could not resolve department %s for permission list: %s', department_id, e)
-        item = ResourcePermissionItem(
-            subject_type='department',
-            subject_id=department_id,
-            subject_name=department_name,
-            relation='viewer',
-            include_children=False,
-        )
-        _attach_default_model_metadata(item, model_map)
-        out.append(item)
-        existing.add(_permission_subject_key(item))
 
     user_has_list_entry = any(
         item.subject_type == 'user' and int(item.subject_id) == int(login_user.user_id)

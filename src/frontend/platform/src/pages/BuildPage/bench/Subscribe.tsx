@@ -10,16 +10,21 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getSubConfigApi, setSubConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import {
+    SubscriptionSensitivePolicy,
+    type SubscriptionSensitivePolicyHandle,
+} from "./SubscriptionSensitivePolicy";
 
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -40,8 +45,7 @@ export interface ChatConfigForm {
     maxChunkSize: number;
     feedbackTips: string;
 }
-export default function Subscribe() {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
+export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -52,6 +56,7 @@ export default function Subscribe() {
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
+    const sensitivePolicyRef = useRef<SubscriptionSensitivePolicyHandle>(null);
 
     const { t } = useTranslation()
     const {
@@ -59,11 +64,11 @@ export default function Subscribe() {
         errors,
         setErrors,
         setFormData,
+        configMeta,
         handleInputChange,
         toggleFeature,
-        handleSave
+        handleSave: saveChatConfig
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -74,22 +79,30 @@ export default function Subscribe() {
         appCenterWelcomeRef,
         appCenterDescriptionRef,
         modelManagementContainerRef,
-    });
+    }, scopeVersion);
 
 
     const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
+        if (user.user_id && !canManageWorkbenchConfig(user)) {
             navigate('/build/apps')
         }
-    }, [user])
+    }, [navigate, user])
+
+    const handleSave = async () => {
+        const sensitiveSaved = await sensitivePolicyRef.current?.save();
+        if (sensitiveSaved === false) return false;
+        return saveChatConfig();
+    };
+
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">
@@ -187,6 +200,7 @@ export default function Subscribe() {
                                 </div>
                             </>
                         </div>
+                        <SubscriptionSensitivePolicy ref={sensitivePolicyRef} />
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
@@ -208,7 +222,6 @@ export default function Subscribe() {
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -221,7 +234,7 @@ interface UseChatConfigProps {
     modelManagementContainerRef: React.RefObject<HTMLDivElement>;
 }
 
-const useChatConfig = (refs: UseChatConfigProps) => {
+const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
     const { t } = useTranslation()
 
     const [formData, setFormData] = useState<ChatConfigForm>({
@@ -230,11 +243,14 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
 
     useEffect(() => {
+        setConfigMeta(null);
         getSubConfigApi().then((res) => {
-            // Interceptor returns response.data.data — null when no config row exists yet.
-            const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
+            const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res);
+            setConfigMeta(meta);
+            const cfg = envData != null && typeof envData === 'object' ? envData : null;
             setFormData((prev) => {
                 const systemPromptFromRes = cfg?.systemPrompt ?? cfg?.system_prompt;
                 const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
@@ -253,10 +269,9 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                 };
             });
         });
-    }, [t]);
+    }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -290,7 +305,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     const validateForm = (): boolean => {
         let isValid = true;
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             inputPlaceholder: '',
@@ -361,24 +375,27 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             feedback_tips: formData.feedbackTips,
         };
 
-        captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave)).then((res) => {
-            if (res) {
-                if (feedbackTooLong) {
-                    toast({
-                        variant: 'warning',
-                        description: '提示文案不可超过 1000 个字符',
-                    });
-                } else {
-                    toast({
-                        variant: 'success',
-                        description: t('chatConfig.saveSuccess'),
-                    });
-                }
-                reloadConfig()
+        const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));
+        if (res) {
+            setConfigMeta({
+                inherited_from_root: false,
+                has_override: true,
+            });
+            if (feedbackTooLong) {
+                toast({
+                    variant: 'warning',
+                    description: '提示文案不可超过 1000 个字符',
+                });
+            } else {
+                toast({
+                    variant: 'success',
+                    description: t('chatConfig.saveSuccess'),
+                });
             }
-        })
+            reloadConfig()
+        }
 
-        return true
+        return Boolean(res)
     };
 
     return {
@@ -386,6 +403,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         errors,
         setFormData,
         setErrors,
+        configMeta,
         handleInputChange,
         toggleFeature,
         handleSave

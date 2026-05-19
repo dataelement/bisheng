@@ -3,10 +3,11 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Dict, Optional
 
-from sqlalchemy import Column, Integer, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR, func
+from sqlalchemy import Column, Integer, Text, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR, func
 from sqlmodel import Field, select, col, update
 
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, json_search_exists
 from bisheng.database.base import uuid_hex
 from bisheng.common.models.base import SQLModelSerializable
 
@@ -42,14 +43,14 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     question: str = Field(..., description='User Questions', sa_type=Text, nullable=False)
     title: Optional[str] = Field(None, description='Session title', sa_type=Text, nullable=True)
-    tools: Optional[List[Dict]] = Field(None, description='List of available tools', sa_type=JSON, nullable=True)
+    tools: Optional[List[Dict]] = Field(None, description='List of available tools', sa_column=Column(JsonType, nullable=True))
     # Personal Knowledge Base
     personal_knowledge_enabled: bool = Field(False, description='Whether or not to enable Personal Knowledge Base', sa_type=Boolean)
     # Organization Knowledge Base
     org_knowledge_enabled: bool = Field(False, description='Whether to enable organization knowledge base', sa_type=Boolean)
-    files: Optional[List[Dict]] = Field(None, description='Uploaded files list:', sa_type=JSON, nullable=True)
+    files: Optional[List[Dict]] = Field(None, description='Uploaded files list:', sa_column=Column(JsonType, nullable=True))
     sop: Optional[str] = Field(None, description='SOPContents', sa_type=Text, nullable=True)
-    output_result: Optional[Dict] = Field(None, description='Output Results', sa_type=JSON, nullable=True)
+    output_result: Optional[Dict] = Field(None, description='Output Results', sa_column=Column(JsonType, nullable=True))
     status: SessionVersionStatusEnum = Field(default=SessionVersionStatusEnum.NOT_STARTED, description='Session Version Status',
                                              sa_column=Column(SQLEnum(SessionVersionStatusEnum), nullable=False))
     score: Optional[int] = Field(None, description='Session Score', ge=1, le=5, nullable=True)
@@ -78,7 +79,7 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
     __tablename__ = "linsight_session_version"
 
@@ -159,8 +160,9 @@ class LinsightSessionVersionDao(object):
         :return: Inspiration Conversation Version Object
         """
         async with get_async_db_session() as session:
+            dialect = session.get_bind().dialect.name
             statement = select(LinsightSessionVersion).where(
-                func.json_search(LinsightSessionVersion.files, 'all', file_id)
+                json_search_exists(LinsightSessionVersion.files, file_id, dialect)
             )
             result = await session.exec(statement)
             return result.first()

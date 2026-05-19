@@ -10,6 +10,8 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 
 
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
     tenant_id: Optional[int] = Field(
         default=None,
@@ -64,7 +66,7 @@ class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
         sa_column=Column(
             DateTime,
             nullable=False,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
         ),
     )
 

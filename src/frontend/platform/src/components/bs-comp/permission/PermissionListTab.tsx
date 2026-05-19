@@ -3,9 +3,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu"
-import Tip from "@/components/bs-ui/tooltip/tip"
+import { Portal, Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
   authorizeResource,
@@ -16,12 +17,56 @@ import {
 } from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { cn } from "@/utils"
-import { Building2, ChevronDown, Loader2, RotateCcw, Search, Trash2, User, Users } from "lucide-react"
+import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { buildDepartmentPathLabelMap } from "./departmentPathUtils"
 import { RelationModelOption } from "./RelationSelect"
 import { PermissionEntry, RelationLevel, ResourceType, RevokeItem } from "./types"
+
+// Tooltip that only shows when the wrapped element's text is truncated.
+function TruncatedTip({
+  content,
+  side = "top",
+  styleClasses,
+  className,
+  as: Tag = "span",
+  children,
+}: {
+  content: string
+  side?: "top" | "right" | "bottom" | "left"
+  styleClasses?: string
+  className?: string
+  as?: "span" | "p" | "div"
+  children: React.ReactNode
+}) {
+  const ref = useRef<HTMLElement | null>(null)
+  const [open, setOpen] = useState(false)
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setOpen(false)
+      return
+    }
+    const el = ref.current
+    if (el && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
+      setOpen(true)
+    }
+  }
+
+  return (
+    <Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={200}>
+      <TooltipTrigger asChild>
+        <Tag ref={ref as React.RefObject<HTMLElement>} className={className}>{children}</Tag>
+      </TooltipTrigger>
+      <Portal>
+        <TooltipContent className={cn(styleClasses, "text-sm shadow-md")} side={side}>
+          <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
+        </TooltipContent>
+      </Portal>
+    </Tooltip>
+  )
+}
 
 const SUBJECT_ICONS = {
   user: User,
@@ -489,21 +534,17 @@ export function PermissionListTab({
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
-                      <Tip content={displayName} side="top" styleClasses="z-[120]">
-                        <span className="truncate text-[14px] leading-[22px] text-[#212121]">
-                          {displayName}
-                        </span>
-                      </Tip>
+                      <TruncatedTip content={displayName} styleClasses="z-[120]" className="truncate text-[14px] leading-[22px] text-[#212121]">
+                        {displayName}
+                      </TruncatedTip>
                     </div>
 
-                    <Tip content={entryCaption} side="top" styleClasses="z-[120]">
-                      <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
-                        {entryCaption}
-                      </p>
-                    </Tip>
+                    <TruncatedTip content={entryCaption} styleClasses="z-[120]" as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                      {entryCaption}
+                    </TruncatedTip>
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      {canModifyEntry && (!isOwner || canManageOwnerEntry) ? (
+                      {(canModifyEntry && (!isOwner || canManageOwnerEntry)) || canDeleteEntrySubject ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -516,9 +557,9 @@ export function PermissionListTab({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
+                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
                           >
-                            {grantableModelOptions.map((model) => {
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && grantableModelOptions.map((model) => {
                               const active = model.id === currentModelId
                               return (
                                 <DropdownMenuItem
@@ -537,23 +578,23 @@ export function PermissionListTab({
                                 </DropdownMenuItem>
                               )
                             })}
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && canDeleteEntrySubject && (
+                              <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
+                            )}
+                            {canDeleteEntrySubject && (
+                              <DropdownMenuItem
+                                className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] focus:bg-[#FFF2F0] focus:text-[#F53F3F]"
+                                onSelect={() => handleDeleteSubject(entry)}
+                              >
+                                {t('action.remove')}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
                         <span className="truncate text-[14px] leading-[22px] text-[#999999]">
                           {getPermissionLabel(entry)}
                         </span>
-                      )}
-                      {canDeleteEntrySubject && (
-                        <button
-                          type="button"
-                          aria-label={t('action.revoke')}
-                          title={t('action.revoke')}
-                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-[#999999] transition-colors hover:bg-[#FFF2F0] hover:text-[#F53F3F]"
-                          onClick={() => handleDeleteSubject(entry)}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
                       )}
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 {
   "name": "bishengchat",
-  "version": "2.5.0",
+  "version": "2.6.0-beta1",
   "description": "",
   "type": "module",
   "scripts": {
@@ -116,6 +116,7 @@
     "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^3.1.1",
+    "xlsx": "^0.18.5",
     "xlsx-populate": "^1.21.0",
     "zod": "^3.22.4"
   },

@@ -22,32 +22,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, constraint_exists
+
 revision: str = 'f027_role_scope_nullsafe_unique'
 down_revision: Union[str, Sequence[str], None] = 'f026_role_scope_name_unique'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
-
-def _constraint_exists(table_name: str, constraint_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND CONSTRAINT_NAME = :c"
-    ), {'t': table_name, 'c': constraint_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _column_exists('role', 'department_scope_key'):
+    conn = op.get_bind()
+    if not column_exists(conn, 'role', 'department_scope_key'):
         op.add_column(
             'role',
             sa.Column(
@@ -59,47 +44,59 @@ def upgrade() -> None:
             ),
         )
 
-    if _constraint_exists('role', 'uk_tenant_roletype_rolename_scope'):
+    if constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename_scope'):
         op.drop_constraint('uk_tenant_roletype_rolename_scope', 'role', type_='unique')
 
-    if not _constraint_exists('role', 'uk_tenant_roletype_rolename_scope_key'):
-        conn = op.get_bind()
-        conflicts = conn.execute(sa.text("""
-            SELECT tenant_id,
-                   role_type,
-                   role_name,
-                   COALESCE(department_id, -1) AS scope_key,
-                   COUNT(*) AS cnt
-            FROM role
-            GROUP BY tenant_id, role_type, role_name, COALESCE(department_id, -1)
-            HAVING cnt > 1
-        """)).fetchall()
+    if not constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename_scope_key'):
+        # Detect and rename duplicate (tenant_id, role_type, role_name, scope_key) rows
+        # before creating the unique constraint. Uses SQLAlchemy expression language
+        # so the GROUP BY + per-row UPDATE works on MySQL and DaMeng alike.
+        role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+        scope_key_expr = sa.func.coalesce(role_tbl.c.department_id, -1)
+
+        conflicts = conn.execute(
+            sa.select(
+                role_tbl.c.tenant_id,
+                role_tbl.c.role_type,
+                role_tbl.c.role_name,
+                scope_key_expr.label('scope_key'),
+                sa.func.count().label('cnt'),
+            )
+            .group_by(
+                role_tbl.c.tenant_id,
+                role_tbl.c.role_type,
+                role_tbl.c.role_name,
+                scope_key_expr,
+            )
+            .having(sa.func.count() > 1)
+        ).fetchall()
 
         for row in conflicts:
-            tenant_id = row[0] if isinstance(row, (list, tuple)) else getattr(row, 'tenant_id')
-            role_type = row[1] if isinstance(row, (list, tuple)) else getattr(row, 'role_type')
-            role_name = row[2] if isinstance(row, (list, tuple)) else getattr(row, 'role_name')
-            scope_key = row[3] if isinstance(row, (list, tuple)) else getattr(row, 'scope_key')
-            count = row[4] if isinstance(row, (list, tuple)) else getattr(row, 'cnt')
             print(
-                f'[f027] dedupe role scope collision: tenant_id={tenant_id} '
-                f'role_type={role_type!r} role_name={role_name!r} scope_key={scope_key} count={count}'
+                f'[f027] dedupe role scope collision: tenant_id={row.tenant_id} '
+                f'role_type={row.role_type!r} role_name={row.role_name!r} '
+                f'scope_key={row.scope_key} count={row.cnt}'
             )
+            # Fetch all duplicate IDs for this group, ordered (first kept, rest renamed)
+            dup_ids = conn.execute(
+                sa.select(role_tbl.c.id)
+                .where(
+                    role_tbl.c.tenant_id == row.tenant_id,
+                    role_tbl.c.role_type == row.role_type,
+                    role_tbl.c.role_name == row.role_name,
+                    scope_key_expr == row.scope_key,
+                )
+                .order_by(role_tbl.c.id)
+            ).fetchall()
 
-        if conflicts:
-            op.execute("""
-                UPDATE role AS r
-                JOIN (
-                    SELECT id,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY tenant_id, role_type, role_name, COALESCE(department_id, -1)
-                               ORDER BY id
-                           ) AS rn
-                    FROM role
-                ) AS t ON r.id = t.id
-                SET r.role_name = CONCAT(r.role_name, '-dup-', r.id)
-                WHERE t.rn > 1
-            """)
+            for (row_id,) in dup_ids[1:]:
+                conn.execute(
+                    sa.update(role_tbl)
+                    .where(role_tbl.c.id == row_id)
+                    .values(role_name=sa.func.concat(
+                        role_tbl.c.role_name, sa.literal(f'-dup-{row_id}')
+                    ))
+                )
 
         op.create_unique_constraint(
             'uk_tenant_roletype_rolename_scope_key',
@@ -109,15 +106,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if _constraint_exists('role', 'uk_tenant_roletype_rolename_scope_key'):
+    conn = op.get_bind()
+    if constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename_scope_key'):
         op.drop_constraint('uk_tenant_roletype_rolename_scope_key', 'role', type_='unique')
 
-    if not _constraint_exists('role', 'uk_tenant_roletype_rolename_scope'):
+    if not constraint_exists(conn, 'role', 'uk_tenant_roletype_rolename_scope'):
         op.create_unique_constraint(
             'uk_tenant_roletype_rolename_scope',
             'role',
             ['tenant_id', 'role_type', 'role_name', 'department_id'],
         )
 
-    if _column_exists('role', 'department_scope_key'):
+    if column_exists(conn, 'role', 'department_scope_key'):
         op.drop_column('role', 'department_scope_key')

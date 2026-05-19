@@ -62,6 +62,11 @@ from bisheng.utils.http_middleware import (
 # the LLM management surface (and the admin endpoints used to set it).
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     '/api/v1/llm',
+    '/api/v1/workstation',
+    '/api/v1/linsight',
+    '/api/v1/tool',
+    '/api/v1/knowledge',
+    '/api/v1/chat/online',
     '/api/v1/admin',
 )
 

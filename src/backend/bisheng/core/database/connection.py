@@ -36,6 +36,8 @@ class DatabaseConnectionManager:
             return url.replace("pymysql", "aiomysql")
         elif "psycopg2" in url:
             return url.replace("psycopg2", "asyncpg")
+        elif "dmPython" in url:
+            return url.replace("dmPython", "dmAsync")
         return url
 
     def _get_default_engine_config(self) -> Dict[str, Any]:
@@ -64,6 +66,33 @@ class DatabaseConnectionManager:
 
         return config
 
+    @staticmethod
+    def _dm_sync_url(url: str) -> str:
+        """Strip the schema/path from a DaMeng sync URL.
+
+        dmPython.connect() takes (user, password, "host:port") and does NOT
+        accept a 'database' keyword argument.  The dmSQLAlchemy sync dialect
+        maps the URL path component to that keyword, causing a connection error.
+        Dropping the path lets the dialect build the correct DSN.
+
+        The dmAsync dialect handles the path correctly, so async URLs are left
+        unchanged.
+
+        Note: urlparse lowercases the scheme, so we strip the path manually
+        using string operations to preserve the original case (dm+dmPython).
+        """
+        # Find the path by locating the host:port section and stripping what follows
+        # URL format: dm+dmPython://user:pass@host:port/schema?query
+        # We want:    dm+dmPython://user:pass@host:port
+        at_idx = url.find("@")
+        if at_idx == -1:
+            return url
+        after_at = url[at_idx + 1:]  # host:port/schema?query
+        slash_idx = after_at.find("/")
+        if slash_idx == -1:
+            return url  # no path — nothing to strip
+        return url[:at_idx + 1 + slash_idx]  # trim /schema and beyond
+
     @property
     def engine(self) -> Engine:
         """Get Synchronization Database Engine"""
@@ -71,11 +100,15 @@ class DatabaseConnectionManager:
             config = self._get_default_engine_config()
             config.update(self.engine_kwargs)
 
+            sync_url = self.database_url
+            if "dm+dmPython" in sync_url:
+                sync_url = self._dm_sync_url(sync_url)
+
             self._engine = create_engine(
-                self.database_url,
+                sync_url,
                 **config
             )
-            logger.debug(f"Created sync database engine for {self.database_url}")
+            logger.debug(f"Created sync database engine for {sync_url}")
 
         return self._engine
 
@@ -113,7 +146,7 @@ class DatabaseConnectionManager:
                 yield session
             except Exception as e:
                 session.rollback()
-                logger.exception(f"Database session rolled back due to error: {e}")
+                logger.error(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 session.close()
@@ -135,7 +168,7 @@ class DatabaseConnectionManager:
                 yield session
             except Exception as e:
                 await session.rollback()
-                logger.exception(f"Database session rolled back due to error: {e}")
+                logger.error(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 await session.close()
@@ -147,12 +180,128 @@ class DatabaseConnectionManager:
             try:
                 await conn.run_sync(SQLModel.metadata.create_all)
             except OperationalError as oe:
-                logger.warning(f"Table creation skipped due to OperationalError: {oe}")
+                # Log full OperationalError so silent failures are visible
+                logger.error(f"Table creation OperationalError (tables may be missing): {oe}")
             except Exception as exc:
                 logger.error(f"Error creating tables: {exc}")
                 raise RuntimeError("Error creating tables") from exc
 
+        # DaMeng: ensure triggers exist for columns that MySQL handles natively
+        # but DaMeng requires explicit triggers for.
+        if self.async_engine.dialect.name == 'dm':
+            self._ensure_dm_triggers()
+            self._ensure_dm_computed_triggers()
+
         logger.info('Database and tables created successfully')
+
+    @staticmethod
+    def _dm_quote_table(actual_name: str) -> str:
+        """Return the DDL identifier for a DaMeng table name.
+
+        DaMeng stores unquoted identifiers as UPPERCASE.
+        Tables whose names contain lowercase letters were created with double
+        quotes (e.g. reserved words like `group`, `user`) and must be quoted
+        in DDL to preserve their case.  All-uppercase names can be used
+        unquoted.
+        """
+        if actual_name == actual_name.upper():
+            return actual_name  # e.g. ROLE, TENANT — no quotes needed
+        return f'"{actual_name}"'  # e.g. "group", "user" — reserved word
+
+    def _ensure_dm_triggers(self) -> None:
+        """Create or replace BEFORE UPDATE triggers for update_time on DaMeng.
+
+        Uses SYS.ALL_TABLES to get the actual stored table names (UPPERCASE for
+        normal tables, lowercase for reserved-word tables created with quotes).
+        This avoids the case-mismatch that occurs when using Inspector's
+        get_table_names() which always returns lowercase names.
+        """
+        from sqlalchemy import inspect as sa_inspect, text
+
+        with self.engine.connect() as conn:
+            # Get actual stored table names from DaMeng system catalog
+            result = conn.execute(text(
+                "SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = USER ORDER BY TABLE_NAME"
+            ))
+            actual_tables = [row[0] for row in result]
+
+            insp = sa_inspect(conn)
+            for actual_name in actual_tables:
+                try:
+                    # Inspector returns columns for lowercase name
+                    col_names = [c['name'].lower() for c in insp.get_columns(actual_name.lower())]
+                except Exception:
+                    try:
+                        col_names = [c['name'].lower() for c in insp.get_columns(actual_name)]
+                    except Exception:
+                        continue
+
+                if 'update_time' not in col_names:
+                    continue
+
+                table_ref = self._dm_quote_table(actual_name)
+                trigger_name = f'trg_{actual_name.lower()}_update_time'
+                trigger_ddl = (
+                    f'CREATE OR REPLACE TRIGGER {trigger_name} '
+                    f'BEFORE UPDATE ON {table_ref} '
+                    f'FOR EACH ROW '
+                    f'BEGIN '
+                    f'  :new.update_time := CURRENT_TIMESTAMP; '
+                    f'END'
+                )
+                try:
+                    conn.exec_driver_sql(trigger_ddl)
+                except Exception as exc:
+                    logger.warning(f'[dm] Could not create trigger {trigger_name}: {exc}')
+
+    def _ensure_dm_computed_triggers(self) -> None:
+        """Create BEFORE INSERT OR UPDATE triggers for Computed columns on DaMeng.
+
+        MySQL supports GENERATED ALWAYS AS (expr) STORED natively.
+        DaMeng rejects virtual columns in UNIQUE constraints, so we suppress
+        the GENERATED clause at DDL time (@compiles(Computed, 'dm')) and
+        instead maintain the value via triggers created here.
+        """
+        import re
+        from sqlmodel import SQLModel
+
+        with self.engine.connect() as conn:
+            for tbl in SQLModel.metadata.tables.values():
+                computed_cols = [c for c in tbl.columns if c.computed is not None]
+                if not computed_cols:
+                    continue
+
+                col_names = [c.name for c in tbl.columns]
+
+                for col in computed_cols:
+                    # Translate expression: col_name → :new.col_name
+                    expr = str(col.computed.sqltext)
+                    trigger_expr = expr
+                    for name in sorted(col_names, key=len, reverse=True):
+                        trigger_expr = re.sub(
+                            r'\b' + re.escape(name) + r'\b',
+                            f':new.{name}',
+                            trigger_expr,
+                        )
+
+                    # Use system catalog name for correct DaMeng identifier case
+                    table_ref = self._dm_quote_table(tbl.name.upper())
+                    trigger_name = f'trg_{tbl.name}_{col.name}'
+                    trigger_ddl = (
+                        f'CREATE OR REPLACE TRIGGER {trigger_name} '
+                        f'BEFORE INSERT OR UPDATE ON {table_ref} '
+                        f'FOR EACH ROW '
+                        f'BEGIN '
+                        f'  :new.{col.name} := {trigger_expr}; '
+                        f'END'
+                    )
+                    try:
+                        conn.exec_driver_sql(trigger_ddl)
+                        logger.debug(f'[dm] Created computed trigger {trigger_name}')
+                    except Exception as exc:
+                        logger.warning(
+                            f'[dm] Could not create computed trigger {trigger_name}: {exc}'
+                        )
 
     async def close(self):
         """Close database connection"""

@@ -121,6 +121,11 @@ class SpaceAuthorizeScopeDeniedError(BaseErrorCode):
     Msg: str = 'The authorization target is outside the allowed knowledge space scope'
 
 
+class SpaceTenantMismatchError(BaseErrorCode):
+    Code: int = 18048
+    Msg: str = '当前租户与知识空间归属租户不一致，暂不支持该操作，请切换到知识空间所属租户后重试'
+
+
 # —— TAG
 class SpaceTagExistsError(BaseErrorCode):
     Code: int = 18050

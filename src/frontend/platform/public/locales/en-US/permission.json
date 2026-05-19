@@ -21,7 +21,8 @@
     "revoke": "Revoke",
     "confirmRevoke": "Are you sure you want to revoke this permission?",
     "submit": "Submit",
-    "modify": "Change Permission"
+    "modify": "Change Permission",
+    "remove": "Remove"
   },
   "search": {
     "user": "Search users...",

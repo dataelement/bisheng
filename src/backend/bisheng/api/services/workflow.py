@@ -1,9 +1,11 @@
 import asyncio
 from datetime import datetime
+from time import perf_counter
 from typing import Dict, Optional
 
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
+from loguru import logger
 
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
@@ -15,6 +17,7 @@ from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_admin_scope_tenant_id, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -54,6 +57,16 @@ class WorkFlowService(BaseService):
     @classmethod
     def filter_supported_apps(cls, data: list[dict]) -> list[dict]:
         return [one for one in data if one.get('flow_type') in cls.SUPPORTED_APP_TYPES]
+
+    @staticmethod
+    def _is_scoped_super_admin(user: UserPayload) -> bool:
+        current_tid = get_current_tenant_id()
+        return bool(
+            getattr(user, 'is_global_super', False)
+            and get_admin_scope_tenant_id() is not None
+            and current_tid is not None
+            and current_tid != DEFAULT_TENANT_ID
+        )
 
     @classmethod
     def add_extra_field(
@@ -111,7 +124,7 @@ class WorkFlowService(BaseService):
         """Set ``can_share`` from ReBAC relation-model ``share_app`` (fail-closed when unknown type)."""
         if not data:
             return data
-        if user.is_admin() or managed:
+        if (user.is_admin() and not cls._is_scoped_super_admin(user)) or managed:
             for one in data:
                 one['can_share'] = True
             return data
@@ -142,8 +155,10 @@ class WorkFlowService(BaseService):
                             managed: bool = False, skip_pagination: bool = False, search_description: bool = False,
                             permission_id: str = 'use_app') -> (list[dict], int):
         """Get all the skills (async, ReBAC + 部门管理员隐式可见 兼容)."""
+        total_start = perf_counter()
         if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
             return [], 0
+        scoped_super_admin = cls._is_scoped_super_admin(user)
 
         # SetujutagDapatkanidVertical
         flow_ids = []
@@ -160,12 +175,25 @@ class WorkFlowService(BaseService):
             query_page_size = 0
 
         readable_type_ids = None
-        if not user.is_admin():
+        if not user.is_admin() or scoped_super_admin:
             required_permission = 'edit_app' if managed else permission_id
+            prefilter_start = perf_counter()
             readable_type_ids = await cls._app_type_ids_for_permission(user, required_permission, flow_type)
+            logger.info(
+                '[perf][workflow.list.prefilter] user_id={} flow_type={} managed={} permission_id={} '
+                'workflow_ids={} assistant_ids={} took_ms={:.2f}',
+                user.user_id,
+                flow_type,
+                managed,
+                required_permission,
+                len((readable_type_ids or {}).get(FlowType.WORKFLOW.value, []) or []),
+                len((readable_type_ids or {}).get(FlowType.ASSISTANT.value, []) or []),
+                (perf_counter() - prefilter_start) * 1000,
+            )
 
         # Get a list of skills visible to the user
-        if user.is_admin():
+        dao_start = perf_counter()
+        if user.is_admin() and not scoped_super_admin:
             data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
                                                       query_page, query_page_size,
                                                       search_description=search_description)
@@ -174,10 +202,24 @@ class WorkFlowService(BaseService):
                                                       None, None, query_page, query_page_size,
                                                       search_description=search_description,
                                                       app_type_ids=readable_type_ids)
+        logger.info(
+            '[perf][workflow.list.dao] user_id={} flow_type={} page={} page_size={} skip_pagination={} '
+            'tag_filter_count={} rows={} total={} took_ms={:.2f}',
+            user.user_id,
+            flow_type,
+            page,
+            page_size,
+            skip_pagination,
+            len(flow_ids),
+            len(data),
+            total,
+            (perf_counter() - dao_start) * 1000,
+        )
         data = cls.filter_supported_apps(data)
         writeable_ids: Optional[set[str]] = None
-        if not user.is_admin() and data:
+        if (not user.is_admin() or scoped_super_admin) and data:
             required_permission = 'edit_app' if managed else permission_id
+            permission_map_start = perf_counter()
             permission_map = await ApplicationPermissionService.get_app_permission_map_async(
                 user,
                 data,
@@ -192,7 +234,40 @@ class WorkFlowService(BaseService):
                 for app_id, permission_ids in permission_map.items()
                 if 'edit_app' in permission_ids
             }
+            logger.info(
+                '[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} '
+                'permission_id={} took_ms={:.2f}',
+                user.user_id,
+                flow_type,
+                len(permission_map),
+                len(data),
+                len(writeable_ids),
+                required_permission,
+                (perf_counter() - permission_map_start) * 1000,
+            )
+        enrich_start = perf_counter()
         data = cls.add_extra_field(user, data, managed, writeable_ids=writeable_ids)
+        logger.info(
+            '[perf][workflow.list.enrich] user_id={} flow_type={} rows={} took_ms={:.2f}',
+            user.user_id,
+            flow_type,
+            len(data),
+            (perf_counter() - enrich_start) * 1000,
+        )
+        logger.info(
+            '[perf][workflow.list.total] user_id={} flow_type={} page={} page_size={} skip_pagination={} '
+            'managed={} permission_id={} rows={} total={} took_ms={:.2f}',
+            user.user_id,
+            flow_type,
+            page,
+            page_size,
+            skip_pagination,
+            managed,
+            permission_id,
+            len(data),
+            total,
+            (perf_counter() - total_start) * 1000,
+        )
         # data = await cls.aenrich_apps_can_share(user, data, managed)  # because frontend not need and this cost most time
         return data, total
 
@@ -253,7 +328,7 @@ class WorkFlowService(BaseService):
         data: list[dict],
         permission_id: str = 'use_app',
     ) -> list[dict]:
-        if user.is_admin() or not data:
+        if (user.is_admin() and not cls._is_scoped_super_admin(user)) or not data:
             return data
         permission_map = await ApplicationPermissionService.get_app_permission_map_async(
             user,

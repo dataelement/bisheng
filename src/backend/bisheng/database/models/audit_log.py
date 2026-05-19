@@ -3,12 +3,21 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import Integer, String
-from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON, col
+from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, json_array_contains
 from bisheng.utils import generate_uuid
+
+
+def _db_dialect() -> str:
+    try:
+        from bisheng.core.database.manager import sync_get_database_connection
+        return sync_get_database_connection().engine.dialect.name
+    except Exception:
+        return 'mysql'
 
 
 # System Module Enumeration
@@ -86,7 +95,7 @@ class AuditLogBase(SQLModelSerializable):
     """
     operator_id: int = Field(index=True, description="Operating User'sID")
     operator_name: Optional[str] = Field(description="Username")
-    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JSON),
+    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JsonType),
                                                  description="Belongs to a user groupIDVertical")
     system_id: Optional[str] = Field(index=True, description="Module Item")
     event_type: Optional[str] = Field(index=True, description="Operation behaviors")
@@ -141,14 +150,14 @@ class AuditLogBase(SQLModelSerializable):
     audit_metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(
-            'metadata', JSON, nullable=True,
+            'metadata', JsonType, nullable=True,
             comment='v2.5.1: extended fields (from/to values, affected ids, etc.)',
         ),
     )
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class AuditLog(AuditLogBase, table=True):
@@ -240,7 +249,7 @@ class AuditLogDao(AuditLogBase):
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
 
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
@@ -316,7 +325,7 @@ class AuditLogDao(AuditLogBase):
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
             statement = statement.where(or_(*group_filters))
         if tenant_scope is not None:
             statement = statement.where(cls._visible_for_tenant(tenant_scope))

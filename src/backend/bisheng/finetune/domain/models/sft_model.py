@@ -9,6 +9,8 @@ from bisheng.core.database import get_async_db_session
 
 
 # Available for trainingmodelVertical
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 class SftModelBase(SQLModelSerializable):
     id: int = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
     tenant_id: Optional[int] = Field(
@@ -19,7 +21,7 @@ class SftModelBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class SftModel(SftModelBase, table=True):

@@ -2,18 +2,17 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import Integer, JSON
+from sqlalchemy import Integer
 from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.models.user_group import UserGroupDao
-
 
 class SensitiveStatus(Enum):
     PASS = 1  # Setuju
     VIOLATIONS = 2  # violates regulation
-
 
 class MessageSessionBase(SQLModelSerializable):
     """ Conversation table """
@@ -34,7 +33,7 @@ class MessageSessionBase(SQLModelSerializable):
             comment='F017: user leaf tenant for INV-T13 derived-data attribution',
         ),
     )
-    group_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JSON),
+    group_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JsonType),
                                            description="Belongs to a user groupIDVertical")
     is_delete: Optional[bool] = Field(default=False,
                                       description='Whether the corresponding skill or the session itself was deleted')
@@ -45,12 +44,10 @@ class MessageSessionBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
-
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class MessageSession(MessageSessionBase, table=True):
     __tablename__ = 'message_session'
-
 
 class MessageSessionDao(MessageSessionBase):
 

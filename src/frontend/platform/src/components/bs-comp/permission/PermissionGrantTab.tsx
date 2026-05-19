@@ -7,9 +7,10 @@ import {
   getResourcePermissions,
   type RelationModel,
 } from "@/controllers/API/permission"
+import { Portal, Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { cn } from "@/utils"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
@@ -29,6 +30,76 @@ const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
   user: [],
   department: [],
   user_group: [],
+}
+
+// Render selected subjects as chips. Horizontally scrollable with a right-edge fade when overflow occurs.
+function SelectedSubjectChips({ subjects, fullText }: { subjects: SelectedSubject[]; fullText: string }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [open, setOpen] = useState(false)
+  const [hasLeftOverflow, setHasLeftOverflow] = useState(false)
+  const [hasRightOverflow, setHasRightOverflow] = useState(false)
+
+  const updateOverflow = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    setHasLeftOverflow(el.scrollLeft > 1)
+    setHasRightOverflow(el.scrollWidth - el.clientWidth - el.scrollLeft > 1)
+  }, [])
+
+  useEffect(() => {
+    updateOverflow()
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(updateOverflow)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [subjects, updateOverflow])
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setOpen(false)
+      return
+    }
+    const el = ref.current
+    if (el && el.scrollWidth > el.clientWidth) {
+      setOpen(true)
+    }
+  }
+
+  if (subjects.length === 0) return null
+
+  return (
+    <Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={200}>
+      <TooltipTrigger asChild>
+        <div
+          ref={ref}
+          onScroll={updateOverflow}
+          className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto scrollbar-hide"
+          style={(() => {
+            const leftStop = hasLeftOverflow ? '24px' : '0'
+            const rightStop = hasRightOverflow ? 'calc(100% - 24px)' : '100%'
+            if (!hasLeftOverflow && !hasRightOverflow) return undefined
+            const value = `linear-gradient(to right, transparent, black ${leftStop}, black ${rightStop}, transparent)`
+            return { maskImage: value, WebkitMaskImage: value }
+          })()}
+        >
+          {subjects.map((subject) => (
+            <span
+              key={subject.id}
+              className="inline-flex shrink-0 items-center rounded-[4px] bg-[#F2F3F5] px-2 py-0.5 text-[14px] leading-[22px] text-[#4E5969]"
+            >
+              {subject.name}
+            </span>
+          ))}
+        </div>
+      </TooltipTrigger>
+      <Portal>
+        <TooltipContent className="z-[120] text-sm shadow-md" side="top">
+          <div className="max-w-96 text-left break-all whitespace-normal">{fullText}</div>
+        </TooltipContent>
+      </Portal>
+    </Tooltip>
+  )
 }
 
 interface PermissionGrantTabProps {
@@ -253,11 +324,11 @@ export function PermissionGrantTab({
 
   const showDepartmentIncludeChildrenControl =
     subjectType === 'department' && !hideDepartmentIncludeChildrenControl
-  const selectedSummaryText = (
+  const selectedSubjectList =
     subjectType === 'department' && selectedDepartmentSummary.length > 0
       ? selectedDepartmentSummary
       : selected
-  ).map((subject) => subject.name).join('、')
+  const selectedSummaryText = selectedSubjectList.map((subject) => subject.name).join('、')
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -329,14 +400,12 @@ export function PermissionGrantTab({
         )}
       </div>
 
-      <div className="mt-4 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
+      <div className="mt-3 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
         <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
           <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
             {`${t('action.grant')}${subjectLabel(subjectType)}:`}
           </span>
-          <span className="truncate text-[14px] leading-[22px] text-[#4E5969]">
-            {selectedSummaryText}
-          </span>
+          <SelectedSubjectChips subjects={selectedSubjectList} fullText={selectedSummaryText} />
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -352,7 +421,7 @@ export function PermissionGrantTab({
         </div>
       </div>
 
-      <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
+      <div className="mt-3 flex shrink-0 justify-end border-t pt-3">
         <Button
           onClick={handleSubmit}
           disabled={selected.length === 0 || availableModels.length === 0 || submitting}

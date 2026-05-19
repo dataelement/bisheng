@@ -17,15 +17,54 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { Building2, ChevronDown, Loader2, RotateCcw, Search, Trash2, User, Users } from "lucide-react";
+import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { buildDepartmentPathLabelMap } from "./departmentPathUtils";
 import { RelationModelOption } from "./RelationSelect";
+
+// Tooltip that only shows when the wrapped element's text is truncated.
+function TruncatedTooltip({
+  content,
+  className,
+  as: Tag = "span",
+  children,
+}: {
+  content: string;
+  className?: string;
+  as?: "span" | "p" | "div";
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setOpen(false);
+      return;
+    }
+    const el = ref.current;
+    if (el && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
+      setOpen(true);
+    }
+  };
+
+  return (
+    <Tooltip open={open} onOpenChange={handleOpenChange}>
+      <TooltipTrigger asChild>
+        <Tag ref={ref as React.RefObject<HTMLElement>} className={className}>{children}</Tag>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="z-[120] max-w-xs break-all">
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const SUBJECT_ICONS = {
   user: User,
@@ -535,37 +574,17 @@ export function PermissionListTab({
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="truncate text-[14px] leading-[22px] text-[#212121]">
-                            {displayName}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="z-[120] max-w-xs break-all">
-                          {displayName}
-                        </TooltipContent>
-                      </Tooltip>
+                      <TruncatedTooltip content={displayName} className="truncate text-[14px] leading-[22px] text-[#212121]">
+                        {displayName}
+                      </TruncatedTooltip>
                     </div>
 
-                    {entryCaption ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
-                            {entryCaption}
-                          </p>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="z-[120] max-w-xs break-all">
-                          {entryCaption}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <p className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
-                        {entryCaption}
-                      </p>
-                    )}
+                    <TruncatedTooltip content={entryCaption} as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                      {entryCaption}
+                    </TruncatedTooltip>
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      {canModifyEntry && (!isOwner || canManageOwnerEntry) ? (
+                      {(canModifyEntry && (!isOwner || canManageOwnerEntry)) || canDeleteEntrySubject ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
@@ -578,9 +597,9 @@ export function PermissionListTab({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto rounded-[8px] border border-[#EBECF0] bg-white p-1 shadow-[0px_6px_20px_0px_rgba(117,145,212,0.12)]"
+                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
                           >
-                            {entryGrantableModels.map((model) => {
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && entryGrantableModels.map((model) => {
                               const active = model.id === currentModelId;
                               return (
                                 <DropdownMenuItem
@@ -599,25 +618,25 @@ export function PermissionListTab({
                                 </DropdownMenuItem>
                               );
                             })}
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && canDeleteEntrySubject && (
+                              <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
+                            )}
+                            {canDeleteEntrySubject && (
+                              <DropdownMenuItem
+                                className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-[#F53F3F]"
+                                onSelect={() => {
+                                  void handleDeleteSubject(entry);
+                                }}
+                              >
+                                {localize("com_permission.remove")}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
                         <span className="truncate text-[14px] leading-[22px] text-[#999999]">
                           {getPermissionLabel(entry)}
                         </span>
-                      )}
-                      {canDeleteEntrySubject && (
-                        <button
-                          type="button"
-                          aria-label={localize("com_permission.remove")}
-                          title={localize("com_permission.remove")}
-                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-[#999999] transition-colors hover:bg-[#FFF2F0] hover:text-[#F53F3F]"
-                          onClick={() => {
-                            void handleDeleteSubject(entry);
-                          }}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
                       )}
                     </div>
                   </div>

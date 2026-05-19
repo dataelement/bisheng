@@ -3,8 +3,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, text, func
-from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, text, func
+from bisheng.core.database.dialect_helpers import JsonType, LargeText, UPDATE_TIME_SERVER_DEFAULT
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -13,17 +13,16 @@ from bisheng.utils import md5_hash, generate_uuid
 from bisheng.utils.mask_data import JsonFieldMasker
 from ..const import AuthType, ToolPresetType
 
-
 class GptsToolsBase(SQLModelSerializable):
     name: str = Field(sa_column=Column(String(length=125), index=True))
     logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
-    desc: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT, index=False))
+    desc: Optional[str] = Field(default=None, sa_column=Column(LargeText, index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
     type: int = Field(default=0, description='of the category to which they belongID')
     is_preset: int = Field(default=ToolPresetType.API.value,
                            description="The category of the tool, the historical reason field is not renamed")
     is_delete: int = Field(default=0, description='1 Indicates logical deletion')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON),
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType),
                                              description='Used to storeapiParameter and other information')
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     tenant_id: Optional[int] = Field(
@@ -34,8 +33,7 @@ class GptsToolsBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
-
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
@@ -71,8 +69,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
-
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
@@ -81,12 +78,10 @@ class GptsTools(GptsToolsBase, table=True):
                                                     'Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ')
     id: Optional[int] = Field(default=None, primary_key=True)
 
-
 class GptsToolsType(GptsToolsTypeBase, table=True):
     __tablename__ = 't_gpts_tools_type'
     openapi_schema: str = Field(default="", sa_column=Column(Text),
                                 description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
-
 
 class GptsToolsTypeRead(GptsToolsTypeBase):
     openapi_schema: Optional[str] = Field(default="",
@@ -116,10 +111,8 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
             self.extra = json.dumps(extra_json, ensure_ascii=False)
         return self
 
-
 class GptsToolsRead(GptsToolsBase):
     id: int
-
 
 class GptsToolsDao(GptsToolsBase):
 
@@ -318,6 +311,35 @@ class GptsToolsDao(GptsToolsBase):
         Get all tool categories visible to the user
         """
         statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def aget_tenant_tool_type(
+        cls,
+        tenant_id: int,
+        include_preset: bool = True,
+        is_preset: ToolPresetType = None,
+    ) -> List[GptsToolsType]:
+        """Get all tool categories under the current tenant.
+
+        Used by admin-scope management views where a global super admin needs
+        the scoped tenant's tool list instead of the operator's own user_id
+        owned tools.
+        """
+        statement = select(GptsToolsType).where(
+            GptsToolsType.is_delete == 0,
+            GptsToolsType.tenant_id == tenant_id,
+        )
+        if is_preset is not None:
+            statement = statement.where(GptsToolsType.is_preset == is_preset.value)
+        elif not include_preset:
+            statement = statement.where(GptsToolsType.is_preset != ToolPresetType.PRESET.value)
+        statement = statement.order_by(
+            func.field(GptsToolsType.is_preset, ToolPresetType.PRESET.value).desc(),
+            GptsToolsType.update_time.desc(),
+        )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()

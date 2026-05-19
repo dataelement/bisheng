@@ -21,7 +21,8 @@
     "revoke": "撤回",
     "confirmRevoke": "确定要撤回该权限吗？",
     "submit": "提交",
-    "modify": "修改权限"
+    "modify": "修改权限",
+    "remove": "移除"
   },
   "search": {
     "user": "搜索用户...",

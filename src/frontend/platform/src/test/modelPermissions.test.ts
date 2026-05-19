@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canManageModelSettings } from "@/pages/ModelPage/manage/permissions";
+import { canManageModelSettings, canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 describe("canManageModelSettings", () => {
   it("allows super admins", () => {
@@ -44,6 +44,32 @@ describe("canManageModelSettings", () => {
         role: "editor",
         web_menu: ["build"],
         is_child_admin: false,
+      } as any),
+    ).toBe(false);
+  });
+});
+
+describe("canManageWorkbenchConfig", () => {
+  it("allows super admins", () => {
+    expect(canManageWorkbenchConfig({ role: "admin" } as any)).toBe(true);
+  });
+
+  it("allows Child Admins", () => {
+    expect(
+      canManageWorkbenchConfig({
+        role: "editor",
+        is_child_admin: true,
+        web_menu: ["build", "model", "workstation"],
+      } as any),
+    ).toBe(true);
+  });
+
+  it("rejects regular members even if web_menu contains workstation/model", () => {
+    expect(
+      canManageWorkbenchConfig({
+        role: "editor",
+        is_child_admin: false,
+        web_menu: ["build", "model", "workstation"],
       } as any),
     ).toBe(false);
   });

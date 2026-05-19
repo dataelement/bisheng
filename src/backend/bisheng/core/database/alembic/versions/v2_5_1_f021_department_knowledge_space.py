@@ -10,41 +10,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from bisheng.core.database.dialect_helpers import column_exists, index_exists, table_exists, update_time_server_default
+
 revision: str = 'f021_department_knowledge_space'
 down_revision: Union[str, Sequence[str], None] = 'f020_llm_tenant'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
-def _table_exists(name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.TABLES '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t'
-    ), {'t': name})
-    return result.scalar() > 0
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c'
-    ), {'t': table_name, 'c': column_name})
-    return result.scalar() > 0
-
-
-def _index_exists(table_name: str, index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'SELECT COUNT(*) FROM information_schema.STATISTICS '
-        'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i'
-    ), {'t': table_name, 'i': index_name})
-    return result.scalar() > 0
-
-
 def upgrade() -> None:
-    if not _table_exists('department_knowledge_space'):
+    conn = op.get_bind()
+    if not table_exists(conn, 'department_knowledge_space'):
         op.create_table(
             'department_knowledge_space',
             sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
@@ -53,7 +28,7 @@ def upgrade() -> None:
             sa.Column('space_id', sa.Integer, sa.ForeignKey('knowledge.id', ondelete='CASCADE'), nullable=False),
             sa.Column('created_by', sa.Integer, nullable=False, server_default='0'),
             sa.Column('create_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
-            sa.Column('update_time', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+            sa.Column('update_time', sa.DateTime, nullable=False, server_default=update_time_server_default(conn)),
             sa.UniqueConstraint('department_id', name='uk_dks_department_id'),
             sa.UniqueConstraint('space_id', name='uk_dks_space_id'),
         )
@@ -61,14 +36,14 @@ def upgrade() -> None:
         op.create_index('idx_dks_department_id', 'department_knowledge_space', ['department_id'])
         op.create_index('idx_dks_space_id', 'department_knowledge_space', ['space_id'])
     else:
-        if not _index_exists('department_knowledge_space', 'idx_dks_tenant_id'):
+        if not index_exists(conn, 'department_knowledge_space', 'idx_dks_tenant_id'):
             op.create_index('idx_dks_tenant_id', 'department_knowledge_space', ['tenant_id'])
-        if not _index_exists('department_knowledge_space', 'idx_dks_department_id'):
+        if not index_exists(conn, 'department_knowledge_space', 'idx_dks_department_id'):
             op.create_index('idx_dks_department_id', 'department_knowledge_space', ['department_id'])
-        if not _index_exists('department_knowledge_space', 'idx_dks_space_id'):
+        if not index_exists(conn, 'department_knowledge_space', 'idx_dks_space_id'):
             op.create_index('idx_dks_space_id', 'department_knowledge_space', ['space_id'])
 
-    if not _column_exists('space_channel_member', 'membership_source'):
+    if not column_exists(conn, 'space_channel_member', 'membership_source'):
         op.add_column(
             'space_channel_member',
             sa.Column(
@@ -80,16 +55,16 @@ def upgrade() -> None:
             ),
         )
 
-
 def downgrade() -> None:
-    if _column_exists('space_channel_member', 'membership_source'):
+    conn = op.get_bind()
+    if column_exists(conn, 'space_channel_member', 'membership_source'):
         op.drop_column('space_channel_member', 'membership_source')
 
-    if _table_exists('department_knowledge_space'):
-        if _index_exists('department_knowledge_space', 'idx_dks_tenant_id'):
+    if table_exists(conn, 'department_knowledge_space'):
+        if index_exists(conn, 'department_knowledge_space', 'idx_dks_tenant_id'):
             op.drop_index('idx_dks_tenant_id', table_name='department_knowledge_space')
-        if _index_exists('department_knowledge_space', 'idx_dks_department_id'):
+        if index_exists(conn, 'department_knowledge_space', 'idx_dks_department_id'):
             op.drop_index('idx_dks_department_id', table_name='department_knowledge_space')
-        if _index_exists('department_knowledge_space', 'idx_dks_space_id'):
+        if index_exists(conn, 'department_knowledge_space', 'idx_dks_space_id'):
             op.drop_index('idx_dks_space_id', table_name='department_knowledge_space')
         op.drop_table('department_knowledge_space')

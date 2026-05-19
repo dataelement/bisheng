@@ -19,6 +19,7 @@ import { getLinsiConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { sopApi } from "@/controllers/API/linsight";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useDebounce } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
@@ -32,9 +33,9 @@ import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -61,7 +62,6 @@ export interface ChatConfigForm {
         image: string;
         relative_path: string;
     };
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -97,7 +97,7 @@ export interface ChatConfigForm {
     };
 }
 
-export default function index() {
+export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { t } = useTranslation()
     const [keywords, setKeywords] = useState('');
     const [datalist, setDatalist] = useState([]);
@@ -145,7 +145,6 @@ export default function index() {
             image: '',
             relative_path: ''
         },
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: t('bench.inputPlaceholder'),
@@ -182,6 +181,7 @@ export default function index() {
         api: [],
         mcp: []
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
     const [importFormData, setImportFormData] = useState<FormData | null>(null);
 
     const fetchTools = async (type: 'builtin' | 'api' | 'mcp') => {
@@ -315,7 +315,8 @@ export default function index() {
     let { assistantState, dispatchAssistant } = useAssistantStore();
     const { handleSave } = useChatConfig(
         selectedTools,
-        setFormData
+        setFormData,
+        setConfigMeta,
     );
 
     // Redirect non-admin users
@@ -342,15 +343,18 @@ export default function index() {
     useEffect(() => {
         if (!user.user_id) return;
 
-        if (user.role !== 'admin') {
+        if (!canManageWorkbenchConfig(user)) {
             navigate('/build/apps');
             return;
         }
 
         const loadInitialData = async () => {
             try {
+                setConfigMeta(null);
                 const res = await getLinsiConfigApi();
-                const cfg = (res && res.data) || res || {};
+                const { data: cfgData, meta } = resolveConfigEnvelope<any>(res);
+                setConfigMeta(meta);
+                const cfg = cfgData || {};
                 const toolsFromCfg = Array.isArray(cfg.tools) ? cfg.tools : [];
                 setFormData(prev => ({
                     ...prev,
@@ -373,7 +377,7 @@ export default function index() {
         };
 
         loadInitialData();
-    }, [user, navigate, t]);
+    }, [navigate, scopeVersion, t, user]);
 
     useEffect(() => {
         if (initialized && !toolsData[activeToolTab].length) {
@@ -835,6 +839,7 @@ export default function index() {
             <Card className="rounded-none">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         <ToggleSection
                             title={t('chatConfig.workstationEntry')}
                             enabled={formData.linsightConfig?.linsight_entry}
@@ -1017,6 +1022,7 @@ export default function index() {
 const useChatConfig = (
     selectedTools: Array<{ id: string | number; name: string }>,
     setFormData: React.Dispatch<React.SetStateAction<ChatConfigForm>>,
+    setConfigMeta: React.Dispatch<React.SetStateAction<any>>,
 ) => {
     const { toast } = useToast();
 
@@ -1054,6 +1060,10 @@ const useChatConfig = (
         try {
             const res = await setLinsiConfigApi(dataToSave);
             if (res) {
+                setConfigMeta({
+                    inherited_from_root: false,
+                    has_override: true,
+                });
                 setFormData(prev => ({
                     ...prev,
                     linsightConfig: {

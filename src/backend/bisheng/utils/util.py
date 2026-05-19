@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import functools
 import hashlib
 import io
@@ -177,7 +178,8 @@ def sync_func_to_async(func, executor=None):
     async def wrapper(*args, **kwargs):
         loop = asyncio.get_running_loop()
         bound_func = functools.partial(func, *args, **kwargs)
-        return await loop.run_in_executor(executor, bound_func)
+        ctx = contextvars.copy_context()
+        return await loop.run_in_executor(executor, ctx.run, bound_func)
 
     return wrapper
 

@@ -390,6 +390,25 @@ class McpConf(BaseModel):
     enable_stdio: bool = Field(default=True, description='Whether to enable stdio')
 
 
+class CofcoForwardingConf(BaseModel):
+    """E+ in-app message forwarding config for 中粮 (cofco) deployment."""
+    enabled: bool = Field(default=False)
+    api_base: str = Field(default="", description="E.g. http://10.28.64.30:8070/qwmsg-ui")
+    app_id: str = Field(default="")
+    secret: str = Field(default="")
+    agentid: int | None = Field(default=None)
+    timeout_seconds: float = Field(default=5.0)
+    bisheng_inbox_url: str = Field(default="", description="BiSheng client base URL for textcard callback")
+    enable_duplicate_check: int = Field(default=0)
+    duplicate_check_interval: int = Field(default=1800)
+
+
+class InAppMessageForwardingConf(BaseModel):
+    """Top-level forwarding config; one sub-block per external system."""
+    cofco: CofcoForwardingConf = CofcoForwardingConf()
+    # Future: shougang / longhua etc. as parallel fields
+
+
 class Settings(BaseModel):
     """ Application Settings """
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
@@ -450,6 +469,7 @@ class Settings(BaseModel):
     sso_sync: SSOSyncConf = SSOSyncConf()
     reconcile: ReconcileConf = ReconcileConf()
     llm: LLMConf = LLMConf()
+    in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
 
     @field_validator('database_url')
     @classmethod

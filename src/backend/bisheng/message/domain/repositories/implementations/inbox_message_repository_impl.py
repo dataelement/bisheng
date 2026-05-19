@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from sqlalchemy import JSON, and_, cast, func, or_
+from sqlalchemy import Text, and_, cast, func, or_
 from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -15,6 +15,11 @@ SEARCHABLE_CONTENT_TYPES = ('user', 'business_url')
 MAX_CONTENT_ITEMS_FOR_KEYWORD_SEARCH = 10
 
 
+def _get_dialect(session: AsyncSession) -> str:
+    bind = session.get_bind()
+    return bind.dialect.name if bind else 'mysql'
+
+
 class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMessageRepository):
     """Inbox Message repository implementation."""
 
@@ -22,27 +27,56 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         super().__init__(session, InboxMessage)
 
     def _apply_receiver_filter(self, query, user_id: int):
-        """Apply JSON_CONTAINS filter for the receiver field."""
+        """Filter messages by receiver user_id.
+
+        MySQL: uses native JSON_CONTAINS for exact integer containment.
+        DaMeng/others: uses text-boundary LIKE patterns against the CLOB-stored
+        JSON array (serialized by JsonType as "[1, 2, 3]").
+        """
+        if _get_dialect(self.session) == 'mysql':
+            return query.where(func.json_contains(InboxMessage.receiver, str(user_id)))
+
+        # JsonType serializes with Python's default separator ", " so the array
+        # looks like "[1, 2, 3]". Match user_id at JSON element boundaries.
+        uid = str(user_id)
+        receiver_text = cast(InboxMessage.receiver, Text())
         return query.where(
-            func.json_contains(InboxMessage.receiver, str(user_id))
+            or_(
+                receiver_text == f'[{uid}]',               # only element
+                receiver_text.like(f'[{uid}, %'),           # first element
+                receiver_text.like(f'%, {uid}]'),           # last element
+                receiver_text.like(f'%, {uid}, %'),         # middle element
+            )
         )
 
     def _apply_content_keyword_filter(self, query, keyword: str):
-        """Apply keyword filter on content fields for searchable JSON content items."""
+        """Filter messages by keyword in content items.
+
+        MySQL: uses JSON_EXTRACT / JSON_UNQUOTE for structured path lookup.
+        DaMeng/others: falls back to full-text LIKE on the serialized content
+        column (less precise but avoids MySQL-specific JSON functions).
+        """
         like_pattern = f'%{keyword}%'
-        searchable_conditions = []
 
-        for index in range(MAX_CONTENT_ITEMS_FOR_KEYWORD_SEARCH):
-            item_type = func.json_unquote(func.json_extract(InboxMessage.content, f'$[{index}].type'))
-            item_content = func.json_unquote(func.json_extract(InboxMessage.content, f'$[{index}].content'))
-            searchable_conditions.append(
-                and_(
-                    item_type.in_(SEARCHABLE_CONTENT_TYPES),
-                    item_content.like(like_pattern),
+        if _get_dialect(self.session) == 'mysql':
+            searchable_conditions = []
+            for index in range(MAX_CONTENT_ITEMS_FOR_KEYWORD_SEARCH):
+                item_type = func.json_unquote(
+                    func.json_extract(InboxMessage.content, f'$[{index}].type')
                 )
-            )
+                item_content = func.json_unquote(
+                    func.json_extract(InboxMessage.content, f'$[{index}].content')
+                )
+                searchable_conditions.append(
+                    and_(
+                        item_type.in_(SEARCHABLE_CONTENT_TYPES),
+                        item_content.like(like_pattern),
+                    )
+                )
+            return query.where(or_(*searchable_conditions))
 
-        return query.where(or_(*searchable_conditions))
+        # DaMeng: content is stored as CLOB; use a simple LIKE on the whole column.
+        return query.where(cast(InboxMessage.content, Text()).like(like_pattern))
 
     async def find_messages_by_receiver(
         self,
@@ -189,8 +223,8 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         """
         from sqlalchemy import update
 
-        # Use JSON_CONTAINS to find messages containing the channel_id in content
-        # The channel_id is stored in content[*].metadata.data.channel_id
+        # Match channel_id anywhere in the serialized content CLOB/JSON.
+        # cast to Text works on all dialects since JsonType stores as text on DaMeng.
         channel_id_json = f'%"channel_id": "{channel_id}"%'
 
         query = (
@@ -198,7 +232,7 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
             .where(
                 InboxMessage.action_code == "request_channel",
                 InboxMessage.status == MessageStatusEnum.WAIT_APPROVE,
-                func.cast(InboxMessage.content, JSON).like(channel_id_json),
+                cast(InboxMessage.content, Text()).like(channel_id_json),
             )
             .values(
                 status=MessageStatusEnum.APPROVED,

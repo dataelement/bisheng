@@ -1,9 +1,8 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { SearchInput } from "@/components/bs-ui/input"
 import { getResourceGrantUsersApi } from "@/controllers/API/permission"
 import { getGroupUsersApi, getUserMembershipGroupsApi, getUsersApi } from "@/controllers/API/user"
 import { userContext } from "@/contexts/userContext"
-import { User as UserIcon } from "lucide-react"
+import { Search, User as UserIcon } from "lucide-react"
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ResourceType } from "./types"
@@ -271,15 +270,20 @@ export function SubjectSearchUser({
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
-      <SearchInput
-        placeholder={t('search.user')}
-        value={keyword}
-        onChange={handleInput}
-      />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="relative shrink-0">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <input
+          type="text"
+          placeholder={t('search.user')}
+          value={keyword}
+          onChange={handleInput}
+          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+        />
+      </div>
       <div
         ref={scrollRef}
-        className="min-h-[120px] max-h-[clamp(120px,calc(100vh-24rem),320px)] overflow-y-auto overscroll-contain rounded-md border"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-[6px] border border-[#EBECF0]"
       >
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>

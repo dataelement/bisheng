@@ -289,7 +289,7 @@ sequenceDiagram
 ```
 /api/v1/user/login
 /api/v1/user/register
-/api/v1/user/sso
+/api/v1/user/sso   # legacy compatibility only; new third-party login uses /api/v1/internal/sso/login-sync
 /api/v1/user/ldap
 /api/v1/user/public_key
 /api/v1/user/switch-tenant

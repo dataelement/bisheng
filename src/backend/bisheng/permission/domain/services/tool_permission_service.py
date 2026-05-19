@@ -16,6 +16,7 @@ from bisheng.permission.domain.tool_permission_template import default_permissio
 
 PermissionService = _PermissionService
 UserDepartmentDao = _UserDepartmentDao
+_TOOL_PERMISSION_MAP_CONCURRENCY = 20
 
 _PERMISSION_LEVEL_TO_RELATION = {
     'owner': 'owner',
@@ -129,6 +130,8 @@ class ToolPermissionService:
         bindings: list[dict] | None = None,
         binding_department_paths: dict[int, str] | None = None,
         user_subject_strings: set[str] | None = None,
+        tuple_cache: dict[str, list[dict]] | None = None,
+        tuple_department_paths: dict[int, str] | None = None,
     ) -> set[str]:
         if models is None:
             models = await cls._get_relation_models_map()
@@ -147,6 +150,8 @@ class ToolPermissionService:
             bindings=bindings,
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
+            tuple_cache=tuple_cache,
+            tuple_department_paths=tuple_department_paths,
         )
 
     @classmethod
@@ -216,25 +221,52 @@ class ToolPermissionService:
         if not normalized_ids:
             return []
 
+        permission_map = await cls.get_tool_permission_map_async(
+            login_user,
+            normalized_ids,
+            [permission_id],
+        )
+        return [
+            tool_type_id
+            for tool_type_id in normalized_ids
+            if permission_id in permission_map.get(tool_type_id, set())
+        ]
+
+    @classmethod
+    async def get_tool_permission_map_async(
+        cls,
+        login_user: UserPayload,
+        tool_type_ids: list[str | int],
+        permission_ids: list[str],
+    ) -> dict[str, set[str]]:
+        normalized_ids = [str(tool_type_id) for tool_type_id in tool_type_ids]
+        permission_id_set = set(permission_ids)
+        if not normalized_ids or not permission_id_set:
+            return {}
+
         models, bindings, user_subject_strings = await asyncio.gather(
             cls._get_relation_models_map(),
             _get_bindings(),
             cls._get_current_user_subject_strings(login_user),
         )
         binding_department_paths = await cls._get_binding_department_paths(bindings)
-        permissions_list = await asyncio.gather(*[
-            cls.get_effective_permission_ids_async(
-                login_user,
-                tool_type_id,
-                models=models,
-                bindings=bindings,
-                binding_department_paths=binding_department_paths,
-                user_subject_strings=user_subject_strings,
-            )
-            for tool_type_id in normalized_ids
-        ])
-        return [
-            tool_type_id
-            for tool_type_id, permission_ids in zip(normalized_ids, permissions_list)
-            if permission_id in permission_ids
-        ]
+        tuple_cache: dict[str, list[dict]] = {}
+        tuple_department_paths: dict[int, str] = {}
+        semaphore = asyncio.Semaphore(_TOOL_PERMISSION_MAP_CONCURRENCY)
+
+        async def _one(tool_type_id: str) -> tuple[str, set[str]]:
+            async with semaphore:
+                perms = await cls.get_effective_permission_ids_async(
+                    login_user,
+                    tool_type_id,
+                    models=models,
+                    bindings=bindings,
+                    binding_department_paths=binding_department_paths,
+                    user_subject_strings=user_subject_strings,
+                    tuple_cache=tuple_cache,
+                    tuple_department_paths=tuple_department_paths,
+                )
+            return tool_type_id, perms & permission_id_set
+
+        pairs = await asyncio.gather(*[_one(tool_type_id) for tool_type_id in normalized_ids])
+        return {tool_type_id: perms for tool_type_id, perms in pairs}

@@ -1,9 +1,8 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { SearchInput } from "@/components/bs-ui/input"
 import { getResourceGrantUserGroupsApi } from "@/controllers/API/permission"
 import { getUserGroupsApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { Users } from "lucide-react"
+import { Search, Users } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ResourceType, SelectedSubject } from "./types"
@@ -63,13 +62,18 @@ export function SubjectSearchUserGroup({
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
-      <SearchInput
-        placeholder={t('search.userGroup')}
-        value={keyword}
-        onChange={(e) => setKeyword(e.target.value)}
-      />
-      <div className="min-h-[120px] max-h-[clamp(120px,calc(100vh-24rem),260px)] overflow-y-auto rounded-md border">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="relative shrink-0">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <input
+          type="text"
+          placeholder={t('search.userGroup')}
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
         )}

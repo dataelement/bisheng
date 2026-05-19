@@ -56,9 +56,14 @@ async def regist(*, user: UserCreate):
     return resp_200(db_user)
 
 
-@router.post('/user/sso')
+@router.post('/user/sso', deprecated=True)
 async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends()):
-    """ Login interface for closed source gateways """
+    """Legacy SSO login endpoint kept for backward compatibility only.
+
+    New third-party login flows should use the HMAC-authenticated
+    ``/api/v1/internal/sso/login-sync`` family instead so department/member
+    sync, tenant mapping, and source-aware binding stay consistent.
+    """
     if settings.get_system_login_method().bisheng_pro:  # Judgingsso Open or not
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)

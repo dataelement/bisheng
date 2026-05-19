@@ -21,9 +21,10 @@ import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
+import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 export interface FormErrors {
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     tabDisplayName: string;
@@ -49,7 +50,6 @@ export interface ChatConfigForm {
         image: string;
         relative_path: string;
     };
-    sidebarSlogan: string;
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
@@ -76,8 +76,7 @@ export interface ChatConfigForm {
     tools: ToolConfigType[];
     orgKbs: OrgKbConfigType[];
 }
-export default function index() {
-    const sidebarSloganRef = useRef<HTMLDivElement>(null);
+export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -94,12 +93,12 @@ export default function index() {
     const {
         formData,
         errors,
+        configMeta,
         setFormData,
         handleInputChange,
         toggleFeature,
         handleSave
     } = useChatConfig({
-        sidebarSloganRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -110,19 +109,19 @@ export default function index() {
         appCenterWelcomeRef,
         appCenterDescriptionRef,
         modelManagementContainerRef, // Pass in the new ref
-    });
+    }, scopeVersion);
 
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
     }, [formData.models]);
-    // Redirect non-admin users
+    // Redirect users who cannot manage workstation settings
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
+        if (user.user_id && !canManageWorkbenchConfig(user)) {
             navigate('/build/apps')
         }
-    }, [user])
+    }, [user, navigate])
 
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
@@ -161,6 +160,7 @@ export default function index() {
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide pb-10">
+                        <ConfigInheritanceBanner meta={configMeta} />
                         {/* <ToggleSection
                             title={t('chatConfig.workstationEntry')}
                             enabled={formData.menuShow}
@@ -184,17 +184,6 @@ export default function index() {
                                 onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'assistant', relativePath)}
                             />
                         </div>
-                        <div ref={sidebarSloganRef}>
-                            <FormInput
-                                label={<Label className="bisheng-label">{t('chatConfig.sidebarSlogan')}</Label>}
-                                value={formData.sidebarSlogan}
-                                error={errors.sidebarSlogan}
-                                placeholder=""
-                                maxLength={15}
-                                onChange={(v) => handleInputChange('sidebarSlogan', v, 15)}
-                            />
-                        </div>
-
                         <div ref={welcomeMessageRef}>
                             <FormInput
                                 label={t('chatConfig.welcomeMessage')}
@@ -346,7 +335,6 @@ export default function index() {
 
 
 interface UseChatConfigProps {
-    sidebarSloganRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -359,7 +347,7 @@ interface UseChatConfigProps {
     modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
-const useChatConfig = (refs: UseChatConfigProps) => {
+const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
     const { t } = useTranslation()
 
     const [formData, setFormData] = useState<ChatConfigForm>({
@@ -368,7 +356,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         systemPrompt: t('chatConfig.systemPrompt2'),
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -409,11 +396,13 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         // seed the built-in "联网搜索" tool as default-checked. The preset list
         // is authoritative (t_gpts_tools* tables), so tool_key is looked up at
         // runtime rather than hardcoded.
+        setConfigMeta(null);
         Promise.all([
             getDailyConfigApi(),
             getToolsApi('default').catch(() => []),
         ]).then(([res, toolsRes]) => {
-            const cfg = (res && (res as any).data) || res;
+            const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
+            setConfigMeta(meta);
             const presetTools: any[] = Array.isArray(toolsRes) ? toolsRes : [];
 
             const buildDefaultTools = (): ToolConfigType[] => {
@@ -472,7 +461,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
                 return {
                     ...prev,
-                    sidebarSlogan: cfg.sidebarSlogan ?? prev.sidebarSlogan,
                     welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
                     functionDescription: cfg.functionDescription ?? prev.functionDescription,
                     inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
@@ -500,10 +488,9 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                 };
             });
         });
-    }, [t]);
+    }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
         tabDisplayName: '',
@@ -515,6 +502,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
     });
+    const [configMeta, setConfigMeta] = useState<any>(null);
 
     const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -542,7 +530,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
         const modelErrorMessages: string[] = [];
         const newErrors: FormErrors = {
-            sidebarSlogan: '',
             welcomeMessage: '',
             functionDescription: '',
             tabDisplayName: '',
@@ -554,12 +541,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             applicationCenterDescription: '',
             systemPrompt: '',
         };
-
-        if (formData.sidebarSlogan.length > 15) {
-            newErrors.sidebarSlogan = t('chatConfig.errors.maxCharacters', { count: 15 });
-            if (!firstErrorRef) firstErrorRef = refs.sidebarSloganRef;
-            isValid = false;
-        }
 
         const tabName = (formData.tabDisplayName || '').trim();
         if (!tabName) {
@@ -662,7 +643,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         const dataToSave = {
             sidebarIcon: formData.sidebarIcon,
             assistantIcon: formData.assistantIcon,
-            sidebarSlogan: formData.sidebarSlogan.trim(),
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
@@ -683,6 +663,10 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
         captureAndAlertRequestErrorHoc(setDailyConfigApi(dataToSave)).then((res) => {
             if (res) {
+                setConfigMeta({
+                    inherited_from_root: false,
+                    has_override: true,
+                });
                 toast({
                     variant: 'success',
                     description: t('chatConfig.saveSuccess'),
@@ -699,6 +683,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         errors,
         setFormData,
         setErrors,
+        configMeta,
         handleInputChange,
         toggleFeature,
         handleSave

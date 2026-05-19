@@ -218,6 +218,8 @@ class ApplicationPermissionService:
         bindings: list[dict] | None = None,
         binding_department_paths: dict[int, str] | None = None,
         user_subject_strings: set[str] | None = None,
+        tuple_cache: dict[str, list[dict]] | None = None,
+        tuple_department_paths: dict[int, str] | None = None,
     ) -> set[str]:
         if models is None:
             models = await cls._get_relation_models_map()
@@ -236,6 +238,8 @@ class ApplicationPermissionService:
             bindings=bindings,
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
+            tuple_cache=tuple_cache,
+            tuple_department_paths=tuple_department_paths,
         )
 
     @classmethod
@@ -255,6 +259,8 @@ class ApplicationPermissionService:
             cls._get_current_user_subject_strings(login_user),
         )
         binding_department_paths = await cls._get_binding_department_paths(bindings)
+        tuple_cache: dict[str, list[dict]] = {}
+        tuple_department_paths: dict[int, str] = {}
 
         semaphore = asyncio.Semaphore(_APP_PERMISSION_MAP_CONCURRENCY)
 
@@ -272,6 +278,8 @@ class ApplicationPermissionService:
                     bindings=bindings,
                     binding_department_paths=binding_department_paths,
                     user_subject_strings=user_subject_strings,
+                    tuple_cache=tuple_cache,
+                    tuple_department_paths=tuple_department_paths,
                 )
             return object_id, perms & permission_id_set
 
