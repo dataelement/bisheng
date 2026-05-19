@@ -20,6 +20,7 @@ const FlowPage = lazy(() => import("@/pages/BuildPage/flow"));
 const SkillPage = lazy(() => import("@/pages/BuildPage/skills/editSkill"));
 const L2Edit = lazy(() => import("@/pages/BuildPage/skills/l2Edit"));
 const SkillToolsPage = lazy(() => import("@/pages/BuildPage/tools"));
+const KnowledgeSpaceTagLibraries = lazy(() => import("@/pages/BuildPage/tagLibraries"));
 const SkillChatPage = lazy(() => import("@/pages/ChatAppPage"));
 const ChatAssitantShare = lazy(() => import("@/pages/ChatAppPage/chatAssitantShare"));
 const ChatShare = lazy(() => import("@/pages/ChatAppPage/chatShare"));
@@ -93,6 +94,7 @@ const privateRouter = [
       // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
+      { path: "build/tag-libraries", element: <KnowledgeSpaceTagLibraries />, permission: 'build', },
       { path: "build/client", element: <WorkBenchPage />, permission: 'workstation' },
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },

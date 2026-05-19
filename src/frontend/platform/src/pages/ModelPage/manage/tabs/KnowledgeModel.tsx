@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
+import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
@@ -120,6 +121,8 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         sourceModelId: null,
         extractModelId: null,
         qaSimilarModelId: null,
+        abstractEnabled: true,
+        autoTagEnabled: false,
         abstractPrompt: ''
     });
     // 最后保存的配置
@@ -130,12 +133,22 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
 
     useEffect(() => {
         if (!config) return
-        const { embedding_model_id, extract_title_model_id, qa_similar_model_id, source_model_id, abstract_prompt } = config
+        const {
+            embedding_model_id,
+            extract_title_model_id,
+            qa_similar_model_id,
+            source_model_id,
+            abstract_enabled,
+            auto_tag_enabled,
+            abstract_prompt,
+        } = config
         setForm({
             embeddingModelId: embedding_model_id,
             sourceModelId: source_model_id,
             extractModelId: extract_title_model_id,
             qaSimilarModelId: qa_similar_model_id,
+            abstractEnabled: abstract_enabled ?? true,
+            autoTagEnabled: auto_tag_enabled ?? false,
             abstractPrompt: abstract_prompt ?? defalutPrompt
         })
         lastSaveFormDataRef.current = { ...config, abstract_prompt: abstract_prompt || defalutPrompt }
@@ -152,10 +165,21 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
     const { message } = useToast()
     const [saveload, setSaveLoad] = useState(false)
     const handleSave = async () => {
-        const { embeddingModelId, extractModelId, qaSimilarModelId, sourceModelId, abstractPrompt } = form
+        const {
+            embeddingModelId,
+            extractModelId,
+            qaSimilarModelId,
+            sourceModelId,
+            abstractEnabled,
+            autoTagEnabled,
+            abstractPrompt,
+        } = form
         const errors = []
         if (!embeddingModelId) {
             errors.push(t('model.defaultEmbeddingModel') + t('bs:required'))
+        }
+        if ((abstractEnabled || autoTagEnabled) && !extractModelId) {
+            errors.push(t('model.documentSummaryModel') + t('bs:required'))
         }
         if (!qaSimilarModelId) {
             errors.push(t('model.qaSimilarModel') + t('bs:required'))
@@ -167,6 +191,8 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             extract_title_model_id: extractModelId,
             qa_similar_model_id: qaSimilarModelId,
             source_model_id: sourceModelId,
+            abstract_enabled: abstractEnabled,
+            auto_tag_enabled: autoTagEnabled,
             abstract_prompt: abstractPrompt
         }
         setSaveLoad(true)
@@ -221,6 +247,22 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 options={llmOptions}
                 onChange={(val) => setFormAndClearInherited({ ...form, extractModelId: val })}
             />
+            <div className="rounded-md border p-4 space-y-4">
+                <div className="flex items-center justify-between gap-6">
+                    <Label className="bisheng-label mb-0">{t('model.summaryGeneration', '摘要生成')}</Label>
+                    <Switch
+                        checked={form.abstractEnabled}
+                        onCheckedChange={(val) => setFormAndClearInherited({ ...form, abstractEnabled: val })}
+                    />
+                </div>
+                <div className="flex items-center justify-between gap-6">
+                    <Label className="bisheng-label mb-0">{t('model.autoTagGeneration', '自动标签生成')}</Label>
+                    <Switch
+                        checked={form.autoTagEnabled}
+                        onCheckedChange={(val) => setFormAndClearInherited({ ...form, autoTagEnabled: val })}
+                    />
+                </div>
+            </div>
             <ModelSelect
                 required
                 label={t('model.qaSimilarModel')}

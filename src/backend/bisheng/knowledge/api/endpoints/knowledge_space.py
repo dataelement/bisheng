@@ -40,6 +40,8 @@ async def create_space(
         icon=req.icon,
         auth_type=req.auth_type,
         is_released=req.is_released,
+        auto_tag_enabled=req.auto_tag_enabled,
+        auto_tag_library_id=req.auto_tag_library_id,
     )
     return resp_200(space)
 
@@ -65,7 +67,9 @@ async def update_space(
         description=req.description,
         icon=req.icon,
         auth_type=req.auth_type,
-        is_released=req.is_released
+        is_released=req.is_released,
+        auto_tag_enabled=req.auto_tag_enabled,
+        auto_tag_library_id=req.auto_tag_library_id,
     )
     return resp_200(space)
 

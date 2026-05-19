@@ -21,6 +21,8 @@ class KnowledgeSpaceCreateReq(BaseModel):
     icon: Optional[str] = Field(None, description="Icon Object Name")
     auth_type: AuthTypeEnum = Field(AuthTypeEnum.PUBLIC, description="Authentication Type")
     is_released: bool = Field(default=False, description="Knowledge Space Status")
+    auto_tag_enabled: bool = Field(default=False, description="Whether uploaded files participate in auto tagging")
+    auto_tag_library_id: Optional[int] = Field(default=None, description="Bound knowledge-space tag library ID")
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
@@ -50,6 +52,8 @@ class KnowledgeSpaceUpdateReq(BaseModel):
     icon: Optional[str] = Field(None, description="Icon Object Name")
     auth_type: Optional[AuthTypeEnum] = Field(None, description="Authentication Type")
     is_released: bool = Field(default=False, description="Knowledge Space Status")
+    auto_tag_enabled: Optional[bool] = Field(default=None, description="Whether uploaded files participate in auto tagging")
+    auto_tag_library_id: Optional[int] = Field(default=None, description="Bound knowledge-space tag library ID")
 
 
 class DepartmentKnowledgeSpaceBatchItem(BaseModel):
