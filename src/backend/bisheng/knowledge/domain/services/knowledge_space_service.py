@@ -47,6 +47,12 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.approval.domain.services.approval_gate import ApprovalGate
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
+    KnowledgeSpaceSubscribeScenarioHandler,
+)
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
@@ -108,6 +114,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.request = request
         self.login_user = login_user
         self.message_service: Optional['MessageService'] = None
+        self.approval_gate: Optional[ApprovalGate] = None
 
     def _ensure_space_async_task_tenant_consistency(
         self, space: Knowledge, operation: str
@@ -2766,7 +2773,42 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             await SpaceChannelMemberDao.async_insert_member(member)
 
-        if previous_status != MembershipStatusEnum.PENDING:
+        if space.auth_type == AuthTypeEnum.APPROVAL:
+            gate = self.approval_gate or self._build_space_approval_gate()
+            gate_result = await gate.request_or_pass(
+                ApprovalGateRequest(
+                    tenant_id=self.login_user.tenant_id,
+                    scenario_code='knowledge_space_subscribe_request',
+                    business_key=f'space:{space.id}:user:{self.login_user.user_id}',
+                    business_resource_type='knowledge_space',
+                    business_resource_id=str(space.id),
+                    business_name=space.name,
+                    applicant_user_id=self.login_user.user_id,
+                    applicant_user_name=self.login_user.user_name,
+                    payload_snapshot={
+                        'space_id': space.id,
+                        'space_name': space.name,
+                        'applicant_user_id': self.login_user.user_id,
+                    },
+                )
+            )
+            if gate_result.decision == 'pass':
+                member.status = MembershipStatusEnum.ACTIVE
+                if existing:
+                    member = await SpaceChannelMemberDao.update(member)
+                else:
+                    member = await SpaceChannelMemberDao.update(member)
+                await self.__class__.sync_direct_space_user_permissions(
+                    space_id,
+                    member.user_id,
+                    member.user_role,
+                    is_active=True,
+                )
+                return {
+                    "status": "subscribed",
+                    "space_id": space_id,
+                }
+        elif previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
 
         if member.status == MembershipStatusEnum.ACTIVE:
@@ -2781,6 +2823,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
             "space_id": space_id,
         }
+
+    def _build_space_approval_gate(self) -> ApprovalGate:
+        registry = ApprovalRegistry.with_default_presets()
+        registry.register_handler(
+            'knowledge_space_subscribe_request',
+            KnowledgeSpaceSubscribeScenarioHandler(
+                find_member=SpaceChannelMemberDao.async_find_member,
+                update_member=SpaceChannelMemberDao.update,
+                sync_permissions=self.__class__.sync_direct_space_user_permissions,
+            ),
+        )
+        return ApprovalGate(registry=registry)
 
     async def _send_subscription_notification(self, space: Knowledge):
         if space.auth_type != AuthTypeEnum.APPROVAL or not self.message_service:
