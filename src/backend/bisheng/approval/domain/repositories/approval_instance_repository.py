@@ -103,3 +103,11 @@ class ApprovalInstanceRepository:
             await session.commit()
             await session.refresh(row)
         return row
+
+    @classmethod
+    async def list_action_logs(cls, instance_id: int) -> list[ApprovalActionLog]:
+        statement = select(ApprovalActionLog).where(ApprovalActionLog.instance_id == instance_id).order_by(
+            ApprovalActionLog.id.asc(),
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Column, DateTime, Index, Integer, String, Text, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -69,7 +69,15 @@ class ApprovalInstanceBase(SQLModelSerializable):
 
 class ApprovalInstance(ApprovalInstanceBase, table=True):
     __tablename__ = 'approval_instance'
-    __table_args__ = (UniqueConstraint('tenant_id', 'scenario_code', 'business_key', 'applicant_user_id', name='uq_approval_instance_business'),)
+    __table_args__ = (
+        Index(
+            'idx_approval_instance_dedupe_lookup',
+            'tenant_id',
+            'scenario_code',
+            'business_key',
+            'applicant_user_id',
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
 

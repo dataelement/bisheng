@@ -10,6 +10,9 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.approval.domain.models.approval_instance import (
+    ApprovalActionLog,
+    ApprovalException,
+    ApprovalExceptionType,
     ApprovalInstance,
     ApprovalInstanceStatus,
     ApprovalOutbox,
@@ -44,7 +47,9 @@ async def approval_runtime_engine():
         ApprovalNodeDefinition.__table__,
         ApprovalInstance.__table__,
         ApprovalTask.__table__,
+        ApprovalException.__table__,
         ApprovalOutbox.__table__,
+        ApprovalActionLog.__table__,
     ]
     async with engine.begin() as conn:
         await conn.run_sync(lambda sync_conn: SQLModel.metadata.create_all(sync_conn, tables=tables))
@@ -271,3 +276,68 @@ async def test_repository_flow_creates_outbox_after_final_approval(patched_runti
     assert [one.id for one in saved_outbox] == [outbox.id]
     assert tenant_one_requests == []
     assert [one.id for one in tenant_two_requests] == [instance.id]
+
+
+@pytest.mark.asyncio
+async def test_repository_flow_lists_routes_logs_and_open_exceptions(patched_runtime_repositories):
+    scenario, route_rule, flow_version, node = await _seed_flow()
+    await ApprovalScenarioRepository.create_route_rule(
+        ApprovalRouteRule(
+            tenant_id=1,
+            scenario_id=scenario.id,
+            route_name='fallback route',
+            route_type='flow',
+            sort_order=2,
+            flow_definition_id=route_rule.flow_definition_id,
+            match_config={'fallback': True},
+        )
+    )
+    instance = await ApprovalInstanceRepository.create_instance(
+        ApprovalInstance(
+            tenant_id=1,
+            scenario_code=scenario.scenario_code,
+            scenario_name=scenario.scenario_name,
+            handler_key='knowledge_space_subscribe',
+            business_key='space:18:user:9',
+            business_resource_type='knowledge_space',
+            business_resource_id='18',
+            business_name='产品知识空间',
+            applicant_user_id=9,
+            applicant_user_name='bob',
+            flow_version_id=flow_version.id,
+            route_rule_id=route_rule.id,
+            current_node_name=node.node_name,
+            status=ApprovalInstanceStatus.EXCEPTION,
+            payload_snapshot={'space_id': 18},
+            detail_snapshot={'space_name': '产品知识空间'},
+        )
+    )
+    await ApprovalInstanceRepository.create_exception(
+        ApprovalException(
+            tenant_id=1,
+            instance_id=instance.id,
+            exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+            detail={'node_code': node.node_code},
+        )
+    )
+    await ApprovalInstanceRepository.create_action_log(
+        ApprovalActionLog(
+            tenant_id=1,
+            instance_id=instance.id,
+            action='instance_created',
+            operator_user_id=9,
+            operator_user_name='bob',
+            detail={'status': ApprovalInstanceStatus.EXCEPTION},
+        )
+    )
+
+    routes = await ApprovalScenarioRepository.list_route_rules(1, scenario.id)
+    active_version = await ApprovalScenarioRepository.get_active_flow_version(1, route_rule.flow_definition_id)
+    logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
+    open_exceptions = await ApprovalQueryRepository.list_open_exceptions(1)
+
+    assert [one.sort_order for one in routes] == [1, 2]
+    assert active_version is not None
+    assert active_version.id == flow_version.id
+    assert [one.action for one in logs] == ['instance_created']
+    assert [one.instance_id for one in open_exceptions] == [instance.id]

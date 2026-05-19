@@ -68,6 +68,20 @@ class ApprovalScenarioRepository:
         return row
 
     @classmethod
+    async def get_active_flow_version(cls, tenant_id: int, flow_definition_id: int) -> ApprovalFlowVersion | None:
+        statement = (
+            select(ApprovalFlowVersion)
+            .where(
+                ApprovalFlowVersion.tenant_id == tenant_id,
+                ApprovalFlowVersion.flow_definition_id == flow_definition_id,
+                ApprovalFlowVersion.is_active.is_(True),
+            )
+            .order_by(ApprovalFlowVersion.version_no.desc(), ApprovalFlowVersion.id.desc())
+        )
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
+
+    @classmethod
     async def create_node_definition(cls, row: ApprovalNodeDefinition) -> ApprovalNodeDefinition:
         async with get_async_db_session() as session:
             session.add(row)
