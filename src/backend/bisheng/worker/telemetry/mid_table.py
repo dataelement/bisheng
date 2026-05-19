@@ -2,16 +2,25 @@ from datetime import datetime, timedelta
 from typing import List
 
 from loguru import logger
+from sqlmodel import select
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus, FileType
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.telemetry.domain.mid_table.app_increment import AppIncrement, AppIncrementRecord
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
 from bisheng.telemetry.domain.mid_table.knowledge_increment import KnowledgeIncrement, KnowledgeIncrementRecord
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+    KnowledgeSpaceContentRecord,
+    KnowledgeSpaceContentStat,
+)
 from bisheng.telemetry.domain.mid_table.user_increment import UserIncrement, UserIncrementRecord
 from bisheng.telemetry.domain.mid_table.user_interact import UserInteract, UserInteractRecord
 from bisheng.user.domain.services.user import UserService
@@ -88,9 +97,96 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
 
 def get_user_from_ids_with_cache(user_ids: List[int], user_map: dict):
     if user_ids:
-        user_list = UserService.get_user_all_info(user_ids=user_ids, page=0, page_size=0)
+        with bypass_tenant_filter():
+            user_list = UserService.get_user_all_info(user_ids=user_ids, page=0, page_size=0)
         user_map.update({user.user_id: user for user in user_list})
     return user_map
+
+
+def _get_success_space_file_rows(page: int, page_size: int):
+    statement = (
+        select(KnowledgeFile, Knowledge)
+        .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+        .where(
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+        )
+        .order_by(KnowledgeFile.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+
+@bisheng_celery.task()
+def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str = None):
+    trace_id_var.set(f"sync_mid_knowledge_space_content_stat_task_{generate_uuid()}")
+    logger.info("Syncing mid_knowledge_space_content_stat file records...")
+
+    mid_table = KnowledgeSpaceContentStat()
+    sync_run_id = generate_uuid()
+    page, page_size = 1, 1000
+    user_map = {}
+    synced_count = 0
+
+    while True:
+        rows = _get_success_space_file_rows(page, page_size)
+        page += 1
+        if not rows:
+            break
+
+        user_ids = {
+            int(file_record.user_id)
+            for file_record, _ in rows
+            if file_record.user_id and int(file_record.user_id) not in user_map
+        }
+        user_map = get_user_from_ids_with_cache(list(user_ids), user_map)
+
+        records = []
+        for file_record, space in rows:
+            uploader_user_id = int(file_record.user_id or 0)
+            uploader = user_map.get(uploader_user_id)
+            uploader_name = file_record.user_name or (uploader.user_name if uploader else str(uploader_user_id or ""))
+            uploader_departments = [
+                UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                for dept in getattr(uploader, "departments", []) or []
+            ] if uploader else []
+
+            records.append(KnowledgeSpaceContentRecord(
+                es_id=f"file_{file_record.id}",
+                record_type="file",
+                sync_run_id=sync_run_id,
+                user_id=uploader_user_id,
+                user_name=uploader_name,
+                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
+                                  for group in uploader.groups] if uploader else [],
+                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                                 for role in uploader.roles] if uploader else [],
+                user_department_infos=uploader_departments,
+                timestamp=int((file_record.create_time or datetime.now()).timestamp()),
+                space_id=int(space.id),
+                space_name=space.name,
+                file_id=int(file_record.id),
+                file_name=file_record.file_name,
+                file_type=int(file_record.file_type),
+                uploader_user_id=uploader_user_id,
+                uploader_user_name=uploader_name,
+                uploader_department_infos=uploader_departments,
+            ))
+
+        mid_table.insert_records_sync(records)
+        synced_count += len(records)
+
+    deleted_count = mid_table.delete_stale_file_records_sync(sync_run_id)
+    logger.info(
+        "Successfully synced mid_knowledge_space_content_stat file records. "
+        "synced={}, deleted_stale={}",
+        synced_count,
+        deleted_count,
+    )
 
 
 @bisheng_celery.task()

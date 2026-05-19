@@ -174,6 +174,11 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl',
                 'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
+        if 'telemetry_sync_mid_knowledge_space_content_stat' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_knowledge_space_content_stat'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
         if 'sync_information_article' not in self.beat_schedule:
             self.beat_schedule['sync_information_article'] = {
                 'task': 'bisheng.worker.information.article.sync_information_article',

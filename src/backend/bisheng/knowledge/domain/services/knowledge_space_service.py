@@ -4189,11 +4189,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id('knowledge_file', file_id, 'view_file', space_id=file_record.knowledge_id)
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+        asyncio.create_task(self._log_file_preview_success(file_record))
 
         return {
             "original_url": original_url,
             "preview_url": preview_url,
         }
+
+    async def _log_file_preview_success(self, file_record: KnowledgeFile) -> None:
+        try:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
+
+            space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+            if (
+                not space
+                or space.type != KnowledgeTypeEnum.SPACE.value
+                or file_record.status != KnowledgeFileStatus.SUCCESS.value
+            ):
+                return
+            await KnowledgeSpaceContentStat.log_preview_success(
+                file_record=file_record,
+                space=space,
+                viewer_user_id=self.login_user.user_id,
+                viewer_user_name=self.login_user.user_name,
+            )
+        except Exception:
+            logger.exception("Failed to log knowledge space file preview telemetry.")
 
     async def get_file_download(self, file_id: int, *, space_id: Optional[int] = None) -> dict:
         file_record = await self._get_file_for_action(file_id, space_id=space_id)

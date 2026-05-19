@@ -421,7 +421,8 @@ class UserDao(UserBase):
         statement = statement.order_by(User.user_id)
         statement = statement.options(
             selectinload(User.groups),  # type: ignore
-            selectinload(User.roles)  # type: ignore
+            selectinload(User.roles),  # type: ignore
+            selectinload(User.departments),  # type: ignore
         )
         with get_sync_db_session() as session:
             users = session.exec(statement).all()

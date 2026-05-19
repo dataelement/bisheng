@@ -4,7 +4,7 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.user.domain.services.user import UserService
 from bisheng.worker import sync_mid_user_interact_dtl
 from bisheng.worker.telemetry.mid_table import sync_mid_user_increment, sync_mid_knowledge_increment, \
-    sync_mid_app_increment
+    sync_mid_app_increment, sync_mid_knowledge_space_content_stat
 
 from loguru import logger
 
@@ -60,8 +60,13 @@ def sync_user_interact_dtl_all():
     sync_mid_user_interact_dtl(first_date, end_date)
 
 
+def sync_knowledge_space_content_stat_all():
+    sync_mid_knowledge_space_content_stat()
+
+
 if __name__ == '__main__':
     sync_user_increment_table_all()
     sync_knowledge_increment_table_all()
     sync_app_increment_table_all()
+    sync_knowledge_space_content_stat_all()
     sync_user_interact_dtl_all()

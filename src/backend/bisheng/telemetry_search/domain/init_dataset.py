@@ -714,6 +714,127 @@ DASHBOARD_DATASET = [
         ).model_dump()
     ),
     DashboardDataset(
+        dataset_name="知识空间内容统计",
+        dataset_code="mid_knowledge_space_content_stat",
+        es_index_name="mid_knowledge_space_content_stat",
+        description="知识空间成功文件与文件预览统计数据表",
+        is_commercial_only=False,
+        schema_config=SchemaConfig(
+            metrics=[
+                MetricConfig(
+                    field="total_file_count",
+                    name="总文件数",
+                    is_virtual=True,
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="file"),
+                        TermOp(field="file_type", value=1),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="file_count",
+                            type=AggsTypeEnum.CARDINALITY,
+                            field="file_id"
+                        ),
+                        AggregationExpression(
+                            name="total_file_count",
+                            type=PipelineTypeEnum.CUMULATIVE_SUM,
+                            field="file_count"
+                        )
+                    ],
+                    index=1,
+                    sum_field="file_id"
+                ),
+                MetricConfig(
+                    field="new_file_count",
+                    name="新增文件数",
+                    is_virtual=True,
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="file"),
+                        TermOp(field="file_type", value=1),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="new_file_count",
+                            type=AggsTypeEnum.CARDINALITY,
+                            field="file_id"
+                        )
+                    ]
+                ),
+                MetricConfig(
+                    field="contributor_count",
+                    name="内容贡献人数",
+                    is_virtual=True,
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="file"),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="contributor_count",
+                            type=AggsTypeEnum.CARDINALITY,
+                            field="uploader_user_id"
+                        )
+                    ]
+                ),
+                MetricConfig(
+                    field="preview_count",
+                    name="预览次数",
+                    is_virtual=True,
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="preview"),
+                        TermOp(field="action_result", value="success"),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="preview_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="event_id"
+                        )
+                    ]
+                ),
+            ],
+            dimensions=[
+                DimensionConfig(
+                    name="时间",
+                    field="timestamp",
+                    time_granularitys=["year", "month", "week", "day"],
+                    field_type="date"
+                ),
+                DimensionConfig(
+                    name="知识空间ID",
+                    field="space_id"
+                ),
+                DimensionConfig(
+                    name="知识空间名称",
+                    field="space_name"
+                ),
+                DimensionConfig(
+                    name="上传人ID",
+                    field="uploader_user_id"
+                ),
+                DimensionConfig(
+                    name="上传人名称",
+                    field="uploader_user_name"
+                ),
+                DimensionConfig(
+                    name="上传人部门ID",
+                    field="uploader_department_infos.department_id"
+                ),
+                DimensionConfig(
+                    name="上传人部门名称",
+                    field="uploader_department_infos.department_name"
+                ),
+                DimensionConfig(
+                    name="文件ID",
+                    field="file_id"
+                ),
+                DimensionConfig(
+                    name="文件名称",
+                    field="file_name"
+                ),
+            ]
+        ).model_dump()
+    ),
+    DashboardDataset(
         dataset_name="文件解析事件表",
         dataset_code="mid_doc_parse_dtl",
         es_index_name="mid_doc_parse_dtl",
@@ -1208,6 +1329,32 @@ async def _upgrade_datasets_add_department_dimensions(
         await dashboard_dataset_repository.update(dataset)
 
 
+def _clone_dashboard_dataset(dataset: DashboardDataset) -> DashboardDataset:
+    data = dataset.model_dump()
+    data.pop("id", None)
+    return DashboardDataset(**data)
+
+
+async def _upgrade_knowledge_space_content_dataset(
+    dashboard_dataset_repository: DashboardDatasetRepositoryImpl,
+):
+    dataset_code = "mid_knowledge_space_content_stat"
+    seed_dataset = next(
+        dataset for dataset in DASHBOARD_DATASET if dataset.dataset_code == dataset_code
+    )
+    existing_dataset = await dashboard_dataset_repository.find_one(dataset_code=dataset_code)
+    if not existing_dataset:
+        await dashboard_dataset_repository.save(_clone_dashboard_dataset(seed_dataset))
+        return
+
+    existing_dataset.dataset_name = seed_dataset.dataset_name
+    existing_dataset.es_index_name = seed_dataset.es_index_name
+    existing_dataset.description = seed_dataset.description
+    existing_dataset.is_commercial_only = seed_dataset.is_commercial_only
+    existing_dataset.schema_config = seed_dataset.schema_config
+    await dashboard_dataset_repository.update(existing_dataset)
+
+
 async def init_dashboard_datasets():
     db_manager = await get_database_connection()
     await db_manager.create_db_and_tables()
@@ -1218,6 +1365,7 @@ async def init_dashboard_datasets():
         else:
             # Upgrade path: add department dimensions to existing datasets
             await _upgrade_datasets_add_department_dimensions(dashboard_dataset_repository)
+            await _upgrade_knowledge_space_content_dataset(dashboard_dataset_repository)
     preset_dashboard = await DashboardDao.get_dashboards(dashboard_type=[DashboardType.PRESET_OSS])
     if not preset_dashboard:
         await DashboardDao.exec_sql_str(preset_oss_dashboard_sql)

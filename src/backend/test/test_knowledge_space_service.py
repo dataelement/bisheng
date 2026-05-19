@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import importlib
 import sys
 from datetime import datetime, timedelta
@@ -3651,6 +3652,42 @@ class TestTupleLifecycle:
         assert ('knowledge_file', 96) in [
             (call.args[0], call.args[1]) for call in mock_effective.await_args_list
         ]
+
+    @pytest.mark.asyncio
+    async def test_get_file_preview_schedules_success_telemetry_without_changing_response(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=196, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space', 'view_file'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
+            return_value=('original', 'preview'),
+        ), patch.object(
+            service, '_log_file_preview_success',
+            new_callable=AsyncMock,
+            create=True,
+        ) as mock_log, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task',
+        ) as mock_create_task:
+            result = await service.get_file_preview(196)
+
+        assert result == {"original_url": "original", "preview_url": "preview"}
+        mock_log.assert_called_once_with(file_record)
+        mock_create_task.assert_called_once()
+        scheduled = mock_create_task.call_args.args[0]
+        assert inspect.iscoroutine(scheduled)
+        scheduled.close()
 
     @pytest.mark.asyncio
     async def test_get_file_preview_denied_without_view_file_permission(self, service):

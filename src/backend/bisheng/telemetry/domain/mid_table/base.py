@@ -79,9 +79,10 @@ class BaseMidTable(BaseModel):
     _es_client: AsyncElasticsearch = None
     _es_client_sync: Elasticsearch = None
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, ensure_sync_index: bool = True, **kwargs: Any):
         super().__init__(**kwargs)
-        self.ensure_index_exists_sync()
+        if ensure_sync_index:
+            self.ensure_index_exists_sync()
 
     async def ensure_index_exists(self) -> None:
         if not self._index_name:
@@ -149,6 +150,26 @@ class BaseMidTable(BaseModel):
                 action["_id"] = rec.es_id
             actions.append(action)
         helpers.bulk(self._es_client_sync, actions)
+
+    async def insert_record(self, record: BaseRecord) -> None:
+        """异步插入单条记录。"""
+        await self.ensure_index_exists()
+        kwargs = {
+            "index": self._index_name,
+            "document": record.model_dump(exclude={"es_id"}),
+        }
+        if record.es_id is not None:
+            kwargs["id"] = record.es_id
+        await self._es_client.index(**kwargs)
+
+    def delete_by_query_sync(self, query: Dict[str, Any], *, refresh: bool = False) -> Dict[str, Any]:
+        """同步删除匹配 Elasticsearch 查询的记录。"""
+        self.ensure_index_exists_sync()
+        return self._es_client_sync.delete_by_query(
+            index=self._index_name,
+            body={"query": query},
+            refresh=refresh,
+        )
 
     def search_from_base_sync(self, **kwargs) -> List[Dict[str, Any]]:
         """ Synchronize search methods """
