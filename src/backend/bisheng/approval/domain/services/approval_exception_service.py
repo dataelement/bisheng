@@ -14,6 +14,10 @@ class ApprovalExceptionService:
     def __init__(self, *, instance_repository) -> None:
         self.instance_repository = instance_repository
 
+    @classmethod
+    async def retry_exception_api(cls, *, exception_id: int, action: str, operator_user_id: int):
+        raise NotImplementedError
+
     async def retry_scenario_disabled(
         self,
         *,

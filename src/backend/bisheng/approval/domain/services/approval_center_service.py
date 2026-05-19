@@ -13,6 +13,34 @@ class ApprovalCenterService:
     def __init__(self, *, instance_repository) -> None:
         self.instance_repository = instance_repository
 
+    @classmethod
+    async def list_my_tasks(cls, *, tenant_id: int, approver_user_id: int):
+        raise NotImplementedError
+
+    @classmethod
+    async def get_task_detail(cls, *, task_id: int, login_user):
+        raise NotImplementedError
+
+    @classmethod
+    async def decide_task_api(cls, *, task_id: int, action: str, operator_user_id: int, operator_user_name: str, comment: str | None = None):
+        raise NotImplementedError
+
+    @classmethod
+    async def list_my_requests(cls, *, tenant_id: int, applicant_user_id: int):
+        raise NotImplementedError
+
+    @classmethod
+    async def get_instance_detail(cls, *, instance_id: int, login_user):
+        raise NotImplementedError
+
+    @classmethod
+    async def withdraw_instance(cls, *, instance_id: int, operator_user_id: int, reason: str | None = None):
+        raise NotImplementedError
+
+    @classmethod
+    async def resubmit_instance(cls, *, instance_id: int, operator_user_id: int, reason: str | None = None):
+        raise NotImplementedError
+
     async def decide_task(
         self,
         *,
