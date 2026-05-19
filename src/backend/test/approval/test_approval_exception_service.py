@@ -5,10 +5,12 @@ from dataclasses import dataclass
 import pytest
 
 from bisheng.approval.domain.models.approval_instance import (
+    ApprovalActionLog,
     ApprovalException,
     ApprovalExceptionType,
     ApprovalInstance,
     ApprovalInstanceStatus,
+    ApprovalOutbox,
     ApprovalTask,
     ApprovalTaskStatus,
 )
@@ -66,7 +68,7 @@ class FakeApprovalRepo:
     async def create_action_log(self, payload: dict) -> None:
         self.action_logs.append(payload)
 
-    async def create_outbox(self, payload: dict) -> None:
+    async def create_outbox(self, payload: ApprovalOutbox) -> None:
         self.outbox_payloads.append(payload)
 
 
@@ -121,7 +123,9 @@ async def test_or_sign_approves_one_and_skips_other_tasks():
     assert repo.tasks[1].status == ApprovalTaskStatus.APPROVED
     assert repo.tasks[2].status == ApprovalTaskStatus.SKIPPED
     assert repo.instances[1].status == ApprovalInstanceStatus.APPROVED
-    assert repo.outbox_payloads == [{'instance_id': 1, 'tenant_id': 1, 'handler_key': 'knowledge_space_subscribe_request'}]
+    assert len(repo.outbox_payloads) == 1
+    assert repo.outbox_payloads[0].instance_id == 1
+    assert repo.outbox_payloads[0].handler_key == 'knowledge_space_subscribe_request'
 
 
 @pytest.mark.asyncio
@@ -182,6 +186,7 @@ async def test_scenario_disabled_retry_reopens_instance_and_creates_task():
     assert repo.exceptions[1].status == 'resolved'
     created_task = next(task for task in repo.tasks.values() if task.node_code == 'n2')
     assert created_task.approver_user_id == 2001
+    assert any(isinstance(log, ApprovalActionLog) and log.action == 'retry_scenario_disabled' for log in repo.action_logs)
 
 
 @pytest.mark.asyncio

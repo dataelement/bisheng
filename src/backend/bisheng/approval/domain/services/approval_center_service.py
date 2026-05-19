@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from bisheng.approval.domain.models.approval_instance import (
+    ApprovalActionLog,
     ApprovalInstanceStatus,
+    ApprovalOutbox,
+    ApprovalOutboxStatus,
     ApprovalTaskStatus,
 )
 
@@ -40,12 +43,14 @@ class ApprovalCenterService:
             instance.status = ApprovalInstanceStatus.REJECTED
             await self.instance_repository.update_instance(instance)
             await self.instance_repository.create_action_log(
-                {
-                    'instance_id': instance.id,
-                    'action': 'rejected',
-                    'operator_user_id': operator_user_id,
-                    'operator_user_name': operator_user_name,
-                }
+                ApprovalActionLog(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    action='rejected',
+                    operator_user_id=operator_user_id,
+                    operator_user_name=operator_user_name,
+                    detail={'comment': comment},
+                )
             )
             return
 
@@ -61,7 +66,13 @@ class ApprovalCenterService:
             instance.status = ApprovalInstanceStatus.APPROVED
             await self.instance_repository.update_instance(instance)
             await self.instance_repository.create_outbox(
-                {'instance_id': instance.id, 'tenant_id': instance.tenant_id, 'handler_key': instance.handler_key}
+                ApprovalOutbox(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    handler_key=instance.handler_key,
+                    status=ApprovalOutboxStatus.PENDING,
+                    payload_snapshot=instance.payload_snapshot,
+                )
             )
             return
 
@@ -70,6 +81,11 @@ class ApprovalCenterService:
             instance.status = ApprovalInstanceStatus.APPROVED
             await self.instance_repository.update_instance(instance)
             await self.instance_repository.create_outbox(
-                {'instance_id': instance.id, 'tenant_id': instance.tenant_id, 'handler_key': instance.handler_key}
+                ApprovalOutbox(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    handler_key=instance.handler_key,
+                    status=ApprovalOutboxStatus.PENDING,
+                    payload_snapshot=instance.payload_snapshot,
+                )
             )
-

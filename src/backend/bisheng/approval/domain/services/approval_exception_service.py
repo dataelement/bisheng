@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from bisheng.approval.domain.models.approval_instance import ApprovalInstanceStatus, ApprovalTask, ApprovalTaskStatus
+from bisheng.approval.domain.models.approval_instance import (
+    ApprovalActionLog,
+    ApprovalInstanceStatus,
+    ApprovalOutbox,
+    ApprovalOutboxStatus,
+    ApprovalTask,
+    ApprovalTaskStatus,
+)
 
 
 class ApprovalExceptionService:
@@ -69,7 +76,13 @@ class ApprovalExceptionService:
         instance.status = ApprovalInstanceStatus.APPROVED
         await self.instance_repository.update_instance(instance)
         await self.instance_repository.create_outbox(
-            {'instance_id': instance.id, 'tenant_id': instance.tenant_id, 'handler_key': instance.handler_key}
+            ApprovalOutbox(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                handler_key=instance.handler_key,
+                status=ApprovalOutboxStatus.PENDING,
+                payload_snapshot=instance.payload_snapshot,
+            )
         )
         await self._resolve_exception(exception, resolved_by_user_id, 'skip_node')
 
@@ -110,6 +123,16 @@ class ApprovalExceptionService:
         exception.resolved_by_user_id = resolved_by_user_id
         exception.resolved_action = resolved_action
         await self.instance_repository.update_exception(exception)
+        instance = await self._get_instance(exception.instance_id)
+        await self.instance_repository.create_action_log(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action=resolved_action,
+                operator_user_id=resolved_by_user_id,
+                detail={'exception_id': exception.id, 'exception_type': exception.exception_type},
+            )
+        )
 
     async def _get_exception(self, exception_id: int):
         exception = await self.instance_repository.get_exception(exception_id)
