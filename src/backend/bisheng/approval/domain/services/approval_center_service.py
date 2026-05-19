@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from bisheng.approval.domain.models.approval_instance import (
+    ApprovalInstanceStatus,
+    ApprovalTaskStatus,
+)
+
+
+class ApprovalCenterService:
+    def __init__(self, *, instance_repository) -> None:
+        self.instance_repository = instance_repository
+
+    async def decide_task(
+        self,
+        *,
+        task_id: int,
+        action: str,
+        operator_user_id: int,
+        operator_user_name: str,
+        comment: str | None = None,
+    ) -> None:
+        task = await self.instance_repository.get_task(task_id)
+        if task is None:
+            raise ValueError(f'task not found: {task_id}')
+        instance = await self.instance_repository.get_instance(task.instance_id)
+        if instance is None:
+            raise ValueError(f'instance not found: {task.instance_id}')
+
+        sibling_tasks = await self.instance_repository.list_tasks(instance.id)
+        same_node_tasks = [one for one in sibling_tasks if one.node_code == task.node_code]
+
+        if action == 'reject':
+            task.status = ApprovalTaskStatus.REJECTED
+            task.comment = comment
+            await self.instance_repository.update_task(task)
+            for sibling in same_node_tasks:
+                if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
+                    sibling.status = ApprovalTaskStatus.CANCELLED
+                    await self.instance_repository.update_task(sibling)
+            instance.status = ApprovalInstanceStatus.REJECTED
+            await self.instance_repository.update_instance(instance)
+            await self.instance_repository.create_action_log(
+                {
+                    'instance_id': instance.id,
+                    'action': 'rejected',
+                    'operator_user_id': operator_user_id,
+                    'operator_user_name': operator_user_name,
+                }
+            )
+            return
+
+        task.status = ApprovalTaskStatus.APPROVED
+        task.comment = comment
+        await self.instance_repository.update_task(task)
+
+        if task.node_mode == 'or':
+            for sibling in same_node_tasks:
+                if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
+                    sibling.status = ApprovalTaskStatus.SKIPPED
+                    await self.instance_repository.update_task(sibling)
+            instance.status = ApprovalInstanceStatus.APPROVED
+            await self.instance_repository.update_instance(instance)
+            await self.instance_repository.create_outbox(
+                {'instance_id': instance.id, 'tenant_id': instance.tenant_id, 'handler_key': instance.handler_key}
+            )
+            return
+
+        all_same_node_approved = all(one.status == ApprovalTaskStatus.APPROVED for one in same_node_tasks)
+        if all_same_node_approved:
+            instance.status = ApprovalInstanceStatus.APPROVED
+            await self.instance_repository.update_instance(instance)
+            await self.instance_repository.create_outbox(
+                {'instance_id': instance.id, 'tenant_id': instance.tenant_id, 'handler_key': instance.handler_key}
+            )
+
