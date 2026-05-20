@@ -1,5 +1,5 @@
 import ApprovalPage from "@/pages/ApprovalPage";
-import { render, screen, waitFor } from "@/test/test-utils";
+import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -99,6 +99,7 @@ describe("ApprovalPage", () => {
         node_name: "一级审批",
         node_order: 1,
         node_mode: "or",
+        approver_config: { type: "tenant_admin" },
       },
     ]);
     createApprovalScenarioApi.mockResolvedValue({ id: 2 });
@@ -296,6 +297,9 @@ describe("ApprovalPage", () => {
     const nodeNameInput = await screen.findByPlaceholderText("approvalPage.nodeNamePlaceholder");
     await user.type(nodeNameInput, "二级审批");
     await user.type(screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder"), "n2");
+    fireEvent.change(screen.getByPlaceholderText("approvalPage.approverConfigPlaceholder"), {
+      target: { value: '{"type":"tenant_admin"}' },
+    });
     await user.click(screen.getByRole("button", { name: "approvalPage.createNode" }));
 
     await waitFor(() => {
@@ -304,6 +308,7 @@ describe("ApprovalPage", () => {
         node_name: "二级审批",
         node_order: 2,
         node_mode: "or",
+        approver_config: { type: "tenant_admin" },
       });
     });
   });
@@ -319,6 +324,9 @@ describe("ApprovalPage", () => {
     const nodeCodeInput = screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder");
     await user.clear(nodeCodeInput);
     await user.type(nodeCodeInput, "n1b");
+    fireEvent.change(screen.getByPlaceholderText("approvalPage.approverConfigPlaceholder"), {
+      target: { value: '{"type":"user","user_ids":[101]}' },
+    });
     await user.selectOptions(screen.getAllByRole("combobox")[3], "and");
     await user.click(screen.getByRole("button", { name: "approvalPage.saveNode" }));
 
@@ -327,8 +335,30 @@ describe("ApprovalPage", () => {
         node_code: "n1b",
         node_name: "更新节点",
         node_mode: "and",
+        approver_config: { type: "user", user_ids: [101] },
       });
     });
+  });
+
+  it("blocks node save when approver config is invalid json", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    const nodeNameInput = await screen.findByPlaceholderText("approvalPage.nodeNamePlaceholder");
+    await user.type(nodeNameInput, "二级审批");
+    await user.type(screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder"), "n2");
+    fireEvent.change(screen.getByPlaceholderText("approvalPage.approverConfigPlaceholder"), {
+      target: { value: "{bad json" },
+    });
+    await user.click(screen.getByRole("button", { name: "approvalPage.createNode" }));
+
+    expect(createApprovalNodeApi).not.toHaveBeenCalled();
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: "error",
+        description: "approvalPage.approverConfigInvalid",
+      }),
+    );
   });
 
   it("toggles scenario enabled status and reloads the page", async () => {

@@ -75,6 +75,7 @@ export default function ApprovalPage() {
   const [nodeName, setNodeName] = useState("");
   const [nodeCode, setNodeCode] = useState("");
   const [nodeMode, setNodeMode] = useState("or");
+  const [nodeApproverConfigText, setNodeApproverConfigText] = useState("{}");
   const [exceptionApproverInputs, setExceptionApproverInputs] = useState<Record<number, string>>({});
 
   const selectedPreset = useMemo(
@@ -293,11 +294,13 @@ export default function ApprovalPage() {
   const handleCreateNode = async () => {
     if (!selectedFlowId || !nodeName.trim() || !nodeCode.trim()) return;
     try {
+      const approverConfig = parseNodeApproverConfig();
       await createApprovalNodeApi(selectedFlowId, {
         node_code: nodeCode.trim(),
         node_name: nodeName.trim(),
         node_order: nodes.length + 1,
         node_mode: nodeMode,
+        approver_config: approverConfig,
       });
       toast({
         title: t("prompt"),
@@ -311,7 +314,7 @@ export default function ApprovalPage() {
       toast({
         title: t("prompt"),
         variant: "error",
-        description: String(error || t("approvalPage.nodeCreateFailed")),
+        description: error?.message || String(error || t("approvalPage.nodeCreateFailed")),
       });
     }
   };
@@ -321,6 +324,15 @@ export default function ApprovalPage() {
     setNodeName("");
     setNodeCode("");
     setNodeMode("or");
+    setNodeApproverConfigText("{}");
+  };
+
+  const parseNodeApproverConfig = () => {
+    try {
+      return JSON.parse(nodeApproverConfigText || "{}");
+    } catch (_error) {
+      throw new Error(t("approvalPage.approverConfigInvalid"));
+    }
   };
 
   const handleSaveRoute = async () => {
@@ -381,10 +393,12 @@ export default function ApprovalPage() {
     if (!selectedNodeId || !nodeName.trim() || !nodeCode.trim()) return;
     try {
       const currentFlowId = selectedFlowId;
+      const approverConfig = parseNodeApproverConfig();
       await updateApprovalNodeApi(selectedNodeId, {
         node_code: nodeCode.trim(),
         node_name: nodeName.trim(),
         node_mode: nodeMode,
+        approver_config: approverConfig,
       });
       toast({
         title: t("prompt"),
@@ -399,7 +413,7 @@ export default function ApprovalPage() {
       toast({
         title: t("prompt"),
         variant: "error",
-        description: String(error || t("approvalPage.nodeUpdateFailed")),
+        description: error?.message || String(error || t("approvalPage.nodeUpdateFailed")),
       });
     }
   };
@@ -778,6 +792,15 @@ export default function ApprovalPage() {
                 <option value="and">{t("approvalPage.nodeModeAnd")}</option>
               </select>
             </label>
+            <label className="flex min-w-[260px] flex-1 flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.approverConfigLabel")}</span>
+              <input
+                value={nodeApproverConfigText}
+                onChange={(event) => setNodeApproverConfigText(event.target.value)}
+                placeholder={t("approvalPage.approverConfigPlaceholder")}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              />
+            </label>
             <button
               type="button"
               disabled={!selectedFlowId || !nodeName.trim() || !nodeCode.trim()}
@@ -809,6 +832,7 @@ export default function ApprovalPage() {
                     setNodeName(node.node_name || "");
                     setNodeCode(node.node_code || "");
                     setNodeMode(node.node_mode || "or");
+                    setNodeApproverConfigText(JSON.stringify(node.approver_config || {}));
                   }}
                   className={`w-full rounded-lg border px-4 py-3 text-left ${
                     node.id === selectedNodeId

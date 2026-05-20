@@ -36,6 +36,7 @@ export interface ApprovalNodeItem {
   node_name?: string;
   node_order?: number;
   node_mode?: string;
+  approver_config?: Record<string, any>;
 }
 
 export interface ApprovalExceptionItem {
