@@ -14,7 +14,6 @@ trigger:
 
 # =========================================
 # 使用 Drone 默认 clone
-# depth: 1 提高 clone 速度
 # =========================================
 clone:
   depth: 1
@@ -52,6 +51,13 @@ steps:
       DOCKER_PASSWORD:
         from_secret: NEXUS_PASSWORD
 
+      # 代理
+      http_proxy:
+        from_secret: PROXY
+
+      https_proxy:
+        from_secret: PROXY
+
     commands:
 
       # 生成版本号
@@ -68,7 +74,9 @@ steps:
       - 'cd src/frontend'
 
       # 构建 frontend 镜像
-      - 'docker build -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .'
+      # 这里必须传递 build-arg
+      # 否则 docker build 内部无法走代理
+      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .'
 
       # 推送 frontend 镜像
       - 'docker push $DOCKER_REPO:$VERSION'
@@ -90,15 +98,14 @@ steps:
       host: 192.168.106.171
 
       # SSH 用户
-      username: deploy
+      username: root
 
-      # SSH 私钥
-      key:
-        from_secret: SSH_KEY
+      # SSH 密码
+      password:
+        from_secret: sshpwd
 
       port: 22
 
-      # 最长执行时间
       command_timeout: 20m
 
       script: |
@@ -121,13 +128,13 @@ steps:
 
         echo "======= migrate database ======="
 
-        # 执行数据库迁移
+        # 数据库迁移
         docker compose -f docker/docker-compose.yml exec -T backend \
         sh -lc "cd /app && alembic upgrade head"
 
         echo "======= restart backend ======="
 
-        # 重启 backend 服务
+        # 重启 backend
         docker compose -f docker/docker-compose.yml restart backend backend_worker
 
   # =========================================
@@ -139,17 +146,25 @@ steps:
 
     pull: if-not-exists
 
+    environment:
+
+      NEXUS_USER:
+        from_secret: NEXUS_USER
+
+      NEXUS_PASSWORD:
+        from_secret: NEXUS_PASSWORD
+
     settings:
 
       # 部署服务器
       host: 192.168.106.171
 
       # SSH 用户
-      username: deploy
+      username: root
 
-      # SSH 私钥
-      key:
-        from_secret: SSH_KEY
+      # SSH 密码
+      password:
+        from_secret: sshpwd
 
       port: 22
 
@@ -174,21 +189,13 @@ steps:
 
         echo "======= pull frontend image ======="
 
-        # 拉取最新 frontend 镜像
+        # 拉取 frontend 镜像
         docker compose -f docker/docker-compose.yml pull frontend
 
         echo "======= restart frontend ======="
 
-        # 重建 frontend 容器
+        # 重建 frontend
         docker compose -f docker/docker-compose.yml up -d frontend
-
-    environment:
-
-      NEXUS_USER:
-        from_secret: NEXUS_USER
-
-      NEXUS_PASSWORD:
-        from_secret: NEXUS_PASSWORD
 
   # =========================================
   # 飞书通知
@@ -200,6 +207,8 @@ steps:
     pull: if-not-exists
 
     settings:
+
+      debug: true
 
       urls:
         from_secret: FEISHU_URL
