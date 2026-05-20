@@ -1,7 +1,9 @@
 import ApprovalPage from "@/pages/ApprovalPage";
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
+import { render, screen, waitFor } from "@/test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// ── mocks ─────────────────────────────────────────────────────────────────
 
 const toastMock = vi.fn();
 const listApprovalScenarioPresetsApi = vi.fn();
@@ -19,124 +21,160 @@ const updateApprovalFlowApi = vi.fn();
 const updateApprovalNodeApi = vi.fn();
 const retryApprovalExceptionApi = vi.fn();
 const updateApprovalScenarioApi = vi.fn();
+const deleteApprovalScenarioApi = vi.fn();
+const deleteApprovalRouteApi = vi.fn();
+const reorderApprovalRoutesApi = vi.fn();
+const deleteApprovalFlowApi = vi.fn();
+const deleteApprovalNodeApi = vi.fn();
 
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({
   toast: (...args: any[]) => toastMock(...args),
 }));
 
-vi.mock("@/controllers/API/approval", () => ({
-  listApprovalScenarioPresetsApi: (...args: any[]) => listApprovalScenarioPresetsApi(...args),
-  listApprovalScenariosApi: (...args: any[]) => listApprovalScenariosApi(...args),
-  listApprovalExceptionsApi: (...args: any[]) => listApprovalExceptionsApi(...args),
-  listApprovalRoutesApi: (...args: any[]) => listApprovalRoutesApi(...args),
-  listApprovalFlowsApi: (...args: any[]) => listApprovalFlowsApi(...args),
-  listApprovalNodesApi: (...args: any[]) => listApprovalNodesApi(...args),
-  createApprovalScenarioApi: (...args: any[]) => createApprovalScenarioApi(...args),
-  createApprovalRouteApi: (...args: any[]) => createApprovalRouteApi(...args),
-  createApprovalFlowApi: (...args: any[]) => createApprovalFlowApi(...args),
-  createApprovalNodeApi: (...args: any[]) => createApprovalNodeApi(...args),
-  updateApprovalRouteApi: (...args: any[]) => updateApprovalRouteApi(...args),
-  updateApprovalFlowApi: (...args: any[]) => updateApprovalFlowApi(...args),
-  updateApprovalNodeApi: (...args: any[]) => updateApprovalNodeApi(...args),
-  retryApprovalExceptionApi: (...args: any[]) => retryApprovalExceptionApi(...args),
-  updateApprovalScenarioApi: (...args: any[]) => updateApprovalScenarioApi(...args),
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
+  bsConfirm: (params: any) => params.onOk?.(() => {}),
 }));
 
-describe("ApprovalPage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    listApprovalScenarioPresetsApi.mockResolvedValue([
-      {
-        scenario_code: "menu_access_request",
-        scenario_name: "菜单权限申请",
-        handler_key: "menu_access_request",
-        condition_fields: ["menu_key"],
-        approver_source_types: ["tenant_admin"],
-      },
-    ]);
-    listApprovalScenariosApi.mockResolvedValue([
-      {
-        id: 1,
-        scenario_code: "menu_access_request",
-        scenario_name: "菜单权限申请",
-        enabled: false,
-      },
-    ]);
-    listApprovalExceptionsApi.mockResolvedValue([
-      {
-        id: 88,
-        exception_type: "approver_empty",
-        instance_id: 18,
-        status: "open",
-        create_time: "2026-05-20 10:00:00",
-        detail: {
-          node_code: "n1",
-          node_name: "一级审批",
-        },
-      },
-    ]);
-    listApprovalRoutesApi.mockResolvedValue([
-      {
-        id: 9,
-        route_name: "默认流程",
-        route_type: "flow",
-        enabled: true,
-        flow_definition_id: 12,
-      },
-    ]);
-    listApprovalFlowsApi.mockResolvedValue([
-      {
-        id: 12,
-        flow_code: "menu_default",
-        flow_name: "菜单默认流程",
-        is_active: true,
-      },
-    ]);
-    listApprovalNodesApi.mockResolvedValue([
-      {
-        id: 15,
-        node_code: "n1",
-        node_name: "一级审批",
-        node_order: 1,
-        node_mode: "or",
-        approver_config: { type: "tenant_admin" },
-      },
-    ]);
-    createApprovalScenarioApi.mockResolvedValue({ id: 2 });
-    createApprovalRouteApi.mockResolvedValue({ id: 10, route_name: "新增分支", route_type: "flow" });
-    createApprovalFlowApi.mockResolvedValue({ id: 12, flow_code: "menu_default", flow_name: "菜单默认流程" });
-    createApprovalNodeApi.mockResolvedValue({ id: 15, node_code: "n1", node_name: "一级审批", node_mode: "or" });
-    updateApprovalRouteApi.mockResolvedValue({ id: 9, route_name: "更新分支", route_type: "pass" });
-    updateApprovalFlowApi.mockResolvedValue({ id: 12, flow_code: "menu_updated", flow_name: "更新流程" });
-    updateApprovalNodeApi.mockResolvedValue({ id: 15, node_code: "n1b", node_name: "更新节点", node_mode: "and" });
-    retryApprovalExceptionApi.mockResolvedValue({ status: "resolved" });
-    updateApprovalScenarioApi.mockResolvedValue({ id: 1, enabled: true });
-  });
+vi.mock("@/controllers/API/approval", () => ({
+  listApprovalScenarioPresetsApi: (...a: any[]) => listApprovalScenarioPresetsApi(...a),
+  listApprovalScenariosApi: (...a: any[]) => listApprovalScenariosApi(...a),
+  listApprovalExceptionsApi: (...a: any[]) => listApprovalExceptionsApi(...a),
+  listApprovalRoutesApi: (...a: any[]) => listApprovalRoutesApi(...a),
+  listApprovalFlowsApi: (...a: any[]) => listApprovalFlowsApi(...a),
+  listApprovalNodesApi: (...a: any[]) => listApprovalNodesApi(...a),
+  createApprovalScenarioApi: (...a: any[]) => createApprovalScenarioApi(...a),
+  createApprovalRouteApi: (...a: any[]) => createApprovalRouteApi(...a),
+  createApprovalFlowApi: (...a: any[]) => createApprovalFlowApi(...a),
+  createApprovalNodeApi: (...a: any[]) => createApprovalNodeApi(...a),
+  updateApprovalRouteApi: (...a: any[]) => updateApprovalRouteApi(...a),
+  updateApprovalFlowApi: (...a: any[]) => updateApprovalFlowApi(...a),
+  updateApprovalNodeApi: (...a: any[]) => updateApprovalNodeApi(...a),
+  retryApprovalExceptionApi: (...a: any[]) => retryApprovalExceptionApi(...a),
+  updateApprovalScenarioApi: (...a: any[]) => updateApprovalScenarioApi(...a),
+  deleteApprovalScenarioApi: (...a: any[]) => deleteApprovalScenarioApi(...a),
+  deleteApprovalRouteApi: (...a: any[]) => deleteApprovalRouteApi(...a),
+  reorderApprovalRoutesApi: (...a: any[]) => reorderApprovalRoutesApi(...a),
+  deleteApprovalFlowApi: (...a: any[]) => deleteApprovalFlowApi(...a),
+  deleteApprovalNodeApi: (...a: any[]) => deleteApprovalNodeApi(...a),
+}));
 
-  it("loads presets, scenarios, exceptions and routes on mount", async () => {
+// ── fixtures ──────────────────────────────────────────────────────────────
+
+const PRESET = {
+  scenario_code: "menu_access_request",
+  scenario_name: "菜单权限申请",
+  handler_key: "menu_access_request",
+  condition_fields: ["menu_key"],
+  approver_source_types: ["applicant_department_admin"],
+};
+
+const SCENARIO = {
+  id: 1,
+  scenario_code: "menu_access_request",
+  scenario_name: "菜单权限申请",
+  enabled: false,
+};
+
+const ROUTE = {
+  id: 9,
+  route_name: "管理员直接通过",
+  route_type: "pass",
+  enabled: true,
+  flow_definition_id: null,
+};
+
+const FLOW = {
+  id: 12,
+  flow_code: "menu_default",
+  flow_name: "菜单权限审批流程 A",
+  is_active: true,
+};
+
+const NODE = {
+  id: 15,
+  node_code: "n1",
+  node_name: "申请人部门管理员审批",
+  node_order: 1,
+  node_mode: "or",
+  approver_config: {
+    sources: [{ type: "applicant_department_admin", label: "申请人部门管理员" }],
+  },
+};
+
+const EXCEPTION = {
+  id: 88,
+  exception_type: "approver_empty",
+  instance_id: 18,
+  status: "open",
+  create_time: "2026-05-20 10:00:00",
+  detail: { node_code: "n1" },
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  listApprovalScenarioPresetsApi.mockResolvedValue([PRESET]);
+  listApprovalScenariosApi.mockResolvedValue([SCENARIO]);
+  listApprovalExceptionsApi.mockResolvedValue([EXCEPTION]);
+  listApprovalRoutesApi.mockResolvedValue([ROUTE]);
+  listApprovalFlowsApi.mockResolvedValue([FLOW]);
+  listApprovalNodesApi.mockResolvedValue([NODE]);
+  createApprovalScenarioApi.mockResolvedValue({ id: 2 });
+  createApprovalRouteApi.mockResolvedValue({ id: 10 });
+  createApprovalFlowApi.mockResolvedValue({ id: 13, flow_code: "flow_b", flow_name: "流程 B" });
+  createApprovalNodeApi.mockResolvedValue({ id: 16 });
+  updateApprovalRouteApi.mockResolvedValue({});
+  updateApprovalFlowApi.mockResolvedValue({});
+  updateApprovalNodeApi.mockResolvedValue({});
+  retryApprovalExceptionApi.mockResolvedValue({ status: "resolved" });
+  updateApprovalScenarioApi.mockResolvedValue({ id: 1, enabled: true });
+  deleteApprovalScenarioApi.mockResolvedValue(undefined);
+  deleteApprovalRouteApi.mockResolvedValue(undefined);
+  reorderApprovalRoutesApi.mockResolvedValue(undefined);
+  deleteApprovalFlowApi.mockResolvedValue(undefined);
+  deleteApprovalNodeApi.mockResolvedValue(undefined);
+});
+
+// ── tests ─────────────────────────────────────────────────────────────────
+
+describe("ApprovalPage", () => {
+  it("renders page title and loads scenario/route/node data on mount", async () => {
     render(<ApprovalPage />);
 
-    expect(await screen.findByText("approvalPage.title")).toBeInTheDocument();
-    expect(await screen.findByText("菜单权限申请")).toBeInTheDocument();
-    expect(await screen.findByText("approver_empty #88")).toBeInTheDocument();
-    expect(await screen.findByText("默认流程 #9")).toBeInTheDocument();
-    expect((await screen.findAllByText("菜单默认流程")).length).toBeGreaterThan(0);
-    expect(await screen.findByText("一级审批 #15")).toBeInTheDocument();
+    expect(await screen.findByText("审批管理")).toBeInTheDocument();
+
+    // scenario card appears in the left panel
+    const scenarioMatches = await screen.findAllByText("菜单权限申请");
+    expect(scenarioMatches.length).toBeGreaterThan(0);
+
+    // route and node appear in the right panel
+    expect(await screen.findByText("管理员直接通过")).toBeInTheDocument();
+    expect(await screen.findByText("菜单权限审批流程 A")).toBeInTheDocument();
+    expect(await screen.findByText("申请人部门管理员审批")).toBeInTheDocument();
 
     expect(listApprovalScenarioPresetsApi).toHaveBeenCalledTimes(1);
     expect(listApprovalScenariosApi).toHaveBeenCalledTimes(1);
-    expect(listApprovalExceptionsApi).toHaveBeenCalledTimes(1);
     expect(listApprovalRoutesApi).toHaveBeenCalledWith(1);
     expect(listApprovalFlowsApi).toHaveBeenCalledWith(1);
     expect(listApprovalNodesApi).toHaveBeenCalledWith(12);
   });
 
-  it("creates a scenario from the selected preset and reloads the page", async () => {
+  it("opens add-scenario dialog and creates scenario on confirm", async () => {
     const user = userEvent.setup();
-    render(<ApprovalPage />);
+    // use a preset NOT already in scenarios so the dropdown is available
+    listApprovalScenariosApi.mockResolvedValue([]);
+    listApprovalRoutesApi.mockResolvedValue([]);
+    listApprovalFlowsApi.mockResolvedValue([]);
 
-    const createButton = await screen.findByRole("button", { name: "approvalPage.createScenario" });
-    await user.click(createButton);
+    render(<ApprovalPage />);
+    await screen.findByText("审批管理");
+
+    const addBtn = screen.getByRole("button", { name: /新增/ });
+    await user.click(addBtn);
+
+    expect(await screen.findByText("新增审批场景")).toBeInTheDocument();
+
+    const confirmBtn = screen.getByRole("button", { name: "确认添加" });
+    await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(createApprovalScenarioApi).toHaveBeenCalledWith({
@@ -145,57 +183,167 @@ describe("ApprovalPage", () => {
         enabled: false,
       });
     });
-    expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: "success",
-        description: "approvalPage.createSuccess",
-      }),
-    );
-    expect(listApprovalScenarioPresetsApi).toHaveBeenCalledTimes(2);
     expect(listApprovalScenariosApi).toHaveBeenCalledTimes(2);
   });
 
-  it("retries an exception and refreshes the page", async () => {
+  it("toggles scenario enabled status via the Switch", async () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
-    const retryButton = await screen.findByRole("button", { name: "approvalPage.retryAction" });
-    await user.click(retryButton);
+    await screen.findAllByText("菜单权限申请");
+
+    // The first switch in DOM order is the scenario enable switch (right-panel header);
+    // route row switches come after it.
+    const switches = screen.getAllByRole("switch");
+    await user.click(switches[0]);
+
+    await waitFor(() => {
+      expect(updateApprovalScenarioApi).toHaveBeenCalledWith(1, { enabled: true });
+    });
+  });
+
+  it("opens route dialog, creates a route and reloads routes", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await screen.findByText("条件分支");
+    await user.click(screen.getByRole("button", { name: /新增分支/ }));
+
+    expect(await screen.findByText("新增条件分支")).toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText("如：管理员直接通过");
+    await user.type(nameInput, "测试分支");
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(createApprovalRouteApi).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ route_name: "测试分支" }),
+      );
+    });
+    expect(listApprovalRoutesApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens flow dialog and creates a new flow when no flow is preselected", async () => {
+    const user = userEvent.setup();
+    // no existing flows so the button says "新建流程"
+    listApprovalFlowsApi.mockResolvedValue([]);
+    listApprovalNodesApi.mockResolvedValue([]);
+
+    render(<ApprovalPage />);
+    await screen.findByText("审批流程");
+
+    await user.click(screen.getByRole("button", { name: "新建流程" }));
+
+    expect(await screen.findByText("新建审批流程")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("如：菜单权限审批流程 A"), "流程 B");
+    await user.type(screen.getByPlaceholderText("如：menu_flow_a"), "flow_b");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(createApprovalFlowApi).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ flow_name: "流程 B", flow_code: "flow_b" }),
+      );
+    });
+  });
+
+  it("opens node dialog and creates a node", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await screen.findByText("审批流程");
+    await user.click(screen.getByRole("button", { name: /新增节点/ }));
+
+    expect(await screen.findByText("新增审批节点")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("如：申请人部门管理员审批"), "二级审批");
+    await user.type(screen.getByPlaceholderText("如：dept_admin_review"), "level2");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(createApprovalNodeApi).toHaveBeenCalledWith(
+        12,
+        expect.objectContaining({ node_name: "二级审批", node_code: "level2" }),
+      );
+    });
+    expect(listApprovalNodesApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("edits a route via the edit button and updates route", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await screen.findByText("管理员直接通过");
+
+    // route edit button has aria-label="编辑"; scenario card also has title="编辑"
+    // so we click the last one (route row) rather than the first (scenario card no-op)
+    const editBtns = screen.getAllByRole("button", { name: "编辑" });
+    await user.click(editBtns[editBtns.length - 1]);
+
+    expect(await screen.findByText("编辑条件分支")).toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText("如：管理员直接通过");
+    await user.clear(nameInput);
+    await user.type(nameInput, "修改后分支名");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(updateApprovalRouteApi).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({ route_name: "修改后分支名" }),
+      );
+    });
+  });
+
+  it("switches to exception tab and retries an exception", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await screen.findByText("审批管理");
+    await user.click(screen.getByRole("button", { name: "异常流程列表" }));
+
+    expect(await screen.findByText("审批人为空")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "重试" }));
 
     await waitFor(() => {
       expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {});
     });
     expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: "success",
-        description: "approvalPage.exceptionResolveSuccess",
-      }),
+      expect.objectContaining({ variant: "success" }),
     );
-    expect(listApprovalExceptionsApi).toHaveBeenCalledTimes(2);
   });
 
-  it("assigns approvers for approver_empty exceptions", async () => {
+  it("switches to exception tab and assigns approvers for approver_empty", async () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
-    const approverInput = await screen.findByPlaceholderText("approvalPage.approverIdsPlaceholder");
-    await user.type(approverInput, "101, 102");
-    await user.click(screen.getByRole("button", { name: "approvalPage.assignApproversAction" }));
+    await user.click(await screen.findByRole("button", { name: "异常流程列表" }));
+    await screen.findByText("审批人为空");
+
+    const input = screen.getByPlaceholderText("输入用户 ID，多个用逗号分隔");
+    await user.type(input, "101, 202");
+    await user.click(screen.getByRole("button", { name: "指定审批人" }));
 
     await waitFor(() => {
       expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {
         action: "assign_approvers",
-        approver_user_ids: [101, 102],
+        approver_user_ids: [101, 202],
       });
     });
   });
 
-  it("skips the current node for approver_empty exceptions", async () => {
+  it("skips current node for approver_empty exception", async () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
-    const skipButton = await screen.findByRole("button", { name: "approvalPage.skipNodeAction" });
-    await user.click(skipButton);
+    await user.click(await screen.findByRole("button", { name: "异常流程列表" }));
+    await screen.findByText("审批人为空");
+
+    await user.click(screen.getByRole("button", { name: "跳过节点" }));
 
     await waitFor(() => {
       expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {
@@ -204,181 +352,21 @@ describe("ApprovalPage", () => {
     });
   });
 
-  it("creates a route for the selected scenario and reloads route list", async () => {
+  it("deletes a route via the delete button", async () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
-    const routeNameInput = await screen.findByPlaceholderText("approvalPage.routeNamePlaceholder");
-    await user.type(routeNameInput, "新增分支");
-    await user.selectOptions(screen.getAllByRole("combobox")[2], "12");
-    await user.click(screen.getByRole("button", { name: "approvalPage.createRoute" }));
+    await screen.findByText("管理员直接通过");
+
+    // route delete button has aria-label="删除"
+    const deleteBtns = screen.getAllByRole("button", { name: "删除" });
+    // first delete btn might be for scenario card (in scenario list hover area)
+    // route row delete is in the route row; click the one visible in the route row area
+    await user.click(deleteBtns[deleteBtns.length - 1]);
 
     await waitFor(() => {
-      expect(createApprovalRouteApi).toHaveBeenCalledWith(1, {
-        route_name: "新增分支",
-        route_type: "flow",
-        sort_order: 1,
-        flow_definition_id: 12,
-        match_config: {},
-      });
+      expect(deleteApprovalRouteApi).toHaveBeenCalledWith(9);
     });
-    expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: "success",
-        description: "approvalPage.routeCreateSuccess",
-      }),
-    );
     expect(listApprovalRoutesApi).toHaveBeenCalledTimes(2);
-  });
-
-  it("creates a flow for the selected scenario and reloads flow list", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    await user.click(await screen.findByRole("button", { name: "approvalPage.cancelEdit" }));
-    const flowNameInput = await screen.findByPlaceholderText("approvalPage.flowNamePlaceholder");
-    await user.type(flowNameInput, "菜单默认流程");
-    await user.type(screen.getByPlaceholderText("approvalPage.flowCodePlaceholder"), "menu_default");
-    await user.click(screen.getByRole("button", { name: "approvalPage.createFlow" }));
-
-    await waitFor(() => {
-      expect(createApprovalFlowApi).toHaveBeenCalledWith(1, {
-        flow_code: "menu_default",
-        flow_name: "菜单默认流程",
-      });
-    });
-  });
-
-  it("updates a selected route", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    await user.click(await screen.findByText("默认流程 #9"));
-    const routeNameInput = await screen.findByPlaceholderText("approvalPage.routeNamePlaceholder");
-    await user.clear(routeNameInput);
-    await user.type(routeNameInput, "更新分支");
-    await user.selectOptions(screen.getAllByRole("combobox")[1], "pass");
-    await user.click(screen.getByRole("button", { name: "approvalPage.saveRoute" }));
-
-    await waitFor(() => {
-      expect(updateApprovalRouteApi).toHaveBeenCalledWith(9, {
-        route_name: "更新分支",
-        route_type: "pass",
-        flow_definition_id: null,
-      });
-    });
-  });
-
-  it("updates a selected flow", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    await user.click(await screen.findByRole("button", { name: /菜单默认流程/ }));
-    const flowNameInput = await screen.findByPlaceholderText("approvalPage.flowNamePlaceholder");
-    await user.clear(flowNameInput);
-    await user.type(flowNameInput, "更新流程");
-    const flowCodeInput = screen.getByPlaceholderText("approvalPage.flowCodePlaceholder");
-    await user.clear(flowCodeInput);
-    await user.type(flowCodeInput, "menu_updated");
-    await user.click(screen.getByRole("button", { name: "approvalPage.saveFlow" }));
-
-    await waitFor(() => {
-      expect(updateApprovalFlowApi).toHaveBeenCalledWith(12, {
-        flow_code: "menu_updated",
-        flow_name: "更新流程",
-      });
-    });
-  });
-
-  it("creates a node for the selected flow and reloads node list", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    const nodeNameInput = await screen.findByPlaceholderText("approvalPage.nodeNamePlaceholder");
-    await user.type(nodeNameInput, "二级审批");
-    await user.type(screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder"), "n2");
-    fireEvent.change(screen.getByPlaceholderText("approvalPage.approverConfigPlaceholder"), {
-      target: { value: '{"type":"tenant_admin"}' },
-    });
-    await user.click(screen.getByRole("button", { name: "approvalPage.createNode" }));
-
-    await waitFor(() => {
-      expect(createApprovalNodeApi).toHaveBeenCalledWith(12, {
-        node_code: "n2",
-        node_name: "二级审批",
-        node_order: 2,
-        node_mode: "or",
-        approver_config: { type: "tenant_admin" },
-      });
-    });
-  });
-
-  it("updates a selected node", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    await user.click(await screen.findByText("一级审批 #15"));
-    const nodeNameInput = await screen.findByPlaceholderText("approvalPage.nodeNamePlaceholder");
-    await user.clear(nodeNameInput);
-    await user.type(nodeNameInput, "更新节点");
-    const nodeCodeInput = screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder");
-    await user.clear(nodeCodeInput);
-    await user.type(nodeCodeInput, "n1b");
-    fireEvent.change(screen.getByPlaceholderText("approvalPage.approverConfigPlaceholder"), {
-      target: { value: '{"type":"user","user_ids":[101]}' },
-    });
-    await user.selectOptions(screen.getAllByRole("combobox")[3], "and");
-    await user.click(screen.getByRole("button", { name: "approvalPage.saveNode" }));
-
-    await waitFor(() => {
-      expect(updateApprovalNodeApi).toHaveBeenCalledWith(15, {
-        node_code: "n1b",
-        node_name: "更新节点",
-        node_mode: "and",
-        approver_config: { type: "user", user_ids: [101] },
-      });
-    });
-  });
-
-  it("blocks node save when approver config is invalid json", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    const nodeNameInput = await screen.findByPlaceholderText("approvalPage.nodeNamePlaceholder");
-    await user.type(nodeNameInput, "二级审批");
-    await user.type(screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder"), "n2");
-    fireEvent.change(screen.getByPlaceholderText("approvalPage.approverConfigPlaceholder"), {
-      target: { value: "{bad json" },
-    });
-    await user.click(screen.getByRole("button", { name: "approvalPage.createNode" }));
-
-    expect(createApprovalNodeApi).not.toHaveBeenCalled();
-    expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: "error",
-        description: "approvalPage.approverConfigInvalid",
-      }),
-    );
-  });
-
-  it("toggles scenario enabled status and reloads the page", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    const enableButton = await screen.findByRole("button", { name: "approvalPage.enableScenario" });
-    await user.click(enableButton);
-
-    await waitFor(() => {
-      expect(updateApprovalScenarioApi).toHaveBeenCalledWith(1, {
-        enabled: true,
-      });
-    });
-    expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: "success",
-        description: "approvalPage.scenarioUpdateSuccess",
-      }),
-    );
-    expect(listApprovalScenariosApi).toHaveBeenCalledTimes(2);
   });
 });

@@ -167,6 +167,32 @@ export async function updateApprovalNodeApi(
   return await axios.put(`/api/v1/approval/admin/nodes/${nodeDefinitionId}`, data);
 }
 
+export async function deleteApprovalScenarioApi(scenarioId: number): Promise<void> {
+  return await axios.delete(`/api/v1/approval/admin/scenarios/${scenarioId}`);
+}
+
+export async function deleteApprovalRouteApi(routeRuleId: number): Promise<void> {
+  return await axios.delete(`/api/v1/approval/admin/routes/${routeRuleId}`);
+}
+
+export async function reorderApprovalRoutesApi(
+  scenarioId: number,
+  orderedRouteIds: number[],
+): Promise<void> {
+  return await axios.patch(
+    `/api/v1/approval/admin/scenarios/${scenarioId}/routes/reorder`,
+    { ordered_route_ids: orderedRouteIds },
+  );
+}
+
+export async function deleteApprovalFlowApi(flowDefinitionId: number): Promise<void> {
+  return await axios.delete(`/api/v1/approval/admin/flows/${flowDefinitionId}`);
+}
+
+export async function deleteApprovalNodeApi(nodeDefinitionId: number): Promise<void> {
+  return await axios.delete(`/api/v1/approval/admin/nodes/${nodeDefinitionId}`);
+}
+
 export async function retryApprovalExceptionApi(
   exceptionId: number,
   payload: {
