@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
+import { getRolesApi } from "@/controllers/API/user";
 import { Switch } from "@/components/bs-ui/switch";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
@@ -106,19 +107,42 @@ interface ConditionFieldMeta {
   values?: { value: string; label: string }[];
 }
 
+// Static fixed identity labels (always present regardless of system roles)
+const FIXED_ROLE_VALUES = [
+  { value: 'admin', label: '系统管理员' },
+  { value: 'tenant_admin', label: '租户管理员' },
+  { value: 'dept_admin', label: '部门管理员' },
+];
+
+// Static menu key options mirroring backend WebMenuResource enum
+const MENU_KEY_VALUES = [
+  { value: 'workstation', label: '工作台' },
+  { value: 'admin', label: '管理后台' },
+  { value: 'build', label: '应用构建' },
+  { value: 'create_app', label: '新建应用' },
+  { value: 'knowledge', label: '知识管理' },
+  { value: 'knowledge_space', label: '知识空间' },
+  { value: 'model', label: '模型管理' },
+  { value: 'tool', label: '工具管理' },
+  { value: 'mcp', label: 'MCP 服务' },
+  { value: 'channel', label: '频道管理' },
+  { value: 'evaluation', label: '模型评测' },
+  { value: 'dataset', label: '数据集管理' },
+  { value: 'mark_task', label: '标注任务' },
+  { value: 'board', label: '数据看板' },
+  { value: 'home', label: '首页（工作台）' },
+  { value: 'apps', label: '应用中心' },
+];
+
 const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
   applicant_role: {
     label: '申请人身份',
-    values: [
-      { value: 'admin', label: '系统管理员' },
-      { value: 'tenant_admin', label: '租户管理员' },
-      { value: 'dept_admin', label: '部门管理员' },
-      { value: 'regular_user', label: '普通用户' },
-    ],
+    // Base values only; RouteDialog dynamically appends system roles from API
+    values: FIXED_ROLE_VALUES,
   },
   menu_key: {
     label: '申请菜单',
-    values: [], // dynamic; user types the menu_key
+    values: MENU_KEY_VALUES,
   },
   space_type: {
     label: '知识空间类型',
@@ -134,8 +158,15 @@ function conditionLabel(matchConfig: { field?: string; value?: string } | null |
   if (!matchConfig?.field) return '';
   const meta = CONDITION_FIELD_META[matchConfig.field];
   const fieldLabel = meta?.label ?? matchConfig.field;
-  const valLabel = meta?.values?.find((v) => v.value === matchConfig.value)?.label ?? matchConfig.value ?? '';
-  return valLabel ? `${fieldLabel} = ${valLabel}` : `${fieldLabel}`;
+  const value = matchConfig.value ?? '';
+  if (!value) return fieldLabel;
+  // For applicant_role, look up static fixed labels first
+  const staticMatch = FIXED_ROLE_VALUES.find((v) => v.value === value)
+    ?? meta?.values?.find((v) => v.value === value);
+  // role_{id} values: show as "系统角色 #{id}" if no static label found
+  const valLabel = staticMatch?.label
+    ?? (value.startsWith('role_') ? `系统角色 #${value.slice(5)}` : value);
+  return `${fieldLabel} = ${valLabel}`;
 }
 
 // ─── Add/Edit dialogs ────────────────────────────────────────────────────────
@@ -244,6 +275,7 @@ function RouteDialog({
   );
   const [condField, setCondField] = useState(initial.match_config?.field ?? "");
   const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
+  const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -252,11 +284,25 @@ function RouteDialog({
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
       setCondField(initial.match_config?.field ?? "");
       setCondValue(initial.match_config?.value ?? "");
+      // Load system roles for applicant_role condition values
+      getRolesApi("").then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.data ?? []);
+        setSystemRoles(
+          list.map((r: any) => ({
+            value: `role_${r.id}`,
+            label: r.role_name,
+          })),
+        );
+      }).catch(() => setSystemRoles([]));
     }
   }, [open]);
 
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
-  const hasEnumValues = (fieldMeta?.values?.length ?? 0) > 0;
+  // For applicant_role: merge static fixed labels with dynamically loaded system roles
+  const effectiveValues = condField === 'applicant_role'
+    ? [...FIXED_ROLE_VALUES, ...systemRoles]
+    : (fieldMeta?.values ?? []);
+  const hasEnumValues = effectiveValues.length > 0;
 
   const handleFieldChange = (f: string) => {
     setCondField(f);
@@ -306,7 +352,7 @@ function RouteDialog({
                       className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
                     >
                       <option value="">请选择</option>
-                      {fieldMeta!.values!.map((v) => (
+                      {effectiveValues.map((v) => (
                         <option key={v.value} value={v.value}>
                           {v.label}
                         </option>

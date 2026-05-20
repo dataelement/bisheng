@@ -23,11 +23,16 @@ from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
     """Return the full set of identity labels for a user.
 
-    Supported labels (can overlap):
+    Fixed labels (can overlap):
         'admin'        → system super-admin (AdminRole=1)
         'tenant_admin' → tenant admin (via OpenFGA/TenantService)
         'dept_admin'   → department admin (any department)
         'regular_user' → always included for every user (catch-all fallback)
+
+    Dynamic labels (one per system role the user holds):
+        'role_{id}'    → user holds the system role with that id
+                         e.g. 'role_3', 'role_7'
+                         Allows conditions like {"field":"applicant_role","value":"role_3"}
 
     PRD §4.3: "同一申请人可能同时具备多个身份标签，条件匹配采用'包含即命中'"
     """
@@ -36,8 +41,11 @@ async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
         from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user_role import UserRoleDao
         user_roles = await UserRoleDao.aget_user_roles(user_id)
-        if any(ur.role_id == AdminRole for ur in user_roles):
-            labels.add('admin')
+        for ur in user_roles:
+            if ur.role_id == AdminRole:
+                labels.add('admin')
+            else:
+                labels.add(f'role_{ur.role_id}')
     except Exception:
         pass
 
