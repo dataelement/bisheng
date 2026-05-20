@@ -2191,6 +2191,8 @@
     "routeTypeLabel": "分岐タイプ",
     "routeTypeFlow": "承認フロー",
     "routeTypePass": "直接承認",
+    "routeFlowLabel": "関連フロー",
+    "routeFlowPlaceholder": "承認フローを選択",
     "createRoute": "分岐を追加",
     "saveRoute": "分岐を保存",
     "flowNameLabel": "フロー名",

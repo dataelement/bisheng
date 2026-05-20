@@ -81,6 +81,7 @@ describe("ApprovalPage", () => {
         route_name: "默认流程",
         route_type: "flow",
         enabled: true,
+        flow_definition_id: 12,
       },
     ]);
     listApprovalFlowsApi.mockResolvedValue([
@@ -118,7 +119,7 @@ describe("ApprovalPage", () => {
     expect(await screen.findByText("菜单权限申请")).toBeInTheDocument();
     expect(await screen.findByText("approver_empty #88")).toBeInTheDocument();
     expect(await screen.findByText("默认流程 #9")).toBeInTheDocument();
-    expect(await screen.findByText("菜单默认流程")).toBeInTheDocument();
+    expect((await screen.findAllByText("菜单默认流程")).length).toBeGreaterThan(0);
     expect(await screen.findByText("一级审批 #15")).toBeInTheDocument();
 
     expect(listApprovalScenarioPresetsApi).toHaveBeenCalledTimes(1);
@@ -208,6 +209,7 @@ describe("ApprovalPage", () => {
 
     const routeNameInput = await screen.findByPlaceholderText("approvalPage.routeNamePlaceholder");
     await user.type(routeNameInput, "新增分支");
+    await user.selectOptions(screen.getAllByRole("combobox")[2], "12");
     await user.click(screen.getByRole("button", { name: "approvalPage.createRoute" }));
 
     await waitFor(() => {
@@ -215,6 +217,7 @@ describe("ApprovalPage", () => {
         route_name: "新增分支",
         route_type: "flow",
         sort_order: 1,
+        flow_definition_id: 12,
         match_config: {},
       });
     });
@@ -260,6 +263,7 @@ describe("ApprovalPage", () => {
       expect(updateApprovalRouteApi).toHaveBeenCalledWith(9, {
         route_name: "更新分支",
         route_type: "pass",
+        flow_definition_id: null,
       });
     });
   });
@@ -268,7 +272,7 @@ describe("ApprovalPage", () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
-    await user.click(await screen.findByText("菜单默认流程"));
+    await user.click(await screen.findByRole("button", { name: /菜单默认流程/ }));
     const flowNameInput = await screen.findByPlaceholderText("approvalPage.flowNamePlaceholder");
     await user.clear(flowNameInput);
     await user.type(flowNameInput, "更新流程");
@@ -315,7 +319,7 @@ describe("ApprovalPage", () => {
     const nodeCodeInput = screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder");
     await user.clear(nodeCodeInput);
     await user.type(nodeCodeInput, "n1b");
-    await user.selectOptions(screen.getAllByRole("combobox")[2], "and");
+    await user.selectOptions(screen.getAllByRole("combobox")[3], "and");
     await user.click(screen.getByRole("button", { name: "approvalPage.saveNode" }));
 
     await waitFor(() => {

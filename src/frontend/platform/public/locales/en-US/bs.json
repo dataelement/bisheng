@@ -2241,6 +2241,8 @@
     "routeTypeLabel": "Route Type",
     "routeTypeFlow": "Approval Flow",
     "routeTypePass": "Pass Directly",
+    "routeFlowLabel": "Linked Flow",
+    "routeFlowPlaceholder": "Select an approval flow",
     "createRoute": "Create Route",
     "saveRoute": "Save Route",
     "flowNameLabel": "Flow Name",

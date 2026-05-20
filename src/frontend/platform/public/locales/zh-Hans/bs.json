@@ -2191,6 +2191,8 @@
     "routeTypeLabel": "分支类型",
     "routeTypeFlow": "审批流程",
     "routeTypePass": "直接通过",
+    "routeFlowLabel": "关联流程",
+    "routeFlowPlaceholder": "选择审批流程",
     "createRoute": "新增分支",
     "saveRoute": "保存分支",
     "flowNameLabel": "流程名称",

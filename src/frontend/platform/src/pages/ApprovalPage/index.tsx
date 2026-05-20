@@ -69,6 +69,7 @@ export default function ApprovalPage() {
   const [selectedPresetCode, setSelectedPresetCode] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeType, setRouteType] = useState("flow");
+  const [routeFlowDefinitionId, setRouteFlowDefinitionId] = useState<string>("");
   const [flowName, setFlowName] = useState("");
   const [flowCode, setFlowCode] = useState("");
   const [nodeName, setNodeName] = useState("");
@@ -233,6 +234,7 @@ export default function ApprovalPage() {
         route_name: routeName.trim(),
         route_type: routeType,
         sort_order: routes.length,
+        flow_definition_id: routeType === "flow" && routeFlowDefinitionId ? Number(routeFlowDefinitionId) : null,
         match_config: {},
       });
       toast({
@@ -255,6 +257,7 @@ export default function ApprovalPage() {
     setSelectedRouteId(null);
     setRouteName("");
     setRouteType("flow");
+    setRouteFlowDefinitionId("");
   };
 
   const handleCreateFlow = async () => {
@@ -326,6 +329,7 @@ export default function ApprovalPage() {
       await updateApprovalRouteApi(selectedRouteId, {
         route_name: routeName.trim(),
         route_type: routeType,
+        flow_definition_id: routeType === "flow" && routeFlowDefinitionId ? Number(routeFlowDefinitionId) : null,
       });
       toast({
         title: t("prompt"),
@@ -605,6 +609,22 @@ export default function ApprovalPage() {
                 <option value="pass">{t("approvalPage.routeTypePass")}</option>
               </select>
             </label>
+            <label className="flex min-w-[200px] flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.routeFlowLabel")}</span>
+              <select
+                value={routeFlowDefinitionId}
+                onChange={(event) => setRouteFlowDefinitionId(event.target.value)}
+                disabled={routeType !== "flow"}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none disabled:opacity-60"
+              >
+                <option value="">{t("approvalPage.routeFlowPlaceholder")}</option>
+                {flows.map((flow) => (
+                  <option key={flow.id} value={String(flow.id)}>
+                    {flow.flow_name || flow.flow_code || `${t("approvalPage.flowFallback")} #${flow.id}`}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               disabled={!selectedScenarioId || !routeName.trim()}
@@ -635,6 +655,7 @@ export default function ApprovalPage() {
                     setSelectedRouteId(route.id);
                     setRouteName(route.route_name || "");
                     setRouteType(route.route_type || "flow");
+                    setRouteFlowDefinitionId(route.flow_definition_id ? String(route.flow_definition_id) : "");
                   }}
                   className={`w-full rounded-lg border px-4 py-3 text-left ${
                     route.id === selectedRouteId

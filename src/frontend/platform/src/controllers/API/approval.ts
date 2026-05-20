@@ -20,6 +20,7 @@ export interface ApprovalRouteItem {
   route_type?: string;
   route_name?: string;
   enabled?: boolean;
+  flow_definition_id?: number | null;
 }
 
 export interface ApprovalFlowItem {
