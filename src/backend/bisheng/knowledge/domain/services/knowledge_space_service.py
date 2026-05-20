@@ -78,7 +78,14 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import KnowledgeSpaceTagLibraryService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.approval.domain.services.approval_gate import ApprovalGate
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
+    KnowledgeSpaceSubscribeScenarioHandler,
+)
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import default_permission_ids_for_relation
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
@@ -148,6 +155,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.request = request
         self.login_user = login_user
         self.message_service: Optional['MessageService'] = None
+        self.approval_gate: Optional[ApprovalGate] = None
 
     def _ensure_space_async_task_tenant_consistency(
         self, space: Knowledge, operation: str
@@ -1608,6 +1616,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_level: KnowledgeSpaceLevelEnum | str | None = KnowledgeSpaceLevelEnum.PERSONAL,
         department_id: Optional[int] = None,
         user_group_id: Optional[int] = None,
+        auto_tag_enabled: bool = False,
+        auto_tag_library_id: Optional[int] = None,
         share_to_children: Optional[bool] = None,
         skip_user_limit: bool = False,
     ) -> Knowledge:
@@ -1630,6 +1640,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
+        if auto_tag_enabled:
+            await KnowledgeSpaceTagLibraryService.validate_bindable_library(auto_tag_library_id)
 
         level, owner_type, owner_id = await self._resolve_space_scope_on_create(
             space_level=space_level,
@@ -1651,6 +1663,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             type=KnowledgeTypeEnum.SPACE.value,
             model=workbench_llm.embedding_model.id,
             is_released=is_released,
+            auto_tag_enabled=auto_tag_enabled,
+            auto_tag_library_id=auto_tag_library_id,
         )
 
         knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge,
@@ -2953,6 +2967,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         icon: Optional[str] = None,
         auth_type: Optional[AuthTypeEnum] = None,
         is_released: bool = False,
+        auto_tag_enabled: Optional[bool] = None,
+        auto_tag_library_id: Optional[int] = None,
     ) -> Knowledge:
         """ Modify an existing knowledge space. """
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -2984,6 +3000,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if auth_type is not None:
             space.auth_type = auth_type
         space.is_released = is_released
+        if auto_tag_library_id is not None:
+            space.auto_tag_library_id = auto_tag_library_id
+        if auto_tag_enabled is not None:
+            if auto_tag_enabled:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_library(space.auto_tag_library_id)
+            space.auto_tag_enabled = auto_tag_enabled
+        elif auto_tag_library_id is not None and space.auto_tag_enabled:
+            await KnowledgeSpaceTagLibraryService.validate_bindable_library(space.auto_tag_library_id)
 
         space = await KnowledgeDao.async_update_space(space)
         new_auth_type = space.auth_type
@@ -3965,28 +3989,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFolderNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, 'upload_file')
 
-        if not skip_approval:
-            from bisheng.approval.domain.services.approval_service import ApprovalService
-
-            if await ApprovalService.should_require_department_space_approval(knowledge_id):
-                should_bypass_approval = await ApprovalService.should_bypass_department_space_approval(
-                    request=self.request,
-                    login_user=self.login_user,
-                    space_id=knowledge_id,
-                    parent_folder_id=parent_id,
-                )
-                if not should_bypass_approval:
-                    approval_request = await ApprovalService.create_department_space_upload_request(
-                        request=self.request,
-                        login_user=self.login_user,
-                        space_id=knowledge_id,
-                        parent_folder_id=parent_id,
-                        file_paths=file_path,
-                    )
-                    return ApprovalService.build_pending_file_responses(
-                        approval_request=approval_request,
-                    )
-
         level = 0
         file_level_path = ""
         parent_type = 'knowledge_space'
@@ -4626,7 +4628,44 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             await SpaceChannelMemberDao.async_insert_member(member)
 
-        if previous_status != MembershipStatusEnum.PENDING:
+        if space.auth_type == AuthTypeEnum.APPROVAL:
+            gate = self.approval_gate or self._build_space_approval_gate()
+            gate_result = await gate.request_or_pass(
+                ApprovalGateRequest(
+                    tenant_id=self.login_user.tenant_id,
+                    scenario_code='knowledge_space_subscribe_request',
+                    business_key=f'space:{space.id}:user:{self.login_user.user_id}',
+                    business_resource_type='knowledge_space',
+                    business_resource_id=str(space.id),
+                    business_name=space.name,
+                    applicant_user_id=self.login_user.user_id,
+                    applicant_user_name=self.login_user.user_name,
+                    applicant_role='admin' if getattr(self.login_user, 'is_admin', lambda: False)() else 'regular_user',
+                    payload_snapshot={
+                        'space_id': space.id,
+                        'space_name': space.name,
+                        'space_type': getattr(space, 'type', ''),
+                        'applicant_user_id': self.login_user.user_id,
+                    },
+                )
+            )
+            if gate_result.decision == 'pass':
+                member.status = MembershipStatusEnum.ACTIVE
+                if existing:
+                    member = await SpaceChannelMemberDao.update(member)
+                else:
+                    member = await SpaceChannelMemberDao.update(member)
+                await self.__class__.sync_direct_space_user_permissions(
+                    space_id,
+                    member.user_id,
+                    member.user_role,
+                    is_active=True,
+                )
+                return {
+                    "status": "subscribed",
+                    "space_id": space_id,
+                }
+        elif previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
 
         if member.status == MembershipStatusEnum.ACTIVE:
@@ -4641,6 +4680,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
             "space_id": space_id,
         }
+
+    def _build_space_approval_gate(self) -> ApprovalGate:
+        registry = ApprovalRegistry.with_default_presets()
+        registry.register_handler(
+            'knowledge_space_subscribe_request',
+            KnowledgeSpaceSubscribeScenarioHandler(
+                find_member=SpaceChannelMemberDao.async_find_member,
+                update_member=SpaceChannelMemberDao.update,
+                sync_permissions=self.__class__.sync_direct_space_user_permissions,
+            ),
+        )
+        return ApprovalGate(registry=registry)
 
     async def _send_subscription_notification(self, space: Knowledge):
         if space.auth_type != AuthTypeEnum.APPROVAL or not self.message_service:

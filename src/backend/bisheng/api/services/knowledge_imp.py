@@ -54,6 +54,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAStatus,
 )
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata, QAKnowledgeMetadata
+from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.utils import is_pdf_damaged
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
@@ -116,6 +117,7 @@ def process_file_task(
         db_files: List[KnowledgeFile],
         preview_cache_keys: List[str] = None,
         callback_url: str = None,
+        enable_auto_tags: bool = False,
 ):
     """Working with Knowledge Files Tasks"""
     try:
@@ -124,6 +126,7 @@ def process_file_task(
             db_files,
             callback=callback_url,
             preview_cache_keys=preview_cache_keys,
+            enable_auto_tags=enable_auto_tags,
         )
     except Exception as e:
         logger.exception("process_file_task error")
@@ -210,6 +213,7 @@ def addEmbedding(
         knowledge_files: List[KnowledgeFile],
         callback: str = None,
         preview_cache_keys: List[str] = None,
+        enable_auto_tags: bool = False,
 ):
     """Adding Files to Vector SumsesCunene"""
 
@@ -247,8 +251,14 @@ def addEmbedding(
                 need_thumbnail=knowledge_info.type == KnowledgeTypeEnum.SPACE.value,
                 vector_store=[vector_client, es_client],
             )
-            _ = knowledge_file_pipeline.run()
+            pipeline_result = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
+            if enable_auto_tags:
+                KnowledgeSpaceAutoTagService.apply_after_upload_parse(
+                    knowledge=knowledge_info,
+                    db_file=db_file,
+                    documents=pipeline_result.documents,
+                )
             status = 'success'
         except EtlException as e:
             logger.exception(

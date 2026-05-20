@@ -74,6 +74,10 @@ from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
+from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.approval_gate import ApprovalGate
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -93,13 +97,15 @@ class ChannelService:
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None,
                  article_read_repository: 'ArticleReadRepository' = None,
-                 message_service: Optional[MessageService] = None):
+                 message_service: Optional[MessageService] = None,
+                 approval_gate: Optional[ApprovalGate] = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
         self.article_es_service = article_es_service or ArticleEsService()
         self.article_read_repository = article_read_repository
         self.message_service = message_service
+        self.approval_gate = approval_gate
 
     @staticmethod
     def _resolve_subscription_status(
@@ -877,22 +883,50 @@ class ChannelService:
                 status=status
             )
 
-        # 6. Send approval notification for review channels
-        if (
-                channel.visibility == ChannelVisibilityEnum.REVIEW
-                and self.message_service
-                and previous_status != MembershipStatusEnum.PENDING
-        ):
-            try:
-                await self._send_subscribe_approval_notification(channel, login_user)
-            except Exception as e:
-                # Do not block subscription flow if notification fails
-                logger.error(
-                    "Failed to send subscribe approval notification: channel_id=%s, user=%s, error=%s",
-                    channel.id, login_user.user_id, e,
+        if channel.visibility == ChannelVisibilityEnum.REVIEW:
+            gate = self.approval_gate or self._build_channel_approval_gate()
+            gate_result = await gate.request_or_pass(
+                ApprovalGateRequest(
+                    tenant_id=login_user.tenant_id,
+                    scenario_code='channel_subscribe_request',
+                    business_key=f'channel:{channel.id}:user:{login_user.user_id}',
+                    business_resource_type='channel',
+                    business_resource_id=str(channel.id),
+                    business_name=channel.name,
+                    applicant_user_id=login_user.user_id,
+                    applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+                    applicant_role='admin' if getattr(login_user, 'is_admin', lambda: False)() else 'regular_user',
+                    payload_snapshot={
+                        'channel_id': str(channel.id),
+                        'channel_name': channel.name,
+                        'applicant_user_id': login_user.user_id,
+                    },
                 )
+            )
+            if gate_result.decision == 'pass':
+                if existing_membership:
+                    existing_membership.status = MembershipStatusEnum.ACTIVE
+                    await self.space_channel_member_repository.update(existing_membership)
+                else:
+                    membership = await self.space_channel_member_repository.find_membership(
+                        business_id=req.channel_id,
+                        business_type=BusinessTypeEnum.CHANNEL,
+                        user_id=login_user.user_id,
+                    )
+                    if membership:
+                        membership.status = MembershipStatusEnum.ACTIVE
+                        await self.space_channel_member_repository.update(membership)
+                return SubscriptionStatusEnum.SUBSCRIBED
 
         return return_status
+
+    def _build_channel_approval_gate(self) -> ApprovalGate:
+        registry = ApprovalRegistry.with_default_presets()
+        registry.register_handler(
+            'channel_subscribe_request',
+            ChannelSubscribeScenarioHandler(self.space_channel_member_repository),
+        )
+        return ApprovalGate(registry=registry)
 
     async def _send_subscribe_approval_notification(
             self,

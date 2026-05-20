@@ -185,7 +185,7 @@ class KnowledgeUtils(BaseService):
     ) -> Tuple[Optional[BaseChatModel], Optional[KnowledgeLLMConfig]]:
         """Get a summary of the knowledge basechunkright of privacy llmObjects"""
         knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
-        if not knowledge_llm.extract_title_model_id:
+        if not knowledge_llm.abstract_enabled or not knowledge_llm.extract_title_model_id:
             # No related configurations
             return None, None
 

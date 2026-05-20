@@ -43,6 +43,7 @@ export async function getModulesApi(): Promise<{ data: any[] }> {
             { name: 'log.systemIdEnum.knowledgeSpace', value: 'knowledge_space' },
             { name: 'log.systemIdEnum.tenant', value: 'tenant' },
             { name: 'log.systemIdEnum.llm', value: 'llm' },
+            { name: 'log.systemIdEnum.approval', value: 'approval' },
         ],
 
     }
@@ -89,6 +90,13 @@ const actions = [
     { name: 'log.eventTypeEnum.llmServerCreate', value: 'llm.server.create' },
     { name: 'log.eventTypeEnum.llmServerUpdate', value: 'llm.server.update' },
     { name: 'log.eventTypeEnum.llmServerDelete', value: 'llm.server.delete' },
+    { name: 'log.eventTypeEnum.approvalScenarioCreate', value: 'approval.scenario.create' },
+    { name: 'log.eventTypeEnum.approvalTaskApprove', value: 'approval.task.approve' },
+    { name: 'log.eventTypeEnum.approvalTaskReject', value: 'approval.task.reject' },
+    { name: 'log.eventTypeEnum.approvalInstanceWithdraw', value: 'approval.instance.withdraw' },
+    { name: 'log.eventTypeEnum.approvalInstanceResubmit', value: 'approval.instance.resubmit' },
+    { name: 'log.eventTypeEnum.approvalMenuAccessRevokeGrant', value: 'approval.menu_access.revoke_grant' },
+    { name: 'log.eventTypeEnum.approvalExceptionRetry', value: 'approval.exception.retry' },
 ];
 
 // 全部操作行为
@@ -108,6 +116,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'knowledge_space': return actions.filter(a => a.value.includes('knowledge_space'))
         case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
         case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
+        case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
     }
 }
 

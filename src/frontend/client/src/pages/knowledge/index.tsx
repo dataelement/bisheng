@@ -510,6 +510,8 @@ export default function Knowledge() {
                     description: form.description,
                     auth_type,
                     is_released,
+                    auto_tag_enabled: form.autoTagEnabled,
+                    auto_tag_library_id: form.autoTagLibraryId,
                 });
                 if (activeSpace?.id === updated.id) setActiveSpace({ ...updated, role: activeSpace.role });
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
@@ -524,6 +526,8 @@ export default function Knowledge() {
                     space_level: form.spaceLevel,
                     department_id: form.departmentId,
                     user_group_id: form.userGroupId,
+                    auto_tag_enabled: form.autoTagEnabled,
+                    auto_tag_library_id: form.autoTagLibraryId,
                 });
                 setActiveSpace(newSpace);
 

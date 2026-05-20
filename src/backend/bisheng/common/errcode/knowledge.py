@@ -169,6 +169,16 @@ class KnowledgeFileTagLimitError(BaseErrorCode):
     Msg: str = '每个文件最多只能关联 5 个标签'
 
 
+class KnowledgeSpaceTagLibraryNotExistError(BaseErrorCode):
+    Code: int = 10988
+    Msg: str = '标签库不存在'
+
+
+class KnowledgeSpaceTagLibraryInvalidError(BaseErrorCode):
+    Code: int = 10989
+    Msg: str = '{message}'
+
+
 # source keyword Processing in the background, try again later
 class BackendProcessingError(BaseErrorCode):
     Code = 10990

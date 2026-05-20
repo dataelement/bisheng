@@ -67,7 +67,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
     return [
       {
         section: 'home' as const,
-        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
+        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable?plugin=home',
         icon: HomeIcon,
         label: localize('com_nav_home'),
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
@@ -75,7 +75,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
       },
       {
         section: 'channel' as const,
-        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
+        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable?plugin=subscription',
         icon: LinkIcon,
         label: localize('com_ui_channel'),
         isActive: pathname.startsWith('/channel'),
@@ -83,7 +83,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
       },
       {
         section: 'knowledge' as const,
-        to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
+        to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable?plugin=knowledge_space',
         icon: BookOpenIcon,
         label: localize('com_knowledge.knowledge_space'),
         isActive: pathname.startsWith('/knowledge'),
@@ -91,7 +91,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
       },
       {
         section: 'apps' as const,
-        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
+        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable?plugin=apps',
         icon: GlobeIcon,
         label: localize('com_nav_app_center'),
         isActive:

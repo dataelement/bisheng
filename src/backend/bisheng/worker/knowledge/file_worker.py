@@ -323,7 +323,8 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     process_file_task(db_knowledge,
                       db_files=[db_file],
                       callback_url=callback_url,
-                      preview_cache_keys=[preview_cache_key])
+                      preview_cache_keys=[preview_cache_key],
+                      enable_auto_tags=True)
     logger.debug("parse_knowledge_file_celery_over", file_id)
     return db_knowledge
 
