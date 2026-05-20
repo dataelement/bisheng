@@ -31,7 +31,6 @@ class ApprovalTaskStatus:
 
 
 class ApprovalExceptionType:
-    SCENARIO_DISABLED = 'scenario_disabled'
     ROUTE_MISSING = 'route_missing'
     APPROVER_EMPTY = 'approver_empty'
     EXECUTE_FAILED = 'execute_failed'

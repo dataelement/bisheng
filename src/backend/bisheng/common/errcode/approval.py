@@ -21,9 +21,34 @@ class ApprovalRejectReasonRequiredError(BaseErrorCode):
     Msg: str = 'Reject reason is required'
 
 
-class ApprovalSettingsPermissionDeniedError(BaseErrorCode):
+class ApprovalHandlerNotRegisteredError(BaseErrorCode):
     Code: int = 18104
-    Msg: str = 'Only super admin can modify approval settings'
+    Msg: str = 'No handler registered for this approval scenario'
+
+
+class ApprovalScenarioDuplicateError(BaseErrorCode):
+    Code: int = 18105
+    Msg: str = 'Approval scenario already exists for this tenant'
+
+
+class ApprovalScenarioDisabledError(BaseErrorCode):
+    Code: int = 18106
+    Msg: str = '此功能未开放申请'
+
+
+class ApprovalRouteNotMatchedError(BaseErrorCode):
+    Code: int = 18107
+    Msg: str = 'No matching route rule found for this approval request'
+
+
+class ApprovalApproverEmptyError(BaseErrorCode):
+    Code: int = 18108
+    Msg: str = 'No approvers resolved for this approval node'
+
+
+class ApprovalDuplicatePendingError(BaseErrorCode):
+    Code: int = 18109
+    Msg: str = 'A pending approval already exists for this request'
 
 
 class ApprovalGrantNotRevokableError(BaseErrorCode):
@@ -34,3 +59,8 @@ class ApprovalGrantNotRevokableError(BaseErrorCode):
 class ApprovalMenuApplyDisabledError(BaseErrorCode):
     Code: int = 18111
     Msg: str = 'Menu approval mode is disabled for this menu request'
+
+
+class ApprovalSettingsPermissionDeniedError(BaseErrorCode):
+    Code: int = 18112
+    Msg: str = 'Only super admin can modify approval settings'

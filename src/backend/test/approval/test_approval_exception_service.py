@@ -130,7 +130,7 @@ async def test_or_sign_approves_one_and_skips_other_tasks(monkeypatch: pytest.Mo
     service = ApprovalCenterService(instance_repository=repo)
     monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
-    await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1')
+    await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1', operator_tenant_id=1, operator_is_admin=True)
 
     assert repo.tasks[1].status == ApprovalTaskStatus.APPROVED
     assert repo.tasks[2].status == ApprovalTaskStatus.SKIPPED
@@ -149,10 +149,10 @@ async def test_countersign_requires_all_tasks_to_approve(monkeypatch: pytest.Mon
     service = ApprovalCenterService(instance_repository=repo)
     monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
-    await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1')
+    await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1', operator_tenant_id=1, operator_is_admin=True)
     assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
 
-    await service.decide_task(task_id=2, action='approve', operator_user_id=1002, operator_user_name='u2')
+    await service.decide_task(task_id=2, action='approve', operator_user_id=1002, operator_user_name='u2', operator_tenant_id=1, operator_is_admin=True)
     assert repo.instances[1].status == ApprovalInstanceStatus.APPROVED
 
 
@@ -165,42 +165,12 @@ async def test_reject_terminates_instance_and_cancels_siblings(monkeypatch: pyte
     service = ApprovalCenterService(instance_repository=repo)
     monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
-    await service.decide_task(task_id=1, action='reject', operator_user_id=1001, operator_user_name='u1', comment='reject')
+    await service.decide_task(task_id=1, action='reject', operator_user_id=1001, operator_user_name='u1', operator_tenant_id=1, operator_is_admin=True, comment='reject')
 
     assert repo.tasks[1].status == ApprovalTaskStatus.REJECTED
     assert repo.tasks[2].status == ApprovalTaskStatus.CANCELLED
     assert repo.instances[1].status == ApprovalInstanceStatus.REJECTED
 
-
-@pytest.mark.asyncio
-async def test_scenario_disabled_retry_reopens_instance_and_creates_task():
-    repo = FakeApprovalRepo()
-    repo.instances[1] = _build_instance(status=ApprovalInstanceStatus.EXCEPTION)
-    repo.exceptions[1] = ApprovalException(
-        id=1,
-        tenant_id=1,
-        instance_id=1,
-        exception_type=ApprovalExceptionType.SCENARIO_DISABLED,
-        status='open',
-        detail={},
-    )
-    service = ApprovalExceptionService(instance_repository=repo)
-
-    await service.retry_scenario_disabled(
-        exception_id=1,
-        flow_version_id=2,
-        route_rule_id=9,
-        node=_FlowNode(node_code='n2', node_name='二级审批', node_order=2, node_mode='or'),
-        approver_user_ids=[2001],
-        resolved_by_user_id=1,
-    )
-
-    assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
-    assert repo.instances[1].flow_version_id == 2
-    assert repo.exceptions[1].status == 'resolved'
-    created_task = next(task for task in repo.tasks.values() if task.node_code == 'n2')
-    assert created_task.approver_user_id == 2001
-    assert any(isinstance(log, ApprovalActionLog) and log.action == 'retry_scenario_disabled' for log in repo.action_logs)
 
 
 @pytest.mark.asyncio

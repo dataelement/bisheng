@@ -26,12 +26,14 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.approval.domain.services.approval_scenario_admin_service import ApprovalScenarioAdminService
+from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
 
 
 @dataclass
 class _User:
     user_id: int
     admin: bool = False
+    tenant_id: int = 1
 
     def is_admin(self) -> bool:
         return self.admin
@@ -149,7 +151,7 @@ async def test_get_instance_detail_blocks_unrelated_user_and_returns_action_logs
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', AsyncMock(return_value=[task]))
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[action_log]))
 
-    with pytest.raises(PermissionError):
+    with pytest.raises(ApprovalRequestPermissionDeniedError):
         await ApprovalCenterService.get_instance_detail(instance_id=1, login_user=_User(user_id=88))
 
     detail = await ApprovalCenterService.get_instance_detail(instance_id=1, login_user=_User(user_id=9))
@@ -190,17 +192,35 @@ async def test_withdraw_instance_cancels_pending_tasks_and_records_log(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_resubmit_instance_reopens_first_node_and_cancels_later_nodes(monkeypatch: pytest.MonkeyPatch):
-    repo = FakeApprovalRepo()
-    repo.instances[1] = _build_instance(status=ApprovalInstanceStatus.REJECTED)
-    repo.tasks[1] = _build_task(1, node_order=1, approver_user_id=9, status=ApprovalTaskStatus.REJECTED)
-    repo.tasks[2] = _build_task(2, node_order=2, approver_user_id=10, status=ApprovalTaskStatus.PENDING)
+async def test_resubmit_instance_creates_new_instance_and_leaves_old_unchanged(monkeypatch: pytest.MonkeyPatch):
+    old_instance = _build_instance(status=ApprovalInstanceStatus.REJECTED)
+    old_task1 = _build_task(1, node_order=1, approver_user_id=9, status=ApprovalTaskStatus.REJECTED)
+    old_task2 = _build_task(2, node_order=2, approver_user_id=10, status=ApprovalTaskStatus.PENDING)
+
+    created_instances: list[ApprovalInstance] = []
+    created_tasks: list[ApprovalTask] = []
+    instances_store: dict[int, ApprovalInstance] = {1: old_instance}
+
+    async def _fake_get_instance(instance_id: int) -> ApprovalInstance | None:
+        return instances_store.get(instance_id)
+
+    async def _fake_create_instance(row: ApprovalInstance) -> ApprovalInstance:
+        row.id = 99
+        instances_store[99] = row
+        created_instances.append(row)
+        return row
+
+    async def _fake_create_task(row: ApprovalTask) -> ApprovalTask:
+        row.id = len(created_tasks) + 100
+        created_tasks.append(row)
+        return row
+
     audit_log = AsyncMock()
-    monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_task', repo.update_task)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', _fake_get_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', AsyncMock(return_value=[old_task1, old_task2]))
+    monkeypatch.setattr(ApprovalInstanceRepository, 'create_instance', _fake_create_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'create_task', _fake_create_task)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', AsyncMock())
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[]))
     monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', audit_log)
 
@@ -211,11 +231,15 @@ async def test_resubmit_instance_reopens_first_node_and_cancels_later_nodes(monk
         reason='updated reason',
     )
 
-    assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
-    assert repo.tasks[1].status == ApprovalTaskStatus.PENDING
-    assert repo.tasks[1].comment is None
-    assert repo.tasks[2].status == ApprovalTaskStatus.CANCELLED
-    assert repo.action_logs[-1].action == 'resubmitted'
+    assert old_instance.status == ApprovalInstanceStatus.REJECTED, 'old instance must not be modified'
+    assert len(created_instances) == 1, 'exactly one new instance created'
+    new_inst = created_instances[0]
+    assert new_inst.status == ApprovalInstanceStatus.PENDING
+    assert new_inst.reason == 'updated reason'
+    assert new_inst.scenario_code == old_instance.scenario_code
+    assert len(created_tasks) == 1, 'first-node task copied to new instance'
+    assert created_tasks[0].approver_user_id == 9
+    assert created_tasks[0].node_order == 1
     assert result['status'] == ApprovalInstanceStatus.PENDING
     audit_log.assert_awaited_once()
 

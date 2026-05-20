@@ -44,7 +44,7 @@
 | ID | 角色 | 操作 | 预期结果 |
 |----|------|------|---------|
 | AC-01 | 管理员 | 打开审批管理并新增场景 | 场景名称只能从后端预置目录选择；本次至少提供 `menu_access_request`、`channel_subscribe_request`、`knowledge_space_subscribe_request` 三个场景；同租户内 `scenario_code` 唯一 |
-| AC-02 | 业务接口 | 某场景未启用时调用 `ApprovalGate.request_or_pass()` | 创建 `approval_instance`，实例进入 `exception`，异常类型为 `scenario_disabled`；不创建 `approval_task` / `approval_outbox`；管理员在异常流程列表中决定后续处理 |
+| AC-02 | 业务接口 | 场景未配置或已配置但未启用时调用 `ApprovalGate.request_or_pass()` | 直接返回错误码 `ApprovalScenarioDisabledError`（18106）；不创建 `approval_instance` / `approval_task` / `approval_outbox`；前端展示"此功能未开放申请" |
 | AC-03 | 业务接口 | 场景已启用且命中“无需审批”分支 | 创建 `approval_instance`，状态依次进入 `approved -> executing -> executed`；不创建审批任务；写 `approval.route.pass` 审计 |
 | AC-04 | 业务接口 | 场景已启用且命中审批流程分支 | 创建 `approval_instance` 和第一个节点的 `approval_task`；返回 `PENDING`；审批人收到站内信提醒；业务动作暂停 |
 | AC-05 | 业务接口 | 同申请人 + 同 `scenario_code` + 同 `business_key` 已有 `pending` / `exception` / `execute_failed` 实例时再次提交 | 不创建新实例；返回已有实例 ID 和 `PENDING`/`EXCEPTION` 语义；前端可跳转已有详情 |
@@ -69,7 +69,7 @@
 | AC-14 | 申请人 | 对 `pending` 实例执行撤回 | 实例进入 `withdrawn`；所有 `pending` 任务改 `cancelled`；审批人收到撤回提醒 |
 | AC-15 | 系统 | 场景已启用但所有条件分支均未命中 | 实例进入 `exception`，异常类型 `route_missing`；不生成任务；管理员在异常流程列表中可重新匹配或指定流程 |
 | AC-16 | 系统 | 某节点解析审批人为空 | 实例进入 `exception`，异常类型 `approver_empty`；管理员可手动指定审批人、使用兜底人、跳过节点或取消审批 |
-| AC-17 | 管理员 | 对 `scenario_disabled` 异常执行处理 | 可启用场景后重试路由、手动指定流程继续，或取消审批；处理过程写审计和异常处理日志 |
+| ~~AC-17~~ | ~~管理员~~ | ~~对 `scenario_disabled` 异常执行处理~~ | **已移除**：场景未配置/未启用直接报错，不再创建异常实例，无需管理员处理 |
 | AC-18 | 管理员 | 对 `execute_failed` 异常执行重试 | 成功则实例进入 `executed`；失败则保留 `execute_failed` 并累计重试次数；审批结论不回退 |
 | AC-19 | 管理员 | 对任意异常实例执行取消 | 实例进入 `cancelled`；业务 handler 不再重试；必须填写原因并写审计 |
 
@@ -91,6 +91,14 @@
 | AC-26 | 频道订阅用户 | 订阅 `review` 类型频道 | 不再直接通过 `send_generic_approval` 创建审批消息；改为 `channel_subscribe_request` 进入审批中心；通过后激活成员关系，拒绝后置为 `rejected` |
 | AC-27 | 知识空间订阅用户 | 申请加入需要审批的知识空间 | 不再以旧 `request_knowledge_space` 消息为事实来源；改为 `knowledge_space_subscribe_request` 进入审批中心；通过后复用现有成员激活 + ReBAC 授权逻辑 |
 
+### 2.5 边缘场景与异常恢复
+
+| ID | 角色 | 操作 | 预期结果 |
+|----|------|------|---------|
+| AC-33 | 系统 | 当前节点某审批人被停用，系统重新按节点配置解析审批人且解析成功 | 取消原审批人的 `pending` 任务（状态变 `cancelled`）；为新解析到的审批人生成新 `pending` 任务；实例继续保持 `pending`；新审批人收到站内信提醒；写 `approval_action_log` 记录 rebind 动作 |
+| AC-34 | 管理员 | 通过 `PUT /admin/scenarios/{scenario_id}` 尝试修改已保存场景的 `scenario_code` | 后端校验 `scenario_code` 不可修改并返回错误；管理员须先删除该场景再重新创建 |
+| AC-35 | 管理员 | 在条件分支列表中点击某分支绑定的"流程预览"按钮 | 调用 `GET /admin/flows/{flow_id}/versions/{version_id}` 获取快照；弹窗展示该流程当前版本的节点顺序、审批人来源和或签 / 会签规则 |
+
 ### 2.6 审计与多租户
 
 | ID | 角色 | 操作 | 预期结果 |
@@ -105,7 +113,7 @@
 
 ## 3. 边界情况
 
-- 场景未启用：默认创建异常实例 `scenario_disabled`，不能静默通过，也不能回退原业务直通。
+- 场景未配置或未启用：直接返回错误"此功能未开放申请"，不创建任何审批实例，不执行业务动作。
 - 场景已启用但管理员未配置任何分支：视同 `route_missing`，不做隐式默认通过。
 - 节点审批人来源解析出重复用户：合并去重后只保留一条待办任务。
 - 审批人离职/停用：系统优先重新解析当前节点审批人；仍为空则进入 `approver_empty` 异常。
@@ -127,7 +135,7 @@
 | AD-05 | 流程变更对已发起实例的影响 | A: 立即影响运行中实例 / B: 创建实例时快照版本，后续配置只影响新申请 | **B** | 与 PRD §7.8 一致，避免运行中实例因配置变更发生语义漂移 |
 | AD-06 | 旧消息审批链路迁移方式 | A: 新旧并行长期保留 / B: 业务入口改走 `ApprovalGate`，旧 message handler 仅做历史兼容跳转 | **B** | 避免双事实源；频道/知识空间订阅必须迁入审批中心，旧入口只做存量兼容 |
 | AD-07 | 菜单权限授权模型 | A: 直接改角色菜单 / B: 新增个人菜单授权表，与角色菜单做并集 | **B** | PRD 明确“审批通过只给申请人增加个人菜单授权，不修改角色菜单” |
-| AD-08 | 场景未启用时的默认行为 | A: 静默 PASS 回原业务 / B: 创建 `scenario_disabled` 异常实例，交管理员处理 | **B** | 业务不能绕开审批配置直接放行；“未启用”本身也是可追踪、可处置的审批异常 |
+| AD-08 | 场景未配置或未启用时的默认行为 | A: 静默 PASS 回原业务 / B: 创建 `scenario_disabled` 异常实例 / C: 直接返回错误”此功能未开放申请” | **C** | 业务不能绕开审批配置直接放行（排除 A）；未配置/未启用是正常的”功能未开放”状态，不需要产生管理员待处理工单（排除 B）；直接报错对用户最清晰，对管理员无额外负担 |
 | AD-09 | 异常处理入口 | A: 在业务页内各自处理 / B: 审批管理统一异常流程列表 | **B** | `scenario_disabled`、`route_missing`、`approver_empty`、`execute_failed` 是跨场景共性，统一后台处理最稳 |
 | AD-10 | 审批中心数据库方言策略 | A: 默认按 MySQL 设计，达梦后补 / B: 复用仓库现有 `dialect_helpers`，新增表和迁移从一开始按 MySQL + 达梦双库约束设计 | **B** | 仓库已落地达梦兼容基础设施，审批中心不能重新引入 MySQL 专属类型、默认值或元数据查询方式 |
 
@@ -147,7 +155,7 @@
 | `approval_instance` | 一次审批申请实例，承载 `scenario_code`、`business_key`、payload 快照、当前状态 |
 | `approval_task` | 分配给审批人的节点待办，支持 `pending/approved/rejected/skipped/cancelled` |
 | `approval_action_log` | 审批详情时间线，用于“谁在何时做了什么” |
-| `approval_exception` | `scenario_disabled`、`route_missing`、`approver_empty`、`execute_failed` 异常记录 |
+| `approval_exception` | `route_missing`、`approver_empty`、`execute_failed` 异常记录（`scenario_disabled` 已移除，改为直接报错） |
 | `approval_outbox` | 审批通过后的业务执行队列，支持状态、重试次数、错误摘要 |
 | `user_menu_access` | 用户级菜单授权表，保存审批授予与撤回状态 |
 
@@ -265,17 +273,43 @@ class ApprovalTask(SQLModelSerializable, table=True):
 
 ### 6.2 管理端 API
 
+> 列表接口统一使用 `PageData[T]` 分页包装，请求参数 `page`（默认 1）、`page_size`（默认 20），响应含 `total`、`data`、`page`、`page_size`。
+
+**场景管理**
+
 | Method | Path | 描述 | 认证 |
 |--------|------|------|------|
-| GET | `/api/v1/approval/admin/scenario-presets` | 预置场景目录 | 管理员 |
+| GET | `/api/v1/approval/admin/scenario-presets` | 预置场景目录（下拉来源） | 管理员 |
 | GET | `/api/v1/approval/admin/scenarios` | 已配置场景列表 | 管理员 |
 | POST | `/api/v1/approval/admin/scenarios` | 新增场景配置 | 管理员 |
-| PUT | `/api/v1/approval/admin/scenarios/{scenario_id}` | 更新场景启停/展示配置 | 管理员 |
+| PUT | `/api/v1/approval/admin/scenarios/{scenario_id}` | 更新场景启停/展示配置（scenario_code 不可修改） | 管理员 |
+| DELETE | `/api/v1/approval/admin/scenarios/{scenario_id}` | 删除场景配置 | 管理员 |
+
+**条件分支管理**
+
+| Method | Path | 描述 | 认证 |
+|--------|------|------|------|
 | GET | `/api/v1/approval/admin/scenarios/{scenario_id}/routes` | 条件分支列表 | 管理员 |
 | POST | `/api/v1/approval/admin/scenarios/{scenario_id}/routes` | 新增条件分支 | 管理员 |
-| PUT | `/api/v1/approval/admin/routes/{route_id}` | 更新分支 | 管理员 |
-| POST | `/api/v1/approval/admin/flows` | 创建流程定义/新版本 | 管理员 |
-| GET | `/api/v1/approval/admin/flows/{flow_id}/versions/{version_id}` | 流程版本预览 | 管理员 |
+| PUT | `/api/v1/approval/admin/routes/{route_id}` | 更新分支（含启停、条件、绑定流程） | 管理员 |
+| DELETE | `/api/v1/approval/admin/routes/{route_id}` | 删除条件分支 | 管理员 |
+| PATCH | `/api/v1/approval/admin/scenarios/{scenario_id}/routes/reorder` | 调整分支顺序（传入有序 route_id 列表） | 管理员 |
+
+**审批流程 & 节点管理**
+
+| Method | Path | 描述 | 认证 |
+|--------|------|------|------|
+| GET | `/api/v1/approval/admin/scenarios/{scenario_id}/flows` | 场景下的流程定义列表 | 管理员 |
+| POST | `/api/v1/approval/admin/flows` | 创建流程定义 | 管理员 |
+| DELETE | `/api/v1/approval/admin/flows/{flow_id}` | 删除流程定义（仅无活跃实例时允许） | 管理员 |
+| GET | `/api/v1/approval/admin/flows/{flow_id}/versions/{version_id}` | 流程版本快照预览 | 管理员 |
+| GET | `/api/v1/approval/admin/flows/{flow_id}/nodes` | 当前版本节点列表 | 管理员 |
+| PUT | `/api/v1/approval/admin/flows/{flow_id}/nodes` | 提交全量节点列表（新增/编辑/删除/排序均通过此接口，触发新版本生成） | 管理员 |
+
+**异常流程处理**
+
+| Method | Path | 描述 | 认证 |
+|--------|------|------|------|
 | GET | `/api/v1/approval/admin/exceptions` | 异常流程列表 | 管理员 |
 | POST | `/api/v1/approval/admin/exceptions/{exception_id}/retry` | 重试执行 / 重新路由 | 管理员 |
 | POST | `/api/v1/approval/admin/exceptions/{exception_id}/assign-approver` | 指定审批人继续 | 管理员 |
@@ -299,8 +333,9 @@ class ApprovalTask(SQLModelSerializable, table=True):
 | 200 (body) | 18101 | `ApprovalRequestPermissionDeniedError` | 无权限查看或处理 | AC-19~22 |
 | 200 (body) | 18102 | `ApprovalRequestAlreadyProcessedError` | 任务已处理/实例不可重复操作 | AC-11~18 |
 | 200 (body) | 18103 | `ApprovalRejectReasonRequiredError` | 驳回/取消时未填必填原因 | AC-13, AC-18 |
+| 200 (body) | 18104 | `ApprovalHandlerNotRegisteredError` | 场景预置目录中找不到对应 handler（研发配置问题，正式环境不应出现） | AC-01 |
 | 200 (body) | 18105 | `ApprovalScenarioDuplicateError` | 场景重复创建 | AC-01 |
-| 200 (body) | 18106 | `ApprovalScenarioDisabledError` | 场景未启用（仅网关内部落异常，不直返前端失败） | AC-02, AC-17 |
+| 200 (body) | 18106 | `ApprovalScenarioDisabledError` | 场景未配置或未启用，直接返回前端，展示"此功能未开放申请" | AC-02 |
 | 200 (body) | 18107 | `ApprovalRouteNotMatchedError` | 分支未命中（仅网关内部抛转 exception，不直返前端） | AC-15 |
 | 200 (body) | 18108 | `ApprovalApproverEmptyError` | 审批人解析为空（仅网关内部抛转 exception） | AC-16 |
 | 200 (body) | 18109 | `ApprovalDuplicatePendingError` | 存在重复申请 | AC-05 |
@@ -316,7 +351,7 @@ class ApprovalTask(SQLModelSerializable, table=True):
 
 | 服务 | 文件 | 职责 |
 |------|------|------|
-| `ApprovalGate` | `approval/domain/services/approval_gate.py` | 场景启停判断、重复申请检查、分支匹配、审批实例创建、PASS/PENDING/EXCEPTION 返回 |
+| `ApprovalGate` | `approval/domain/services/approval_gate.py` | 场景是否配置且启用的前置校验（未配置/未启用直接抛 `ApprovalScenarioDisabledError`）、重复申请检查、分支匹配、审批实例创建、PASS/PENDING/EXCEPTION 返回 |
 | `ApprovalCenterService` | `approval/domain/services/approval_center_service.py` | 审批任务处理、撤回、重新提交、详情聚合 |
 | `ApprovalScenarioAdminService` | `approval/domain/services/approval_scenario_admin_service.py` | 场景/分支/流程/节点配置管理与版本化 |
 | `ApprovalExceptionService` | `approval/domain/services/approval_exception_service.py` | scenario_disabled / route_missing / approver_empty / execute_failed 统一处理 |
@@ -544,6 +579,7 @@ platform approval admin
 | `src/backend/test/approval/test_approval_gate.py` | 审批网关单测 |
 | `src/backend/test/approval/test_approval_flow_runtime.py` | 流程流转单测 |
 | `src/backend/test/approval/test_approval_exception_service.py` | 异常处理单测 |
+| `src/backend/test/approval/test_approval_api.py` | 用户端 / 管理端 API 集成测试（TestClient） |
 | `src/backend/test/approval/test_menu_access_approval.py` | 菜单权限审批单测 |
 | `src/backend/test/approval/test_channel_subscription_approval_integration.py` | 频道审批接入测试 |
 | `src/backend/test/approval/test_knowledge_space_subscription_approval_integration.py` | 知识空间审批接入测试 |

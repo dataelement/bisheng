@@ -110,16 +110,7 @@ class ApprovalExceptionService:
         if not approver_user_ids:
             raise ValueError(f'no approvers resolved for exception {exception_id}')
 
-        if exception.exception_type == 'scenario_disabled':
-            await service.retry_scenario_disabled(
-                exception_id=exception_id,
-                flow_version_id=flow_version_id,
-                route_rule_id=route_rule.id,
-                node=node,
-                approver_user_ids=approver_user_ids,
-                resolved_by_user_id=operator_user_id,
-            )
-        elif exception.exception_type == 'route_missing':
+        if exception.exception_type == 'route_missing':
             await service.assign_flow(
                 exception_id=exception_id,
                 flow_version_id=flow_version_id,
@@ -151,26 +142,6 @@ class ApprovalExceptionService:
             'status': 'resolved',
             'exception_type': exception.exception_type,
         }
-
-    async def retry_scenario_disabled(
-        self,
-        *,
-        exception_id: int,
-        flow_version_id: int,
-        route_rule_id: int,
-        node,
-        approver_user_ids: list[int],
-        resolved_by_user_id: int,
-    ) -> None:
-        exception = await self._get_exception(exception_id)
-        instance = await self._get_instance(exception.instance_id)
-        instance.status = ApprovalInstanceStatus.PENDING
-        instance.flow_version_id = flow_version_id
-        instance.route_rule_id = route_rule_id
-        instance.current_node_name = node.node_name
-        await self.instance_repository.update_instance(instance)
-        await self._create_tasks(instance_id=instance.id, tenant_id=instance.tenant_id, flow_version_id=flow_version_id, node=node, approver_user_ids=approver_user_ids)
-        await self._resolve_exception(exception, resolved_by_user_id, 'retry_scenario_disabled')
 
     async def assign_flow(
         self,

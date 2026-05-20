@@ -18,6 +18,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalInstanceStatus,
     ApprovalTask,
 )
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
 from bisheng.approval.domain.models.user_menu_access import UserMenuAccess, UserMenuAccessStatus
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
@@ -76,13 +77,13 @@ async def patched_approval_repositories(approval_db_engine, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_repository_flow_creates_scenario_disabled_exception(patched_approval_repositories):
+async def test_repository_flow_creates_route_missing_exception(patched_approval_repositories):
     scenario = await ApprovalScenarioRepository.create_scenario(
         ApprovalScenario(
             tenant_id=1,
             scenario_code='menu_access_request',
             scenario_name='菜单权限申请',
-            enabled=False,
+            enabled=True,
         )
     )
     instance = await ApprovalInstanceRepository.create_instance(
@@ -106,7 +107,7 @@ async def test_repository_flow_creates_scenario_disabled_exception(patched_appro
         ApprovalException(
             tenant_id=1,
             instance_id=instance.id,
-            exception_type=ApprovalExceptionType.SCENARIO_DISABLED,
+            exception_type=ApprovalExceptionType.ROUTE_MISSING,
             detail={'scenario_code': scenario.scenario_code},
         )
     )
@@ -117,7 +118,7 @@ async def test_repository_flow_creates_scenario_disabled_exception(patched_appro
 
     assert saved is not None
     assert saved.status == ApprovalInstanceStatus.EXCEPTION
-    assert [one.exception_type for one in exceptions] == [ApprovalExceptionType.SCENARIO_DISABLED]
+    assert [one.exception_type for one in exceptions] == [ApprovalExceptionType.ROUTE_MISSING]
     assert tasks == []
 
 
@@ -247,8 +248,51 @@ async def test_user_menu_access_repository_lists_active_grants(patched_approval_
 
 
 @pytest.mark.asyncio
-async def test_gate_creates_scenario_disabled_exception():
-    registry = SimpleNamespace(get_handler=AsyncMock())
+async def test_gate_raises_disabled_error_when_scenario_not_configured():
+    handler = SimpleNamespace(
+        build_detail=AsyncMock(return_value={}),
+        build_title=AsyncMock(return_value='知识管理'),
+    )
+    registry = SimpleNamespace(get_handler=AsyncMock(return_value=handler))
+    scenario_repository = SimpleNamespace(
+        get_scenario_by_code=AsyncMock(return_value=None),
+    )
+    instance_repository = SimpleNamespace(
+        find_duplicate_active_instance=AsyncMock(return_value=None),
+        create_instance=AsyncMock(),
+        create_exception=AsyncMock(),
+        create_task=AsyncMock(),
+    )
+    gate = ApprovalGate(
+        registry=registry,
+        scenario_repository=scenario_repository,
+        instance_repository=instance_repository,
+    )
+
+    with pytest.raises(ApprovalScenarioDisabledError):
+        await gate.request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=1,
+                scenario_code='menu_access_request',
+                business_key='menu:knowledge:user:7',
+                business_resource_type='web_menu',
+                business_resource_id='knowledge',
+                business_name='知识管理',
+                applicant_user_id=7,
+                applicant_user_name='alice',
+                payload_snapshot={'menu_key': 'knowledge'},
+            )
+        )
+    instance_repository.create_instance.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gate_raises_disabled_error_when_scenario_disabled():
+    handler = SimpleNamespace(
+        build_detail=AsyncMock(return_value={}),
+        build_title=AsyncMock(return_value='知识管理'),
+    )
+    registry = SimpleNamespace(get_handler=AsyncMock(return_value=handler))
     scenario_repository = SimpleNamespace(
         get_scenario_by_code=AsyncMock(
             return_value=SimpleNamespace(
@@ -258,13 +302,10 @@ async def test_gate_creates_scenario_disabled_exception():
                 enabled=False,
             )
         ),
-        list_route_rules=AsyncMock(),
-        get_active_flow_version=AsyncMock(),
-        list_node_definitions=AsyncMock(),
     )
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
-        create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 101})),
+        create_instance=AsyncMock(),
         create_exception=AsyncMock(),
         create_task=AsyncMock(),
     )
@@ -272,27 +313,23 @@ async def test_gate_creates_scenario_disabled_exception():
         registry=registry,
         scenario_repository=scenario_repository,
         instance_repository=instance_repository,
-        route_matcher=AsyncMock(),
     )
 
-    result = await gate.request_or_pass(
-        ApprovalGateRequest(
-            tenant_id=1,
-            scenario_code='menu_access_request',
-            business_key='menu:knowledge:user:7',
-            business_resource_type='web_menu',
-            business_resource_id='knowledge',
-            business_name='知识管理',
-            applicant_user_id=7,
-            applicant_user_name='alice',
-            payload_snapshot={'menu_key': 'knowledge'},
+    with pytest.raises(ApprovalScenarioDisabledError):
+        await gate.request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=1,
+                scenario_code='menu_access_request',
+                business_key='menu:knowledge:user:7',
+                business_resource_type='web_menu',
+                business_resource_id='knowledge',
+                business_name='知识管理',
+                applicant_user_id=7,
+                applicant_user_name='alice',
+                payload_snapshot={'menu_key': 'knowledge'},
+            )
         )
-    )
-
-    assert result.decision == ApprovalGateDecision.EXCEPTION
-    assert result.instance_id == 101
-    assert result.exception_type == ApprovalExceptionType.SCENARIO_DISABLED
-    instance_repository.create_task.assert_not_awaited()
+    instance_repository.create_instance.assert_not_awaited()
 
 
 @pytest.mark.asyncio

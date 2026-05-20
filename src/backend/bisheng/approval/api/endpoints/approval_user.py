@@ -51,6 +51,8 @@ async def decide_task(
         action=req.action,
         operator_user_id=login_user.user_id,
         operator_user_name=login_user.user_name,
+        operator_tenant_id=login_user.tenant_id,
+        operator_is_admin=login_user.is_admin(),
         comment=req.comment,
     )
     return resp_200(data)
@@ -80,6 +82,7 @@ async def withdraw_instance(
     data = await ApprovalCenterService.withdraw_instance(
         instance_id=instance_id,
         operator_user_id=login_user.user_id,
+        operator_user_name=login_user.user_name,
         reason=req.reason,
     )
     return resp_200(data)

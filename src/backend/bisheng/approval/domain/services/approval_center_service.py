@@ -4,10 +4,17 @@ from datetime import datetime
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
+    ApprovalInstance,
     ApprovalInstanceStatus,
     ApprovalOutbox,
     ApprovalOutboxStatus,
+    ApprovalTask,
     ApprovalTaskStatus,
+)
+from bisheng.common.errcode.approval import (
+    ApprovalRequestAlreadyProcessedError,
+    ApprovalRequestNotFoundError,
+    ApprovalRequestPermissionDeniedError,
 )
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
@@ -24,8 +31,9 @@ from bisheng.user.domain.services.auth import LoginUser
 
 
 class _SystemLoginUser:
-    def __init__(self, user_id: int) -> None:
+    def __init__(self, user_id: int, tenant_id: int = 0) -> None:
         self.user_id = user_id
+        self.tenant_id = tenant_id
 
     def is_admin(self) -> bool:
         return True
@@ -59,12 +67,14 @@ class ApprovalCenterService:
     async def get_task_detail(cls, *, task_id: int, login_user):
         task = await ApprovalInstanceRepository.get_task(task_id)
         if task is None:
-            raise ValueError(f'task not found: {task_id}')
+            raise ApprovalRequestNotFoundError()
         instance = await ApprovalInstanceRepository.get_instance(task.instance_id)
         if instance is None:
-            raise ValueError(f'instance not found: {task.instance_id}')
+            raise ApprovalRequestNotFoundError()
+        if instance.tenant_id != login_user.tenant_id:
+            raise ApprovalRequestPermissionDeniedError()
         if not login_user.is_admin() and task.approver_user_id != login_user.user_id and instance.applicant_user_id != login_user.user_id:
-            raise PermissionError('task not visible')
+            raise ApprovalRequestPermissionDeniedError()
         return {
             'task_id': task.id,
             'instance_id': task.instance_id,
@@ -87,6 +97,8 @@ class ApprovalCenterService:
         action: str,
         operator_user_id: int,
         operator_user_name: str,
+        operator_tenant_id: int,
+        operator_is_admin: bool = False,
         comment: str | None = None,
     ):
         service = cls(instance_repository=ApprovalInstanceRepository)
@@ -95,6 +107,8 @@ class ApprovalCenterService:
             action=action,
             operator_user_id=operator_user_id,
             operator_user_name=operator_user_name,
+            operator_tenant_id=operator_tenant_id,
+            operator_is_admin=operator_is_admin,
             comment=comment,
         )
         task = await ApprovalInstanceRepository.get_task(task_id)
@@ -128,12 +142,14 @@ class ApprovalCenterService:
     async def get_instance_detail(cls, *, instance_id: int, login_user):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
-            raise ValueError(f'instance not found: {instance_id}')
+            raise ApprovalRequestNotFoundError()
+        if instance.tenant_id != login_user.tenant_id:
+            raise ApprovalRequestPermissionDeniedError()
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
         if not login_user.is_admin():
             visible_task_owner = any(task.approver_user_id == login_user.user_id for task in tasks)
             if instance.applicant_user_id != login_user.user_id and not visible_task_owner:
-                raise PermissionError('instance not visible')
+                raise ApprovalRequestPermissionDeniedError()
         action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
         return {
             'instance_id': instance.id,
@@ -216,7 +232,7 @@ class ApprovalCenterService:
         )
         return await cls.get_instance_detail(
             instance_id=instance.id,
-            login_user=_SystemLoginUser(operator_user_id),
+            login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
         )
 
     @classmethod
@@ -230,49 +246,78 @@ class ApprovalCenterService:
     ):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
-            raise ValueError(f'instance not found: {instance_id}')
+            raise ApprovalRequestNotFoundError()
         if instance.applicant_user_id != operator_user_id:
-            raise PermissionError('only applicant can resubmit')
-        tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        if not tasks:
-            raise ValueError('instance has no tasks to resubmit')
-        first_node_order = min(task.node_order for task in tasks)
-        first_node_tasks = [task for task in tasks if task.node_order == first_node_order]
-        for task in tasks:
-            if task.node_order == first_node_order:
-                task.status = ApprovalTaskStatus.PENDING
-                task.comment = None
-                task.acted_at = None
-            else:
-                task.status = ApprovalTaskStatus.CANCELLED
-            await ApprovalInstanceRepository.update_task(task)
-        instance.status = ApprovalInstanceStatus.PENDING
-        instance.reason = reason or instance.reason
-        instance.current_node_name = first_node_tasks[0].node_name if first_node_tasks else instance.current_node_name
-        await ApprovalInstanceRepository.update_instance(instance)
+            raise ApprovalRequestPermissionDeniedError()
+        if instance.status != ApprovalInstanceStatus.REJECTED:
+            raise ApprovalRequestAlreadyProcessedError()
+
+        old_tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
+        if not old_tasks:
+            raise ValueError('original instance has no tasks to resubmit from')
+        first_node_order = min(t.node_order for t in old_tasks)
+        first_node_tasks = [t for t in old_tasks if t.node_order == first_node_order]
+
+        new_instance = await ApprovalInstanceRepository.create_instance(
+            ApprovalInstance(
+                tenant_id=instance.tenant_id,
+                scenario_code=instance.scenario_code,
+                scenario_name=instance.scenario_name,
+                handler_key=instance.handler_key,
+                business_key=instance.business_key,
+                business_resource_type=instance.business_resource_type,
+                business_resource_id=instance.business_resource_id,
+                business_name=instance.business_name,
+                applicant_user_id=instance.applicant_user_id,
+                applicant_user_name=instance.applicant_user_name,
+                applicant_department_id=instance.applicant_department_id,
+                flow_version_id=instance.flow_version_id,
+                route_rule_id=instance.route_rule_id,
+                status=ApprovalInstanceStatus.PENDING,
+                reason=reason or instance.reason,
+                payload_snapshot=instance.payload_snapshot,
+                detail_snapshot=instance.detail_snapshot,
+                current_node_name=first_node_tasks[0].node_name if first_node_tasks else None,
+            )
+        )
+        for old_task in first_node_tasks:
+            await ApprovalInstanceRepository.create_task(
+                ApprovalTask(
+                    tenant_id=instance.tenant_id,
+                    instance_id=new_instance.id,
+                    flow_version_id=old_task.flow_version_id,
+                    node_code=old_task.node_code,
+                    node_name=old_task.node_name,
+                    node_order=old_task.node_order,
+                    approver_user_id=old_task.approver_user_id,
+                    approver_source_type=old_task.approver_source_type,
+                    node_mode=old_task.node_mode,
+                    status=ApprovalTaskStatus.PENDING,
+                )
+            )
         await ApprovalInstanceRepository.create_action_log(
             ApprovalActionLog(
-                tenant_id=instance.tenant_id,
-                instance_id=instance.id,
+                tenant_id=new_instance.tenant_id,
+                instance_id=new_instance.id,
                 action='resubmitted',
                 operator_user_id=operator_user_id,
                 operator_user_name=operator_user_name,
-                detail={'reason': reason},
+                detail={'original_instance_id': instance_id, 'reason': reason},
             )
         )
         await cls._write_audit_log(
-            tenant_id=instance.tenant_id,
+            tenant_id=new_instance.tenant_id,
             operator_user_id=operator_user_id,
-            operator_tenant_id=instance.tenant_id,
+            operator_tenant_id=new_instance.tenant_id,
             action='approval.instance.resubmit',
-            target_id=str(instance.id),
+            target_id=str(new_instance.id),
             reason=reason,
-            metadata={'scenario_code': instance.scenario_code},
+            metadata={'scenario_code': new_instance.scenario_code, 'original_instance_id': instance_id},
             operator_name=operator_user_name,
         )
         return await cls.get_instance_detail(
-            instance_id=instance.id,
-            login_user=_SystemLoginUser(operator_user_id),
+            instance_id=new_instance.id,
+            login_user=_SystemLoginUser(operator_user_id, tenant_id=new_instance.tenant_id),
         )
 
     @classmethod
@@ -361,14 +406,22 @@ class ApprovalCenterService:
         action: str,
         operator_user_id: int,
         operator_user_name: str,
+        operator_tenant_id: int,
+        operator_is_admin: bool = False,
         comment: str | None = None,
     ) -> None:
         task = await self.instance_repository.get_task(task_id)
         if task is None:
-            raise ValueError(f'task not found: {task_id}')
+            raise ApprovalRequestNotFoundError()
         instance = await self.instance_repository.get_instance(task.instance_id)
         if instance is None:
-            raise ValueError(f'instance not found: {task.instance_id}')
+            raise ApprovalRequestNotFoundError()
+        if instance.tenant_id != operator_tenant_id:
+            raise ApprovalRequestPermissionDeniedError()
+        if not operator_is_admin and task.approver_user_id != operator_user_id:
+            raise ApprovalRequestPermissionDeniedError()
+        if task.status != ApprovalTaskStatus.PENDING:
+            raise ApprovalRequestAlreadyProcessedError()
 
         sibling_tasks = await self.instance_repository.list_tasks(instance.id)
         same_node_tasks = [one for one in sibling_tasks if one.node_code == task.node_code]

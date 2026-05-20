@@ -247,6 +247,85 @@ class ApprovalScenarioAdminService:
         return updated.model_dump()
 
     @classmethod
+    async def delete_scenario(cls, *, tenant_id: int, scenario_id: int) -> None:
+        row = await ApprovalScenarioRepository.get_scenario(scenario_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'scenario not found: {scenario_id}')
+        await ApprovalScenarioRepository.delete_scenario(scenario_id)
+
+    @classmethod
+    async def delete_route(cls, *, tenant_id: int, route_rule_id: int) -> None:
+        row = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'route not found: {route_rule_id}')
+        await ApprovalScenarioRepository.delete_route_rule(route_rule_id)
+
+    @classmethod
+    async def reorder_routes(cls, *, tenant_id: int, scenario_id: int, ordered_route_ids: list[int]) -> None:
+        existing = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
+        existing_ids = {r.id for r in existing}
+        for rid in ordered_route_ids:
+            if rid not in existing_ids:
+                raise ValueError(f'route {rid} does not belong to scenario {scenario_id}')
+        await ApprovalScenarioRepository.bulk_update_route_sort_order(ordered_route_ids)
+
+    @classmethod
+    async def delete_flow(cls, *, tenant_id: int, flow_definition_id: int) -> None:
+        row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'flow not found: {flow_definition_id}')
+        await ApprovalScenarioRepository.delete_flow_definition(flow_definition_id)
+
+    @classmethod
+    async def get_flow_version(cls, *, tenant_id: int, flow_definition_id: int, flow_version_id: int):
+        flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
+        if flow is None or flow.tenant_id != tenant_id:
+            raise ValueError(f'flow not found: {flow_definition_id}')
+        version = await ApprovalScenarioRepository.get_flow_version(flow_version_id)
+        if version is None or version.flow_definition_id != flow_definition_id:
+            raise ValueError(f'version not found: {flow_version_id}')
+        nodes = await ApprovalScenarioRepository.list_node_definitions(tenant_id, version.id)
+        return {**version.model_dump(), 'nodes': [n.model_dump() for n in nodes]}
+
+    @classmethod
+    async def set_flow_nodes(cls, *, tenant_id: int, flow_definition_id: int, nodes_payload: list[dict]):
+        flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
+        if flow is None or flow.tenant_id != tenant_id:
+            raise ValueError(f'flow not found: {flow_definition_id}')
+        current_version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
+        if current_version:
+            current_version.is_active = False
+            await ApprovalScenarioRepository.update_flow_version(current_version)
+            new_version_no = current_version.version_no + 1
+        else:
+            new_version_no = 1
+        new_version = await ApprovalScenarioRepository.create_flow_version(
+            ApprovalFlowVersion(
+                tenant_id=tenant_id,
+                flow_definition_id=flow_definition_id,
+                version_no=new_version_no,
+                is_active=True,
+                definition_snapshot={'nodes': nodes_payload},
+            )
+        )
+        created = []
+        for idx, node_data in enumerate(nodes_payload):
+            row = await ApprovalScenarioRepository.create_node_definition(
+                ApprovalNodeDefinition(
+                    tenant_id=tenant_id,
+                    flow_version_id=new_version.id,
+                    node_code=node_data.get('node_code', f'node_{idx}'),
+                    node_name=node_data.get('node_name', f'Node {idx + 1}'),
+                    node_order=node_data.get('node_order', idx),
+                    node_mode=node_data.get('node_mode', 'or'),
+                    approver_config=node_data.get('approver_config') or {},
+                    extra_config=node_data.get('extra_config') or {},
+                )
+            )
+            created.append(row.model_dump())
+        return {'flow_version_id': new_version.id, 'version_no': new_version_no, 'nodes': created}
+
+    @classmethod
     async def list_open_exceptions(cls, *, tenant_id: int):
         rows = await ApprovalQueryRepository.list_open_exceptions(tenant_id)
         return [row.model_dump() for row in rows]

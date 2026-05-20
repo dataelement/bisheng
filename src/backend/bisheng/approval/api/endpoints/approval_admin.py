@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
@@ -74,9 +74,17 @@ class NodeUpdateReq(BaseModel):
     extra_config: dict | None = None
 
 
+class RouteReorderReq(BaseModel):
+    ordered_route_ids: list[int]
+
+
+class NodeListReq(BaseModel):
+    nodes: list[dict]
+
+
 def _ensure_admin(login_user: UserPayload) -> None:
     if not login_user.is_admin():
-        raise PermissionError('admin only')
+        raise HTTPException(status_code=403, detail='Admin access required')
 
 
 @router.get('/scenario-presets')
@@ -230,6 +238,74 @@ async def update_node(
             tenant_id=login_user.tenant_id,
             node_definition_id=node_definition_id,
             payload=req.model_dump(exclude_none=True),
+        )
+    )
+
+
+@router.delete('/scenarios/{scenario_id}')
+async def delete_scenario(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    await ApprovalScenarioAdminService.delete_scenario(tenant_id=login_user.tenant_id, scenario_id=scenario_id)
+    return resp_200({'deleted': scenario_id})
+
+
+@router.delete('/routes/{route_rule_id}')
+async def delete_route(route_rule_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    await ApprovalScenarioAdminService.delete_route(tenant_id=login_user.tenant_id, route_rule_id=route_rule_id)
+    return resp_200({'deleted': route_rule_id})
+
+
+@router.patch('/scenarios/{scenario_id}/routes/reorder')
+async def reorder_routes(
+    scenario_id: int,
+    req: RouteReorderReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    await ApprovalScenarioAdminService.reorder_routes(
+        tenant_id=login_user.tenant_id,
+        scenario_id=scenario_id,
+        ordered_route_ids=req.ordered_route_ids,
+    )
+    return resp_200({'reordered': req.ordered_route_ids})
+
+
+@router.delete('/flows/{flow_definition_id}')
+async def delete_flow(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    await ApprovalScenarioAdminService.delete_flow(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
+    return resp_200({'deleted': flow_definition_id})
+
+
+@router.get('/flows/{flow_definition_id}/versions/{flow_version_id}')
+async def get_flow_version(
+    flow_definition_id: int,
+    flow_version_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.get_flow_version(
+            tenant_id=login_user.tenant_id,
+            flow_definition_id=flow_definition_id,
+            flow_version_id=flow_version_id,
+        )
+    )
+
+
+@router.put('/flows/{flow_definition_id}/nodes')
+async def set_flow_nodes(
+    flow_definition_id: int,
+    req: NodeListReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.set_flow_nodes(
+            tenant_id=login_user.tenant_id,
+            flow_definition_id=flow_definition_id,
+            nodes_payload=req.nodes,
         )
     )
 

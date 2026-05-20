@@ -17,6 +17,7 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateRequest,
     ApprovalGateResult,
 )
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 
 
 class ApprovalGate:
@@ -52,14 +53,7 @@ class ApprovalGate:
 
         scenario = await self.scenario_repository.get_scenario_by_code(req.tenant_id, req.scenario_code)
         if not scenario or not scenario.enabled:
-            return await self._create_exception_result(
-                req=req,
-                scenario_name=scenario.scenario_name if scenario else req.scenario_code,
-                handler_key=req.scenario_code,
-                business_name=business_name,
-                detail_snapshot=detail_snapshot,
-                exception_type=ApprovalExceptionType.SCENARIO_DISABLED,
-            )
+            raise ApprovalScenarioDisabledError()
 
         route_rules = await self.scenario_repository.list_route_rules(req.tenant_id, scenario.id)
         matched_route = await self.route_matcher(route_rules, req)
