@@ -61,7 +61,7 @@ steps:
 
       no_proxy: 192.168.106.8
 
-      DOCKER_REGISTRY: cr.dataelem.com
+      DOCKER_REGISTRY: http://192.168.106.8:6082
 
       DOCKER_REPO: 192.168.106.8:6082/dataelement/bisheng-frontend
 
@@ -186,7 +186,7 @@ steps:
 
         echo "======= login docker registry ======="
 
-        echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USER" --password-stdin cr.dataelem.com
+        echo "$NEXUS_PASSWORD" | docker login cr.dataelem.com -u "$NEXUS_USER" --password-stdin
 
         echo "======= pull frontend image ======="
 
