@@ -132,10 +132,6 @@ bisheng/
 ├── docker/                         # Docker Compose 部署
 └── docs/                           # 架构文档 + PRD
 
-bisheng-gateway/                    # 商业版 API 网关 (独立仓库，Java)
-├── src/main/java/com/dataelem/gateway/  # Spring Cloud Gateway 应用
-├── pom.xml                         # Maven 构建
-└── db/                             # 数据库初始化 SQL
 ```
 
 ### 后端入口与启动

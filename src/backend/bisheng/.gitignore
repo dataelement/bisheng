@@ -1,1 +1,5 @@
 config.yaml
+# for local development
+config*.yaml.tmp
+# celery beat schedule file
+celerybeat-schedule.db
