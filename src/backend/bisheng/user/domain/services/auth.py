@@ -22,7 +22,7 @@ from bisheng.database.models.group import GroupDao
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from ..models.user import User, UserDao
 from ..models.user_role import UserRoleDao
 
@@ -630,7 +630,7 @@ class LoginUser(BaseModel):
             web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
             web_menu = list({one.third_id for one in web_menu})
             personal_menu = await UserMenuAccessService.list_effective_menu_grants(
-                user.tenant_id or DEFAULT_TENANT_ID,
+                get_current_tenant_id() or DEFAULT_TENANT_ID,
                 user.user_id,
             )
             web_menu = list(set(web_menu) | set(personal_menu))
