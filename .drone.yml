@@ -136,8 +136,8 @@ steps:
 
         echo "======= migrate database ======="
 
-        docker compose -f docker/docker-compose.yml exec -T backend \
-        sh -lc "cd /app && alembic upgrade head"
+#        docker compose -f docker/docker-compose.yml exec -T backend \
+#        sh -lc "cd /app && alembic upgrade head"
 
         echo "======= restart backend ======="
 
