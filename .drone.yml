@@ -4,13 +4,13 @@ name: cicd # 定义流水线名称
 
 clone:
   disable: true
-  
+
 steps: # 定义流水线执行步骤，这些步骤将顺序执行
   - name: clone
     image: alpine/git
     pull: if-not-exists
     environment:
-      http_proxy: 
+      http_proxy:
         from_secret: PROXY
       https_proxy:
         from_secret: PROXY
@@ -127,7 +127,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     image: plugins/webhook
     settings:
       debug: true
-      urls: 
+      urls:
         from_secret: FEISHU_URL
       content_type: application/json
       template: |
@@ -281,64 +281,60 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - docker build -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
-  - name: ssh deploy backend
+  - name: ssh deploy
     image: appleboy/drone-ssh
     pull: if-not-exists
     settings:
-      host: 192.168.106.109
+      host: 192.168.106.171
       username: root
       password:
         from_secret: sshpwd
       port: 22
       command_timeout: 10m
       script: |
-        echo "=======同步 109 backend 源码======="
-        cd /opt/server/bisheng-dev
-        git fetch origin +refs/heads/feat/2.5.0-sg:refs/remotes/origin/feat/2.5.0-sg
-        echo "=======后端源码版本======="
-        git rev-parse --short origin/feat/2.5.0-sg
-        git checkout origin/feat/2.5.0-sg -- src/backend
-        echo "=======重启 backend / worker======="
-        cd /opt/server/bisheng-dev/docker
-        docker-compose restart backend backend_worker
+        echo "=======同步 171 源码======="
+        cd /opt/code/bisheng
+        git fetch --all
+        git reset --hard origin/${DRONE_BRANCH}
+        docker-compose -f ./docker/docker-compose.yml up -d
         sleep 15
         echo "=======执行数据库迁移======="
         docker exec bisheng-backend sh -lc "cd /app && (alembic upgrade heads || alembic upgrade head)"
         echo "=======迁移后再次重启======="
         docker-compose restart backend backend_worker
 
-  - name: ssh deploy frontend 3003
-    image: appleboy/drone-ssh
-    pull: if-not-exists
-    environment:
-      NEXUS_USER:
-        from_secret: NEXUS_USER
-      NEXUS_PASSWORD:
-        from_secret: NEXUS_PASSWORD
-    settings:
-      host: 192.168.106.120
-      username: root
-      password:
-        from_secret: sshpwd
-      port: 22
-      command_timeout: 20m
-      envs:
-        - NEXUS_USER
-        - NEXUS_PASSWORD
-      script: |
-        echo "=======准备 3003 前端发布======="
-        frontend_container="drone_bisheng_frontend_feat_2_5_0_sg_$(date +%s%N)"
-        trap 'docker rm -f "$frontend_container" >/dev/null 2>&1 || true' EXIT
-        docker login -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" http://192.168.106.8:6082 || true
-        docker pull 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0-sg || docker pull cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0-sg
-        docker create --name "$frontend_container" 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0-sg || docker create --name "$frontend_container" cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0-sg
-        mkdir -p /data/webroot/bisheng-dev /data/webroot/client-dev
-        rm -rf /data/webroot/bisheng-dev/* /data/webroot/client-dev/*
-        docker cp "$frontend_container":/usr/share/nginx/html/platform/. /data/webroot/bisheng-dev/
-        docker cp "$frontend_container":/usr/share/nginx/html/client/. /data/webroot/client-dev/
-        docker rm -f "$frontend_container"
-        curl -fsI http://127.0.0.1:3003/
-        curl -fsI http://127.0.0.1:3003/workspace/c/new
+#  - name: ssh deploy frontend
+#    image: appleboy/drone-ssh
+#    pull: if-not-exists
+#    environment:
+#      NEXUS_USER:
+#        from_secret: NEXUS_USER
+#      NEXUS_PASSWORD:
+#        from_secret: NEXUS_PASSWORD
+#    settings:
+#      host: 192.168.106.171
+#      username: root
+#      password:
+#        from_secret: sshpwd
+#      port: 22
+#      command_timeout: 20m
+#      envs:
+#        - NEXUS_USER
+#        - NEXUS_PASSWORD
+#      script: |
+#        echo "=======准备 3003 前端发布======="
+#        frontend_container="drone_bisheng_frontend_feat_2_5_0_sg_$(date +%s%N)"
+#        trap 'docker rm -f "$frontend_container" >/dev/null 2>&1 || true' EXIT
+#        docker login -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" http://192.168.106.8:6082 || true
+#        docker pull 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0-sg || docker pull cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0-sg
+#        docker create --name "$frontend_container" 192.168.106.8:6082/dataelement/bisheng-frontend:feat_2.5.0-sg || docker create --name "$frontend_container" cr.dataelem.com/dataelement/bisheng-frontend:feat_2.5.0-sg
+#        mkdir -p /data/webroot/bisheng-dev /data/webroot/client-dev
+#        rm -rf /data/webroot/bisheng-dev/* /data/webroot/client-dev/*
+#        docker cp "$frontend_container":/usr/share/nginx/html/platform/. /data/webroot/bisheng-dev/
+#        docker cp "$frontend_container":/usr/share/nginx/html/client/. /data/webroot/client-dev/
+#        docker rm -f "$frontend_container"
+#        curl -fsI http://127.0.0.1:3003/
+#        curl -fsI http://127.0.0.1:3003/workspace/c/new
 
   - name: notify-start # notify
     pull: if-not-exists

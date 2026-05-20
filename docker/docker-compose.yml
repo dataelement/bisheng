@@ -2,7 +2,7 @@ services:
   mysql:
     container_name: bisheng-mysql
     image: mysql:8.0
-    
+
     ports:
       - "3306:3306"
     environment:
@@ -81,7 +81,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.5.0
+    image: cr.dataelem.com/dataelement/bisheng-backend:2.5.0-sg
     ports:
       - "7860:7860"
     environment:
@@ -123,7 +123,7 @@ services:
 
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.5.0
+    image: cr.dataelem.com/dataelement/bisheng-backend:2.5.0-sg
     environment:
       TZ: Asia/Shanghai
       BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
@@ -157,7 +157,7 @@ services:
   frontend:
     container_name: bisheng-frontend
     # 注意：此处为 Hub 的 latest，未必与自建镜像 backend:v2.5-local 同版本；界面偏旧请 pull 最新或按源码 build（见 AGENTS / 部署文档）
-    image: dataelement/bisheng-frontend:latest
+    image: cr.dataelem.com/dataelement/bisheng-frontend:2.5.0-sg
     ports:
       - "3001:3001"
     environment:
