@@ -8,6 +8,7 @@ name: bisheng_deploy
 trigger:
   branch:
     - feat/2.5.0-sg
+
   event:
     - push
 
@@ -21,13 +22,14 @@ clone:
 steps:
 
   # =========================================
-  # 前端镜像构建
-  # frontend 使用镜像部署
+  # frontend 镜像构建
   # =========================================
   - name: build_frontend
 
     image: docker:24.0.6
+
     pull: if-not-exists
+
     privileged: true
 
     volumes:
@@ -42,7 +44,7 @@ steps:
       # frontend 镜像仓库
       DOCKER_REPO: 192.168.106.8:6082/dataelement/bisheng-frontend
 
-      # Docker 用户名
+      # Docker 用户
       DOCKER_USER:
         from_secret: NEXUS_USER
 
@@ -52,26 +54,26 @@ steps:
 
     commands:
 
-      - export VERSION=${DRONE_COMMIT_SHA:0:8}
+      # 生成版本号
+      - 'VERSION=$(echo $DRONE_COMMIT_SHA | cut -c1-8)'
 
-      - echo "======= build frontend ======="
+      - 'echo "======= build frontend ======="'
 
-      - echo "当前版本: $VERSION"
+      - 'echo "当前版本: $VERSION"'
 
-      # 安全登录 docker 仓库（修复版）
-      - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin $DOCKER_REGISTRY
+      # 登录 docker 仓库
+      - 'echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin $DOCKER_REGISTRY'
 
-      # 进入前端目录
-      - cd src/frontend
+      # 进入 frontend 目录
+      - 'cd src/frontend'
 
       # 构建 frontend 镜像
-      - docker build -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .
+      - 'docker build -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .'
 
-      # 推送版本镜像
-      - docker push $DOCKER_REPO:$VERSION
+      # 推送 frontend 镜像
+      - 'docker push $DOCKER_REPO:$VERSION'
 
-      # 推送 latest 镜像
-      - docker push $DOCKER_REPO:latest
+      - 'docker push $DOCKER_REPO:latest'
 
   # =========================================
   # backend 部署（源码映射）
@@ -79,6 +81,7 @@ steps:
   - name: deploy_backend
 
     image: appleboy/drone-ssh
+
     pull: if-not-exists
 
     settings:
@@ -86,7 +89,7 @@ steps:
       # 部署服务器
       host: 192.168.106.171
 
-      # 建议不要 root
+      # SSH 用户
       username: deploy
 
       # SSH 私钥
@@ -95,6 +98,7 @@ steps:
 
       port: 22
 
+      # 最长执行时间
       command_timeout: 20m
 
       script: |
@@ -107,7 +111,7 @@ steps:
 
         echo "======= reset local changes ======="
 
-        # 防止本地脏代码导致 pull 冲突
+        # 防止本地改动导致 pull 冲突
         git reset --hard HEAD
 
         echo "======= pull latest code ======="
@@ -132,20 +136,28 @@ steps:
   - name: deploy_frontend
 
     image: appleboy/drone-ssh
+
     pull: if-not-exists
 
     settings:
 
+      # 部署服务器
       host: 192.168.106.171
 
+      # SSH 用户
       username: deploy
 
+      # SSH 私钥
       key:
         from_secret: SSH_KEY
 
       port: 22
 
       command_timeout: 20m
+
+      envs:
+        - NEXUS_USER
+        - NEXUS_PASSWORD
 
       script: |
 
@@ -157,7 +169,7 @@ steps:
 
         echo "======= login docker registry ======="
 
-        # 安全登录 docker 仓库（修复版）
+        # 登录 docker 仓库
         echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USER" --password-stdin 192.168.106.8:6082
 
         echo "======= pull frontend image ======="
@@ -184,6 +196,7 @@ steps:
   - name: notify_result
 
     image: plugins/webhook
+
     pull: if-not-exists
 
     settings:
@@ -226,5 +239,6 @@ steps:
 volumes:
 
   - name: docker_sock
+
     host:
       path: /var/run/docker.sock
