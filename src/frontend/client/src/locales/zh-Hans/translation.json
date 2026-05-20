@@ -1766,7 +1766,7 @@
     "action_revoke": "撤销",
     "action_submit": "提交",
     "confirm_revoke": "确认撤销该主体的访问权限吗？",
-    "dialog_title": "权限管理",
+    "dialog_title": "成员管理",
     "empty_departments": "暂无部门数据",
     "empty_permissions": "当前还没有权限记录",
     "empty_search": "暂无匹配用户",

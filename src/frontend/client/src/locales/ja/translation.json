@@ -1760,7 +1760,7 @@
     "action_revoke": "解除",
     "action_submit": "送信",
     "confirm_revoke": "この対象の権限を解除しますか？",
-    "dialog_title": "権限管理",
+    "dialog_title": "メンバー管理",
     "empty_departments": "部署データがありません",
     "empty_permissions": "権限設定はまだありません",
     "empty_search": "一致するユーザーがいません",

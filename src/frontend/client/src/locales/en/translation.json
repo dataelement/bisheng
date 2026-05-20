@@ -1837,7 +1837,7 @@
     "action_revoke": "Revoke",
     "action_submit": "Submit",
     "confirm_revoke": "Are you sure you want to revoke access for this subject?",
-    "dialog_title": "Permission Management",
+    "dialog_title": "Member Management",
     "empty_departments": "No departments found",
     "empty_permissions": "No permission entries yet",
     "empty_search": "No matching users",
