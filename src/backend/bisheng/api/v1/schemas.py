@@ -433,7 +433,7 @@ class LinsightConfig(BaseModel):
 
 # Daily Chat Configuration
 class WorkstationConfig(BaseModel):
-    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True, validate_assignment=True)
 
     tabDisplayName: Optional[str] = Field(default='', alias='tabDisplayName', description='Tab Display Name')
     maxTokens: Optional[int] = Field(default=15000, description='Max chunk size for knowledge rag or web search')
