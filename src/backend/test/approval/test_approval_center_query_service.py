@@ -189,13 +189,14 @@ async def test_resubmit_instance_reopens_first_node_and_cancels_later_nodes(monk
     repo.instances[1] = _build_instance(status=ApprovalInstanceStatus.REJECTED)
     repo.tasks[1] = _build_task(1, node_order=1, approver_user_id=9, status=ApprovalTaskStatus.REJECTED)
     repo.tasks[2] = _build_task(2, node_order=2, approver_user_id=10, status=ApprovalTaskStatus.PENDING)
+    audit_log = AsyncMock()
     monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_task', repo.update_task)
     monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[]))
-    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
+    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', audit_log)
 
     result = await ApprovalCenterService.resubmit_instance(
         instance_id=1,
@@ -210,6 +211,7 @@ async def test_resubmit_instance_reopens_first_node_and_cancels_later_nodes(monk
     assert repo.tasks[2].status == ApprovalTaskStatus.CANCELLED
     assert repo.action_logs[-1].action == 'resubmitted'
     assert result['status'] == ApprovalInstanceStatus.PENDING
+    audit_log.assert_awaited_once()
 
 
 @pytest.mark.asyncio

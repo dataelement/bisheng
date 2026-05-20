@@ -1332,6 +1332,8 @@
       "approvalTaskApprove": "Approve Task",
       "approvalTaskReject": "Reject Task",
       "approvalInstanceWithdraw": "Withdraw Approval Request",
+      "approvalInstanceResubmit": "Resubmit Approval Request",
+      "approvalMenuAccessRevokeGrant": "Revoke Menu Access Grant",
       "approvalExceptionRetry": "Retry Approval Exception"
     },
     "objectTypeEnum": {

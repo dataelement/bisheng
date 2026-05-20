@@ -139,12 +139,16 @@ async def test_revoke_menu_grant_uses_instance_payload_menu_key():
             tenant_id=1,
             applicant_user_id=7,
             payload_snapshot={'menu_key': 'knowledge'},
+            scenario_code='menu_access_request',
         ),
     ), patch(
         'bisheng.approval.domain.services.approval_center_service.UserMenuAccessService.revoke_menu_access',
         new_callable=AsyncMock,
         return_value=[SimpleNamespace(menu_key='knowledge')],
-    ) as mock_revoke:
+    ) as mock_revoke, patch(
+        'bisheng.approval.domain.services.approval_center_service.ApprovalCenterService._write_audit_log',
+        new_callable=AsyncMock,
+    ) as mock_audit_log:
         result = await ApprovalCenterService.revoke_menu_grant(
             instance_id=22,
             operator_user_id=1,
@@ -153,6 +157,7 @@ async def test_revoke_menu_grant_uses_instance_payload_menu_key():
 
     assert result['revoked_keys'] == ['knowledge']
     mock_revoke.assert_awaited_once()
+    mock_audit_log.assert_awaited_once()
 
 
 @pytest.mark.asyncio

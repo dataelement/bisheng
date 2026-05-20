@@ -260,6 +260,16 @@ class ApprovalCenterService:
                 detail={'reason': reason},
             )
         )
+        await cls._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            action='approval.instance.resubmit',
+            target_id=str(instance.id),
+            reason=reason,
+            metadata={'scenario_code': instance.scenario_code},
+            operator_name=operator_user_name,
+        )
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id),
@@ -329,6 +339,19 @@ class ApprovalCenterService:
         )
         if not rows:
             raise ApprovalGrantNotRevokableError()
+        await cls._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            action='approval.menu_access.revoke_grant',
+            target_id=str(instance.id),
+            reason=reason,
+            metadata={
+                'scenario_code': instance.scenario_code,
+                'menu_key': menu_key,
+                'applicant_user_id': instance.applicant_user_id,
+            },
+        )
         return {'revoked_keys': [row.menu_key for row in rows], 'instance_id': instance_id}
 
     async def decide_task(

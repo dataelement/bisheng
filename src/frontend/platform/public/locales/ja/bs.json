@@ -1315,6 +1315,8 @@
       "approvalTaskApprove": "承認タスクを承認",
       "approvalTaskReject": "承認タスクを却下",
       "approvalInstanceWithdraw": "承認申請を撤回",
+      "approvalInstanceResubmit": "承認申請を再提出",
+      "approvalMenuAccessRevokeGrant": "メニュー権限付与を取り消し",
       "approvalExceptionRetry": "承認例外を再試行"
     },
     "objectTypeEnum": {
