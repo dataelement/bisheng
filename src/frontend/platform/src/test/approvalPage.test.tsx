@@ -14,6 +14,9 @@ const createApprovalScenarioApi = vi.fn();
 const createApprovalRouteApi = vi.fn();
 const createApprovalFlowApi = vi.fn();
 const createApprovalNodeApi = vi.fn();
+const updateApprovalRouteApi = vi.fn();
+const updateApprovalFlowApi = vi.fn();
+const updateApprovalNodeApi = vi.fn();
 const retryApprovalExceptionApi = vi.fn();
 const updateApprovalScenarioApi = vi.fn();
 
@@ -32,6 +35,9 @@ vi.mock("@/controllers/API/approval", () => ({
   createApprovalRouteApi: (...args: any[]) => createApprovalRouteApi(...args),
   createApprovalFlowApi: (...args: any[]) => createApprovalFlowApi(...args),
   createApprovalNodeApi: (...args: any[]) => createApprovalNodeApi(...args),
+  updateApprovalRouteApi: (...args: any[]) => updateApprovalRouteApi(...args),
+  updateApprovalFlowApi: (...args: any[]) => updateApprovalFlowApi(...args),
+  updateApprovalNodeApi: (...args: any[]) => updateApprovalNodeApi(...args),
   retryApprovalExceptionApi: (...args: any[]) => retryApprovalExceptionApi(...args),
   updateApprovalScenarioApi: (...args: any[]) => updateApprovalScenarioApi(...args),
 }));
@@ -98,6 +104,9 @@ describe("ApprovalPage", () => {
     createApprovalRouteApi.mockResolvedValue({ id: 10, route_name: "新增分支", route_type: "flow" });
     createApprovalFlowApi.mockResolvedValue({ id: 12, flow_code: "menu_default", flow_name: "菜单默认流程" });
     createApprovalNodeApi.mockResolvedValue({ id: 15, node_code: "n1", node_name: "一级审批", node_mode: "or" });
+    updateApprovalRouteApi.mockResolvedValue({ id: 9, route_name: "更新分支", route_type: "pass" });
+    updateApprovalFlowApi.mockResolvedValue({ id: 12, flow_code: "menu_updated", flow_name: "更新流程" });
+    updateApprovalNodeApi.mockResolvedValue({ id: 15, node_code: "n1b", node_name: "更新节点", node_mode: "and" });
     retryApprovalExceptionApi.mockResolvedValue({ status: "resolved" });
     updateApprovalScenarioApi.mockResolvedValue({ id: 1, enabled: true });
   });
@@ -222,6 +231,7 @@ describe("ApprovalPage", () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
+    await user.click(await screen.findByRole("button", { name: "approvalPage.cancelEdit" }));
     const flowNameInput = await screen.findByPlaceholderText("approvalPage.flowNamePlaceholder");
     await user.type(flowNameInput, "菜单默认流程");
     await user.type(screen.getByPlaceholderText("approvalPage.flowCodePlaceholder"), "menu_default");
@@ -231,6 +241,46 @@ describe("ApprovalPage", () => {
       expect(createApprovalFlowApi).toHaveBeenCalledWith(1, {
         flow_code: "menu_default",
         flow_name: "菜单默认流程",
+      });
+    });
+  });
+
+  it("updates a selected route", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await user.click(await screen.findByText("默认流程 #9"));
+    const routeNameInput = await screen.findByPlaceholderText("approvalPage.routeNamePlaceholder");
+    await user.clear(routeNameInput);
+    await user.type(routeNameInput, "更新分支");
+    await user.selectOptions(screen.getAllByRole("combobox")[1], "pass");
+    await user.click(screen.getByRole("button", { name: "approvalPage.saveRoute" }));
+
+    await waitFor(() => {
+      expect(updateApprovalRouteApi).toHaveBeenCalledWith(9, {
+        route_name: "更新分支",
+        route_type: "pass",
+      });
+    });
+  });
+
+  it("updates a selected flow", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await user.click(await screen.findByText("菜单默认流程"));
+    const flowNameInput = await screen.findByPlaceholderText("approvalPage.flowNamePlaceholder");
+    await user.clear(flowNameInput);
+    await user.type(flowNameInput, "更新流程");
+    const flowCodeInput = screen.getByPlaceholderText("approvalPage.flowCodePlaceholder");
+    await user.clear(flowCodeInput);
+    await user.type(flowCodeInput, "menu_updated");
+    await user.click(screen.getByRole("button", { name: "approvalPage.saveFlow" }));
+
+    await waitFor(() => {
+      expect(updateApprovalFlowApi).toHaveBeenCalledWith(12, {
+        flow_code: "menu_updated",
+        flow_name: "更新流程",
       });
     });
   });
@@ -250,6 +300,29 @@ describe("ApprovalPage", () => {
         node_name: "二级审批",
         node_order: 2,
         node_mode: "or",
+      });
+    });
+  });
+
+  it("updates a selected node", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    await user.click(await screen.findByText("一级审批 #15"));
+    const nodeNameInput = await screen.findByPlaceholderText("approvalPage.nodeNamePlaceholder");
+    await user.clear(nodeNameInput);
+    await user.type(nodeNameInput, "更新节点");
+    const nodeCodeInput = screen.getByPlaceholderText("approvalPage.nodeCodePlaceholder");
+    await user.clear(nodeCodeInput);
+    await user.type(nodeCodeInput, "n1b");
+    await user.selectOptions(screen.getAllByRole("combobox")[2], "and");
+    await user.click(screen.getByRole("button", { name: "approvalPage.saveNode" }));
+
+    await waitFor(() => {
+      expect(updateApprovalNodeApi).toHaveBeenCalledWith(15, {
+        node_code: "n1b",
+        node_name: "更新节点",
+        node_mode: "and",
       });
     });
   });

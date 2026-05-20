@@ -5,6 +5,9 @@ import {
   createApprovalNodeApi,
   createApprovalRouteApi,
   createApprovalScenarioApi,
+  updateApprovalFlowApi,
+  updateApprovalNodeApi,
+  updateApprovalRouteApi,
   listApprovalFlowsApi,
   listApprovalExceptionsApi,
   listApprovalNodesApi,
@@ -61,6 +64,8 @@ export default function ApprovalPage() {
   const [exceptions, setExceptions] = useState<ApprovalExceptionItem[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<number | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [selectedPresetCode, setSelectedPresetCode] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeType, setRouteType] = useState("flow");
@@ -246,6 +251,12 @@ export default function ApprovalPage() {
     }
   };
 
+  const resetRouteForm = () => {
+    setSelectedRouteId(null);
+    setRouteName("");
+    setRouteType("flow");
+  };
+
   const handleCreateFlow = async () => {
     if (!selectedScenarioId || !flowName.trim() || !flowCode.trim()) return;
     try {
@@ -270,6 +281,12 @@ export default function ApprovalPage() {
     }
   };
 
+  const resetFlowForm = () => {
+    setSelectedFlowId(null);
+    setFlowName("");
+    setFlowCode("");
+  };
+
   const handleCreateNode = async () => {
     if (!selectedFlowId || !nodeName.trim() || !nodeCode.trim()) return;
     try {
@@ -292,6 +309,93 @@ export default function ApprovalPage() {
         title: t("prompt"),
         variant: "error",
         description: String(error || t("approvalPage.nodeCreateFailed")),
+      });
+    }
+  };
+
+  const resetNodeForm = () => {
+    setSelectedNodeId(null);
+    setNodeName("");
+    setNodeCode("");
+    setNodeMode("or");
+  };
+
+  const handleSaveRoute = async () => {
+    if (!selectedRouteId || !routeName.trim()) return;
+    try {
+      await updateApprovalRouteApi(selectedRouteId, {
+        route_name: routeName.trim(),
+        route_type: routeType,
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.routeUpdateSuccess"),
+      });
+      resetRouteForm();
+      if (selectedScenarioId) {
+        await loadRoutes(selectedScenarioId);
+      }
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.routeUpdateFailed")),
+      });
+    }
+  };
+
+  const handleSaveFlow = async () => {
+    if (!selectedFlowId || !flowName.trim() || !flowCode.trim()) return;
+    try {
+      const currentFlowId = selectedFlowId;
+      await updateApprovalFlowApi(selectedFlowId, {
+        flow_code: flowCode.trim(),
+        flow_name: flowName.trim(),
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.flowUpdateSuccess"),
+      });
+      const currentScenarioId = selectedScenarioId;
+      resetFlowForm();
+      if (currentScenarioId) {
+        await loadFlows(currentScenarioId);
+        setSelectedFlowId(currentFlowId);
+      }
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.flowUpdateFailed")),
+      });
+    }
+  };
+
+  const handleSaveNode = async () => {
+    if (!selectedNodeId || !nodeName.trim() || !nodeCode.trim()) return;
+    try {
+      const currentFlowId = selectedFlowId;
+      await updateApprovalNodeApi(selectedNodeId, {
+        node_code: nodeCode.trim(),
+        node_name: nodeName.trim(),
+        node_mode: nodeMode,
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.nodeUpdateSuccess"),
+      });
+      resetNodeForm();
+      if (currentFlowId) {
+        setNodes(await listApprovalNodesApi(currentFlowId));
+      }
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.nodeUpdateFailed")),
       });
     }
   };
@@ -504,25 +608,47 @@ export default function ApprovalPage() {
             <button
               type="button"
               disabled={!selectedScenarioId || !routeName.trim()}
-              onClick={() => void handleCreateRoute()}
+              onClick={() => void (selectedRouteId ? handleSaveRoute() : handleCreateRoute())}
               className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {t("approvalPage.createRoute")}
+              {selectedRouteId ? t("approvalPage.saveRoute") : t("approvalPage.createRoute")}
             </button>
+            {selectedRouteId ? (
+              <button
+                type="button"
+                onClick={resetRouteForm}
+                className="h-10 rounded-lg border border-border-subtle px-4 text-sm text-text-primary"
+              >
+                {t("approvalPage.cancelEdit")}
+              </button>
+            ) : null}
           </div>
           {!routes.length ? (
             <EmptyBlock text={t("approvalPage.emptyRoutes")} />
           ) : (
             <div className="space-y-3">
               {routes.map((route) => (
-                <div key={route.id} className="rounded-lg border border-border-subtle bg-background-main-content px-4 py-3">
+                <button
+                  key={route.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedRouteId(route.id);
+                    setRouteName(route.route_name || "");
+                    setRouteType(route.route_type || "flow");
+                  }}
+                  className={`w-full rounded-lg border px-4 py-3 text-left ${
+                    route.id === selectedRouteId
+                      ? "border-primary bg-background-main-content"
+                      : "border-border-subtle bg-background-main-content"
+                  }`}
+                >
                   <div className="text-sm font-medium text-text-primary">
                     {route.route_name || route.route_type || t("approvalPage.routeFallback")} #{route.id}
                   </div>
                   <div className="mt-1 text-xs text-text-secondary">
                     {route.route_type || "--"} · {route.enabled ? t("approvalPage.enabled") : t("approvalPage.disabled")}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -553,11 +679,20 @@ export default function ApprovalPage() {
             <button
               type="button"
               disabled={!selectedScenarioId || !flowName.trim() || !flowCode.trim()}
-              onClick={() => void handleCreateFlow()}
+              onClick={() => void (selectedFlowId ? handleSaveFlow() : handleCreateFlow())}
               className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {t("approvalPage.createFlow")}
+              {selectedFlowId ? t("approvalPage.saveFlow") : t("approvalPage.createFlow")}
             </button>
+            {selectedFlowId ? (
+              <button
+                type="button"
+                onClick={resetFlowForm}
+                className="h-10 rounded-lg border border-border-subtle px-4 text-sm text-text-primary"
+              >
+                {t("approvalPage.cancelEdit")}
+              </button>
+            ) : null}
           </div>
           {!flows.length ? (
             <EmptyBlock text={t("approvalPage.emptyFlows")} />
@@ -569,6 +704,8 @@ export default function ApprovalPage() {
                   type="button"
                   onClick={async () => {
                     setSelectedFlowId(flow.id);
+                    setFlowName(flow.flow_name || "");
+                    setFlowCode(flow.flow_code || "");
                     setNodes(await listApprovalNodesApi(flow.id));
                   }}
                   className={`flex w-full flex-col rounded-lg border px-4 py-3 text-left transition-colors ${
@@ -623,25 +760,48 @@ export default function ApprovalPage() {
             <button
               type="button"
               disabled={!selectedFlowId || !nodeName.trim() || !nodeCode.trim()}
-              onClick={() => void handleCreateNode()}
+              onClick={() => void (selectedNodeId ? handleSaveNode() : handleCreateNode())}
               className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {t("approvalPage.createNode")}
+              {selectedNodeId ? t("approvalPage.saveNode") : t("approvalPage.createNode")}
             </button>
+            {selectedNodeId ? (
+              <button
+                type="button"
+                onClick={resetNodeForm}
+                className="h-10 rounded-lg border border-border-subtle px-4 text-sm text-text-primary"
+              >
+                {t("approvalPage.cancelEdit")}
+              </button>
+            ) : null}
           </div>
           {!nodes.length ? (
             <EmptyBlock text={t("approvalPage.emptyNodes")} />
           ) : (
             <div className="space-y-3">
               {nodes.map((node) => (
-                <div key={node.id} className="rounded-lg border border-border-subtle bg-background-main-content px-4 py-3">
+                <button
+                  key={node.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedNodeId(node.id);
+                    setNodeName(node.node_name || "");
+                    setNodeCode(node.node_code || "");
+                    setNodeMode(node.node_mode || "or");
+                  }}
+                  className={`w-full rounded-lg border px-4 py-3 text-left ${
+                    node.id === selectedNodeId
+                      ? "border-primary bg-background-main-content"
+                      : "border-border-subtle bg-background-main-content"
+                  }`}
+                >
                   <div className="text-sm font-medium text-text-primary">
                     {node.node_name || node.node_code || t("approvalPage.nodeFallback")} #{node.id}
                   </div>
                   <div className="mt-1 text-xs text-text-secondary">
                     {node.node_code || "--"} · {node.node_mode || "--"} · #{node.node_order || "--"}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

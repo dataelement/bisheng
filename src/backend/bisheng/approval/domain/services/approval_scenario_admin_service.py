@@ -105,6 +105,30 @@ class ApprovalScenarioAdminService:
         return row.model_dump()
 
     @classmethod
+    async def update_route(
+        cls,
+        *,
+        tenant_id: int,
+        route_rule_id: int,
+        payload: dict,
+    ):
+        row = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'route not found: {route_rule_id}')
+        if 'route_name' in payload and payload['route_name']:
+            row.route_name = payload['route_name']
+        if 'route_type' in payload and payload['route_type']:
+            row.route_type = payload['route_type']
+        if 'sort_order' in payload:
+            row.sort_order = int(payload['sort_order'])
+        if 'flow_definition_id' in payload:
+            row.flow_definition_id = payload['flow_definition_id']
+        if 'match_config' in payload:
+            row.match_config = payload['match_config'] or {}
+        updated = await ApprovalScenarioRepository.update_route_rule(row)
+        return updated.model_dump()
+
+    @classmethod
     async def list_flows(cls, *, tenant_id: int, scenario_id: int):
         rows = await ApprovalScenarioRepository.list_flow_definitions(tenant_id, scenario_id)
         return [row.model_dump() for row in rows]
@@ -136,6 +160,26 @@ class ApprovalScenarioAdminService:
             )
         )
         return flow.model_dump()
+
+    @classmethod
+    async def update_flow(
+        cls,
+        *,
+        tenant_id: int,
+        flow_definition_id: int,
+        payload: dict,
+    ):
+        row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'flow not found: {flow_definition_id}')
+        if 'flow_name' in payload and payload['flow_name']:
+            row.flow_name = payload['flow_name']
+        if 'flow_code' in payload and payload['flow_code']:
+            row.flow_code = payload['flow_code']
+        if 'is_active' in payload:
+            row.is_active = bool(payload['is_active'])
+        updated = await ApprovalScenarioRepository.update_flow_definition(row)
+        return updated.model_dump()
 
     @classmethod
     async def list_nodes(cls, *, tenant_id: int, flow_definition_id: int):
@@ -175,6 +219,32 @@ class ApprovalScenarioAdminService:
             )
         )
         return row.model_dump()
+
+    @classmethod
+    async def update_node(
+        cls,
+        *,
+        tenant_id: int,
+        node_definition_id: int,
+        payload: dict,
+    ):
+        row = await ApprovalScenarioRepository.get_node_definition(node_definition_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'node not found: {node_definition_id}')
+        if 'node_name' in payload and payload['node_name']:
+            row.node_name = payload['node_name']
+        if 'node_code' in payload and payload['node_code']:
+            row.node_code = payload['node_code']
+        if 'node_order' in payload:
+            row.node_order = int(payload['node_order'])
+        if 'node_mode' in payload and payload['node_mode']:
+            row.node_mode = payload['node_mode']
+        if 'approver_config' in payload:
+            row.approver_config = payload['approver_config'] or {}
+        if 'extra_config' in payload:
+            row.extra_config = payload['extra_config'] or {}
+        updated = await ApprovalScenarioRepository.update_node_definition(row)
+        return updated.model_dump()
 
     @classmethod
     async def list_open_exceptions(cls, *, tenant_id: int):

@@ -280,15 +280,20 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     monkeypatch.setattr(ApprovalScenarioRepository, 'get_scenario', AsyncMock(return_value=scenario))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_scenario', AsyncMock(return_value=scenario))
     monkeypatch.setattr(ApprovalScenarioRepository, 'update_scenario', AsyncMock(return_value=scenario))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'get_route_rule', AsyncMock(return_value=route))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_route_rule', AsyncMock(return_value=route))
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_route_rules', AsyncMock(return_value=[route]))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'update_route_rule', AsyncMock(return_value=route))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_flow_definition', AsyncMock(return_value=flow))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_flow_version', AsyncMock(return_value=version))
     monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_flow_definitions', AsyncMock(return_value=[flow]))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'update_flow_definition', AsyncMock(return_value=flow))
     monkeypatch.setattr(ApprovalScenarioRepository, 'get_active_flow_version', AsyncMock(return_value=version))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'get_node_definition', AsyncMock(return_value=node))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_node_definition', AsyncMock(return_value=node))
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_node_definitions', AsyncMock(return_value=[node]))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'update_node_definition', AsyncMock(return_value=node))
     monkeypatch.setattr(ApprovalQueryRepository, 'list_open_exceptions', AsyncMock(return_value=[exception]))
     monkeypatch.setattr(
         'bisheng.approval.domain.services.approval_scenario_admin_service.AuditLogDao.ainsert_v2',
@@ -312,17 +317,32 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         scenario_id=1,
         payload={'route_name': '默认流程', 'route_type': 'flow', 'sort_order': 1, 'match_config': {}},
     )
+    updated_route = await ApprovalScenarioAdminService.update_route(
+        tenant_id=1,
+        route_rule_id=2,
+        payload={'route_name': '更新分支', 'route_type': 'pass'},
+    )
     routes = await ApprovalScenarioAdminService.list_routes(tenant_id=1, scenario_id=1)
     created_flow = await ApprovalScenarioAdminService.create_flow(
         tenant_id=1,
         scenario_id=1,
         payload={'flow_code': 'menu_default', 'flow_name': '菜单默认流程'},
     )
+    updated_flow = await ApprovalScenarioAdminService.update_flow(
+        tenant_id=1,
+        flow_definition_id=3,
+        payload={'flow_code': 'menu_updated', 'flow_name': '更新流程'},
+    )
     flows = await ApprovalScenarioAdminService.list_flows(tenant_id=1, scenario_id=1)
     created_node = await ApprovalScenarioAdminService.create_node(
         tenant_id=1,
         flow_definition_id=3,
         payload={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+    )
+    updated_node = await ApprovalScenarioAdminService.update_node(
+        tenant_id=1,
+        node_definition_id=5,
+        payload={'node_code': 'n1b', 'node_name': '更新节点', 'node_mode': 'and'},
     )
     nodes = await ApprovalScenarioAdminService.list_nodes(tenant_id=1, flow_definition_id=3)
     exceptions = await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=1)
@@ -331,9 +351,12 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     assert created['id'] == 1
     assert updated['id'] == 1
     assert created_route['route_name'] == '默认流程'
-    assert routes[0]['route_type'] == 'flow'
+    assert updated_route['route_type'] == 'pass'
+    assert routes[0]['route_type'] == 'pass'
     assert created_flow['flow_code'] == 'menu_default'
-    assert flows[0]['flow_name'] == '菜单默认流程'
+    assert updated_flow['flow_code'] == 'menu_updated'
+    assert flows[0]['flow_name'] == '更新流程'
     assert created_node['node_code'] == 'n1'
-    assert nodes[0]['node_name'] == '一级审批'
+    assert updated_node['node_mode'] == 'and'
+    assert nodes[0]['node_name'] == '更新节点'
     assert exceptions[0]['exception_type'] == 'route_missing'

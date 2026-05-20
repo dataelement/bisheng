@@ -90,6 +90,19 @@ export async function createApprovalRouteApi(
   return await axios.post(`/api/v1/approval/admin/scenarios/${scenarioId}/routes`, data);
 }
 
+export async function updateApprovalRouteApi(
+  routeRuleId: number,
+  data: {
+    route_name?: string;
+    route_type?: string;
+    sort_order?: number;
+    flow_definition_id?: number | null;
+    match_config?: Record<string, any>;
+  },
+): Promise<ApprovalRouteItem> {
+  return await axios.put(`/api/v1/approval/admin/routes/${routeRuleId}`, data);
+}
+
 export async function listApprovalExceptionsApi(): Promise<ApprovalExceptionItem[]> {
   return await axios.get("/api/v1/approval/admin/exceptions");
 }
@@ -109,6 +122,17 @@ export async function createApprovalFlowApi(
   return await axios.post(`/api/v1/approval/admin/scenarios/${scenarioId}/flows`, data);
 }
 
+export async function updateApprovalFlowApi(
+  flowDefinitionId: number,
+  data: {
+    flow_code?: string;
+    flow_name?: string;
+    is_active?: boolean;
+  },
+): Promise<ApprovalFlowItem> {
+  return await axios.put(`/api/v1/approval/admin/flows/${flowDefinitionId}`, data);
+}
+
 export async function listApprovalNodesApi(flowDefinitionId: number): Promise<ApprovalNodeItem[]> {
   return await axios.get(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`);
 }
@@ -125,6 +149,20 @@ export async function createApprovalNodeApi(
   },
 ): Promise<ApprovalNodeItem> {
   return await axios.post(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`, data);
+}
+
+export async function updateApprovalNodeApi(
+  nodeDefinitionId: number,
+  data: {
+    node_code?: string;
+    node_name?: string;
+    node_order?: number;
+    node_mode?: string;
+    approver_config?: Record<string, any>;
+    extra_config?: Record<string, any>;
+  },
+): Promise<ApprovalNodeItem> {
+  return await axios.put(`/api/v1/approval/admin/nodes/${nodeDefinitionId}`, data);
 }
 
 export async function retryApprovalExceptionApi(

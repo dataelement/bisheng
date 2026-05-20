@@ -62,6 +62,11 @@ class ApprovalScenarioRepository:
         return row
 
     @classmethod
+    async def get_route_rule(cls, route_rule_id: int) -> ApprovalRouteRule | None:
+        async with get_async_db_session() as session:
+            return await session.get(ApprovalRouteRule, route_rule_id)
+
+    @classmethod
     async def list_route_rules(cls, tenant_id: int, scenario_id: int) -> list[ApprovalRouteRule]:
         statement = (
             select(ApprovalRouteRule)
@@ -73,6 +78,14 @@ class ApprovalScenarioRepository:
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def update_route_rule(cls, row: ApprovalRouteRule) -> ApprovalRouteRule:
+        async with get_async_db_session() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return row
 
     @classmethod
     async def create_flow_definition(cls, row: ApprovalFlowDefinition) -> ApprovalFlowDefinition:
@@ -99,6 +112,14 @@ class ApprovalScenarioRepository:
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def update_flow_definition(cls, row: ApprovalFlowDefinition) -> ApprovalFlowDefinition:
+        async with get_async_db_session() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return row
 
     @classmethod
     async def create_flow_version(cls, row: ApprovalFlowVersion) -> ApprovalFlowVersion:
@@ -131,6 +152,11 @@ class ApprovalScenarioRepository:
         return row
 
     @classmethod
+    async def get_node_definition(cls, node_definition_id: int) -> ApprovalNodeDefinition | None:
+        async with get_async_db_session() as session:
+            return await session.get(ApprovalNodeDefinition, node_definition_id)
+
+    @classmethod
     async def list_node_definitions(cls, tenant_id: int, flow_version_id: int) -> list[ApprovalNodeDefinition]:
         statement = (
             select(ApprovalNodeDefinition)
@@ -142,3 +168,11 @@ class ApprovalScenarioRepository:
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def update_node_definition(cls, row: ApprovalNodeDefinition) -> ApprovalNodeDefinition:
+        async with get_async_db_session() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return row

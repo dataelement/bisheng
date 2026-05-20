@@ -36,10 +36,24 @@ class RouteCreateReq(BaseModel):
     match_config: dict = Field(default_factory=dict)
 
 
+class RouteUpdateReq(BaseModel):
+    route_name: str | None = None
+    route_type: str | None = None
+    sort_order: int | None = None
+    flow_definition_id: int | None = None
+    match_config: dict | None = None
+
+
 class FlowCreateReq(BaseModel):
     flow_code: str
     flow_name: str
     is_active: bool = True
+
+
+class FlowUpdateReq(BaseModel):
+    flow_code: str | None = None
+    flow_name: str | None = None
+    is_active: bool | None = None
 
 
 class NodeCreateReq(BaseModel):
@@ -49,6 +63,15 @@ class NodeCreateReq(BaseModel):
     node_mode: str
     approver_config: dict = Field(default_factory=dict)
     extra_config: dict = Field(default_factory=dict)
+
+
+class NodeUpdateReq(BaseModel):
+    node_code: str | None = None
+    node_name: str | None = None
+    node_order: int | None = None
+    node_mode: str | None = None
+    approver_config: dict | None = None
+    extra_config: dict | None = None
 
 
 def _ensure_admin(login_user: UserPayload) -> None:
@@ -119,6 +142,22 @@ async def create_route(
     )
 
 
+@router.put('/routes/{route_rule_id}')
+async def update_route(
+    route_rule_id: int,
+    req: RouteUpdateReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.update_route(
+            tenant_id=login_user.tenant_id,
+            route_rule_id=route_rule_id,
+            payload=req.model_dump(exclude_none=True),
+        )
+    )
+
+
 @router.get('/scenarios/{scenario_id}/flows')
 async def list_flows(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     _ensure_admin(login_user)
@@ -141,6 +180,22 @@ async def create_flow(
     )
 
 
+@router.put('/flows/{flow_definition_id}')
+async def update_flow(
+    flow_definition_id: int,
+    req: FlowUpdateReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.update_flow(
+            tenant_id=login_user.tenant_id,
+            flow_definition_id=flow_definition_id,
+            payload=req.model_dump(exclude_none=True),
+        )
+    )
+
+
 @router.get('/flows/{flow_definition_id}/nodes')
 async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     _ensure_admin(login_user)
@@ -159,6 +214,22 @@ async def create_node(
             tenant_id=login_user.tenant_id,
             flow_definition_id=flow_definition_id,
             payload=req.model_dump(),
+        )
+    )
+
+
+@router.put('/nodes/{node_definition_id}')
+async def update_node(
+    node_definition_id: int,
+    req: NodeUpdateReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.update_node(
+            tenant_id=login_user.tenant_id,
+            node_definition_id=node_definition_id,
+            payload=req.model_dump(exclude_none=True),
         )
     )
 
