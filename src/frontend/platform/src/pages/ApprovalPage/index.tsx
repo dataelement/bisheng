@@ -8,6 +8,7 @@ import {
   listApprovalScenarioPresetsApi,
   listApprovalScenariosApi,
   retryApprovalExceptionApi,
+  updateApprovalScenarioApi,
   type ApprovalExceptionItem,
   type ApprovalRouteItem,
   type ApprovalScenarioItem,
@@ -119,6 +120,26 @@ export default function ApprovalPage() {
         title: t("prompt"),
         variant: "error",
         description: String(error || t("approvalPage.createFailed")),
+      });
+    }
+  };
+
+  const handleToggleScenario = async (scenario: ApprovalScenarioItem) => {
+    try {
+      await updateApprovalScenarioApi(scenario.id, {
+        enabled: !scenario.enabled,
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.scenarioUpdateSuccess"),
+      });
+      await loadPage();
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.scenarioUpdateFailed")),
       });
     }
   };
@@ -277,6 +298,25 @@ export default function ApprovalPage() {
                     <span className="mt-1 text-xs text-text-secondary">
                       {scenario.scenario_code} · {scenario.enabled ? t("approvalPage.enabled") : t("approvalPage.disabled")}
                     </span>
+                    <div className="mt-3 flex justify-end">
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleToggleScenario(scenario);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleToggleScenario(scenario);
+                        }}
+                        className="rounded-md border border-border-subtle px-3 py-1 text-xs text-text-primary hover:bg-background-main-content"
+                      >
+                        {scenario.enabled ? t("approvalPage.disableScenario") : t("approvalPage.enableScenario")}
+                      </span>
+                    </div>
                   </button>
                 );
               })}

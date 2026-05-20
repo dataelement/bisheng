@@ -46,6 +46,14 @@ class ApprovalScenarioRepository:
             return list((await session.exec(statement)).all())
 
     @classmethod
+    async def update_scenario(cls, row: ApprovalScenario) -> ApprovalScenario:
+        async with get_async_db_session() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return row
+
+    @classmethod
     async def create_route_rule(cls, row: ApprovalRouteRule) -> ApprovalRouteRule:
         async with get_async_db_session() as session:
             session.add(row)

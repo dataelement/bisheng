@@ -46,6 +46,17 @@ export async function createApprovalScenarioApi(data: {
   return await axios.post("/api/v1/approval/admin/scenarios", data);
 }
 
+export async function updateApprovalScenarioApi(
+  scenarioId: number,
+  data: {
+    scenario_name?: string;
+    enabled?: boolean;
+    display_name?: string | null;
+  },
+): Promise<ApprovalScenarioItem> {
+  return await axios.put(`/api/v1/approval/admin/scenarios/${scenarioId}`, data);
+}
+
 export async function listApprovalRoutesApi(scenarioId: number): Promise<ApprovalRouteItem[]> {
   return await axios.get(`/api/v1/approval/admin/scenarios/${scenarioId}/routes`);
 }

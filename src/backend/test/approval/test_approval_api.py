@@ -109,6 +109,10 @@ def test_admin_approval_endpoints():
         new_callable=AsyncMock,
         return_value={'id': 1, 'scenario_code': 'menu_access_request'},
     ), patch(
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.update_scenario',
+        new_callable=AsyncMock,
+        return_value={'id': 1, 'scenario_code': 'menu_access_request', 'enabled': True},
+    ), patch(
         'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_routes',
         new_callable=AsyncMock,
         return_value=[{'id': 9, 'route_type': 'flow'}],
@@ -129,6 +133,7 @@ def test_admin_approval_endpoints():
             assert c.get('/api/v1/approval/admin/scenario-presets').json()['data'][0]['scenario_code'] == 'menu_access_request'
             assert c.get('/api/v1/approval/admin/scenarios').json()['data'][0]['id'] == 1
             assert c.post('/api/v1/approval/admin/scenarios', json={'scenario_code': 'menu_access_request', 'scenario_name': '菜单权限申请'}).json()['data']['id'] == 1
+            assert c.put('/api/v1/approval/admin/scenarios/1', json={'enabled': True}).json()['data']['enabled'] is True
             assert c.get('/api/v1/approval/admin/scenarios/1/routes').json()['data'][0]['id'] == 9
             assert c.post('/api/v1/approval/admin/scenarios/1/routes', json={'route_name': '默认流程', 'route_type': 'flow'}).json()['data']['id'] == 10
             assert c.get('/api/v1/approval/admin/exceptions').json()['data'][0]['id'] == 88

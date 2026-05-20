@@ -53,6 +53,26 @@ class ApprovalScenarioAdminService:
         return row.model_dump()
 
     @classmethod
+    async def update_scenario(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_id: int,
+        payload: dict,
+    ):
+        row = await ApprovalScenarioRepository.get_scenario(scenario_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'scenario not found: {scenario_id}')
+        if 'scenario_name' in payload and payload['scenario_name']:
+            row.scenario_name = payload['scenario_name']
+        if 'enabled' in payload:
+            row.enabled = bool(payload['enabled'])
+        if 'display_name' in payload:
+            row.display_name = payload['display_name']
+        updated = await ApprovalScenarioRepository.update_scenario(row)
+        return updated.model_dump()
+
+    @classmethod
     async def list_routes(cls, *, tenant_id: int, scenario_id: int):
         rows = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
         return [row.model_dump() for row in rows]

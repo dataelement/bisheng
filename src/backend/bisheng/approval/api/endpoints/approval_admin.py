@@ -17,6 +17,12 @@ class ScenarioUpsertReq(BaseModel):
     enabled: bool = False
 
 
+class ScenarioUpdateReq(BaseModel):
+    scenario_name: str | None = None
+    enabled: bool | None = None
+    display_name: str | None = None
+
+
 class ExceptionRetryReq(BaseModel):
     action: str = Field(default='retry')
 
@@ -55,6 +61,22 @@ async def create_scenario(req: ScenarioUpsertReq, login_user: UserPayload = Depe
             payload=req.model_dump(),
             operator_user_id=login_user.user_id,
             operator_user_name=login_user.user_name,
+        )
+    )
+
+
+@router.put('/scenarios/{scenario_id}')
+async def update_scenario(
+    scenario_id: int,
+    req: ScenarioUpdateReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.update_scenario(
+            tenant_id=login_user.tenant_id,
+            scenario_id=scenario_id,
+            payload=req.model_dump(exclude_none=True),
         )
     )
 

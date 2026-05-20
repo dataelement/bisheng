@@ -11,6 +11,7 @@ const listApprovalRoutesApi = vi.fn();
 const createApprovalScenarioApi = vi.fn();
 const createApprovalRouteApi = vi.fn();
 const retryApprovalExceptionApi = vi.fn();
+const updateApprovalScenarioApi = vi.fn();
 
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({
   toast: (...args: any[]) => toastMock(...args),
@@ -24,6 +25,7 @@ vi.mock("@/controllers/API/approval", () => ({
   createApprovalScenarioApi: (...args: any[]) => createApprovalScenarioApi(...args),
   createApprovalRouteApi: (...args: any[]) => createApprovalRouteApi(...args),
   retryApprovalExceptionApi: (...args: any[]) => retryApprovalExceptionApi(...args),
+  updateApprovalScenarioApi: (...args: any[]) => updateApprovalScenarioApi(...args),
 }));
 
 describe("ApprovalPage", () => {
@@ -66,6 +68,7 @@ describe("ApprovalPage", () => {
     createApprovalScenarioApi.mockResolvedValue({ id: 2 });
     createApprovalRouteApi.mockResolvedValue({ id: 10, route_name: "新增分支", route_type: "flow" });
     retryApprovalExceptionApi.mockResolvedValue({ status: "resolved" });
+    updateApprovalScenarioApi.mockResolvedValue({ id: 1, enabled: true });
   });
 
   it("loads presets, scenarios, exceptions and routes on mount", async () => {
@@ -148,5 +151,26 @@ describe("ApprovalPage", () => {
       }),
     );
     expect(listApprovalRoutesApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("toggles scenario enabled status and reloads the page", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    const enableButton = await screen.findByRole("button", { name: "approvalPage.enableScenario" });
+    await user.click(enableButton);
+
+    await waitFor(() => {
+      expect(updateApprovalScenarioApi).toHaveBeenCalledWith(1, {
+        enabled: true,
+      });
+    });
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: "success",
+        description: "approvalPage.scenarioUpdateSuccess",
+      }),
+    );
+    expect(listApprovalScenariosApi).toHaveBeenCalledTimes(2);
   });
 });
