@@ -9,6 +9,7 @@ const listApprovalScenariosApi = vi.fn();
 const listApprovalExceptionsApi = vi.fn();
 const listApprovalRoutesApi = vi.fn();
 const createApprovalScenarioApi = vi.fn();
+const createApprovalRouteApi = vi.fn();
 const retryApprovalExceptionApi = vi.fn();
 
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/controllers/API/approval", () => ({
   listApprovalExceptionsApi: (...args: any[]) => listApprovalExceptionsApi(...args),
   listApprovalRoutesApi: (...args: any[]) => listApprovalRoutesApi(...args),
   createApprovalScenarioApi: (...args: any[]) => createApprovalScenarioApi(...args),
+  createApprovalRouteApi: (...args: any[]) => createApprovalRouteApi(...args),
   retryApprovalExceptionApi: (...args: any[]) => retryApprovalExceptionApi(...args),
 }));
 
@@ -62,6 +64,7 @@ describe("ApprovalPage", () => {
       },
     ]);
     createApprovalScenarioApi.mockResolvedValue({ id: 2 });
+    createApprovalRouteApi.mockResolvedValue({ id: 10, route_name: "新增分支", route_type: "flow" });
     retryApprovalExceptionApi.mockResolvedValue({ status: "resolved" });
   });
 
@@ -120,5 +123,30 @@ describe("ApprovalPage", () => {
       }),
     );
     expect(listApprovalExceptionsApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates a route for the selected scenario and reloads route list", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    const routeNameInput = await screen.findByPlaceholderText("approvalPage.routeNamePlaceholder");
+    await user.type(routeNameInput, "新增分支");
+    await user.click(screen.getByRole("button", { name: "approvalPage.createRoute" }));
+
+    await waitFor(() => {
+      expect(createApprovalRouteApi).toHaveBeenCalledWith(1, {
+        route_name: "新增分支",
+        route_type: "flow",
+        sort_order: 1,
+        match_config: {},
+      });
+    });
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: "success",
+        description: "approvalPage.routeCreateSuccess",
+      }),
+    );
+    expect(listApprovalRoutesApi).toHaveBeenCalledTimes(2);
   });
 });

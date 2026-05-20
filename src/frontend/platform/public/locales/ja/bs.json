@@ -2180,6 +2180,12 @@
     "scenarioDesc": "このテナントで有効化済み、または設定待ちの承認シナリオです。",
     "routeTitle": "条件分岐",
     "routeDesc": "選択中シナリオの分岐一覧です。ノード編集はこの画面を起点に後続で追加できます。",
+    "routeNameLabel": "分岐名",
+    "routeNamePlaceholder": "分岐名を入力",
+    "routeTypeLabel": "分岐タイプ",
+    "routeTypeFlow": "承認フロー",
+    "routeTypePass": "直接承認",
+    "createRoute": "分岐を追加",
     "retryAction": "再試行",
     "routeFallback": "分岐",
     "enabled": "有効",
@@ -2191,6 +2197,8 @@
     "loadFailed": "承認管理データの読み込みに失敗しました",
     "createSuccess": "承認シナリオを作成しました",
     "createFailed": "承認シナリオの作成に失敗しました",
+    "routeCreateSuccess": "条件分岐を作成しました",
+    "routeCreateFailed": "条件分岐の作成に失敗しました",
     "retrySuccess": "例外フローの再試行を開始しました",
     "retryFailed": "例外フローの再試行に失敗しました"
   }

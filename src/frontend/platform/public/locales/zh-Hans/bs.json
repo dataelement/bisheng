@@ -2180,6 +2180,12 @@
     "scenarioDesc": "当前租户已启用或待配置的审批场景。",
     "routeTitle": "条件分支",
     "routeDesc": "当前场景下的路由列表。后续可继续补充节点和分支编辑能力。",
+    "routeNameLabel": "分支名称",
+    "routeNamePlaceholder": "输入分支名称",
+    "routeTypeLabel": "分支类型",
+    "routeTypeFlow": "审批流程",
+    "routeTypePass": "直接通过",
+    "createRoute": "新增分支",
     "retryAction": "重试",
     "routeFallback": "流程分支",
     "enabled": "启用",
@@ -2191,6 +2197,8 @@
     "loadFailed": "审批管理数据加载失败",
     "createSuccess": "审批场景已创建",
     "createFailed": "审批场景创建失败",
+    "routeCreateSuccess": "条件分支已创建",
+    "routeCreateFailed": "条件分支创建失败",
     "retrySuccess": "异常流程已触发重试",
     "retryFailed": "异常流程重试失败"
   }

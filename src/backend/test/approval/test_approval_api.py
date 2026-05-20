@@ -113,6 +113,10 @@ def test_admin_approval_endpoints():
         new_callable=AsyncMock,
         return_value=[{'id': 9, 'route_type': 'flow'}],
     ), patch(
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.create_route',
+        new_callable=AsyncMock,
+        return_value={'id': 10, 'route_name': '默认流程', 'route_type': 'flow'},
+    ), patch(
         'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_open_exceptions',
         new_callable=AsyncMock,
         return_value=[{'id': 88, 'exception_type': 'route_missing'}],
@@ -126,5 +130,6 @@ def test_admin_approval_endpoints():
             assert c.get('/api/v1/approval/admin/scenarios').json()['data'][0]['id'] == 1
             assert c.post('/api/v1/approval/admin/scenarios', json={'scenario_code': 'menu_access_request', 'scenario_name': '菜单权限申请'}).json()['data']['id'] == 1
             assert c.get('/api/v1/approval/admin/scenarios/1/routes').json()['data'][0]['id'] == 9
+            assert c.post('/api/v1/approval/admin/scenarios/1/routes', json={'route_name': '默认流程', 'route_type': 'flow'}).json()['data']['id'] == 10
             assert c.get('/api/v1/approval/admin/exceptions').json()['data'][0]['id'] == 88
             assert c.post('/api/v1/approval/admin/exceptions/88/retry', json={'action': 'retry'}).json()['data']['status'] == 'resolved'

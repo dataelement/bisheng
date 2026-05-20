@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
+  createApprovalRouteApi,
   createApprovalScenarioApi,
   listApprovalExceptionsApi,
   listApprovalRoutesApi,
@@ -51,6 +52,8 @@ export default function ApprovalPage() {
   const [exceptions, setExceptions] = useState<ApprovalExceptionItem[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
   const [selectedPresetCode, setSelectedPresetCode] = useState("");
+  const [routeName, setRouteName] = useState("");
+  const [routeType, setRouteType] = useState("flow");
 
   const selectedPreset = useMemo(
     () => presets.find((item) => item.scenario_code === selectedPresetCode) ?? null,
@@ -134,6 +137,31 @@ export default function ApprovalPage() {
         title: t("prompt"),
         variant: "error",
         description: String(error || t("approvalPage.retryFailed")),
+      });
+    }
+  };
+
+  const handleCreateRoute = async () => {
+    if (!selectedScenarioId || !routeName.trim()) return;
+    try {
+      await createApprovalRouteApi(selectedScenarioId, {
+        route_name: routeName.trim(),
+        route_type: routeType,
+        sort_order: routes.length,
+        match_config: {},
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.routeCreateSuccess"),
+      });
+      setRouteName("");
+      await loadRoutes(selectedScenarioId);
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.routeCreateFailed")),
       });
     }
   };
@@ -260,6 +288,36 @@ export default function ApprovalPage() {
           title={t("approvalPage.routeTitle")}
           description={t("approvalPage.routeDesc")}
         >
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[220px] flex-1 flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.routeNameLabel")}</span>
+              <input
+                value={routeName}
+                onChange={(event) => setRouteName(event.target.value)}
+                placeholder={t("approvalPage.routeNamePlaceholder")}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              />
+            </label>
+            <label className="flex min-w-[160px] flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.routeTypeLabel")}</span>
+              <select
+                value={routeType}
+                onChange={(event) => setRouteType(event.target.value)}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              >
+                <option value="flow">{t("approvalPage.routeTypeFlow")}</option>
+                <option value="pass">{t("approvalPage.routeTypePass")}</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!selectedScenarioId || !routeName.trim()}
+              onClick={() => void handleCreateRoute()}
+              className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {t("approvalPage.createRoute")}
+            </button>
+          </div>
           {!routes.length ? (
             <EmptyBlock text={t("approvalPage.emptyRoutes")} />
           ) : (

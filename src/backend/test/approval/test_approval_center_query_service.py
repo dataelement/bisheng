@@ -245,6 +245,7 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_scenarios', AsyncMock(return_value=[scenario]))
     monkeypatch.setattr(ApprovalScenarioRepository, 'get_scenario_by_code', AsyncMock(return_value=scenario))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_scenario', AsyncMock(return_value=scenario))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'create_route_rule', AsyncMock(return_value=route))
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_route_rules', AsyncMock(return_value=[route]))
     monkeypatch.setattr(ApprovalQueryRepository, 'list_open_exceptions', AsyncMock(return_value=[exception]))
     monkeypatch.setattr(
@@ -259,10 +260,16 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         operator_user_id=1,
         operator_user_name='admin',
     )
+    created_route = await ApprovalScenarioAdminService.create_route(
+        tenant_id=1,
+        scenario_id=1,
+        payload={'route_name': '默认流程', 'route_type': 'flow', 'sort_order': 1, 'match_config': {}},
+    )
     routes = await ApprovalScenarioAdminService.list_routes(tenant_id=1, scenario_id=1)
     exceptions = await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=1)
 
     assert scenarios[0]['scenario_code'] == 'menu_access_request'
     assert created['id'] == 1
+    assert created_route['route_name'] == '默认流程'
     assert routes[0]['route_type'] == 'flow'
     assert exceptions[0]['exception_type'] == 'route_missing'

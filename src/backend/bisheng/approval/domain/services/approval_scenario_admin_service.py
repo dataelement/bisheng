@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
+from bisheng.approval.domain.models.approval_scenario import ApprovalRouteRule, ApprovalScenario
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
@@ -56,6 +56,27 @@ class ApprovalScenarioAdminService:
     async def list_routes(cls, *, tenant_id: int, scenario_id: int):
         rows = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
         return [row.model_dump() for row in rows]
+
+    @classmethod
+    async def create_route(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_id: int,
+        payload: dict,
+    ):
+        row = await ApprovalScenarioRepository.create_route_rule(
+            ApprovalRouteRule(
+                tenant_id=tenant_id,
+                scenario_id=scenario_id,
+                route_name=payload['route_name'],
+                route_type=payload['route_type'],
+                sort_order=int(payload.get('sort_order', 0)),
+                flow_definition_id=payload.get('flow_definition_id'),
+                match_config=payload.get('match_config') or {},
+            )
+        )
+        return row.model_dump()
 
     @classmethod
     async def list_open_exceptions(cls, *, tenant_id: int):

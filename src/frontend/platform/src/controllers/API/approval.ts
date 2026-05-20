@@ -50,6 +50,19 @@ export async function listApprovalRoutesApi(scenarioId: number): Promise<Approva
   return await axios.get(`/api/v1/approval/admin/scenarios/${scenarioId}/routes`);
 }
 
+export async function createApprovalRouteApi(
+  scenarioId: number,
+  data: {
+    route_name: string;
+    route_type: string;
+    sort_order?: number;
+    flow_definition_id?: number | null;
+    match_config?: Record<string, any>;
+  },
+): Promise<ApprovalRouteItem> {
+  return await axios.post(`/api/v1/approval/admin/scenarios/${scenarioId}/routes`, data);
+}
+
 export async function listApprovalExceptionsApi(): Promise<ApprovalExceptionItem[]> {
   return await axios.get("/api/v1/approval/admin/exceptions");
 }
