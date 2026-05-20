@@ -15,6 +15,7 @@ from bisheng.approval.domain.repositories.approval_instance_repository import Ap
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
 from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+from bisheng.database.models.audit_log import AuditLogDao
 
 
 class ApprovalExceptionService:
@@ -36,6 +37,14 @@ class ApprovalExceptionService:
                 resolved_by_user_id=operator_user_id,
                 scenario_code=instance.scenario_code,
             )
+            if retried:
+                await service._write_audit_log(
+                    tenant_id=instance.tenant_id,
+                    operator_user_id=operator_user_id,
+                    operator_tenant_id=instance.tenant_id,
+                    target_id=str(instance.id),
+                    metadata={'exception_id': exception_id, 'exception_type': exception.exception_type},
+                )
             return {
                 'exception_id': exception_id,
                 'instance_id': instance.id,
@@ -77,6 +86,14 @@ class ApprovalExceptionService:
             )
         else:
             raise ValueError(f'unsupported exception type: {exception.exception_type}')
+
+        await service._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            target_id=str(instance.id),
+            metadata={'exception_id': exception_id, 'exception_type': exception.exception_type},
+        )
 
         return {
             'exception_id': exception_id,
@@ -289,3 +306,22 @@ class ApprovalExceptionService:
 
     async def _build_handler(self, scenario_code: str) -> Any:
         return await build_runtime_handler(scenario_code)
+
+    async def _write_audit_log(
+        self,
+        *,
+        tenant_id: int,
+        operator_user_id: int,
+        operator_tenant_id: int,
+        target_id: str,
+        metadata: dict | None = None,
+    ) -> None:
+        await AuditLogDao.ainsert_v2(
+            tenant_id=tenant_id,
+            operator_id=operator_user_id,
+            operator_tenant_id=operator_tenant_id,
+            action='approval.exception.retry',
+            target_type='approval_instance',
+            target_id=target_id,
+            metadata=metadata,
+        )

@@ -158,12 +158,14 @@ async def test_withdraw_instance_cancels_pending_tasks_and_records_log(monkeypat
     repo.instances[1] = _build_instance()
     repo.tasks[1] = _build_task(1, node_order=1, approver_user_id=9)
     repo.tasks[2] = _build_task(2, node_order=2, approver_user_id=10, status=ApprovalTaskStatus.APPROVED)
+    audit_log = AsyncMock()
     monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_task', repo.update_task)
     monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[]))
+    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', audit_log)
 
     result = await ApprovalCenterService.withdraw_instance(
         instance_id=1,
@@ -178,6 +180,7 @@ async def test_withdraw_instance_cancels_pending_tasks_and_records_log(monkeypat
     assert repo.tasks[2].status == ApprovalTaskStatus.APPROVED
     assert repo.action_logs[-1].action == 'withdrawn'
     assert result['status'] == ApprovalInstanceStatus.WITHDRAWN
+    audit_log.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -192,6 +195,7 @@ async def test_resubmit_instance_reopens_first_node_and_cancels_later_nodes(monk
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_task', repo.update_task)
     monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[]))
+    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
     result = await ApprovalCenterService.resubmit_instance(
         instance_id=1,
@@ -241,11 +245,17 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_scenario', AsyncMock(return_value=scenario))
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_route_rules', AsyncMock(return_value=[route]))
     monkeypatch.setattr(ApprovalQueryRepository, 'list_open_exceptions', AsyncMock(return_value=[exception]))
+    monkeypatch.setattr(
+        'bisheng.approval.domain.services.approval_scenario_admin_service.AuditLogDao.ainsert_v2',
+        AsyncMock(),
+    )
 
     scenarios = await ApprovalScenarioAdminService.list_scenarios(tenant_id=1)
     created = await ApprovalScenarioAdminService.create_scenario(
         tenant_id=1,
         payload={'scenario_code': 'menu_access_request', 'scenario_name': '菜单权限申请', 'enabled': True},
+        operator_user_id=1,
+        operator_user_name='admin',
     )
     routes = await ApprovalScenarioAdminService.list_routes(tenant_id=1, scenario_id=1)
     exceptions = await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=1)

@@ -4,6 +4,7 @@ from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.database.models.audit_log import AuditLogDao
 
 
 class ApprovalScenarioAdminService:
@@ -17,7 +18,14 @@ class ApprovalScenarioAdminService:
         return [row.model_dump() for row in rows]
 
     @classmethod
-    async def create_scenario(cls, *, tenant_id: int, payload: dict):
+    async def create_scenario(
+        cls,
+        *,
+        tenant_id: int,
+        payload: dict,
+        operator_user_id: int | None = None,
+        operator_user_name: str | None = None,
+    ):
         scenario_code = str(payload['scenario_code'])
         existing = await ApprovalScenarioRepository.get_scenario_by_code(tenant_id, scenario_code)
         if existing:
@@ -31,6 +39,17 @@ class ApprovalScenarioAdminService:
                 display_name=payload.get('display_name'),
             )
         )
+        if operator_user_id is not None:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=tenant_id,
+                operator_id=operator_user_id,
+                operator_tenant_id=tenant_id,
+                action='approval.scenario.create',
+                target_type='approval_scenario',
+                target_id=str(row.id),
+                metadata={'scenario_code': row.scenario_code, 'enabled': row.enabled},
+                operator_name=operator_user_name,
+            )
         return row.model_dump()
 
     @classmethod

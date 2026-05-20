@@ -41,7 +41,14 @@ async def list_scenarios(login_user: UserPayload = Depends(UserPayload.get_login
 @router.post('/scenarios')
 async def create_scenario(req: ScenarioUpsertReq, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.create_scenario(tenant_id=login_user.tenant_id, payload=req.model_dump()))
+    return resp_200(
+        await ApprovalScenarioAdminService.create_scenario(
+            tenant_id=login_user.tenant_id,
+            payload=req.model_dump(),
+            operator_user_id=login_user.user_id,
+            operator_user_name=login_user.user_name,
+        )
+    )
 
 
 @router.get('/scenarios/{scenario_id}/routes')
@@ -70,4 +77,3 @@ async def retry_exception(
             operator_user_id=login_user.user_id,
         )
     )
-

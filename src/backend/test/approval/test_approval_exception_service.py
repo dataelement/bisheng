@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -120,12 +121,13 @@ def _build_task(task_id: int, *, user_id: int, node_mode: str = 'or', status: st
 
 
 @pytest.mark.asyncio
-async def test_or_sign_approves_one_and_skips_other_tasks():
+async def test_or_sign_approves_one_and_skips_other_tasks(monkeypatch: pytest.MonkeyPatch):
     repo = FakeApprovalRepo()
     repo.instances[1] = _build_instance()
     repo.tasks[1] = _build_task(1, user_id=1001, node_mode='or')
     repo.tasks[2] = _build_task(2, user_id=1002, node_mode='or')
     service = ApprovalCenterService(instance_repository=repo)
+    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
     await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1')
 
@@ -138,12 +140,13 @@ async def test_or_sign_approves_one_and_skips_other_tasks():
 
 
 @pytest.mark.asyncio
-async def test_countersign_requires_all_tasks_to_approve():
+async def test_countersign_requires_all_tasks_to_approve(monkeypatch: pytest.MonkeyPatch):
     repo = FakeApprovalRepo()
     repo.instances[1] = _build_instance()
     repo.tasks[1] = _build_task(1, user_id=1001, node_mode='and')
     repo.tasks[2] = _build_task(2, user_id=1002, node_mode='and')
     service = ApprovalCenterService(instance_repository=repo)
+    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
     await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1')
     assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
@@ -153,12 +156,13 @@ async def test_countersign_requires_all_tasks_to_approve():
 
 
 @pytest.mark.asyncio
-async def test_reject_terminates_instance_and_cancels_siblings():
+async def test_reject_terminates_instance_and_cancels_siblings(monkeypatch: pytest.MonkeyPatch):
     repo = FakeApprovalRepo()
     repo.instances[1] = _build_instance()
     repo.tasks[1] = _build_task(1, user_id=1001)
     repo.tasks[2] = _build_task(2, user_id=1002)
     service = ApprovalCenterService(instance_repository=repo)
+    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
 
     await service.decide_task(task_id=1, action='reject', operator_user_id=1001, operator_user_name='u1', comment='reject')
 
@@ -309,6 +313,7 @@ async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
         payload_snapshot={'space_id': 12, 'applicant_user_id': 7},
     )
     service = ApprovalExceptionService(instance_repository=repo)
+    service._write_audit_log = AsyncMock()  # type: ignore[method-assign]
 
     class _SuccessHandler:
         async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:

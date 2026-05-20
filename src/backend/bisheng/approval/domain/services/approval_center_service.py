@@ -18,6 +18,7 @@ from bisheng.approval.domain.services.menu_access_handler import MenuAccessAppro
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import ApprovalGrantNotRevokableError
 from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.services.auth import LoginUser
 
@@ -203,6 +204,16 @@ class ApprovalCenterService:
                 detail={'reason': reason},
             )
         )
+        await cls._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            action='approval.instance.withdraw',
+            target_id=str(instance.id),
+            reason=reason,
+            metadata={'scenario_code': instance.scenario_code},
+            operator_name=operator_user_name,
+        )
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id),
@@ -361,6 +372,16 @@ class ApprovalCenterService:
                     detail={'comment': comment},
                 )
             )
+            await self.__class__._write_audit_log(
+                tenant_id=instance.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=instance.tenant_id,
+                action='approval.task.reject',
+                target_id=str(instance.id),
+                reason=comment,
+                metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
+                operator_name=operator_user_name,
+            )
             return
 
         task.status = ApprovalTaskStatus.APPROVED
@@ -376,6 +397,16 @@ class ApprovalCenterService:
                 operator_user_name=operator_user_name,
                 detail={'task_id': task.id, 'comment': comment},
             )
+        )
+        await self.__class__._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            action='approval.task.approve',
+            target_id=str(instance.id),
+            reason=comment,
+            metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
+            operator_name=operator_user_name,
         )
 
         if task.node_mode == 'or':
@@ -410,3 +441,28 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
+
+    @classmethod
+    async def _write_audit_log(
+        cls,
+        *,
+        tenant_id: int,
+        operator_user_id: int,
+        operator_tenant_id: int,
+        action: str,
+        target_id: str,
+        reason: str | None,
+        metadata: dict | None = None,
+        operator_name: str | None = None,
+    ) -> None:
+        await AuditLogDao.ainsert_v2(
+            tenant_id=tenant_id,
+            operator_id=operator_user_id,
+            operator_tenant_id=operator_tenant_id,
+            action=action,
+            target_type='approval_instance',
+            target_id=target_id,
+            reason=reason,
+            metadata=metadata,
+            operator_name=operator_name,
+        )
