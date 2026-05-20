@@ -111,6 +111,7 @@ const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
     label: '申请人身份',
     values: [
       { value: 'admin', label: '系统管理员' },
+      { value: 'tenant_admin', label: '租户管理员' },
       { value: 'dept_admin', label: '部门管理员' },
       { value: 'regular_user', label: '普通用户' },
     ],
