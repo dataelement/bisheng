@@ -2,12 +2,19 @@ kind: pipeline
 type: docker
 name: bisheng_deploy
 
+# =========================================
+# 触发条件
+# =========================================
 trigger:
   branch:
     - feat/2.5.0-sg
   event:
     - push
 
+# =========================================
+# 使用 Drone 默认 clone
+# depth: 1 提高 clone 速度
+# =========================================
 clone:
   depth: 1
 
@@ -15,7 +22,7 @@ steps:
 
   # =========================================
   # 前端镜像构建
-  # frontend 仍然使用镜像部署
+  # frontend 使用镜像部署
   # =========================================
   - name: build_frontend
 
@@ -29,13 +36,17 @@ steps:
 
     environment:
 
+      # Docker 仓库地址
       DOCKER_REGISTRY: 192.168.106.8:6082
 
+      # frontend 镜像仓库
       DOCKER_REPO: 192.168.106.8:6082/dataelement/bisheng-frontend
 
+      # Docker 用户名
       DOCKER_USER:
         from_secret: NEXUS_USER
 
+      # Docker 密码
       DOCKER_PASSWORD:
         from_secret: NEXUS_PASSWORD
 
@@ -45,25 +56,25 @@ steps:
 
       - echo "======= build frontend ======="
 
-      - echo "$DOCKER_PASSWORD" | docker login \
-          -u "$DOCKER_USER" \
-          --password-stdin \
-          $DOCKER_REGISTRY
+      - echo "当前版本: $VERSION"
 
+      # 安全登录 docker 仓库（修复版）
+      - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin $DOCKER_REGISTRY
+
+      # 进入前端目录
       - cd src/frontend
 
-      - docker build \
-          -t $DOCKER_REPO:$VERSION \
-          -t $DOCKER_REPO:latest \
-          .
+      # 构建 frontend 镜像
+      - docker build -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .
 
+      # 推送版本镜像
       - docker push $DOCKER_REPO:$VERSION
 
+      # 推送 latest 镜像
       - docker push $DOCKER_REPO:latest
 
   # =========================================
-  # backend 部署
-  # 使用源码映射方式
+  # backend 部署（源码映射）
   # =========================================
   - name: deploy_backend
 
@@ -72,11 +83,13 @@ steps:
 
     settings:
 
+      # 部署服务器
       host: 192.168.106.171
 
-      # 不建议 root
+      # 建议不要 root
       username: deploy
 
+      # SSH 私钥
       key:
         from_secret: SSH_KEY
 
@@ -94,23 +107,24 @@ steps:
 
         echo "======= reset local changes ======="
 
-        # 防止服务器有人改代码导致 pull 冲突
+        # 防止本地脏代码导致 pull 冲突
         git reset --hard HEAD
 
         echo "======= pull latest code ======="
 
+        # 拉取最新代码
         git pull origin feat/2.5.0-sg
 
         echo "======= migrate database ======="
 
-        docker compose -f docker/docker-compose.yml \
-          exec -T backend \
-          sh -lc "cd /app && alembic upgrade head"
+        # 执行数据库迁移
+        docker compose -f docker/docker-compose.yml exec -T backend \
+        sh -lc "cd /app && alembic upgrade head"
 
         echo "======= restart backend ======="
 
-        docker compose -f docker/docker-compose.yml \
-          restart backend backend_worker
+        # 重启 backend 服务
+        docker compose -f docker/docker-compose.yml restart backend backend_worker
 
   # =========================================
   # frontend 部署
@@ -143,19 +157,18 @@ steps:
 
         echo "======= login docker registry ======="
 
-        docker login 192.168.106.8:6082 \
-          -u ${NEXUS_USER} \
-          -p ${NEXUS_PASSWORD}
+        # 安全登录 docker 仓库（修复版）
+        echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USER" --password-stdin 192.168.106.8:6082
 
         echo "======= pull frontend image ======="
 
-        docker compose -f docker/docker-compose.yml \
-          pull frontend
+        # 拉取最新 frontend 镜像
+        docker compose -f docker/docker-compose.yml pull frontend
 
         echo "======= restart frontend ======="
 
-        docker compose -f docker/docker-compose.yml \
-          up -d frontend
+        # 重建 frontend 容器
+        docker compose -f docker/docker-compose.yml up -d frontend
 
     environment:
 
@@ -199,6 +212,7 @@ steps:
           }
         }
 
+    # 通知失败不影响流水线
     failure: ignore
 
     when:
@@ -206,6 +220,9 @@ steps:
         - success
         - failure
 
+# =========================================
+# volumes
+# =========================================
 volumes:
 
   - name: docker_sock
