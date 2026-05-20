@@ -83,6 +83,24 @@ class ApprovalScenarioRepository:
         return row
 
     @classmethod
+    async def get_flow_definition(cls, flow_definition_id: int) -> ApprovalFlowDefinition | None:
+        async with get_async_db_session() as session:
+            return await session.get(ApprovalFlowDefinition, flow_definition_id)
+
+    @classmethod
+    async def list_flow_definitions(cls, tenant_id: int, scenario_id: int) -> list[ApprovalFlowDefinition]:
+        statement = (
+            select(ApprovalFlowDefinition)
+            .where(
+                ApprovalFlowDefinition.tenant_id == tenant_id,
+                ApprovalFlowDefinition.scenario_id == scenario_id,
+            )
+            .order_by(ApprovalFlowDefinition.id.desc())
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def create_flow_version(cls, row: ApprovalFlowVersion) -> ApprovalFlowVersion:
         async with get_async_db_session() as session:
             session.add(row)

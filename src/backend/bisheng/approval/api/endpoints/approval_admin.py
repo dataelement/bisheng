@@ -36,6 +36,21 @@ class RouteCreateReq(BaseModel):
     match_config: dict = Field(default_factory=dict)
 
 
+class FlowCreateReq(BaseModel):
+    flow_code: str
+    flow_name: str
+    is_active: bool = True
+
+
+class NodeCreateReq(BaseModel):
+    node_code: str
+    node_name: str
+    node_order: int = 0
+    node_mode: str
+    approver_config: dict = Field(default_factory=dict)
+    extra_config: dict = Field(default_factory=dict)
+
+
 def _ensure_admin(login_user: UserPayload) -> None:
     if not login_user.is_admin():
         raise PermissionError('admin only')
@@ -99,6 +114,50 @@ async def create_route(
         await ApprovalScenarioAdminService.create_route(
             tenant_id=login_user.tenant_id,
             scenario_id=scenario_id,
+            payload=req.model_dump(),
+        )
+    )
+
+
+@router.get('/scenarios/{scenario_id}/flows')
+async def list_flows(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    return resp_200(await ApprovalScenarioAdminService.list_flows(tenant_id=login_user.tenant_id, scenario_id=scenario_id))
+
+
+@router.post('/scenarios/{scenario_id}/flows')
+async def create_flow(
+    scenario_id: int,
+    req: FlowCreateReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.create_flow(
+            tenant_id=login_user.tenant_id,
+            scenario_id=scenario_id,
+            payload=req.model_dump(),
+        )
+    )
+
+
+@router.get('/flows/{flow_definition_id}/nodes')
+async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    return resp_200(await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id))
+
+
+@router.post('/flows/{flow_definition_id}/nodes')
+async def create_node(
+    flow_definition_id: int,
+    req: NodeCreateReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.create_node(
+            tenant_id=login_user.tenant_id,
+            flow_definition_id=flow_definition_id,
             payload=req.model_dump(),
         )
     )

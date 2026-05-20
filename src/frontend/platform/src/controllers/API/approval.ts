@@ -22,6 +22,21 @@ export interface ApprovalRouteItem {
   enabled?: boolean;
 }
 
+export interface ApprovalFlowItem {
+  id: number;
+  flow_code?: string;
+  flow_name?: string;
+  is_active?: boolean;
+}
+
+export interface ApprovalNodeItem {
+  id: number;
+  node_code?: string;
+  node_name?: string;
+  node_order?: number;
+  node_mode?: string;
+}
+
 export interface ApprovalExceptionItem {
   id: number;
   exception_type: string;
@@ -77,6 +92,39 @@ export async function createApprovalRouteApi(
 
 export async function listApprovalExceptionsApi(): Promise<ApprovalExceptionItem[]> {
   return await axios.get("/api/v1/approval/admin/exceptions");
+}
+
+export async function listApprovalFlowsApi(scenarioId: number): Promise<ApprovalFlowItem[]> {
+  return await axios.get(`/api/v1/approval/admin/scenarios/${scenarioId}/flows`);
+}
+
+export async function createApprovalFlowApi(
+  scenarioId: number,
+  data: {
+    flow_code: string;
+    flow_name: string;
+    is_active?: boolean;
+  },
+): Promise<ApprovalFlowItem> {
+  return await axios.post(`/api/v1/approval/admin/scenarios/${scenarioId}/flows`, data);
+}
+
+export async function listApprovalNodesApi(flowDefinitionId: number): Promise<ApprovalNodeItem[]> {
+  return await axios.get(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`);
+}
+
+export async function createApprovalNodeApi(
+  flowDefinitionId: number,
+  data: {
+    node_code: string;
+    node_name: string;
+    node_order?: number;
+    node_mode: string;
+    approver_config?: Record<string, any>;
+    extra_config?: Record<string, any>;
+  },
+): Promise<ApprovalNodeItem> {
+  return await axios.post(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`, data);
 }
 
 export async function retryApprovalExceptionApi(

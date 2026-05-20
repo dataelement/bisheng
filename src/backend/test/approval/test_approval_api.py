@@ -121,6 +121,22 @@ def test_admin_approval_endpoints():
         new_callable=AsyncMock,
         return_value={'id': 10, 'route_name': '默认流程', 'route_type': 'flow'},
     ), patch(
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_flows',
+        new_callable=AsyncMock,
+        return_value=[{'id': 12, 'flow_code': 'menu_default', 'flow_name': '菜单默认流程'}],
+    ), patch(
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.create_flow',
+        new_callable=AsyncMock,
+        return_value={'id': 12, 'flow_code': 'menu_default', 'flow_name': '菜单默认流程'},
+    ), patch(
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_nodes',
+        new_callable=AsyncMock,
+        return_value=[{'id': 15, 'node_code': 'n1', 'node_name': '一级审批', 'node_mode': 'or'}],
+    ), patch(
+        'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.create_node',
+        new_callable=AsyncMock,
+        return_value={'id': 15, 'node_code': 'n1', 'node_name': '一级审批', 'node_mode': 'or'},
+    ), patch(
         'bisheng.approval.api.endpoints.approval_admin.ApprovalScenarioAdminService.list_open_exceptions',
         new_callable=AsyncMock,
         return_value=[{'id': 88, 'exception_type': 'route_missing'}],
@@ -136,6 +152,10 @@ def test_admin_approval_endpoints():
             assert c.put('/api/v1/approval/admin/scenarios/1', json={'enabled': True}).json()['data']['enabled'] is True
             assert c.get('/api/v1/approval/admin/scenarios/1/routes').json()['data'][0]['id'] == 9
             assert c.post('/api/v1/approval/admin/scenarios/1/routes', json={'route_name': '默认流程', 'route_type': 'flow'}).json()['data']['id'] == 10
+            assert c.get('/api/v1/approval/admin/scenarios/1/flows').json()['data'][0]['id'] == 12
+            assert c.post('/api/v1/approval/admin/scenarios/1/flows', json={'flow_code': 'menu_default', 'flow_name': '菜单默认流程'}).json()['data']['id'] == 12
+            assert c.get('/api/v1/approval/admin/flows/12/nodes').json()['data'][0]['id'] == 15
+            assert c.post('/api/v1/approval/admin/flows/12/nodes', json={'node_code': 'n1', 'node_name': '一级审批', 'node_mode': 'or'}).json()['data']['id'] == 15
             assert c.get('/api/v1/approval/admin/exceptions').json()['data'][0]['id'] == 88
             assert c.post('/api/v1/approval/admin/exceptions/88/retry', json={'action': 'retry'}).json()['data']['status'] == 'resolved'
             assert c.post('/api/v1/approval/admin/exceptions/88/retry', json={'action': 'assign_approvers', 'approver_user_ids': [101, 102]}).json()['data']['status'] == 'resolved'

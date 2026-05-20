@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
+  createApprovalFlowApi,
+  createApprovalNodeApi,
   createApprovalRouteApi,
   createApprovalScenarioApi,
+  listApprovalFlowsApi,
   listApprovalExceptionsApi,
+  listApprovalNodesApi,
   listApprovalRoutesApi,
   listApprovalScenarioPresetsApi,
   listApprovalScenariosApi,
   retryApprovalExceptionApi,
   updateApprovalScenarioApi,
   type ApprovalExceptionItem,
+  type ApprovalFlowItem,
+  type ApprovalNodeItem,
   type ApprovalRouteItem,
   type ApprovalScenarioItem,
   type ApprovalScenarioPreset,
@@ -50,11 +56,19 @@ export default function ApprovalPage() {
   const [presets, setPresets] = useState<ApprovalScenarioPreset[]>([]);
   const [scenarios, setScenarios] = useState<ApprovalScenarioItem[]>([]);
   const [routes, setRoutes] = useState<ApprovalRouteItem[]>([]);
+  const [flows, setFlows] = useState<ApprovalFlowItem[]>([]);
+  const [nodes, setNodes] = useState<ApprovalNodeItem[]>([]);
   const [exceptions, setExceptions] = useState<ApprovalExceptionItem[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
+  const [selectedFlowId, setSelectedFlowId] = useState<number | null>(null);
   const [selectedPresetCode, setSelectedPresetCode] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeType, setRouteType] = useState("flow");
+  const [flowName, setFlowName] = useState("");
+  const [flowCode, setFlowCode] = useState("");
+  const [nodeName, setNodeName] = useState("");
+  const [nodeCode, setNodeCode] = useState("");
+  const [nodeMode, setNodeMode] = useState("or");
   const [exceptionApproverInputs, setExceptionApproverInputs] = useState<Record<number, string>>({});
 
   const selectedPreset = useMemo(
@@ -65,6 +79,18 @@ export default function ApprovalPage() {
   const loadRoutes = async (scenarioId: number) => {
     setRoutes(await listApprovalRoutesApi(scenarioId));
     setSelectedScenarioId(scenarioId);
+  };
+
+  const loadFlows = async (scenarioId: number) => {
+    const flowList = await listApprovalFlowsApi(scenarioId);
+    setFlows(flowList);
+    const nextFlowId = selectedFlowId && flowList.some((item) => item.id === selectedFlowId) ? selectedFlowId : flowList[0]?.id ?? null;
+    setSelectedFlowId(nextFlowId);
+    if (nextFlowId) {
+      setNodes(await listApprovalNodesApi(nextFlowId));
+    } else {
+      setNodes([]);
+    }
   };
 
   const loadPage = async () => {
@@ -80,9 +106,11 @@ export default function ApprovalPage() {
       setExceptions(exceptionList);
       const initialScenarioId = selectedScenarioId ?? scenarioList[0]?.id ?? null;
       if (initialScenarioId) {
-        await loadRoutes(initialScenarioId);
+        await Promise.all([loadRoutes(initialScenarioId), loadFlows(initialScenarioId)]);
       } else {
         setRoutes([]);
+        setFlows([]);
+        setNodes([]);
       }
       if (!selectedPresetCode && presetList[0]?.scenario_code) {
         setSelectedPresetCode(presetList[0].scenario_code);
@@ -214,6 +242,56 @@ export default function ApprovalPage() {
         title: t("prompt"),
         variant: "error",
         description: String(error || t("approvalPage.routeCreateFailed")),
+      });
+    }
+  };
+
+  const handleCreateFlow = async () => {
+    if (!selectedScenarioId || !flowName.trim() || !flowCode.trim()) return;
+    try {
+      await createApprovalFlowApi(selectedScenarioId, {
+        flow_code: flowCode.trim(),
+        flow_name: flowName.trim(),
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.flowCreateSuccess"),
+      });
+      setFlowName("");
+      setFlowCode("");
+      await loadFlows(selectedScenarioId);
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.flowCreateFailed")),
+      });
+    }
+  };
+
+  const handleCreateNode = async () => {
+    if (!selectedFlowId || !nodeName.trim() || !nodeCode.trim()) return;
+    try {
+      await createApprovalNodeApi(selectedFlowId, {
+        node_code: nodeCode.trim(),
+        node_name: nodeName.trim(),
+        node_order: nodes.length + 1,
+        node_mode: nodeMode,
+      });
+      toast({
+        title: t("prompt"),
+        variant: "success",
+        description: t("approvalPage.nodeCreateSuccess"),
+      });
+      setNodeName("");
+      setNodeCode("");
+      setNodes(await listApprovalNodesApi(selectedFlowId));
+    } catch (error: any) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: String(error || t("approvalPage.nodeCreateFailed")),
       });
     }
   };
@@ -358,7 +436,10 @@ export default function ApprovalPage() {
                   <button
                     key={scenario.id}
                     type="button"
-                    onClick={() => void loadRoutes(scenario.id)}
+                    onClick={() => {
+                      void loadRoutes(scenario.id);
+                      void loadFlows(scenario.id);
+                    }}
                     className={`flex w-full flex-col rounded-lg border px-4 py-3 text-left transition-colors ${
                       active
                         ? "border-primary bg-background-main-content"
@@ -440,6 +521,125 @@ export default function ApprovalPage() {
                   </div>
                   <div className="mt-1 text-xs text-text-secondary">
                     {route.route_type || "--"} · {route.enabled ? t("approvalPage.enabled") : t("approvalPage.disabled")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
+        <SectionCard title={t("approvalPage.flowTitle")} description={t("approvalPage.flowDesc")}>
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[220px] flex-1 flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.flowNameLabel")}</span>
+              <input
+                value={flowName}
+                onChange={(event) => setFlowName(event.target.value)}
+                placeholder={t("approvalPage.flowNamePlaceholder")}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              />
+            </label>
+            <label className="flex min-w-[220px] flex-1 flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.flowCodeLabel")}</span>
+              <input
+                value={flowCode}
+                onChange={(event) => setFlowCode(event.target.value)}
+                placeholder={t("approvalPage.flowCodePlaceholder")}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={!selectedScenarioId || !flowName.trim() || !flowCode.trim()}
+              onClick={() => void handleCreateFlow()}
+              className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {t("approvalPage.createFlow")}
+            </button>
+          </div>
+          {!flows.length ? (
+            <EmptyBlock text={t("approvalPage.emptyFlows")} />
+          ) : (
+            <div className="space-y-3">
+              {flows.map((flow) => (
+                <button
+                  key={flow.id}
+                  type="button"
+                  onClick={async () => {
+                    setSelectedFlowId(flow.id);
+                    setNodes(await listApprovalNodesApi(flow.id));
+                  }}
+                  className={`flex w-full flex-col rounded-lg border px-4 py-3 text-left transition-colors ${
+                    flow.id === selectedFlowId
+                      ? "border-primary bg-background-main-content"
+                      : "border-border-subtle bg-background-primary hover:bg-background-main-content"
+                  }`}
+                >
+                  <span className="text-sm font-medium text-text-primary">
+                    {flow.flow_name || flow.flow_code || t("approvalPage.flowFallback")}
+                  </span>
+                  <span className="mt-1 text-xs text-text-secondary">
+                    {flow.flow_code || "--"} · {flow.is_active ? t("approvalPage.enabled") : t("approvalPage.disabled")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title={t("approvalPage.nodeTitle")} description={t("approvalPage.nodeDesc")}>
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[180px] flex-1 flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.nodeNameLabel")}</span>
+              <input
+                value={nodeName}
+                onChange={(event) => setNodeName(event.target.value)}
+                placeholder={t("approvalPage.nodeNamePlaceholder")}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              />
+            </label>
+            <label className="flex min-w-[180px] flex-1 flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.nodeCodeLabel")}</span>
+              <input
+                value={nodeCode}
+                onChange={(event) => setNodeCode(event.target.value)}
+                placeholder={t("approvalPage.nodeCodePlaceholder")}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              />
+            </label>
+            <label className="flex min-w-[160px] flex-col gap-2 text-sm text-text-secondary">
+              <span>{t("approvalPage.nodeModeLabel")}</span>
+              <select
+                value={nodeMode}
+                onChange={(event) => setNodeMode(event.target.value)}
+                className="h-10 rounded-lg border border-border-subtle bg-background-primary px-3 text-text-primary outline-none"
+              >
+                <option value="or">{t("approvalPage.nodeModeOr")}</option>
+                <option value="and">{t("approvalPage.nodeModeAnd")}</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!selectedFlowId || !nodeName.trim() || !nodeCode.trim()}
+              onClick={() => void handleCreateNode()}
+              className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {t("approvalPage.createNode")}
+            </button>
+          </div>
+          {!nodes.length ? (
+            <EmptyBlock text={t("approvalPage.emptyNodes")} />
+          ) : (
+            <div className="space-y-3">
+              {nodes.map((node) => (
+                <div key={node.id} className="rounded-lg border border-border-subtle bg-background-main-content px-4 py-3">
+                  <div className="text-sm font-medium text-text-primary">
+                    {node.node_name || node.node_code || t("approvalPage.nodeFallback")} #{node.id}
+                  </div>
+                  <div className="mt-1 text-xs text-text-secondary">
+                    {node.node_code || "--"} · {node.node_mode || "--"} · #{node.node_order || "--"}
                   </div>
                 </div>
               ))}

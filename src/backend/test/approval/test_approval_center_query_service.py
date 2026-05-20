@@ -14,7 +14,13 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
-from bisheng.approval.domain.models.approval_scenario import ApprovalRouteRule, ApprovalScenario
+from bisheng.approval.domain.models.approval_scenario import (
+    ApprovalFlowDefinition,
+    ApprovalFlowVersion,
+    ApprovalNodeDefinition,
+    ApprovalRouteRule,
+    ApprovalScenario,
+)
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
@@ -233,6 +239,33 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         flow_definition_id=3,
         match_config={},
     )
+    flow = ApprovalFlowDefinition(
+        id=3,
+        tenant_id=1,
+        scenario_id=1,
+        flow_code='menu_default',
+        flow_name='菜单默认流程',
+        is_active=True,
+    )
+    version = ApprovalFlowVersion(
+        id=4,
+        tenant_id=1,
+        flow_definition_id=3,
+        version_no=1,
+        is_active=True,
+        definition_snapshot={},
+    )
+    node = ApprovalNodeDefinition(
+        id=5,
+        tenant_id=1,
+        flow_version_id=4,
+        node_code='n1',
+        node_name='一级审批',
+        node_order=1,
+        node_mode='or',
+        approver_config={'type': 'tenant_admin'},
+        extra_config={},
+    )
     exception = ApprovalException(
         id=8,
         tenant_id=1,
@@ -249,6 +282,13 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     monkeypatch.setattr(ApprovalScenarioRepository, 'update_scenario', AsyncMock(return_value=scenario))
     monkeypatch.setattr(ApprovalScenarioRepository, 'create_route_rule', AsyncMock(return_value=route))
     monkeypatch.setattr(ApprovalScenarioRepository, 'list_route_rules', AsyncMock(return_value=[route]))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'create_flow_definition', AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'create_flow_version', AsyncMock(return_value=version))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'list_flow_definitions', AsyncMock(return_value=[flow]))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'get_active_flow_version', AsyncMock(return_value=version))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'create_node_definition', AsyncMock(return_value=node))
+    monkeypatch.setattr(ApprovalScenarioRepository, 'list_node_definitions', AsyncMock(return_value=[node]))
     monkeypatch.setattr(ApprovalQueryRepository, 'list_open_exceptions', AsyncMock(return_value=[exception]))
     monkeypatch.setattr(
         'bisheng.approval.domain.services.approval_scenario_admin_service.AuditLogDao.ainsert_v2',
@@ -273,6 +313,18 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         payload={'route_name': '默认流程', 'route_type': 'flow', 'sort_order': 1, 'match_config': {}},
     )
     routes = await ApprovalScenarioAdminService.list_routes(tenant_id=1, scenario_id=1)
+    created_flow = await ApprovalScenarioAdminService.create_flow(
+        tenant_id=1,
+        scenario_id=1,
+        payload={'flow_code': 'menu_default', 'flow_name': '菜单默认流程'},
+    )
+    flows = await ApprovalScenarioAdminService.list_flows(tenant_id=1, scenario_id=1)
+    created_node = await ApprovalScenarioAdminService.create_node(
+        tenant_id=1,
+        flow_definition_id=3,
+        payload={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+    )
+    nodes = await ApprovalScenarioAdminService.list_nodes(tenant_id=1, flow_definition_id=3)
     exceptions = await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=1)
 
     assert scenarios[0]['scenario_code'] == 'menu_access_request'
@@ -280,4 +332,8 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     assert updated['id'] == 1
     assert created_route['route_name'] == '默认流程'
     assert routes[0]['route_type'] == 'flow'
+    assert created_flow['flow_code'] == 'menu_default'
+    assert flows[0]['flow_name'] == '菜单默认流程'
+    assert created_node['node_code'] == 'n1'
+    assert nodes[0]['node_name'] == '一级审批'
     assert exceptions[0]['exception_type'] == 'route_missing'
