@@ -1,24 +1,40 @@
 kind: pipeline
 type: docker
-name: bisheng_deploy
+name: feat_cicd
 
-# =========================================
-# 触发条件
-# =========================================
-trigger:
-  branch:
-    - feat/2.5.0-sg
-
-  event:
-    - push
-
-# =========================================
-# 使用 Drone 默认 clone
-# =========================================
+# 禁用 Drone 默认 clone
 clone:
-  depth: 1
+  disable: true
 
 steps:
+
+  # =========================================
+  # 手动 clone（保留你原版）
+  # 因为默认 clone 不走代理
+  # =========================================
+  - name: clone
+
+    image: alpine/git
+
+    pull: if-not-exists
+
+    environment:
+
+      http_proxy:
+        from_secret: PROXY
+
+      https_proxy:
+        from_secret: PROXY
+
+    commands:
+
+      - 'git config --global http.version HTTP/1.1'
+
+      - 'git config --global core.compression 0'
+
+      - 'git clone https://github.com/dataelement/bisheng.git .'
+
+      - 'git checkout $DRONE_COMMIT'
 
   # =========================================
   # frontend 镜像构建
@@ -32,35 +48,31 @@ steps:
     privileged: true
 
     volumes:
-      - name: docker_sock
+      - name: socket
         path: /var/run/docker.sock
 
     environment:
 
-      # Docker 仓库地址
-      DOCKER_REGISTRY: 192.168.106.8:6082
-
-      # frontend 镜像仓库
-      DOCKER_REPO: 192.168.106.8:6082/dataelement/bisheng-frontend
-
-      # Docker 用户
-      DOCKER_USER:
-        from_secret: NEXUS_USER
-
-      # Docker 密码
-      DOCKER_PASSWORD:
-        from_secret: NEXUS_PASSWORD
-
-      # 代理
       http_proxy:
         from_secret: PROXY
 
       https_proxy:
         from_secret: PROXY
 
+      no_proxy: 192.168.106.8
+
+      DOCKER_REGISTRY: 192.168.106.8:6082
+
+      DOCKER_REPO: 192.168.106.8:6082/dataelement/bisheng-frontend
+
+      DOCKER_USER:
+        from_secret: NEXUS_USER
+
+      DOCKER_PASSWORD:
+        from_secret: NEXUS_PASSWORD
+
     commands:
 
-      # 生成版本号
       - 'VERSION=$(echo $DRONE_COMMIT_SHA | cut -c1-8)'
 
       - 'echo "======= build frontend ======="'
@@ -70,15 +82,12 @@ steps:
       # 登录 docker 仓库
       - 'echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin $DOCKER_REGISTRY'
 
-      # 进入 frontend 目录
       - 'cd src/frontend'
 
       # 构建 frontend 镜像
-      # 这里必须传递 build-arg
-      # 否则 docker build 内部无法走代理
       - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .'
 
-      # 推送 frontend 镜像
+      # 推送镜像
       - 'docker push $DOCKER_REPO:$VERSION'
 
       - 'docker push $DOCKER_REPO:latest'
@@ -94,13 +103,10 @@ steps:
 
     settings:
 
-      # 部署服务器
       host: 192.168.106.171
 
-      # SSH 用户
       username: root
 
-      # SSH 密码
       password:
         from_secret: sshpwd
 
@@ -114,27 +120,27 @@ steps:
 
         echo "======= deploy backend ======="
 
+        export https_proxy=http://118.195.232.223:39995
+        export http_proxy=http://118.195.232.223:39995
+        export all_proxy=socks5://118.195.232.223:39995
+
         cd /opt/code/bisheng
 
         echo "======= reset local changes ======="
 
-        # 防止本地改动导致 pull 冲突
         git reset --hard HEAD
 
         echo "======= pull latest code ======="
 
-        # 拉取最新代码
         git pull origin feat/2.5.0-sg
 
         echo "======= migrate database ======="
 
-        # 数据库迁移
         docker compose -f docker/docker-compose.yml exec -T backend \
         sh -lc "cd /app && alembic upgrade head"
 
         echo "======= restart backend ======="
 
-        # 重启 backend
         docker compose -f docker/docker-compose.yml restart backend backend_worker
 
   # =========================================
@@ -156,13 +162,10 @@ steps:
 
     settings:
 
-      # 部署服务器
       host: 192.168.106.171
 
-      # SSH 用户
       username: root
 
-      # SSH 密码
       password:
         from_secret: sshpwd
 
@@ -180,21 +183,22 @@ steps:
 
         echo "======= deploy frontend ======="
 
+        export https_proxy=http://118.195.232.223:39995
+        export http_proxy=http://118.195.232.223:39995
+        export all_proxy=socks5://118.195.232.223:39995
+
         cd /opt/code/bisheng
 
         echo "======= login docker registry ======="
 
-        # 登录 docker 仓库
         echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USER" --password-stdin 192.168.106.8:6082
 
         echo "======= pull frontend image ======="
 
-        # 拉取 frontend 镜像
         docker compose -f docker/docker-compose.yml pull frontend
 
         echo "======= restart frontend ======="
 
-        # 重建 frontend
         docker compose -f docker/docker-compose.yml up -d frontend
 
   # =========================================
@@ -234,7 +238,6 @@ steps:
           }
         }
 
-    # 通知失败不影响流水线
     failure: ignore
 
     when:
@@ -242,12 +245,17 @@ steps:
         - success
         - failure
 
-# =========================================
-# volumes
-# =========================================
+trigger:
+
+  branch:
+    - feat/2.5.0-sg
+
+  event:
+    - push
+
 volumes:
 
-  - name: docker_sock
+  - name: socket
 
     host:
       path: /var/run/docker.sock
