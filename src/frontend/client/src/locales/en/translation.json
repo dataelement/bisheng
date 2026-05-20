@@ -428,6 +428,7 @@
   "com_menu_unavailable_apply_hint": "Need access to {{menu}}? Submit a menu access request.",
   "com_menu_unavailable_apply_success": "Menu access request submitted",
   "com_menu_unavailable_apply_failed": "Failed to submit menu access request. Please try again later.",
+  "com_approval_action_resubmit": "Resubmit",
   "com_msg_source_no_permission": "Due to insufficient permissions, content you cannot view has been excluded from this answer",
   "com_msg_source_reference": "Reference",
   "com_nav_2fa": "Two-Factor Authentication (2FA)",

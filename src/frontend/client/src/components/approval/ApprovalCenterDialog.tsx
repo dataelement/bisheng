@@ -6,6 +6,7 @@ import {
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
   revokeMenuAccessGrantApi,
+  resubmitApprovalInstanceApi,
   type ApprovalCenterTab,
   type ApprovalInstanceDetail,
   type ApprovalInstanceItem,
@@ -243,6 +244,27 @@ export function ApprovalCenterDialog({
     }
   };
 
+  const runResubmit = async () => {
+    if (!selectedInstanceId) return;
+    setActionLoading(true);
+    try {
+      const detail = await resubmitApprovalInstanceApi(selectedInstanceId, {});
+      setRequestDetail(detail);
+      await loadRequests(selectedInstanceId);
+      showToast({
+        message: localize("com_approval_toast_success"),
+        severity: NotificationSeverity.SUCCESS,
+      });
+    } catch {
+      showToast({
+        message: localize("com_approval_toast_failed"),
+        severity: NotificationSeverity.INFO,
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const listItems = activeTab === "my_tasks" ? taskItems : requestItems;
   const selectedId = activeTab === "my_tasks" ? selectedTaskId : selectedInstanceId;
   const selectedTitle = activeTab === "my_tasks"
@@ -253,6 +275,7 @@ export function ApprovalCenterDialog({
     : getStatusText(localize, requestDetail?.status);
   const canApproveTask = activeTab === "my_tasks" && String(taskDetail?.status || "").toLowerCase() === "pending";
   const canWithdrawRequest = activeTab === "my_requests" && String(requestDetail?.status || "").toLowerCase() === "pending";
+  const canResubmitRequest = activeTab === "my_requests" && String(requestDetail?.status || "").toLowerCase() === "rejected";
   const canRevokeGrant =
     activeTab === "my_requests" &&
     String(requestDetail?.scenario_code || "").toLowerCase() === "menu_access_request" &&
@@ -423,6 +446,16 @@ export function ApprovalCenterDialog({
                         onClick={() => void runWithdraw()}
                       >
                         {localize("com_approval_action_withdraw")}
+                      </button>
+                    )}
+                    {canResubmitRequest && (
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        className="rounded-lg border border-[#722ed1] px-4 py-2 text-[14px] text-[#722ed1] hover:bg-[#f9f0ff] disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => void runResubmit()}
+                      >
+                        {localize("com_approval_action_resubmit")}
                       </button>
                     )}
                     {canRevokeGrant && (

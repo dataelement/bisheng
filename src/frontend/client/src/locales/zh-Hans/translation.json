@@ -416,6 +416,7 @@
   "com_menu_unavailable_apply_hint": "如需访问{{menu}}，可提交菜单权限申请。",
   "com_menu_unavailable_apply_success": "菜单权限申请已提交",
   "com_menu_unavailable_apply_failed": "菜单权限申请失败，请稍后重试",
+  "com_approval_action_resubmit": "重新提交",
   "com_msg_source_no_permission": "因权限不足，该答案剔除了无权查看的内容",
   "com_msg_source_reference": "参考来源",
   "com_nav_admin_panel": "管理后台",
