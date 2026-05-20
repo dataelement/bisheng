@@ -4,11 +4,11 @@ WORKDIR /app
 
 COPY ./ ./
 
-# 生成并安装依赖
+# 从 uv.lock 导出并安装依赖，避免构建时重新解析到不兼容版本。
 # dmPython / dmSQLAlchemy / dmAsync 在 Linux 上由 pyproject.toml 自动包含。
 # dmPython 安装时会附带 dmssl 包，其中已包含所需的原生 .so 文件，
 # 无需额外安装达梦客户端或下载 DPI 驱动包。
-RUN uv pip compile pyproject.toml --upgrade --output-file requirements.txt && \
+RUN uv export --quiet --frozen --no-dev --format requirements.txt --output-file requirements.txt && \
     uv pip install -r requirements.txt --system --no-cache-dir && \
     uv cache clean && \
     rm -f requirements.txt

@@ -15,6 +15,25 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 logger = logging.getLogger(__name__)
 
 
+def _patch_aiomysql_pre_ping() -> None:
+    """修正 SQLAlchemy aiomysql pre-ping 的 ping 参数调用。"""
+    try:
+        from sqlalchemy.dialects.mysql.aiomysql import MySQLDialect_aiomysql
+    except ImportError:
+        return
+
+    if getattr(MySQLDialect_aiomysql, '_bisheng_pre_ping_patched', False):
+        return
+
+    def do_ping(self, dbapi_connection):
+        # aiomysql 的 SQLAlchemy 适配层要求显式传入 reconnect 参数。
+        dbapi_connection.ping(False)
+        return True
+
+    MySQLDialect_aiomysql.do_ping = do_ping
+    MySQLDialect_aiomysql._bisheng_pre_ping_patched = True
+
+
 class DatabaseConnectionManager:
     """Database Connection Manager
 
@@ -121,6 +140,9 @@ class DatabaseConnectionManager:
 
             # Remove Synchronization Engine Specific Configuration
             config.pop('poolclass', None)
+
+            if 'mysql+aiomysql' in self.async_database_url:
+                _patch_aiomysql_pre_ping()
 
             self._async_engine = create_async_engine(
                 self.async_database_url,

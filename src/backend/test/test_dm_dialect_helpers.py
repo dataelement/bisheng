@@ -413,3 +413,30 @@ class TestConnectionManagerUrlConversion:
         from bisheng.core.database.connection import DatabaseConnectionManager
         url = "dm+dmPython://SYSDBA:pass@192.168.107.9:5236"
         assert DatabaseConnectionManager._dm_sync_url(url) == url
+
+    def test_mysql_async_pre_ping_passes_reconnect_false(self):
+        import asyncio
+
+        from sqlalchemy.dialects.mysql.aiomysql import MySQLDialect_aiomysql
+
+        from bisheng.core.database.connection import DatabaseConnectionManager
+
+        class PingRequiresReconnect:
+            def __init__(self):
+                self.calls = []
+
+            def ping(self, reconnect):
+                self.calls.append(reconnect)
+
+        mgr = DatabaseConnectionManager("mysql+pymysql://user:pass@localhost/db")
+        engine = mgr.async_engine
+        try:
+            dialect = MySQLDialect_aiomysql()
+            dialect.__dict__['_send_false_to_ping'] = False
+            connection = PingRequiresReconnect()
+
+            dialect.do_ping(connection)
+
+            assert connection.calls == [False]
+        finally:
+            asyncio.run(engine.dispose())

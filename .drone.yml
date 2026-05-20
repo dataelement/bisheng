@@ -281,26 +281,26 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - docker build -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
-#  - name: ssh deploy
-#    image: appleboy/drone-ssh
-#    pull: if-not-exists
-#    settings:
-#      host: 192.168.106.171
-#      username: root
-#      password:
-#        from_secret: sshpwd
-#      port: 22
-#      command_timeout: 10m
-#      script: |
-#        echo "=======同步 171 源码======="
-#        cd /opt/code/bisheng
-#        git pull
-#        docker-compose -f ./docker/docker-compose.yml up -d
-#        sleep 15
-#        echo "=======执行数据库迁移======="
-#        docker exec bisheng-backend sh -lc "cd /app && (alembic upgrade heads || alembic upgrade head)"
-#        echo "=======迁移后再次重启======="
-#        docker-compose restart backend backend_worker
+  - name: ssh deploy
+    image: appleboy/drone-ssh
+    pull: if-not-exists
+    settings:
+      host: 192.168.106.171
+      username: root
+      password:
+        from_secret: sshpwd
+      port: 22
+      command_timeout: 10m
+      script: |
+        echo "=======同步 171 源码======="
+        cd /opt/code/bisheng
+        git pull
+        docker-compose -f ./docker/docker-compose.yml up -d
+        sleep 15
+        echo "=======执行数据库迁移======="
+        docker exec bisheng-backend sh -lc "cd /app && (alembic upgrade heads || alembic upgrade head)"
+        echo "=======迁移后再次重启======="
+        docker-compose restart backend backend_worker
 
 #  - name: ssh deploy frontend
 #    image: appleboy/drone-ssh
