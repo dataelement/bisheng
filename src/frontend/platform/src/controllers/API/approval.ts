@@ -28,6 +28,7 @@ export interface ApprovalExceptionItem {
   instance_id?: number;
   status?: string;
   create_time?: string;
+  detail?: Record<string, any>;
 }
 
 export async function listApprovalScenarioPresetsApi(): Promise<ApprovalScenarioPreset[]> {
@@ -78,6 +79,15 @@ export async function listApprovalExceptionsApi(): Promise<ApprovalExceptionItem
   return await axios.get("/api/v1/approval/admin/exceptions");
 }
 
-export async function retryApprovalExceptionApi(exceptionId: number, action = "retry"): Promise<Record<string, any>> {
-  return await axios.post(`/api/v1/approval/admin/exceptions/${exceptionId}/retry`, { action });
+export async function retryApprovalExceptionApi(
+  exceptionId: number,
+  payload: {
+    action?: string;
+    approver_user_ids?: number[];
+  } = {},
+): Promise<Record<string, any>> {
+  return await axios.post(`/api/v1/approval/admin/exceptions/${exceptionId}/retry`, {
+    action: payload.action ?? "retry",
+    approver_user_ids: payload.approver_user_ids ?? [],
+  });
 }

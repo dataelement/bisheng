@@ -25,6 +25,7 @@ class ScenarioUpdateReq(BaseModel):
 
 class ExceptionRetryReq(BaseModel):
     action: str = Field(default='retry')
+    approver_user_ids: list[int] = Field(default_factory=list)
 
 
 class RouteCreateReq(BaseModel):
@@ -121,5 +122,6 @@ async def retry_exception(
             exception_id=exception_id,
             action=req.action,
             operator_user_id=login_user.user_id,
+            approver_user_ids=req.approver_user_ids,
         )
     )

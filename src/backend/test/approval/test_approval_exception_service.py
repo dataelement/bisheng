@@ -16,6 +16,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
+from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
 
@@ -257,6 +258,53 @@ async def test_approver_empty_can_assign_approver_or_skip_node():
     )
     await service.skip_node(exception_id=2, resolved_by_user_id=1)
     assert repo.exceptions[2].status == 'resolved'
+
+
+@pytest.mark.asyncio
+async def test_retry_exception_api_supports_assign_approvers_and_skip_node(monkeypatch: pytest.MonkeyPatch):
+    repo = FakeApprovalRepo()
+    repo.instances[1] = _build_instance(status=ApprovalInstanceStatus.EXCEPTION)
+    repo.exceptions[1] = ApprovalException(
+        id=1,
+        tenant_id=1,
+        instance_id=1,
+        exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+        status='open',
+        detail={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+    )
+    repo.exceptions[2] = ApprovalException(
+        id=2,
+        tenant_id=1,
+        instance_id=1,
+        exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+        status='open',
+        detail={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+    )
+    monkeypatch.setattr(ApprovalInstanceRepository, 'get_exception', repo.get_exception)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'update_exception', repo.update_exception)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'create_task', repo.create_task)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'create_outbox', repo.create_outbox)
+    monkeypatch.setattr(ApprovalExceptionService, '_write_audit_log', AsyncMock())
+
+    assigned = await ApprovalExceptionService.retry_exception_api(
+        exception_id=1,
+        action='assign_approvers',
+        operator_user_id=1,
+        approver_user_ids=[5001, 5002],
+    )
+    skipped = await ApprovalExceptionService.retry_exception_api(
+        exception_id=2,
+        action='skip_node',
+        operator_user_id=1,
+    )
+
+    assert assigned['status'] == 'resolved'
+    assert skipped['status'] == 'resolved'
+    assert len([task for task in repo.tasks.values() if task.approver_user_id in {5001, 5002}]) == 2
+    assert len(repo.outbox_payloads) == 1
 
 
 @pytest.mark.asyncio

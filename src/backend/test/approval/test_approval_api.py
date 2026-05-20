@@ -128,7 +128,7 @@ def test_admin_approval_endpoints():
         'bisheng.approval.api.endpoints.approval_admin.ApprovalExceptionService.retry_exception_api',
         new_callable=AsyncMock,
         return_value={'exception_id': 88, 'status': 'resolved'},
-    ):
+    ) as mock_retry_exception:
         with TestClient(app) as c:
             assert c.get('/api/v1/approval/admin/scenario-presets').json()['data'][0]['scenario_code'] == 'menu_access_request'
             assert c.get('/api/v1/approval/admin/scenarios').json()['data'][0]['id'] == 1
@@ -138,3 +138,6 @@ def test_admin_approval_endpoints():
             assert c.post('/api/v1/approval/admin/scenarios/1/routes', json={'route_name': '默认流程', 'route_type': 'flow'}).json()['data']['id'] == 10
             assert c.get('/api/v1/approval/admin/exceptions').json()['data'][0]['id'] == 88
             assert c.post('/api/v1/approval/admin/exceptions/88/retry', json={'action': 'retry'}).json()['data']['status'] == 'resolved'
+            assert c.post('/api/v1/approval/admin/exceptions/88/retry', json={'action': 'assign_approvers', 'approver_user_ids': [101, 102]}).json()['data']['status'] == 'resolved'
+            assert c.post('/api/v1/approval/admin/exceptions/88/retry', json={'action': 'skip_node'}).json()['data']['status'] == 'resolved'
+    assert mock_retry_exception.await_args_list[1].kwargs['approver_user_ids'] == [101, 102]

@@ -2189,6 +2189,10 @@
     "routeTypePass": "直接通过",
     "createRoute": "新增分支",
     "retryAction": "重试",
+    "assignApproversAction": "指定审批人",
+    "skipNodeAction": "跳过节点",
+    "approverIdsPlaceholder": "输入审批人 ID，多个用逗号分隔",
+    "approverIdsRequired": "请至少输入一个有效的审批人 ID",
     "routeFallback": "流程分支",
     "enabled": "启用",
     "disabled": "未启用",
@@ -2204,6 +2208,8 @@
     "routeCreateSuccess": "条件分支已创建",
     "routeCreateFailed": "条件分支创建失败",
     "retrySuccess": "异常流程已触发重试",
-    "retryFailed": "异常流程重试失败"
+    "retryFailed": "异常流程重试失败",
+    "exceptionResolveSuccess": "异常流程处理完成",
+    "exceptionResolveFailed": "异常流程处理失败"
   }
 }

@@ -2239,6 +2239,10 @@
     "routeTypePass": "Pass Directly",
     "createRoute": "Create Route",
     "retryAction": "Retry",
+    "assignApproversAction": "Assign Approvers",
+    "skipNodeAction": "Skip Node",
+    "approverIdsPlaceholder": "Enter approver IDs separated by commas",
+    "approverIdsRequired": "Enter at least one valid approver ID",
     "routeFallback": "Route",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -2254,7 +2258,9 @@
     "routeCreateSuccess": "Route created",
     "routeCreateFailed": "Failed to create route",
     "retrySuccess": "Exception retry triggered",
-    "retryFailed": "Failed to retry exception"
+    "retryFailed": "Failed to retry exception",
+    "exceptionResolveSuccess": "Exception resolved successfully",
+    "exceptionResolveFailed": "Failed to resolve exception"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

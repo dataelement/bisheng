@@ -23,13 +23,63 @@ class ApprovalExceptionService:
         self.instance_repository = instance_repository
 
     @classmethod
-    async def retry_exception_api(cls, *, exception_id: int, action: str, operator_user_id: int):
-        if action != 'retry':
-            raise ValueError(f'unsupported exception action: {action}')
-
+    async def retry_exception_api(
+        cls,
+        *,
+        exception_id: int,
+        action: str,
+        operator_user_id: int,
+        approver_user_ids: list[int] | None = None,
+    ):
         service = cls(instance_repository=ApprovalInstanceRepository)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
+
+        if action == 'skip_node':
+            await service.skip_node(exception_id=exception_id, resolved_by_user_id=operator_user_id)
+            await service._write_audit_log(
+                tenant_id=instance.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=instance.tenant_id,
+                target_id=str(instance.id),
+                metadata={'exception_id': exception_id, 'exception_type': exception.exception_type, 'action': action},
+            )
+            return {
+                'exception_id': exception_id,
+                'instance_id': instance.id,
+                'status': 'resolved',
+                'exception_type': exception.exception_type,
+            }
+
+        if action == 'assign_approvers':
+            if not approver_user_ids:
+                raise ValueError('approver_user_ids required for assign_approvers')
+            await service.assign_approvers(
+                exception_id=exception_id,
+                approver_user_ids=approver_user_ids,
+                resolved_by_user_id=operator_user_id,
+            )
+            await service._write_audit_log(
+                tenant_id=instance.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=instance.tenant_id,
+                target_id=str(instance.id),
+                metadata={
+                    'exception_id': exception_id,
+                    'exception_type': exception.exception_type,
+                    'action': action,
+                    'approver_user_ids': approver_user_ids,
+                },
+            )
+            return {
+                'exception_id': exception_id,
+                'instance_id': instance.id,
+                'status': 'resolved',
+                'exception_type': exception.exception_type,
+            }
+
+        if action != 'retry':
+            raise ValueError(f'unsupported exception action: {action}')
 
         if exception.exception_type == 'execute_failed':
             retried = await service.retry_execute_failed_api(

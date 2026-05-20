@@ -55,6 +55,7 @@ export default function ApprovalPage() {
   const [selectedPresetCode, setSelectedPresetCode] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeType, setRouteType] = useState("flow");
+  const [exceptionApproverInputs, setExceptionApproverInputs] = useState<Record<number, string>>({});
 
   const selectedPreset = useMemo(
     () => presets.find((item) => item.scenario_code === selectedPresetCode) ?? null,
@@ -144,22 +145,52 @@ export default function ApprovalPage() {
     }
   };
 
-  const handleRetryException = async (exceptionId: number) => {
+  const handleRetryException = async (
+    item: ApprovalExceptionItem,
+    payload: {
+      action?: string;
+      approver_user_ids?: number[];
+    } = {},
+  ) => {
     try {
-      await retryApprovalExceptionApi(exceptionId);
+      await retryApprovalExceptionApi(item.id, payload);
       toast({
         title: t("prompt"),
         variant: "success",
-        description: t("approvalPage.retrySuccess"),
+        description: t("approvalPage.exceptionResolveSuccess"),
       });
+      setExceptionApproverInputs((current) => ({
+        ...current,
+        [item.id]: "",
+      }));
       await loadPage();
     } catch (error: any) {
       toast({
         title: t("prompt"),
         variant: "error",
-        description: String(error || t("approvalPage.retryFailed")),
+        description: String(error || t("approvalPage.exceptionResolveFailed")),
       });
     }
+  };
+
+  const handleAssignApprovers = async (item: ApprovalExceptionItem) => {
+    const rawValue = exceptionApproverInputs[item.id] || "";
+    const approverUserIds = rawValue
+      .split(",")
+      .map((part) => Number(part.trim()))
+      .filter((value) => Number.isInteger(value) && value > 0);
+    if (!approverUserIds.length) {
+      toast({
+        title: t("prompt"),
+        variant: "error",
+        description: t("approvalPage.approverIdsRequired"),
+      });
+      return;
+    }
+    await handleRetryException(item, {
+      action: "assign_approvers",
+      approver_user_ids: approverUserIds,
+    });
   };
 
   const handleCreateRoute = async () => {
@@ -255,14 +286,54 @@ export default function ApprovalPage() {
                         instance #{item.instance_id || "--"} · {item.status || "--"} · {item.create_time || "--"}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRetryException(item.id)}
-                      className="rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-primary hover:bg-background-primary"
-                    >
-                      {t("approvalPage.retryAction")}
-                    </button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryException(item)}
+                        className="rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-primary hover:bg-background-primary"
+                      >
+                        {t("approvalPage.retryAction")}
+                      </button>
+                      {item.exception_type === "approver_empty" ? (
+                        <>
+                          <input
+                            value={exceptionApproverInputs[item.id] || ""}
+                            onChange={(event) =>
+                              setExceptionApproverInputs((current) => ({
+                                ...current,
+                                [item.id]: event.target.value,
+                              }))
+                            }
+                            placeholder={t("approvalPage.approverIdsPlaceholder")}
+                            className="h-9 min-w-[200px] rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleAssignApprovers(item)}
+                            className="rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-primary hover:bg-background-primary"
+                          >
+                            {t("approvalPage.assignApproversAction")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleRetryException(item, {
+                                action: "skip_node",
+                              })
+                            }
+                            className="rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-primary hover:bg-background-primary"
+                          >
+                            {t("approvalPage.skipNodeAction")}
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
+                  {item.detail && Object.keys(item.detail).length ? (
+                    <div className="mt-3 rounded-lg bg-background-primary p-3 text-xs text-text-secondary">
+                      {JSON.stringify(item.detail)}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

@@ -51,10 +51,14 @@ describe("ApprovalPage", () => {
     listApprovalExceptionsApi.mockResolvedValue([
       {
         id: 88,
-        exception_type: "route_missing",
+        exception_type: "approver_empty",
         instance_id: 18,
         status: "open",
         create_time: "2026-05-20 10:00:00",
+        detail: {
+          node_code: "n1",
+          node_name: "一级审批",
+        },
       },
     ]);
     listApprovalRoutesApi.mockResolvedValue([
@@ -76,7 +80,7 @@ describe("ApprovalPage", () => {
 
     expect(await screen.findByText("approvalPage.title")).toBeInTheDocument();
     expect(await screen.findByText("菜单权限申请")).toBeInTheDocument();
-    expect(await screen.findByText("route_missing #88")).toBeInTheDocument();
+    expect(await screen.findByText("approver_empty #88")).toBeInTheDocument();
     expect(await screen.findByText("默认流程 #9")).toBeInTheDocument();
 
     expect(listApprovalScenarioPresetsApi).toHaveBeenCalledTimes(1);
@@ -117,15 +121,45 @@ describe("ApprovalPage", () => {
     await user.click(retryButton);
 
     await waitFor(() => {
-      expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88);
+      expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {});
     });
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({
         variant: "success",
-        description: "approvalPage.retrySuccess",
+        description: "approvalPage.exceptionResolveSuccess",
       }),
     );
     expect(listApprovalExceptionsApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("assigns approvers for approver_empty exceptions", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    const approverInput = await screen.findByPlaceholderText("approvalPage.approverIdsPlaceholder");
+    await user.type(approverInput, "101, 102");
+    await user.click(screen.getByRole("button", { name: "approvalPage.assignApproversAction" }));
+
+    await waitFor(() => {
+      expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {
+        action: "assign_approvers",
+        approver_user_ids: [101, 102],
+      });
+    });
+  });
+
+  it("skips the current node for approver_empty exceptions", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalPage />);
+
+    const skipButton = await screen.findByRole("button", { name: "approvalPage.skipNodeAction" });
+    await user.click(skipButton);
+
+    await waitFor(() => {
+      expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {
+        action: "skip_node",
+      });
+    });
   });
 
   it("creates a route for the selected scenario and reloads route list", async () => {

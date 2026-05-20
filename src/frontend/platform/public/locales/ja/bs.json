@@ -2189,6 +2189,10 @@
     "routeTypePass": "直接承認",
     "createRoute": "分岐を追加",
     "retryAction": "再試行",
+    "assignApproversAction": "承認者を指定",
+    "skipNodeAction": "ノードをスキップ",
+    "approverIdsPlaceholder": "承認者 ID をカンマ区切りで入力",
+    "approverIdsRequired": "有効な承認者 ID を 1 件以上入力してください",
     "routeFallback": "分岐",
     "enabled": "有効",
     "disabled": "無効",
@@ -2204,6 +2208,8 @@
     "routeCreateSuccess": "条件分岐を作成しました",
     "routeCreateFailed": "条件分岐の作成に失敗しました",
     "retrySuccess": "例外フローの再試行を開始しました",
-    "retryFailed": "例外フローの再試行に失敗しました"
+    "retryFailed": "例外フローの再試行に失敗しました",
+    "exceptionResolveSuccess": "例外フローを処理しました",
+    "exceptionResolveFailed": "例外フローの処理に失敗しました"
   }
 }
