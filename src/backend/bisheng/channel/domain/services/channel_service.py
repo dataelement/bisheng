@@ -895,6 +895,7 @@ class ChannelService:
                     business_name=channel.name,
                     applicant_user_id=login_user.user_id,
                     applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+                    applicant_role='admin' if getattr(login_user, 'is_admin', lambda: False)() else 'regular_user',
                     payload_snapshot={
                         'channel_id': str(channel.id),
                         'channel_name': channel.name,

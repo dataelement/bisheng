@@ -21,6 +21,7 @@ export interface ApprovalRouteItem {
   route_name?: string;
   enabled?: boolean;
   flow_definition_id?: number | null;
+  match_config?: { field?: string; value?: string } | null;
 }
 
 export interface ApprovalFlowItem {

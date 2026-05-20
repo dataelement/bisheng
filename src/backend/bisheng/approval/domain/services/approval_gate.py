@@ -223,9 +223,37 @@ class ApprovalGate:
             exception_type=exception_type,
         )
 
-    @staticmethod
-    async def _match_first_route(route_rules: list[Any], _req: ApprovalGateRequest) -> Any | None:
-        return route_rules[0] if route_rules else None
+    async def _match_first_route(self, route_rules: list[Any], req: ApprovalGateRequest) -> Any | None:
+        """Evaluate route conditions top-to-bottom; return the first matching enabled route.
+
+        match_config format (stored on ApprovalRouteRule):
+          {}                              → catch-all, always matches
+          {"field": "applicant_role",
+           "value": "admin"}             → matches if req.applicant_role == "admin"
+          {"field": "<payload_key>",
+           "value": "<expected>"}        → matches if payload_snapshot[field] == value
+
+        Supported field values for applicant_role:
+          "admin"        → 系统管理员
+          "dept_admin"   → 部门管理员
+          "regular_user" → 普通用户
+        """
+        for route in route_rules:
+            if not getattr(route, 'enabled', True):
+                continue
+            match_config = getattr(route, 'match_config', {}) or {}
+            field = match_config.get('field', '')
+            if not field:
+                return route  # catch-all
+            expected = str(match_config.get('value', ''))
+            if field == 'applicant_role':
+                if req.applicant_role == expected:
+                    return route
+            else:
+                payload_val = req.payload_snapshot.get(field)
+                if payload_val is not None and str(payload_val) == expected:
+                    return route
+        return None
 
     @staticmethod
     def _decision_from_instance_status(status: str) -> ApprovalGateDecision:

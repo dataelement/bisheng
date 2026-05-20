@@ -18,8 +18,10 @@ class ApprovalRegistry:
                 scenario_code='menu_access_request',
                 scenario_name='菜单权限申请',
                 handler_key='menu_access_request',
-                condition_fields=['menu_key', 'applicant_department_id'],
-                approver_source_types=['direct_user', 'tenant_admin', 'department_admin'],
+                # applicant_role: admin / dept_admin / regular_user
+                # menu_key: specific menu key from payload_snapshot
+                condition_fields=['applicant_role', 'menu_key'],
+                approver_source_types=['direct_user', 'department_admin'],
             )
         )
         registry.register_preset(
@@ -27,8 +29,8 @@ class ApprovalRegistry:
                 scenario_code='channel_subscribe_request',
                 scenario_name='频道订阅审批',
                 handler_key='channel_subscribe_request',
-                condition_fields=['channel_id', 'channel_type'],
-                approver_source_types=['direct_user', 'channel_admin', 'department_admin'],
+                condition_fields=['applicant_role'],
+                approver_source_types=['direct_user', 'department_admin'],
             )
         )
         registry.register_preset(
@@ -36,8 +38,9 @@ class ApprovalRegistry:
                 scenario_code='knowledge_space_subscribe_request',
                 scenario_name='知识空间加入审批',
                 handler_key='knowledge_space_subscribe_request',
-                condition_fields=['space_id', 'space_type', 'applicant_department_id'],
-                approver_source_types=['direct_user', 'space_admin', 'department_admin'],
+                # space_type: public / department / team (from payload_snapshot)
+                condition_fields=['applicant_role', 'space_type'],
+                approver_source_types=['direct_user', 'department_admin'],
             )
         )
         return registry

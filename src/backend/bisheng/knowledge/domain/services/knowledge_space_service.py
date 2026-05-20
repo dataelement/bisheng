@@ -2802,9 +2802,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     business_name=space.name,
                     applicant_user_id=self.login_user.user_id,
                     applicant_user_name=self.login_user.user_name,
+                    applicant_role='admin' if getattr(self.login_user, 'is_admin', lambda: False)() else 'regular_user',
                     payload_snapshot={
                         'space_id': space.id,
                         'space_name': space.name,
+                        'space_type': getattr(space, 'type', ''),
                         'applicant_user_id': self.login_user.user_id,
                     },
                 )

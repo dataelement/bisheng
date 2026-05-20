@@ -22,6 +22,9 @@ class ApprovalGateRequest(BaseModel):
     applicant_user_id: int
     applicant_user_name: str
     applicant_department_id: int | None = None
+    # Role classification: "admin" | "dept_admin" | "regular_user"
+    # Callers should populate this; gate matcher uses it for applicant_role conditions.
+    applicant_role: str = "regular_user"
     reason: str | None = None
     payload_snapshot: dict[str, Any] = Field(default_factory=dict)
     detail_snapshot: dict[str, Any] = Field(default_factory=dict)

@@ -99,6 +99,44 @@ function ActionBtn({
   );
 }
 
+// ─── Condition field / value metadata ────────────────────────────────────────
+
+interface ConditionFieldMeta {
+  label: string;
+  values?: { value: string; label: string }[];
+}
+
+const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
+  applicant_role: {
+    label: '申请人身份',
+    values: [
+      { value: 'admin', label: '系统管理员' },
+      { value: 'dept_admin', label: '部门管理员' },
+      { value: 'regular_user', label: '普通用户' },
+    ],
+  },
+  menu_key: {
+    label: '申请菜单',
+    values: [], // dynamic; user types the menu_key
+  },
+  space_type: {
+    label: '知识空间类型',
+    values: [
+      { value: 'public', label: '公共' },
+      { value: 'department', label: '部门' },
+      { value: 'team', label: '团队' },
+    ],
+  },
+};
+
+function conditionLabel(matchConfig: { field?: string; value?: string } | null | undefined): string {
+  if (!matchConfig?.field) return '';
+  const meta = CONDITION_FIELD_META[matchConfig.field];
+  const fieldLabel = meta?.label ?? matchConfig.field;
+  const valLabel = meta?.values?.find((v) => v.value === matchConfig.value)?.label ?? matchConfig.value ?? '';
+  return valLabel ? `${fieldLabel} = ${valLabel}` : `${fieldLabel}`;
+}
+
 // ─── Add/Edit dialogs ────────────────────────────────────────────────────────
 
 function AddScenarioDialog({
@@ -182,18 +220,20 @@ function RouteDialog({
   open,
   initial,
   flows,
+  conditionFields,
   onClose,
   onConfirm,
 }: {
   open: boolean;
-  initial: Partial<ApprovalRouteItem> & { match_label?: string };
+  initial: Partial<ApprovalRouteItem>;
   flows: ApprovalFlowItem[];
+  conditionFields: string[];
   onClose: () => void;
   onConfirm: (data: {
     route_name: string;
     route_type: string;
     flow_definition_id: number | null;
-    match_label: string;
+    match_config: { field?: string; value?: string };
   }) => void;
 }) {
   const [name, setName] = useState(initial.route_name ?? "");
@@ -201,19 +241,30 @@ function RouteDialog({
   const [flowId, setFlowId] = useState(
     initial.flow_definition_id ? String(initial.flow_definition_id) : "",
   );
-  const [matchLabel, setMatchLabel] = useState(initial.match_label ?? "");
+  const [condField, setCondField] = useState(initial.match_config?.field ?? "");
+  const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
+
   useEffect(() => {
     if (open) {
       setName(initial.route_name ?? "");
       setType(initial.route_type ?? "flow");
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
-      setMatchLabel(initial.match_label ?? "");
+      setCondField(initial.match_config?.field ?? "");
+      setCondValue(initial.match_config?.value ?? "");
     }
-  }, [open, initial.route_name, initial.route_type, initial.flow_definition_id, initial.match_label]);
+  }, [open]);
+
+  const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
+  const hasEnumValues = (fieldMeta?.values?.length ?? 0) > 0;
+
+  const handleFieldChange = (f: string) => {
+    setCondField(f);
+    setCondValue(""); // reset value when field changes
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{initial.id ? "编辑条件分支" : "新增条件分支"}</DialogTitle>
         </DialogHeader>
@@ -227,15 +278,56 @@ function RouteDialog({
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             />
           </label>
-          <label className="block text-sm text-text-secondary">
-            条件描述（展示用）
-            <input
-              value={matchLabel}
-              onChange={(e) => setMatchLabel(e.target.value)}
-              placeholder="如：申请人身份 = 系统管理员"
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
-            />
-          </label>
+
+          {/* Condition */}
+          <div className="rounded-lg border border-border-subtle bg-gray-50 p-3 space-y-3">
+            <div className="text-xs font-medium text-text-secondary">匹配条件（从上到下匹配，命中即停止）</div>
+            <div className="flex items-center gap-2">
+              <select
+                value={condField}
+                onChange={(e) => handleFieldChange(e.target.value)}
+                className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+              >
+                <option value="">无条件（始终命中）</option>
+                {conditionFields.map((f) => (
+                  <option key={f} value={f}>
+                    {CONDITION_FIELD_META[f]?.label ?? f}
+                  </option>
+                ))}
+              </select>
+              {condField && (
+                <>
+                  <span className="text-xs text-text-secondary">=</span>
+                  {hasEnumValues ? (
+                    <select
+                      value={condValue}
+                      onChange={(e) => setCondValue(e.target.value)}
+                      className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                    >
+                      <option value="">请选择</option>
+                      {fieldMeta!.values!.map((v) => (
+                        <option key={v.value} value={v.value}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={condValue}
+                      onChange={(e) => setCondValue(e.target.value)}
+                      placeholder="请输入条件值"
+                      className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                    />
+                  )}
+                </>
+              )}
+            </div>
+            {condField && !condValue && (
+              <p className="text-xs text-amber-500">请填写条件值，否则该分支将始终命中</p>
+            )}
+          </div>
+
+          {/* Route type */}
           <label className="block text-sm text-text-secondary">
             处理方式
             <select
@@ -249,7 +341,7 @@ function RouteDialog({
           </label>
           {type === "flow" && (
             <label className="block text-sm text-text-secondary">
-              审批流程
+              绑定审批流程
               <select
                 value={flowId}
                 onChange={(e) => setFlowId(e.target.value)}
@@ -275,13 +367,13 @@ function RouteDialog({
           </button>
           <button
             type="button"
-            disabled={!name.trim()}
+            disabled={!name.trim() || (type === "flow" && !flowId)}
             onClick={() =>
               onConfirm({
                 route_name: name.trim(),
                 route_type: type,
                 flow_definition_id: type === "flow" && flowId ? Number(flowId) : null,
-                match_label: matchLabel.trim(),
+                match_config: condField ? { field: condField, value: condValue } : {},
               })
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
@@ -539,7 +631,7 @@ export default function ApprovalPage() {
   const [showAddScenario, setShowAddScenario] = useState(false);
   const [routeDialog, setRouteDialog] = useState<{
     open: boolean;
-    initial: Partial<ApprovalRouteItem> & { match_label?: string };
+    initial: Partial<ApprovalRouteItem>;
   }>({ open: false, initial: {} });
   const [flowDialog, setFlowDialog] = useState<{
     open: boolean;
@@ -564,6 +656,12 @@ export default function ApprovalPage() {
     () => flows.find((f) => f.id === selectedFlowId) ?? null,
     [flows, selectedFlowId],
   );
+  // condition fields available for the selected scenario (from the preset registry)
+  const activeConditionFields = useMemo(() => {
+    if (!selectedScenario) return Object.keys(CONDITION_FIELD_META);
+    const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
+    return preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? Object.keys(CONDITION_FIELD_META);
+  }, [selectedScenario, presets]);
   const existingCodes = useMemo(
     () => new Set(scenarios.map((s) => s.scenario_code)),
     [scenarios],
@@ -656,7 +754,7 @@ export default function ApprovalPage() {
     route_name: string;
     route_type: string;
     flow_definition_id: number | null;
-    match_label: string;
+    match_config: { field?: string; value?: string };
   }) => {
     if (!selectedScenarioId) return;
     try {
@@ -664,7 +762,7 @@ export default function ApprovalPage() {
         route_name: data.route_name,
         route_type: data.route_type,
         flow_definition_id: data.flow_definition_id,
-        match_config: { label: data.match_label },
+        match_config: data.match_config,
       };
       if (routeDialog.initial.id) {
         await updateApprovalRouteApi(routeDialog.initial.id, payload);
@@ -962,8 +1060,7 @@ export default function ApprovalPage() {
                         </div>
                       )}
                       {routes.map((route, idx) => {
-                        const matchLabel =
-                          (route as any).match_config?.label ?? "";
+                        const matchLabel = conditionLabel(route.match_config);
                         const flowName = flows.find(
                           (f) => f.id === route.flow_definition_id,
                         )?.flow_name;
@@ -1027,10 +1124,7 @@ export default function ApprovalPage() {
                                 onClick={() =>
                                   setRouteDialog({
                                     open: true,
-                                    initial: {
-                                      ...route,
-                                      match_label: matchLabel,
-                                    },
+                                    initial: route,
                                   })
                                 }
                               >
@@ -1320,6 +1414,7 @@ export default function ApprovalPage() {
         open={routeDialog.open}
         initial={routeDialog.initial}
         flows={flows}
+        conditionFields={activeConditionFields}
         onClose={() => setRouteDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveRoute(data)}
       />
