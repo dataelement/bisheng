@@ -302,8 +302,13 @@
   - `src/frontend/platform/src/controllers/API/approval.ts`（分支 / 流程 / 节点接口）
   - `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（分支 / 流程文案）
   **逻辑**: 条件分支 CRUD / 启停 / 上下移动（PATCH reorder）；流程选择 + 节点列表 CRUD / 排序（PUT full node list）；节点审批人来源按场景过滤；流程预览弹窗（对应 AC-35）
-  **覆盖 AC**: AC-06, AC-07, AC-08, AC-09, AC-10, AC-35
-  **手动验证**: 分支 CRUD 和排序生效；节点增删排序后已发起实例不受影响；流程预览正确展示
+  **条件值 UI 规则（对应 AC-36/37，来自 PRD §5.4.4）**：
+  - 条件字段下拉按当前场景 `condition_fields` 过滤，由场景预置目录决定
+  - `applicant_role`（申请人身份）→ 条件值展示**枚举下拉**：系统管理员 / 租户管理员 / 部门管理员 + 当前租户系统角色列表（调 `GET /api/v1/role` 或等价接口动态加载）
+  - `menu_key`（申请菜单）→ 条件值展示**可申请菜单下拉**（调菜单列表接口动态加载，不能是自由文本输入）
+  - `space_type`（知识空间类型）→ 条件值展示固定枚举：公共 / 部门 / 团队
+  **覆盖 AC**: AC-06, AC-07, AC-08, AC-09, AC-10, AC-35, AC-36, AC-37
+  **手动验证**: 分支 CRUD 和排序生效；节点增删排序后已发起实例不受影响；流程预览正确展示；条件值下拉随条件字段联动变化；申请人身份包含当前租户所有系统角色
   **依赖**: T016A
 
 - [ ] **T016C**: Platform 异常流程列表 + 审计文案扩展

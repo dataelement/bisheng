@@ -659,9 +659,18 @@ export default function ApprovalPage() {
   );
   // condition fields available for the selected scenario (from the preset registry)
   const activeConditionFields = useMemo(() => {
-    if (!selectedScenario) return Object.keys(CONDITION_FIELD_META);
+    // applicant_role is universal — every scenario supports identity-based routing.
+    // Per PRD §5.4.4, all scenarios include 申请人身份 as a condition field.
+    const ALWAYS_INCLUDED = ['applicant_role'];
+    const dedup = (arr: string[]) => arr.filter((v, i, self) => self.indexOf(v) === i);
+    if (!selectedScenario) {
+      return dedup([...ALWAYS_INCLUDED, ...Object.keys(CONDITION_FIELD_META)]);
+    }
     const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
-    return preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? Object.keys(CONDITION_FIELD_META);
+    // Filter preset fields by what CONDITION_FIELD_META knows about;
+    // then prepend the always-included fields so they appear first.
+    const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
+    return dedup([...ALWAYS_INCLUDED, ...presetFields]);
   }, [selectedScenario, presets]);
   const existingCodes = useMemo(
     () => new Set(scenarios.map((s) => s.scenario_code)),
