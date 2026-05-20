@@ -32,6 +32,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Extend role table for policy-role model (F005)."""
+    conn = op.get_bind()
+
     # 1. Add role_type column
     if not column_exists(conn, 'role', 'role_type'):
         op.add_column(
@@ -68,7 +70,6 @@ def upgrade() -> None:
     # will not collide with each other). Idempotent: runs only when the
     # target unique index is not yet present.
     if not index_exists(conn, 'role', 'uk_tenant_roletype_rolename'):
-        conn = op.get_bind()
         conflicts = conn.execute(sa.text("""
             SELECT tenant_id, role_type, role_name, COUNT(*) AS cnt
             FROM role
