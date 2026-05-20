@@ -13,7 +13,12 @@ from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
-from bisheng.knowledge.api.router import qa_router, knowledge_router, knowledge_space_router
+from bisheng.knowledge.api.router import (
+    qa_router,
+    knowledge_router,
+    knowledge_space_router,
+    knowledge_space_tag_library_router,
+)
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
@@ -39,6 +44,7 @@ router = APIRouter(prefix='/api/v1', )
 router.include_router(chat_router)
 router.include_router(endpoints_router)
 router.include_router(knowledge_router)
+router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
 router.include_router(server_router)
 router.include_router(user_router)

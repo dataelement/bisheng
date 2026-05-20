@@ -46,6 +46,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import KnowledgeSpaceTagLibraryService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
@@ -1072,6 +1073,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         icon: Optional[str] = None,
         auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
         is_released: bool = False,
+        auto_tag_enabled: bool = False,
+        auto_tag_library_id: Optional[int] = None,
         share_to_children: Optional[bool] = None,
         skip_user_limit: bool = False,
     ) -> Knowledge:
@@ -1094,6 +1097,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
+        if auto_tag_enabled:
+            await KnowledgeSpaceTagLibraryService.validate_bindable_library(auto_tag_library_id)
 
         db_knowledge = Knowledge(
             name=name,
@@ -1103,6 +1108,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             type=KnowledgeTypeEnum.SPACE.value,
             model=workbench_llm.embedding_model.id,
             is_released=is_released,
+            auto_tag_enabled=auto_tag_enabled,
+            auto_tag_library_id=auto_tag_library_id,
         )
 
         knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge,
@@ -1251,6 +1258,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         icon: Optional[str] = None,
         auth_type: Optional[AuthTypeEnum] = None,
         is_released: bool = False,
+        auto_tag_enabled: Optional[bool] = None,
+        auto_tag_library_id: Optional[int] = None,
     ) -> Knowledge:
         """ Modify an existing knowledge space. """
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -1270,6 +1279,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if auth_type is not None:
             space.auth_type = auth_type
         space.is_released = is_released
+        if auto_tag_library_id is not None:
+            space.auto_tag_library_id = auto_tag_library_id
+        if auto_tag_enabled is not None:
+            if auto_tag_enabled:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_library(space.auto_tag_library_id)
+            space.auto_tag_enabled = auto_tag_enabled
+        elif auto_tag_library_id is not None and space.auto_tag_enabled:
+            await KnowledgeSpaceTagLibraryService.validate_bindable_library(space.auto_tag_library_id)
 
         space = await KnowledgeDao.async_update_space(space)
         new_auth_type = space.auth_type
