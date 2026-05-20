@@ -134,11 +134,6 @@ steps:
 
         git pull origin feat/2.5.0-sg
 
-        echo "======= migrate database ======="
-
-#        docker compose -f docker/docker-compose.yml exec -T backend \
-#        sh -lc "cd /app && alembic upgrade head"
-
         echo "======= restart backend ======="
 
         docker compose -f docker/docker-compose.yml restart backend backend_worker
