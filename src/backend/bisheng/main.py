@@ -20,6 +20,7 @@ from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
+    http_status_code = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
         msg = {
             'status_code': exc.status_code,
@@ -32,8 +33,9 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
     else:
         logger.exception('Unhandled exception')
         msg = {'status_code': 500, 'status_message': str(exc)}
+        http_status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     logger.error(f'{req.method} {req.url} {str(exc)}')
-    return ORJSONResponse(content=msg)
+    return ORJSONResponse(content=msg, status_code=http_status_code)
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> ORJSONResponse:

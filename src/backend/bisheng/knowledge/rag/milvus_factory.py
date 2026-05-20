@@ -1,7 +1,8 @@
 from typing import Optional, List, Dict
 
 from langchain_core.embeddings import Embeddings
-from pymilvus import DataType
+from pymilvus import DataType, MilvusException
+from pymilvus.orm.connections import connections
 
 from bisheng.common.schemas.rag_schema import RagMetadataFieldSchema
 from bisheng.common.services.config_service import settings
@@ -48,7 +49,7 @@ class MilvusFactory:
             elif schema.field_type == 'boolean':
                 milvus_metadata_schema[schema.field_name] = {'dtype': DataType.BOOL, "kwargs": schema_kwargs}
 
-        return Milvus(
+        milvus_kwargs = dict(
             embedding_function=embedding_function,
             collection_name=collection_name,
             connection_args=connection_args,
@@ -57,3 +58,33 @@ class MilvusFactory:
             metadata_schema=milvus_metadata_schema,
             **kwargs
         )
+        try:
+            return Milvus(**milvus_kwargs)
+        except MilvusException as exc:
+            if not MilvusFactory._is_closed_channel_error(exc):
+                raise
+            connections.disconnect(MilvusFactory._get_connection_alias(connection_args))
+            return Milvus(**milvus_kwargs)
+
+    @staticmethod
+    def _is_closed_channel_error(exc: MilvusException) -> bool:
+        return "Cannot invoke RPC on closed channel" in str(exc)
+
+    @staticmethod
+    def _get_connection_alias(connection_args: dict) -> str:
+        if connection_args.get("alias"):
+            return connection_args["alias"]
+
+        uri = connection_args.get("uri") or "http://localhost:19530"
+        db_name = connection_args.get("db_name", "")
+        user = connection_args.get("user", "")
+        token = connection_args.get("token", "")
+        auth = user
+        if not auth and token:
+            import hashlib
+
+            md5 = hashlib.new("md5", usedforsecurity=False)
+            md5.update(token.encode())
+            auth = md5.hexdigest()
+
+        return "-".join(str(value) for value in (uri, db_name, auth) if value)
