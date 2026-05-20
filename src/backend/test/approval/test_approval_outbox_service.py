@@ -107,3 +107,18 @@ async def test_retry_outbox_resets_pending_before_reexecute():
 
     assert result is True
     assert repo.outboxes[1].status == ApprovalOutboxStatus.SUCCESS
+
+
+async def test_execute_outbox_supports_async_executor():
+    repo = FakeOutboxRepo()
+    repo.instances[1] = _instance()
+    repo.outboxes[1] = _outbox()
+    service = ApprovalOutboxService(instance_repository=repo)
+
+    async def executor(outbox):
+        return True, None
+
+    result = await service.execute_outbox(outbox_id=1, executor=executor)
+
+    assert result is True
+    assert repo.outboxes[1].status == ApprovalOutboxStatus.SUCCESS

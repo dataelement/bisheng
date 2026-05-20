@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from inspect import isawaitable
+
 from bisheng.approval.domain.models.approval_instance import ApprovalExceptionType, ApprovalOutboxStatus
 
 
@@ -12,7 +14,11 @@ class ApprovalOutboxService:
         if outbox is None:
             raise ValueError(f'outbox not found: {outbox_id}')
 
-        success, error_summary = executor(outbox)
+        execution_result = executor(outbox)
+        if isawaitable(execution_result):
+            success, error_summary = await execution_result
+        else:
+            success, error_summary = execution_result
         if success:
             outbox.status = ApprovalOutboxStatus.SUCCESS
             outbox.error_summary = None
@@ -55,4 +61,3 @@ class ApprovalOutboxService:
             exception_type=ApprovalExceptionType.EXECUTE_FAILED,
             detail={'error_summary': error_summary},
         )
-
