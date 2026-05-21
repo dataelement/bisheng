@@ -118,23 +118,24 @@ const FIXED_ROLE_VALUES = [
 ];
 
 // Static menu key options mirroring backend WebMenuResource enum
+// Mirrors WORKBENCH_MENU_OPTIONS + ADMIN_MENU_OPTIONS in Roles.tsx.
+// Uses the same menu.* i18n keys so names stay consistent with role config.
 const MENU_KEY_VALUES = [
-  { value: 'workstation',    label: 'approvalPage.menuKeyLabel.workstation' },
-  { value: 'admin',          label: 'approvalPage.menuKeyLabel.admin' },
-  { value: 'build',          label: 'approvalPage.menuKeyLabel.build' },
-  { value: 'create_app',     label: 'approvalPage.menuKeyLabel.create_app' },
-  { value: 'knowledge',      label: 'approvalPage.menuKeyLabel.knowledge' },
-  { value: 'knowledge_space',label: 'approvalPage.menuKeyLabel.knowledge_space' },
-  { value: 'model',          label: 'approvalPage.menuKeyLabel.model' },
-  { value: 'tool',           label: 'approvalPage.menuKeyLabel.tool' },
-  { value: 'mcp',            label: 'approvalPage.menuKeyLabel.mcp' },
-  { value: 'channel',        label: 'approvalPage.menuKeyLabel.channel' },
-  { value: 'evaluation',     label: 'approvalPage.menuKeyLabel.evaluation' },
-  { value: 'dataset',        label: 'approvalPage.menuKeyLabel.dataset' },
-  { value: 'mark_task',      label: 'approvalPage.menuKeyLabel.mark_task' },
-  { value: 'board',          label: 'approvalPage.menuKeyLabel.board' },
-  { value: 'home',           label: 'approvalPage.menuKeyLabel.home' },
-  { value: 'apps',           label: 'approvalPage.menuKeyLabel.apps' },
+  // Admin console menus
+  { value: 'board',            label: 'menu.board' },
+  { value: 'model',            label: 'menu.models' },
+  { value: 'log',              label: 'menu.log' },
+  { value: 'knowledge',        label: 'menu.knowledge' },
+  { value: 'create_knowledge', label: 'menu.createKnowledge' },
+  { value: 'build',            label: 'menu.skills' },
+  { value: 'create_app',       label: 'menu.createApp' },
+  { value: 'evaluation',       label: 'menu.evaluation' },
+  { value: 'mark_task',        label: 'menu.annotation' },
+  // Workbench menus
+  { value: 'home',             label: 'menu.workbenchHome' },
+  { value: 'apps',             label: 'menu.workbenchApps' },
+  { value: 'subscription',     label: 'menu.workbench1' },
+  { value: 'knowledge_space',  label: 'menu.workbench2' },
 ];
 
 const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
