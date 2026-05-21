@@ -26,7 +26,7 @@ export default function MenuUnavailablePage() {
   const { user } = useAuthContext();
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const [submitting, setSubmitting] = useState(false);
+
   const pluginId = searchParams.get('plugin') || '';
   const hasPlugin = Array.isArray((user as { plugins?: string[] } | null)?.plugins)
     && Boolean((user as { plugins?: string[] } | null)?.plugins?.includes(pluginId));
@@ -34,14 +34,22 @@ export default function MenuUnavailablePage() {
   const canApply = Boolean(pluginId) && menuApprovalMode && !hasPlugin;
   const menuName = pluginId ? localize((MENU_LABEL_KEYS[pluginId] || pluginId) as any) : '';
 
-  const handleApply = async () => {
-    if (!canApply || !pluginId) return;
+  const [showDialog, setShowDialog] = useState(false);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [applied, setApplied] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!canApply || !pluginId || submitting) return;
     setSubmitting(true);
     try {
       await applyMenuAccessApi({
         menu_key: pluginId,
         menu_name: menuName || pluginId,
+        reason: reason.trim() || undefined,
       });
+      setApplied(true);
+      setShowDialog(false);
       showToast({
         message: localize('com_menu_unavailable_apply_success'),
         severity: NotificationSeverity.SUCCESS,
@@ -62,7 +70,7 @@ export default function MenuUnavailablePage() {
         <WorkbenchEmptyIllustration />
       </div>
       <p className="max-w-xl text-center text-sm leading-relaxed text-gray-500" role="status">
-        {message}
+        {canApply ? localize('com_menu_unavailable_no_permission') : message}
       </p>
       {canApply && (
         <div className="mt-6 flex flex-col items-center gap-3">
@@ -71,12 +79,52 @@ export default function MenuUnavailablePage() {
           </div>
           <button
             type="button"
-            disabled={submitting}
+            disabled={applied}
             className="rounded-lg bg-[#165dff] px-4 py-2 text-sm text-white transition-colors hover:bg-[#0e42d2] disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={() => void handleApply()}
+            onClick={() => setShowDialog(true)}
           >
-            {localize('com_menu_unavailable_apply_button')}
+            {applied
+              ? localize('com_menu_unavailable_apply_submitted')
+              : localize('com_menu_unavailable_apply_button')}
           </button>
+        </div>
+      )}
+
+      {/* Apply reason dialog */}
+      {showDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-base font-semibold text-gray-900">
+              {localize('com_menu_unavailable_apply_button')}
+            </h3>
+            <label className="mb-1 block text-sm text-gray-600">
+              {localize('com_menu_unavailable_reason_label')}
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder={localize('com_menu_unavailable_reason_placeholder') as string}
+              className="mb-4 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#165dff]"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setShowDialog(false); setReason(''); }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                {localize('com_ui_cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void handleSubmit()}
+                className="rounded-lg bg-[#165dff] px-4 py-2 text-sm text-white hover:bg-[#0e42d2] disabled:opacity-60"
+              >
+                {submitting ? localize('com_menu_unavailable_apply_submitting') : localize('com_ui_submit')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

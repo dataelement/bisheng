@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { XIcon } from "lucide-react";
+import { Upload, XIcon } from "lucide-react";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
@@ -13,12 +13,13 @@ import {
     SheetHeader,
     SheetTitle
 } from "~/components/ui/Sheet";
-import { Switch } from "~/components/ui/Switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import {
     getKnowledgeSpaceAutoTagVisibilityApi,
     getKnowledgeSpaceTagLibrariesApi,
+    getKnowledgeSpaceTagLibraryDetailApi,
     type KnowledgeSpace,
     type KnowledgeSpaceTagLibraryListItem,
     VisibilityType
@@ -28,6 +29,22 @@ import { ChannelSuccessIcon } from "~/components/icons/channels";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
+const MAX_AUTO_TAG_CUSTOM_TAGS = 200;
+const AUTO_TAG_PREVIEW_LIMIT = 20;
+
+type AutoTagMode = "library" | "custom";
+
+function parseAutoTagText(text: string): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const line of text.split(/\r?\n/)) {
+        const value = line.trim();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+        result.push(value);
+    }
+    return result;
+}
 
 /** 权限项文案：PingFang SC / 14px / 22px 行高 / 400 / #212121 */
 const PERMISSION_OPTION_TEXT_CLASS =
@@ -48,6 +65,8 @@ export interface CreateKnowledgeSpaceFormData {
     publishToSquare: PublishToSquare;
     autoTagEnabled: boolean;
     autoTagLibraryId: number | null;
+    /** Custom tag list when the user picks the "Custom Tags" tab; null when in library mode. */
+    autoTagCustomTags: string[] | null;
 }
 
 interface CreateKnowledgeSpaceDrawerProps {
@@ -77,10 +96,20 @@ export function CreateKnowledgeSpaceDrawer({
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
+    const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
     const [autoTagLibraryId, setAutoTagLibraryId] = useState<number | null>(null);
+    const [autoTagLibraryTags, setAutoTagLibraryTags] = useState<string[]>([]);
+    const [autoTagLibraryTagsLoading, setAutoTagLibraryTagsLoading] = useState(false);
+    const [autoTagPreviewExpanded, setAutoTagPreviewExpanded] = useState(false);
+    const [autoTagCustomTagsText, setAutoTagCustomTagsText] = useState("");
     const [tagLibraries, setTagLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
     const [tagLibrariesLoading, setTagLibrariesLoading] = useState(false);
     const [autoTagFeatureVisible, setAutoTagFeatureVisible] = useState(false);
+    const customTags = useMemo(
+        () => parseAutoTagText(autoTagCustomTagsText),
+        [autoTagCustomTagsText],
+    );
+    const txtInputRef = useRef<HTMLInputElement | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
@@ -98,7 +127,11 @@ export function CreateKnowledgeSpaceDrawer({
         setJoinPolicy("review");
         setPublishToSquare("yes");
         setAutoTagEnabled(false);
+        setAutoTagMode("library");
         setAutoTagLibraryId(null);
+        setAutoTagLibraryTags([]);
+        setAutoTagPreviewExpanded(false);
+        setAutoTagCustomTagsText("");
         setShowSuccess(false);
         setSubmitting(false);
     };
@@ -122,7 +155,17 @@ export function CreateKnowledgeSpaceDrawer({
             );
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setAutoTagEnabled(Boolean(editingSpace.autoTagEnabled));
-            setAutoTagLibraryId(editingSpace.autoTagLibraryId ?? null);
+            const editingMode: AutoTagMode = editingSpace.autoTagMode === "custom" ? "custom" : "library";
+            setAutoTagMode(editingMode);
+            if (editingMode === "custom") {
+                setAutoTagLibraryId(null);
+                setAutoTagCustomTagsText((editingSpace.autoTagCustomTags ?? []).join("\n"));
+                setAutoTagLibraryTags([]);
+            } else {
+                setAutoTagLibraryId(editingSpace.autoTagLibraryId ?? null);
+                setAutoTagCustomTagsText("");
+            }
+            setAutoTagPreviewExpanded(false);
             setShowSuccess(false);
         }
     }, [open, mode, editingSpace]);
@@ -156,6 +199,66 @@ export function CreateKnowledgeSpaceDrawer({
             .finally(() => setTagLibrariesLoading(false));
     }, [open, autoTagFeatureVisible]);
 
+    // Pull the selected library's full tag list so we can render the preview chips.
+    // Only fires in library mode — the custom mode draws its tags from local state.
+    useEffect(() => {
+        if (!open || !autoTagFeatureVisible) return;
+        if (autoTagMode !== "library" || !autoTagLibraryId) {
+            setAutoTagLibraryTags([]);
+            setAutoTagPreviewExpanded(false);
+            return;
+        }
+        let cancelled = false;
+        setAutoTagLibraryTagsLoading(true);
+        getKnowledgeSpaceTagLibraryDetailApi(autoTagLibraryId)
+            .then((res) => {
+                if (cancelled) return;
+                setAutoTagLibraryTags(Array.isArray(res.tags) ? res.tags : []);
+                setAutoTagPreviewExpanded(false);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setAutoTagLibraryTags([]);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setAutoTagLibraryTagsLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, autoTagFeatureVisible, autoTagMode, autoTagLibraryId]);
+
+    const handleAutoTagModeChange = (value: string) => {
+        const next = value === "custom" ? "custom" : "library";
+        setAutoTagMode(next);
+        if (next === "custom") {
+            setAutoTagLibraryTags([]);
+            setAutoTagPreviewExpanded(false);
+        }
+    };
+
+    const handleUploadTxt = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        // Reset the input synchronously so picking the same filename twice in a
+        // row still fires onChange.
+        event.target.value = "";
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const raw = typeof reader.result === "string" ? reader.result : "";
+            const parsed = parseAutoTagText(raw);
+            if (parsed.length > MAX_AUTO_TAG_CUSTOM_TAGS) {
+                showToast({
+                    message: localize("com_knowledge.auto_tag_custom_tags_limit"),
+                    severity: NotificationSeverity.WARNING,
+                });
+            }
+            setAutoTagCustomTagsText(parsed.slice(0, MAX_AUTO_TAG_CUSTOM_TAGS).join("\n"));
+        };
+        reader.readAsText(file);
+    };
+
     const handleConfirm = async () => {
         // Guard against double-submit while the previous request is still in-flight.
         if (submitting) return;
@@ -169,13 +272,35 @@ export function CreateKnowledgeSpaceDrawer({
         // When the tenant-level feature is hidden, drop any local state that
         // might have been pre-filled in edit mode so we never submit stale flags.
         const effectiveAutoTagEnabled = autoTagFeatureVisible && autoTagEnabled;
-        const effectiveAutoTagLibraryId = effectiveAutoTagEnabled ? autoTagLibraryId : null;
-        if (effectiveAutoTagEnabled && !effectiveAutoTagLibraryId) {
-            showToast({
-                message: localize("com_knowledge.auto_tag_library_required"),
-                severity: NotificationSeverity.WARNING
-            });
-            return;
+        let effectiveAutoTagLibraryId: number | null = null;
+        let effectiveAutoTagCustomTags: string[] | null = null;
+        if (effectiveAutoTagEnabled) {
+            if (autoTagMode === "library") {
+                if (!autoTagLibraryId) {
+                    showToast({
+                        message: localize("com_knowledge.auto_tag_library_required"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+                effectiveAutoTagLibraryId = autoTagLibraryId;
+            } else {
+                if (customTags.length === 0) {
+                    showToast({
+                        message: localize("com_knowledge.auto_tag_custom_tags_required"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+                if (customTags.length > MAX_AUTO_TAG_CUSTOM_TAGS) {
+                    showToast({
+                        message: localize("com_knowledge.auto_tag_custom_tags_limit"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+                effectiveAutoTagCustomTags = customTags;
+            }
         }
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
@@ -184,6 +309,7 @@ export function CreateKnowledgeSpaceDrawer({
             publishToSquare: needPublishOption ? publishToSquare : "no",
             autoTagEnabled: effectiveAutoTagEnabled,
             autoTagLibraryId: effectiveAutoTagLibraryId,
+            autoTagCustomTags: effectiveAutoTagCustomTags,
         };
         try {
             setSubmitting(true);
@@ -456,63 +582,177 @@ export function CreateKnowledgeSpaceDrawer({
                             )}
 
                             {autoTagFeatureVisible && (
-                                <div className="space-y-3 rounded-[6px] border border-[#E5E6EB] bg-[#FAFBFC] p-4">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="min-w-0">
-                                            <Label className="text-[14px] font-medium text-[#1D2129]">
-                                                {localize("com_knowledge.auto_tag_generation")}
-                                            </Label>
-                                            <p className="mt-1 text-[14px] font-normal text-[#999999]">
-                                                {localize("com_knowledge.auto_tag_generation_desc")}
-                                            </p>
-                                        </div>
-                                        <Switch
-                                            checked={autoTagEnabled}
-                                            onCheckedChange={(checked) => {
-                                                setAutoTagEnabled(checked);
-                                                if (!checked) return;
-                                                if (!autoTagLibraryId && tagLibraries.length === 1) {
-                                                    setAutoTagLibraryId(tagLibraries[0].id);
-                                                }
-                                            }}
-                                            className="shrink-0 data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
-                                        />
-                                    </div>
+                                <div className="space-y-3">
+                                    <Label className="text-[14px] text-[#1D2129]">
+                                        <span className="text-[#F53F3F]">*</span>
+                                        {localize("com_knowledge.auto_tag_generation")}
+                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
+                                            {localize("com_knowledge.auto_tag_generation_desc")}
+                                        </span>
+                                    </Label>
+                                    <RadioGroup.Root
+                                        value={autoTagEnabled ? "yes" : "no"}
+                                        onValueChange={(v) => {
+                                            const checked = v === "yes";
+                                            setAutoTagEnabled(checked);
+                                            if (!checked) return;
+                                            if (!autoTagLibraryId && tagLibraries.length === 1) {
+                                                setAutoTagLibraryId(tagLibraries[0].id);
+                                            }
+                                        }}
+                                        className="flex gap-6"
+                                    >
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <RadioGroup.Item
+                                                value="yes"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                            >
+                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                            </RadioGroup.Item>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <RadioGroup.Item
+                                                value="no"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                            >
+                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                            </RadioGroup.Item>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
+                                        </label>
+                                    </RadioGroup.Root>
 
                                     {autoTagEnabled && (
-                                        <div className="space-y-2">
-                                            <Label className="text-[14px] font-medium text-[#1D2129]">
-                                                <span className="mr-1 text-[#F53F3F]">*</span>
-                                                {localize("com_knowledge.auto_tag_library")}
-                                            </Label>
-                                            <Select
-                                                value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
-                                                onValueChange={(value) => setAutoTagLibraryId(Number(value))}
-                                                disabled={tagLibrariesLoading || tagLibraries.length === 0}
-                                            >
-                                                <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
-                                                    <SelectValue
-                                                        placeholder={
-                                                            tagLibrariesLoading
-                                                                ? localize("com_knowledge.loading")
-                                                                : localize("com_knowledge.select_auto_tag_library")
-                                                        }
-                                                    />
-                                                </SelectTrigger>
-                                                <SelectContent className="z-[150] bg-white">
-                                                    {tagLibraries.map((library) => (
-                                                        <SelectItem key={library.id} value={String(library.id)}>
-                                                            {library.name} ({library.tag_count})
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {tagLibraries.length === 0 && !tagLibrariesLoading && (
-                                                <p className="text-[12px] text-[#F53F3F]">
-                                                    {localize("com_knowledge.no_auto_tag_library")}
-                                                </p>
-                                            )}
-                                        </div>
+                                        <Tabs
+                                            value={autoTagMode}
+                                            onValueChange={handleAutoTagModeChange}
+                                            className="space-y-3"
+                                        >
+                                            <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
+                                                <TabsTrigger
+                                                    value="library"
+                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
+                                                >
+                                                    {localize("com_knowledge.auto_tag_mode_library")}
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="custom"
+                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
+                                                >
+                                                    {localize("com_knowledge.auto_tag_mode_custom")}
+                                                </TabsTrigger>
+                                            </TabsList>
+
+                                            <TabsContent value="library" className="space-y-2">
+                                                <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                    <span className="mr-1 text-[#F53F3F]">*</span>
+                                                    {localize("com_knowledge.auto_tag_library")}
+                                                </Label>
+                                                <Select
+                                                    value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
+                                                    onValueChange={(value) => setAutoTagLibraryId(Number(value))}
+                                                    disabled={tagLibrariesLoading || tagLibraries.length === 0}
+                                                >
+                                                    <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
+                                                        <SelectValue
+                                                            placeholder={
+                                                                tagLibrariesLoading
+                                                                    ? localize("com_knowledge.loading")
+                                                                    : localize("com_knowledge.select_auto_tag_library")
+                                                            }
+                                                        />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="z-[150] bg-white">
+                                                        {tagLibraries.map((library) => (
+                                                            <SelectItem key={library.id} value={String(library.id)}>
+                                                                {library.name} ({library.tag_count})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                {tagLibraries.length === 0 && !tagLibrariesLoading && (
+                                                    <p className="text-[12px] text-[#F53F3F]">
+                                                        {localize("com_knowledge.no_auto_tag_library")}
+                                                    </p>
+                                                )}
+                                                {autoTagLibraryId && (
+                                                    <div className="space-y-1.5 pt-1">
+                                                        <div className="text-[12px] text-[#86909C]">
+                                                            {localize("com_knowledge.auto_tag_library_preview")}
+                                                        </div>
+                                                        {autoTagLibraryTagsLoading ? (
+                                                            <div className="text-[12px] text-[#86909C]">
+                                                                {localize("com_knowledge.loading")}
+                                                            </div>
+                                                        ) : autoTagLibraryTags.length === 0 ? (
+                                                            <div className="text-[12px] text-[#86909C]">
+                                                                {localize("com_knowledge.auto_tag_library_preview_empty")}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-wrap items-center">
+                                                                {(autoTagPreviewExpanded
+                                                                    ? autoTagLibraryTags
+                                                                    : autoTagLibraryTags.slice(0, AUTO_TAG_PREVIEW_LIMIT)
+                                                                ).map((tag, idx) => (
+                                                                    <span
+                                                                        key={`${tag}-${idx}`}
+                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
+                                                                    >
+                                                                        {tag}
+                                                                    </span>
+                                                                ))}
+                                                                {autoTagLibraryTags.length > AUTO_TAG_PREVIEW_LIMIT && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="mb-1.5 text-[12px] text-[#165DFF] hover:underline"
+                                                                        onClick={() => setAutoTagPreviewExpanded((prev) => !prev)}
+                                                                    >
+                                                                        {autoTagPreviewExpanded
+                                                                            ? localize("com_knowledge.collapse")
+                                                                            : `${localize("com_knowledge.expand_more")} (+${autoTagLibraryTags.length - AUTO_TAG_PREVIEW_LIMIT})`}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </TabsContent>
+
+                                            <TabsContent value="custom" className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                        <span className="mr-1 text-[#F53F3F]">*</span>
+                                                        {localize("com_knowledge.auto_tag_mode_custom")}
+                                                    </Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[12px] text-[#86909C]">
+                                                            {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => txtInputRef.current?.click()}
+                                                            className="inline-flex h-6 items-center gap-1 rounded-[4px] border border-[#E5E6EB] bg-white px-2 text-[12px] text-[#4E5969] hover:bg-[#F2F3F5]"
+                                                        >
+                                                            <Upload className="h-3 w-3" />
+                                                            {localize("com_knowledge.upload_txt")}
+                                                        </button>
+                                                        <input
+                                                            ref={txtInputRef}
+                                                            type="file"
+                                                            accept=".txt"
+                                                            className="hidden"
+                                                            onChange={handleUploadTxt}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <Textarea
+                                                    value={autoTagCustomTagsText}
+                                                    onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
+                                                    placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
+                                                    className="min-h-[120px] rounded-[6px] border-[#E5E6EB] bg-white text-[14px]"
+                                                />
+                                            </TabsContent>
+                                        </Tabs>
                                     )}
                                 </div>
                             )}

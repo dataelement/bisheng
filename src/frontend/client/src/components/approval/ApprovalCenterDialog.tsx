@@ -77,6 +77,19 @@ function renderDetailRows(detail: Record<string, any> | null | undefined) {
   return Object.entries(detail).filter(([, value]) => value !== undefined && value !== null && value !== "");
 }
 
+/** Translate raw snapshot field keys to human-readable labels */
+function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
+  const map: Record<string, string> = {
+    menu_key:   localize("com_approval_field_menu_key" as any),
+    menu_name:  localize("com_approval_field_menu_name" as any),
+    reason:     localize("com_approval_field_reason" as any),
+    space_type: localize("com_approval_field_space_type" as any),
+    channel_id: localize("com_approval_field_channel_id" as any),
+    space_id:   localize("com_approval_field_space_id" as any),
+  };
+  return map[key] ?? key;
+}
+
 export function ApprovalCenterDialog({
   open,
   onOpenChange,
@@ -391,7 +404,7 @@ export function ApprovalCenterDialog({
                       <div className="space-y-2 text-[14px] text-[#4e5969]">
                         {currentDetailRows.map(([key, value]) => (
                           <div key={key} className="flex gap-3">
-                            <span className="w-[140px] shrink-0 text-[#86909c]">{key}</span>
+                            <span className="w-[140px] shrink-0 text-[#86909c]">{localizeFieldKey(key, localize)}</span>
                             <span className="break-all">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
                           </div>
                         ))}
@@ -408,7 +421,11 @@ export function ApprovalCenterDialog({
                         {requestDetail.action_logs.map((log, index) => (
                           <div key={`${log.id ?? index}`} className="rounded-xl bg-[#fafbfc] px-4 py-3">
                             <div className="text-[14px] text-[#1d2129]">
-                              {log.operator_user_name || "--"} · {log.action || "--"}
+                              {log.operator_user_name || "--"} · {
+                                log.action
+                                  ? (localize(`com_approval_action_${log.action}` as any, { defaultValue: log.action }) as string)
+                                  : "--"
+                              }
                             </div>
                             <div className="mt-1 text-[12px] text-[#86909c]">{log.create_time || "--"}</div>
                           </div>

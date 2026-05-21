@@ -2371,6 +2371,15 @@
     "tabException": "例外フロー一覧",
     "tabFlow": "フロー管理",
     "searchRole": "ロールを検索…",
-    "searchUser": "ユーザー名を検索…"
+    "searchUser": "ユーザー名を検索…",
+    "menuNeedsApproval": "メニューの承認が必要です",
+    "menuApprovalDesc": "あなたのロールにはこのメニュー権限が含まれていません。下のボタンをクリックして申請してください。承認後にアクセスできます。",
+    "menuApply": "アクセスを申請",
+    "menuApplying": "送信中…",
+    "menuApplied": "申請済み",
+    "menuNoPermission": "このメニューの権限がありません",
+    "menuNoPermissionDesc": "あなたのロールにはこのメニュー権限が含まれていません。管理者にお問い合わせください。",
+    "menuApplyReasonLabel": "申請理由",
+    "menuApplyReasonPlaceholder": "申請理由を入力してください（任意）"
   }
 }
