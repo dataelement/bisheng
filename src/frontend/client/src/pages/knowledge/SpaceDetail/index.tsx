@@ -219,6 +219,20 @@ export function KnowledgeSpaceContent({
     });
     const pendingSimilarCount = pendingSimilarList.length;
 
+    // SimHash scan runs asynchronously on the backend after a file's parse finishes,
+    // so files can transition has_similar=false → true outside our polling cadence
+    // for pending-similar. Watch the has_similar id set on the visible file list;
+    // any change refreshes the top-right "处理相似文档" count.
+    const similarFileIdsKey = displayFiles
+        .filter((f) => f.has_similar && !f.is_multi_version)
+        .map((f) => f.id)
+        .sort()
+        .join(",");
+    useEffect(() => {
+        if (!versionManagementEnabled || spaceIdNum <= 0) return;
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
+    }, [similarFileIdsKey, versionManagementEnabled, spaceIdNum, queryClient]);
+
     // Invalidate pending-similar and trigger file list refresh after any version action
     const handleVersionAction = () => {
         queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
@@ -1133,6 +1147,28 @@ export function KnowledgeSpaceContent({
                         documentTitle={versionHistoryFile?.name}
                         canManage={isAdmin}
                         onPreview={(versionFileId) => handlePreviewFile(String(versionFileId))}
+                        onDownload={async (versionFileId) => {
+                            try {
+                                const downloadData = await getFileDownloadApi(
+                                    String(space.id),
+                                    String(versionFileId),
+                                );
+                                const downloadUrl = downloadData.original_url;
+                                if (!downloadUrl) {
+                                    showToast({
+                                        message: localize("com_knowledge.get_download_link_failed"),
+                                        status: "error",
+                                    });
+                                    return;
+                                }
+                                triggerUrlDownload(downloadUrl);
+                            } catch {
+                                showToast({
+                                    message: localize("com_knowledge.download_failed"),
+                                    status: "error",
+                                });
+                            }
+                        }}
                         onPrimaryChanged={handleVersionAction}
                         onDeleted={handleVersionAction}
                     />

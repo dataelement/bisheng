@@ -46,14 +46,9 @@ export function VersionManagementDialog({
                 className="flex w-full max-w-[720px] flex-col gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none [&>button]:hidden"
             >
                 <DialogHeader className="relative shrink-0 border-b border-[#EBECF0] px-6 py-4 text-left">
-                    <DialogTitle className="text-base font-semibold text-[#1d2129]">
+                    <DialogTitle className="text-[16px] font-semibold text-[#1d2129]">
                         {localize("com_knowledge.version.dialog_title")}
                     </DialogTitle>
-                    <p className="mt-0.5 truncate text-sm text-[#86909c]" title={file.name}>
-                        {localize("com_knowledge.version.dialog_subtitle_for_file", {
-                            name: file.name,
-                        })}
-                    </p>
                     <button
                         type="button"
                         onClick={() => onOpenChange(false)}
@@ -68,7 +63,7 @@ export function VersionManagementDialog({
                     <RelateDocumentPanel
                         spaceId={spaceId}
                         fileId={typeof file.id === "string" ? parseInt(file.id, 10) : file.id}
-                        fileName={file.name}
+                        file={file}
                         onLinked={handleLinked}
                     />
                 </div>

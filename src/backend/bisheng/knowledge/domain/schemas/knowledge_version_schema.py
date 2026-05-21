@@ -46,6 +46,15 @@ class LinkResponse(BaseModel):
     new_version_no: int
 
 
+class MergeRequest(BaseModel):
+    """Version management merge: pull a single-version source document into the
+    current file's document chain as its new primary version. Reverse semantics
+    of LinkRequest — current document absorbs the source.
+    """
+    current_knowledge_file_id: int
+    source_document_id: int
+
+
 class SetPrimaryResponse(BaseModel):
     document_id: int
     new_primary_version_no: int

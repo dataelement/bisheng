@@ -960,11 +960,18 @@ function FileRow({
                                     {`V${file.version_no}`}
                                 </span>
                             )}
-                            {versionManagementEnabled && file.has_similar && (
-                                <span className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44]">
+                            {versionManagementEnabled && file.has_similar && !file.is_multi_version && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenVersionManagement?.(file);
+                                    }}
+                                    className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+                                >
                                     <FileSearch className="size-3" />
                                     {localize("com_knowledge.version.pill_similar")}
-                                </span>
+                                </button>
                             )}
                             <span
                                 className={cn(

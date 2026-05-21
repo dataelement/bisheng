@@ -160,6 +160,21 @@ class KnowledgeVersionService:
         if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise HTTPException(status_code=412, detail="current file must be successfully parsed")
 
+        # Disallow moving the primary version of a multi-version document: doing so
+        # would orphan the source document by stealing its current primary. The
+        # primary must be promoted to another version first.
+        source_version = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
+        if source_version is not None and source_version.is_primary:
+            source_chain = await self.version_repo.find_by_document_id(source_version.document_id)
+            if len(source_chain) >= 2:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "cannot link the primary version of a multi-version document; "
+                        "promote another version to primary first"
+                    ),
+                )
+
         target_doc = await self.doc_repo.find_by_id(target_document_id)
         if target_doc is None:
             raise HTTPException(status_code=404, detail="target document not found")
@@ -401,6 +416,200 @@ class KnowledgeVersionService:
             self.login_user, self.request, kf.knowledge_id, kf.file_name,
         )
         return DismissSimilarResponse(knowledge_file_id=kf.id, similar_status=2)
+
+    async def get_version_recommendations(
+        self,
+        current_file_id: int,
+        *,
+        limit: int = 3,
+    ) -> list:
+        """Top-N single-version similar candidates for the version management dialog.
+
+        Same scoring as get_similar_candidates_for_file but additionally filters out
+        documents that already have multiple versions — multi-version docs cannot be
+        merged in (they own their own version chain).
+        """
+        from bisheng.common.utils.simhash_utils import similarity as _similarity
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
+
+        kf = await self.knowledge_file_repo.find_by_id(current_file_id)
+        if kf is None or not kf.simhash:
+            return []
+
+        conf = await bisheng_settings.async_get_knowledge()
+        vmc = getattr(conf, "version_management", None)
+        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
+
+        self_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
+        self_doc_id = self_v.document_id if self_v else None
+
+        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
+            knowledge_id=kf.knowledge_id, exclude_file_id=current_file_id,
+        )
+
+        scored: list[tuple[float, KnowledgeFile]] = []
+        for c in candidates:
+            if not c.simhash:
+                continue
+            sim = _similarity(kf.simhash, c.simhash)
+            if sim < threshold:
+                continue
+            scored.append((sim, c))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        out: list[SimilarCandidateEntry] = []
+        for sim, c in scored:
+            if len(out) >= limit:
+                break
+            v = await self.version_repo.find_by_knowledge_file_id(c.id)
+            if v is None:
+                continue
+            if self_doc_id is not None and v.document_id == self_doc_id:
+                continue
+            # Single-version filter (the merge-source eligibility constraint)
+            chain = await self.version_repo.find_by_document_id(v.document_id)
+            if len(chain) != 1:
+                continue
+            out.append(SimilarCandidateEntry(
+                target_document_id=v.document_id,
+                title=c.file_name,
+                doc_code=getattr(c, "file_encoding", None),
+                current_primary_version_no=v.version_no,
+                similarity=sim,
+                primary_uploader_name=getattr(c, "user_name", None),
+                primary_upload_time=getattr(c, "create_time", None),
+            ))
+        return out
+
+    async def search_version_sources(
+        self,
+        knowledge_id: int,
+        keyword: str,
+        current_file_id: int,
+    ):
+        """Keyword-search single-version documents in a space — for the version
+        management merge selection. Identical to search_associable_documents but
+        additionally excludes multi-version documents.
+        """
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
+        docs = await self.doc_repo.find_by_knowledge_id(knowledge_id)
+
+        current_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
+        self_doc_id = current_v.document_id if current_v else None
+
+        keyword_lower = (keyword or "").strip().lower()
+        out: list[AssociableDocumentEntry] = []
+        for doc in docs:
+            if doc.id == self_doc_id:
+                continue
+            if doc.primary_version_id is None:
+                continue
+            chain = await self.version_repo.find_by_document_id(doc.id)
+            if len(chain) != 1:
+                continue
+            primary_v = chain[0]
+            kf = await self.knowledge_file_repo.find_by_id(primary_v.knowledge_file_id)
+            if kf is None:
+                continue
+            haystack = " ".join([
+                kf.file_name or "",
+                getattr(kf, "file_encoding", "") or "",
+            ]).lower()
+            if keyword_lower and keyword_lower not in haystack:
+                continue
+            out.append(AssociableDocumentEntry(
+                document_id=doc.id, title=kf.file_name,
+                doc_code=getattr(kf, "file_encoding", None),
+                current_primary_version_no=primary_v.version_no,
+                primary_uploader_name=kf.user_name,
+                primary_upload_time=kf.create_time,
+            ))
+        return out
+
+    async def merge_source_document_into_current(
+        self,
+        current_knowledge_file_id: int,
+        source_document_id: int,
+    ):
+        """Merge a single-version source document into the current file's document
+        chain. The source's V1 file becomes the new primary version of the current
+        document; the source document row is deleted.
+
+        Reverse direction of link_file_to_document — used by the version management
+        flow where the user picks a single-version target to absorb into the file
+        they are managing.
+        """
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkResponse
+        from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
+            KnowledgeAuditTelemetryService,
+        )
+
+        await self._require_version_management_enabled()
+
+        current_kf = await self.knowledge_file_repo.find_by_id(current_knowledge_file_id)
+        if current_kf is None:
+            raise HTTPException(status_code=404, detail="current file not found")
+
+        current_v = await self.version_repo.find_by_knowledge_file_id(current_knowledge_file_id)
+        if current_v is None:
+            raise HTTPException(status_code=404, detail="current file has no document")
+        target_doc_id = current_v.document_id
+
+        source_doc = await self.doc_repo.find_by_id(source_document_id)
+        if source_doc is None:
+            raise HTTPException(status_code=404, detail="source document not found")
+        if source_doc.knowledge_id != current_kf.knowledge_id:
+            raise HTTPException(
+                status_code=409, detail="source document belongs to a different space",
+            )
+
+        source_chain = await self.version_repo.find_by_document_id(source_document_id)
+        if len(source_chain) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="only single-version documents can be merged as a new version",
+            )
+        source_version = source_chain[0]
+        source_kf = await self.knowledge_file_repo.find_by_id(source_version.knowledge_file_id)
+        if source_kf is None or source_kf.status != KnowledgeFileStatus.SUCCESS.value:
+            raise HTTPException(status_code=412, detail="source file must be successfully parsed")
+
+        existing = await self.version_repo.find_by_document_id(target_doc_id)
+        existing_kf_ids = [v.knowledge_file_id for v in existing]
+        existing_kfs = await self.knowledge_file_repo.find_by_ids(existing_kf_ids)
+        if source_kf.md5 and any(kf.md5 == source_kf.md5 for kf in existing_kfs if kf.md5):
+            raise HTTPException(status_code=409, detail="duplicate content already in current chain")
+
+        old_primary = await self.version_repo.find_primary(target_doc_id)
+        if old_primary is not None:
+            old_primary.is_primary = False
+            await self.version_repo.update(old_primary)
+
+        next_no = await self.version_repo.next_version_no(target_doc_id)
+        new_version = KnowledgeDocumentVersion(
+            document_id=target_doc_id,
+            knowledge_file_id=source_kf.id,
+            version_no=next_no,
+            is_primary=True,
+        )
+        saved = await self.version_repo.save(new_version)
+
+        await self.doc_repo.update_primary_version_id(target_doc_id, saved.id)
+
+        if source_version.id != saved.id:
+            await self.version_repo.delete(source_version.id)
+            await self.doc_repo.delete(source_document_id)
+
+        if source_kf.similar_status != 2:
+            source_kf.similar_status = 2
+            await self.knowledge_file_repo.update(source_kf)
+
+        KnowledgeAuditTelemetryService.audit_link_file_version(
+            self.login_user, self.request, current_kf.knowledge_id, source_kf.file_name, next_no,
+        )
+
+        return LinkResponse(document_id=target_doc_id, new_version_no=next_no)
 
     async def get_similar_candidates_for_file(
         self,

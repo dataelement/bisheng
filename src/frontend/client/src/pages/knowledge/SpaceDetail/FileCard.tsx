@@ -1,4 +1,4 @@
-import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
+import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -200,28 +200,38 @@ export function FileCard({
         }
 
         const versionBadge = versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
-            <Badge variant="secondary" className="ml-1 shrink-0 text-xs">{`V${file.version_no}`}</Badge>
-        );
-        const similarIndicator = versionManagementEnabled && file.has_similar && (
-            <span className="mr-1 shrink-0 rounded bg-[#FFF3E8] px-1.5 py-0.5 text-xs text-[#F76F44]">
-                {localize("com_knowledge.version.pill_similar")}
+            <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                {`V${file.version_no}`}
             </span>
+        );
+        const similarIndicator = versionManagementEnabled && file.has_similar && !file.is_multi_version && (
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenVersionManagement?.(file);
+                }}
+                className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+            >
+                <FileSearch className="size-3" />
+                {localize("com_knowledge.version.pill_similar")}
+            </button>
         );
 
         if ((!isAdmin && !approvalStatusLabel) || isFolder) {
             return (
-                <div className="flex min-w-0 items-center">
+                <div className="flex min-w-0 items-center gap-2">
+                    {versionBadge}
                     {similarIndicator}
                     <span className={cn("truncate", nameToneClass)}>{file.name}</span>
-                    {versionBadge}
                 </div>
             );
         }
         return (
             <div className="flex min-w-0 items-center gap-2">
+                {versionBadge}
                 {similarIndicator}
                 <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
-                {versionBadge}
                 {renderStatusBadge()}
             </div>
         );
