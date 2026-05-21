@@ -24,7 +24,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 from bisheng.llm.domain import LLMService
 
 
-AUTO_TAG_MAX_CONTENT = 7000
+AUTO_TAG_MAX_CONTENT = 3000
 AUTO_TAG_MAX_RESULT = 5
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
     "你是知识空间文件自动标签分类器。只能从候选标签中选择最相关的标签，"
