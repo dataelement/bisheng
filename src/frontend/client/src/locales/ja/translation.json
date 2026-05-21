@@ -1878,5 +1878,6 @@
     "action_revoke_grant": "権限を撤回",
     "toast_success": "承認操作を送信しました",
     "toast_failed": "承認操作に失敗しました。後でもう一度お試しください"
-  }
+  },
+  "com_menu_unavailable_no_permission": "このメニューの権限がありません"
 }

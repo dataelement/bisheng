@@ -62,7 +62,7 @@ export default function MenuUnavailablePage() {
         <WorkbenchEmptyIllustration />
       </div>
       <p className="max-w-xl text-center text-sm leading-relaxed text-gray-500" role="status">
-        {message}
+        {canApply ? localize('com_menu_unavailable_no_permission') : message}
       </p>
       {canApply && (
         <div className="mt-6 flex flex-col items-center gap-3">
