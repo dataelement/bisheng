@@ -421,7 +421,11 @@ export function ApprovalCenterDialog({
                         {requestDetail.action_logs.map((log, index) => (
                           <div key={`${log.id ?? index}`} className="rounded-xl bg-[#fafbfc] px-4 py-3">
                             <div className="text-[14px] text-[#1d2129]">
-                              {log.operator_user_name || "--"} · {log.action || "--"}
+                              {log.operator_user_name || "--"} · {
+                                log.action
+                                  ? (localize(`com_approval_action_${log.action}` as any, { defaultValue: log.action }) as string)
+                                  : "--"
+                              }
                             </div>
                             <div className="mt-1 text-[12px] text-[#86909c]">{log.create_time || "--"}</div>
                           </div>

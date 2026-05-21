@@ -1905,5 +1905,14 @@
   "com_approval_field_reason": "申請理由",
   "com_approval_field_space_type": "スペースタイプ",
   "com_approval_field_channel_id": "チャンネル",
-  "com_approval_field_space_id": "ナレッジスペース"
+  "com_approval_field_space_id": "ナレッジスペース",
+  "com_menu_unavailable_apply_submitted": "申請済み",
+  "com_menu_unavailable_apply_submitting": "送信中…",
+  "com_menu_unavailable_reason_label": "申請理由",
+  "com_menu_unavailable_reason_placeholder": "申請理由を入力してください（任意）",
+  "com_approval_action_withdrawn": "取り下げ済み",
+  "com_approval_action_approved": "承認済み",
+  "com_approval_action_rejected": "却下",
+  "com_approval_action_pending": "審査中",
+  "com_approval_action_cancelled": "キャンセル"
 }

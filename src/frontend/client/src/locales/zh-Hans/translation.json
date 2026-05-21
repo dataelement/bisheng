@@ -1911,5 +1911,14 @@
   "com_approval_field_reason": "申请原因",
   "com_approval_field_space_type": "空间类型",
   "com_approval_field_channel_id": "频道",
-  "com_approval_field_space_id": "知识空间"
+  "com_approval_field_space_id": "知识空间",
+  "com_menu_unavailable_apply_submitted": "已提交申请",
+  "com_menu_unavailable_apply_submitting": "提交中…",
+  "com_menu_unavailable_reason_label": "申请理由",
+  "com_menu_unavailable_reason_placeholder": "请填写申请理由（选填）",
+  "com_approval_action_withdrawn": "已撤回",
+  "com_approval_action_approved": "已通过",
+  "com_approval_action_rejected": "已拒绝",
+  "com_approval_action_pending": "待审批",
+  "com_approval_action_cancelled": "已取消"
 }

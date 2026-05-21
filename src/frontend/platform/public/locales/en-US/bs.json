@@ -2428,7 +2428,9 @@
     "menuApplying": "Submitting…",
     "menuApplied": "Application Submitted",
     "menuNoPermission": "No permission for this menu",
-    "menuNoPermissionDesc": "Your role does not include this menu permission. Please contact your administrator."
+    "menuNoPermissionDesc": "Your role does not include this menu permission. Please contact your administrator.",
+    "menuApplyReasonLabel": "Reason",
+    "menuApplyReasonPlaceholder": "Please enter your reason (optional)"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

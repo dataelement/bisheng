@@ -5,6 +5,7 @@ import { applyMenuAccessApi } from "@/controllers/API/approval";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 /** Menu key → i18n label mapping, aligned with MainLayout sidebar */
 const MENU_LABEL_KEYS: Record<string, string> = {
@@ -17,7 +18,7 @@ const MENU_LABEL_KEYS: Record<string, string> = {
   log:         "menu.log",
 };
 
-/** 菜单无权限占位页：approval 模式展示申请按钮，非 approval 模式展示无权限提示 */
+/** 菜单无权限占位页：approval 模式展示申请按钮+理由弹窗，非 approval 模式展示无权限提示 */
 export default function MenuPermissionPlaceholder() {
   const { t } = useTranslation("bs");
   const location = useLocation();
@@ -29,20 +30,24 @@ export default function MenuPermissionPlaceholder() {
   const menuName = menuLabelKey ? t(menuLabelKey, { defaultValue: menuKey }) : "";
   const approvalEnabled = Boolean(user?.menu_approval_mode);
 
-  const [applying, setApplying] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  const handleApply = async () => {
-    if (!menuKey || applying || applied) return;
-    setApplying(true);
+  const handleSubmit = async () => {
+    if (!menuKey || submitting) return;
+    setSubmitting(true);
     await captureAndAlertRequestErrorHoc(
-      applyMenuAccessApi({ menu_key: menuKey, menu_name: menuName })
+      applyMenuAccessApi({ menu_key: menuKey, menu_name: menuName, reason: reason.trim() || undefined })
         .then(() => {
           setApplied(true);
+          setShowDialog(false);
+          setReason("");
           toast({ variant: "success", description: t("approvalPage.genericOperateSuccess") });
         })
     );
-    setApplying(false);
+    setSubmitting(false);
   };
 
   return (
@@ -61,18 +66,53 @@ export default function MenuPermissionPlaceholder() {
         {approvalEnabled && menuKey && (
           <button
             type="button"
-            disabled={applying || applied}
-            onClick={handleApply}
+            disabled={applied}
+            onClick={() => setShowDialog(true)}
             className="mt-6 inline-flex items-center rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
           >
             {applied
               ? t("approvalPage.menuApplied", { defaultValue: "已提交申请" })
-              : applying
-                ? t("approvalPage.menuApplying", { defaultValue: "提交中…" })
-                : t("approvalPage.menuApply", { defaultValue: "申请菜单权限" })}
+              : t("approvalPage.menuApply", { defaultValue: "申请菜单权限" })}
           </button>
         )}
       </div>
+
+      <Dialog open={showDialog} onOpenChange={(v) => { if (!v) { setShowDialog(false); setReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("approvalPage.menuApply", { defaultValue: "申请菜单权限" })}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="block text-sm text-text-secondary">
+              {t("approvalPage.menuApplyReasonLabel", { defaultValue: "申请理由" })}
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                placeholder={t("approvalPage.menuApplyReasonPlaceholder", { defaultValue: "请填写申请理由（选填）" })}
+                className="mt-1 block w-full resize-none rounded-lg border border-border-subtle bg-background-primary px-3 py-2 text-sm text-text-primary outline-none"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => { setShowDialog(false); setReason(""); }}
+              className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            >
+              {t("approvalPage.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void handleSubmit()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+            >
+              {submitting ? t("approvalPage.menuApplying", { defaultValue: "提交中…" }) : t("approvalPage.save")}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

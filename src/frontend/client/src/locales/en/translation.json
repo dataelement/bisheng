@@ -1982,5 +1982,14 @@
   "com_approval_field_reason": "Reason",
   "com_approval_field_space_type": "Space Type",
   "com_approval_field_channel_id": "Channel",
-  "com_approval_field_space_id": "Knowledge Space"
+  "com_approval_field_space_id": "Knowledge Space",
+  "com_menu_unavailable_apply_submitted": "Application Submitted",
+  "com_menu_unavailable_apply_submitting": "Submitting…",
+  "com_menu_unavailable_reason_label": "Reason",
+  "com_menu_unavailable_reason_placeholder": "Please enter your reason (optional)",
+  "com_approval_action_withdrawn": "Withdrawn",
+  "com_approval_action_approved": "Approved",
+  "com_approval_action_rejected": "Rejected",
+  "com_approval_action_pending": "Pending",
+  "com_approval_action_cancelled": "Cancelled"
 }

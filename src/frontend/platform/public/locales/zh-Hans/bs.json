@@ -2378,6 +2378,8 @@
     "menuApplying": "提交中…",
     "menuApplied": "已提交申请",
     "menuNoPermission": "暂无该菜单权限",
-    "menuNoPermissionDesc": "你的角色当前未包含该菜单权限，请联系管理员开通。"
+    "menuNoPermissionDesc": "你的角色当前未包含该菜单权限，请联系管理员开通。",
+    "menuApplyReasonLabel": "申请理由",
+    "menuApplyReasonPlaceholder": "请填写申请理由（选填）"
   }
 }

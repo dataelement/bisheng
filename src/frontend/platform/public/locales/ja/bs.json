@@ -2378,6 +2378,8 @@
     "menuApplying": "送信中…",
     "menuApplied": "申請済み",
     "menuNoPermission": "このメニューの権限がありません",
-    "menuNoPermissionDesc": "あなたのロールにはこのメニュー権限が含まれていません。管理者にお問い合わせください。"
+    "menuNoPermissionDesc": "あなたのロールにはこのメニュー権限が含まれていません。管理者にお問い合わせください。",
+    "menuApplyReasonLabel": "申請理由",
+    "menuApplyReasonPlaceholder": "申請理由を入力してください（任意）"
   }
 }
