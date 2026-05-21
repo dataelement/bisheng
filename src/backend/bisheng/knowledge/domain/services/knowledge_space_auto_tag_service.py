@@ -27,8 +27,8 @@ from bisheng.llm.domain import LLMService
 AUTO_TAG_MAX_CONTENT = 3000
 AUTO_TAG_MAX_RESULT = 5
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
-    "你是知识空间文件自动标签分类器。只能从候选标签中选择最相关的标签，"
-    "最多返回 5 个。只输出严格 JSON，格式固定为 {\"tags\": [\"标签名\"]}。"
+    "你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。\n"
+    "输出格要求严格遵循 JSON 格式： {\"tags\": [\"标签名\"]}。"
 )
 
 
