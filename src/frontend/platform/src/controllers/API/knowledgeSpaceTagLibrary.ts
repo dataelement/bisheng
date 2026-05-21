@@ -33,16 +33,9 @@ export async function createKnowledgeSpaceTagLibraryApi(data: {
   name: string
   description?: string
   tags: string[]
+  is_builtin?: boolean
 }): Promise<KnowledgeSpaceTagLibraryDetail> {
   return await axios.post("/api/v1/knowledge/space/tag-libraries", data)
-}
-
-export async function importKnowledgeSpaceTagLibraryTextApi(data: {
-  name: string
-  description?: string
-  content: string
-}): Promise<KnowledgeSpaceTagLibraryDetail> {
-  return await axios.post("/api/v1/knowledge/space/tag-libraries/import/text", data)
 }
 
 export async function updateKnowledgeSpaceTagLibraryApi(
@@ -58,4 +51,8 @@ export async function updateKnowledgeSpaceTagLibraryApi(
 
 export async function deleteKnowledgeSpaceTagLibraryApi(id: number): Promise<boolean> {
   return await axios.delete(`/api/v1/knowledge/space/tag-libraries/${id}`)
+}
+
+export async function getKnowledgeSpaceTagLibraryUsageApi(id: number): Promise<{ count: number }> {
+  return await axios.get(`/api/v1/knowledge/space/tag-libraries/${id}/usage`)
 }

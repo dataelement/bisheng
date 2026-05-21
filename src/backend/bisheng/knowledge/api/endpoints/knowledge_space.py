@@ -21,6 +21,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.department_knowledge_space_service import DepartmentKnowledgeSpaceService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix='/knowledge/space', tags=['knowledge_space'])
 
@@ -44,6 +45,22 @@ async def create_space(
         auto_tag_library_id=req.auto_tag_library_id,
     )
     return resp_200(space)
+
+
+@router.get('/auto-tag-visibility')
+async def get_auto_tag_visibility(
+        _: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    """Whether the knowledge-space auto-tag UI is enabled for the current tenant.
+
+    Read-only for any logged-in user; respects the same root→tenant inheritance
+    as the rest of the workstation knowledge-space config.
+    """
+    cfg, _inherited, _src, _has_override = (
+        await WorkStationService.get_knowledge_space_config_with_meta()
+    )
+    visible = bool(getattr(cfg, 'auto_tag_visible', False)) if cfg else False
+    return resp_200({'visible': visible})
 
 
 @router.get('/{space_id}/info')
