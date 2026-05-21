@@ -350,7 +350,7 @@ function RouteDialog({
     : (fieldMeta?.values ?? [])
   ).map((v) => ({
     value: v.value,
-    label: v.label.startsWith('approvalPage.') ? t(v.label, { defaultValue: v.value }) : v.label,
+    label: t(v.label, { defaultValue: v.value }),
   }));
   // Apply search filter for applicant_role (search against translated label)
   const effectiveValues = condField === 'applicant_role' && roleSearch
