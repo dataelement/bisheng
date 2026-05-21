@@ -128,7 +128,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         extractModelId: null,
         qaSimilarModelId: null,
         abstractEnabled: true,
-        autoTagEnabled: false,
+        autoTagEnabled: true,
         abstractPrompt: '',
         autoTagPrompt: ''
     });
@@ -156,7 +156,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             extractModelId: extract_title_model_id,
             qaSimilarModelId: qa_similar_model_id,
             abstractEnabled: abstract_enabled ?? true,
-            autoTagEnabled: auto_tag_enabled ?? false,
+            autoTagEnabled: auto_tag_enabled ?? true,
             abstractPrompt: abstract_prompt ?? defalutPrompt,
             autoTagPrompt: auto_tag_prompt ?? defaultAutoTagPrompt,
         })
