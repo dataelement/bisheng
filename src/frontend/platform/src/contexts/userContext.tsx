@@ -206,8 +206,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     { key: 'model', path: '/model/management' },
                     { key: 'evaluation', path: '/evaluation' },
                     { key: 'mark_task', path: '/label' }, // 与角色菜单 third_id 一致
-                    // workstation: 工作台配置页，始终有路由权限
-                    { key: 'workstation', path: '/build/client' },
+                    // admin/workstation are entry-level keys, not content menus;
+                    // excluded intentionally — fallback handles the no-match case.
                 ];
                 const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
                 if (target) {
