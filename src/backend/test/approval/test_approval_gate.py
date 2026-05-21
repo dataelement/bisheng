@@ -583,6 +583,146 @@ async def test_gate_creates_approver_empty_exception():
     instance_repository.create_task.assert_not_awaited()
 
 
+# ── _match_first_route unit tests ────────────────────────────────────────────
+
+def _make_gate() -> ApprovalGate:
+    registry = SimpleNamespace(get_handler=AsyncMock())
+    return ApprovalGate(registry=registry)
+
+
+def _req(user_id: int = 7, tenant_id: int = 1, payload: dict | None = None) -> ApprovalGateRequest:
+    return ApprovalGateRequest(
+        tenant_id=tenant_id,
+        scenario_code='menu_access_request',
+        business_key=f'menu:k:user:{user_id}',
+        business_resource_type='web_menu',
+        business_resource_id='k',
+        business_name='知识管理',
+        applicant_user_id=user_id,
+        applicant_user_name='alice',
+        payload_snapshot=payload or {},
+    )
+
+
+def _route(route_type: str = 'pass', match_config: dict | None = None, enabled: bool = True):
+    return SimpleNamespace(
+        id=99,
+        route_type=route_type,
+        flow_definition_id=None,
+        enabled=enabled,
+        match_config=match_config or {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_catchall_returns_first_enabled(monkeypatch):
+    """Empty match_config → always matches first enabled route."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'regular_user'})))
+    gate = _make_gate()
+    result = await gate._match_first_route([_route()], _req())
+    assert result is not None
+    assert result.route_type == 'pass'
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_skips_disabled_routes(monkeypatch):
+    """Disabled routes are never selected, even if they would otherwise match."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'regular_user'})))
+    gate = _make_gate()
+    disabled = _route(enabled=False)
+    enabled_fallback = _route(route_type='flow', match_config={})
+    result = await gate._match_first_route([disabled, enabled_fallback], _req())
+    assert result is not None
+    assert result.route_type == 'flow'
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_applicant_role_admin_matches(monkeypatch):
+    """applicant_role=admin condition matches when user has admin label."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'admin', 'regular_user'})))
+    gate = _make_gate()
+    admin_route = _route(route_type='pass', match_config={'field': 'applicant_role', 'value': 'admin'})
+    regular_route = _route(route_type='flow', match_config={'field': 'applicant_role', 'value': 'regular_user'})
+    result = await gate._match_first_route([admin_route, regular_route], _req())
+    assert result is not None
+    assert result.route_type == 'pass'
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_applicant_role_regular_skips_admin_route(monkeypatch):
+    """regular_user should skip admin-only route and fall through to regular route."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'regular_user'})))
+    gate = _make_gate()
+    admin_route = _route(route_type='pass', match_config={'field': 'applicant_role', 'value': 'admin'})
+    regular_route = _route(route_type='flow', match_config={'field': 'applicant_role', 'value': 'regular_user'})
+    result = await gate._match_first_route([admin_route, regular_route], _req())
+    assert result is not None
+    assert result.route_type == 'flow'
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_dept_admin_matches(monkeypatch):
+    """dept_admin user should match dept_admin route, not admin route."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'dept_admin', 'regular_user'})))
+    gate = _make_gate()
+    admin_route = _route(route_type='pass', match_config={'field': 'applicant_role', 'value': 'admin'})
+    dept_route = _route(route_type='flow', match_config={'field': 'applicant_role', 'value': 'dept_admin'})
+    result = await gate._match_first_route([admin_route, dept_route], _req())
+    assert result is not None
+    assert result.route_type == 'flow'
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_user_labels_queried_once(monkeypatch):
+    """_get_user_role_labels is called at most once per match, even with multiple role conditions."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    mock_labels = AsyncMock(return_value=frozenset({'regular_user'}))
+    monkeypatch.setattr(gm, '_get_user_role_labels', mock_labels)
+    gate = _make_gate()
+    routes = [
+        _route(match_config={'field': 'applicant_role', 'value': 'admin'}),
+        _route(match_config={'field': 'applicant_role', 'value': 'dept_admin'}),
+        _route(match_config={}),  # catch-all
+    ]
+    result = await gate._match_first_route(routes, _req())
+    assert result is not None
+    assert result.match_config == {}  # catch-all was hit
+    mock_labels.assert_awaited_once()  # only queried once for all role checks
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_payload_condition(monkeypatch):
+    """Payload-based condition matches when payload_snapshot contains the expected value."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'regular_user'})))
+    gate = _make_gate()
+    menu_route = _route(route_type='pass', match_config={'field': 'menu_key', 'value': 'approval_manage'})
+    other_route = _route(route_type='flow', match_config={})
+    req = _req(payload={'menu_key': 'approval_manage'})
+    result = await gate._match_first_route([menu_route, other_route], req)
+    assert result is not None
+    assert result.route_type == 'pass'
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_returns_none_when_no_match(monkeypatch):
+    """Returns None when all routes have conditions that don't match."""
+    import bisheng.approval.domain.services.approval_gate as gm
+    monkeypatch.setattr(gm, '_get_user_role_labels', AsyncMock(return_value=frozenset({'regular_user'})))
+    gate = _make_gate()
+    routes = [
+        _route(match_config={'field': 'applicant_role', 'value': 'admin'}),
+        _route(match_config={'field': 'applicant_role', 'value': 'dept_admin'}),
+    ]
+    result = await gate._match_first_route(routes, _req())
+    assert result is None
+
+
 def test_registry_exposes_default_presets():
     registry = ApprovalRegistry.with_default_presets()
 

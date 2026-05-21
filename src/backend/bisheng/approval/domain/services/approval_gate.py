@@ -20,6 +20,53 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 
 
+async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
+    """Return the full set of identity labels for a user.
+
+    Fixed labels (can overlap):
+        'admin'        → system super-admin (AdminRole=1)
+        'tenant_admin' → tenant admin (via OpenFGA/TenantService)
+        'dept_admin'   → department admin (any department)
+        'regular_user' → always included for every user (catch-all fallback)
+
+    Dynamic labels (one per system role the user holds):
+        'role_{id}'    → user holds the system role with that id
+                         e.g. 'role_3', 'role_7'
+                         Allows conditions like {"field":"applicant_role","value":"role_3"}
+
+    PRD §4.3: "同一申请人可能同时具备多个身份标签，条件匹配采用'包含即命中'"
+    """
+    labels: set[str] = {'regular_user'}
+    try:
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user_role import UserRoleDao
+        user_roles = await UserRoleDao.aget_user_roles(user_id)
+        for ur in user_roles:
+            if ur.role_id == AdminRole:
+                labels.add('admin')
+            else:
+                labels.add(f'role_{ur.role_id}')
+    except Exception:
+        pass
+
+    try:
+        from bisheng.database.models.department import DepartmentDao
+        dept_admins = await DepartmentDao.aget_user_admin_departments(user_id)
+        if dept_admins:
+            labels.add('dept_admin')
+    except Exception:
+        pass
+
+    try:
+        from bisheng.tenant.domain.services.tenant_service import TenantService
+        if await TenantService._is_tenant_admin(user_id, tenant_id):
+            labels.add('tenant_admin')
+    except Exception:
+        pass
+
+    return frozenset(labels)
+
+
 class ApprovalGate:
     def __init__(
         self,
@@ -227,32 +274,45 @@ class ApprovalGate:
         """Evaluate route conditions top-to-bottom; return the first matching enabled route.
 
         match_config format (stored on ApprovalRouteRule):
-          {}                              → catch-all, always matches
+          {}                              → catch-all (no condition), always matches
           {"field": "applicant_role",
-           "value": "admin"}             → matches if req.applicant_role == "admin"
+           "value": "admin"}             → matches if 'admin' ∈ user's identity labels
           {"field": "<payload_key>",
-           "value": "<expected>"}        → matches if payload_snapshot[field] == value
+           "value": "<expected>"}        → matches if payload_snapshot[field] == expected
 
-        Supported field values for applicant_role:
-          "admin"        → 系统管理员
+        applicant_role condition uses "包含即命中" semantics:
+          a user may have multiple labels simultaneously (e.g. admin + dept_admin).
+          The condition matches if the user has AT LEAST the specified label.
+
+        Supported applicant_role values:
+          "admin"        → 系统管理员 (AdminRole=1)
+          "tenant_admin" → 租户管理员
           "dept_admin"   → 部门管理员
-          "regular_user" → 普通用户
+          "regular_user" → 普通用户 (catch-all, every user has this label)
         """
+        user_labels: frozenset[str] | None = None  # lazily resolved; shared across routes
+
         for route in route_rules:
             if not getattr(route, 'enabled', True):
                 continue
             match_config = getattr(route, 'match_config', {}) or {}
             field = match_config.get('field', '')
             if not field:
-                return route  # catch-all
+                return route  # catch-all branch
+
             expected = str(match_config.get('value', ''))
+
             if field == 'applicant_role':
-                if req.applicant_role == expected:
+                if user_labels is None:
+                    user_labels = await _get_user_role_labels(req.applicant_user_id, req.tenant_id)
+                if expected in user_labels:
                     return route
             else:
+                # Payload-based condition: compare against payload_snapshot field
                 payload_val = req.payload_snapshot.get(field)
                 if payload_val is not None and str(payload_val) == expected:
                     return route
+
         return None
 
     @staticmethod

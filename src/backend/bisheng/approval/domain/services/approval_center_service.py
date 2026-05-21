@@ -338,14 +338,6 @@ class ApprovalCenterService:
             has_menu_access=menu_key in set(web_menu),
         )
 
-        # Classify applicant role for condition matching
-        if login_user.is_admin():
-            applicant_role = 'admin'
-        elif is_department_admin:
-            applicant_role = 'dept_admin'
-        else:
-            applicant_role = 'regular_user'
-
         registry = ApprovalRegistry.with_default_presets()
         registry.register_handler('menu_access_request', MenuAccessApprovalHandler())
         gate = ApprovalGate(registry=registry)
@@ -359,7 +351,6 @@ class ApprovalCenterService:
                 business_name=menu_name,
                 applicant_user_id=login_user.user_id,
                 applicant_user_name=login_user.user_name,
-                applicant_role=applicant_role,
                 reason=reason,
                 payload_snapshot={
                     'menu_key': menu_key,
