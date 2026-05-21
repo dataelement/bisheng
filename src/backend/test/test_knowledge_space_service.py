@@ -153,8 +153,29 @@ def _install_schema_stubs() -> None:
             def telemetry_delete_knowledge(*args, **kwargs):
                 return None
 
+            # Version management audit methods (added in P2-T2)
+            @staticmethod
+            def audit_link_file_version(*args, **kwargs):
+                return None
+
+            @staticmethod
+            def audit_set_primary_version(*args, **kwargs):
+                return None
+
+            @staticmethod
+            def audit_delete_file_version(*args, **kwargs):
+                return None
+
+            @staticmethod
+            def audit_dismiss_similar_file(*args, **kwargs):
+                return None
+
         telemetry_module.KnowledgeAuditTelemetryService = _DummyKnowledgeAuditTelemetryService
         sys.modules['bisheng.knowledge.domain.services.knowledge_audit_telemetry_service'] = telemetry_module
+        # Register as attribute on the parent package so pytest monkeypatch can resolve
+        # dotted-path strings like "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service.X"
+        import bisheng.knowledge.domain.services as _svc_pkg
+        _svc_pkg.knowledge_audit_telemetry_service = telemetry_module
 
     if 'bisheng.knowledge.domain.services.knowledge_utils' not in sys.modules:
         knowledge_utils_module = ModuleType('bisheng.knowledge.domain.services.knowledge_utils')

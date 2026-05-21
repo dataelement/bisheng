@@ -150,8 +150,10 @@ class CeleryConf(BaseModel):
             self.task_routers = {
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
-                "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},  # Org Sync Tasks (low frequency, reuse knowledge queue)
-                "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},  # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
+                "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},
+                # Org Sync Tasks (low frequency, reuse knowledge queue)
+                "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},
+                # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
                 "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
@@ -375,12 +377,27 @@ class PaddleOcrConf(BaseModel):
     request_kwargs: Dict = Field(default_factory=dict, description='PaddleOcrService Request Arguments')
 
 
+class VersionManagementConf(BaseModel):
+    """ Version Management Configure """
+    enabled: bool = Field(default=False, description="Enable knowledge-space file version management")
+    simhash_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold (1 - hamming/64) to flag a file as 'similar'. Range [0, 1].",
+    )
+
+
 class KnowledgeConf(BaseModel):
     """ Knowledge Configure """
     loader_provider: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
     etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description='Etl4lm Configure')
     mineru: MineruConf = Field(default_factory=MineruConf, description='Mineru Configure')
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description='PaddleOcr Config')
+    version_management: VersionManagementConf = Field(
+        default_factory=VersionManagementConf,
+        description='Version Management Configure',
+    )
 
 
 class IntelligenceCenterConf(BaseModel):
@@ -449,7 +466,7 @@ class Settings(BaseModel):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    jwt_secret: str = 'secret'
+    jwt_secret: str = 'secret_cF2kD4lW9wY4zL7eX1zX9vS1fA7eW4lQ'
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}

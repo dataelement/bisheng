@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
+import { useVersionManagementEnabled } from "~/hooks";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -31,6 +33,9 @@ import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
+import { VersionManagementDialog } from "./VersionManagementDialog";
+import { VersionHistorySheet } from "./VersionHistorySheet";
+import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
@@ -206,6 +211,45 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+
+    // ─── Version Management ──────────────────────────────────────────────
+    const versionManagementEnabled = useVersionManagementEnabled();
+    const queryClient = useQueryClient();
+    const spaceIdNum = Number(space.id);
+
+    const [versionMgmtFile, setVersionMgmtFile] = useState<KnowledgeFile | null>(null);
+    const [versionHistoryFile, setVersionHistoryFile] = useState<KnowledgeFile | null>(null);
+    const [similarDialogOpen, setSimilarDialogOpen] = useState(false);
+
+    const { data: pendingSimilarList = [] } = useQuery({
+        queryKey: ["pending-similar", spaceIdNum],
+        queryFn: () => getPendingSimilarFilesApi(spaceIdNum),
+        enabled: versionManagementEnabled && spaceIdNum > 0,
+    });
+    const pendingSimilarCount = pendingSimilarList.length;
+
+    // SimHash scan runs asynchronously on the backend after a file's parse finishes,
+    // so files can transition has_similar=false → true outside our polling cadence
+    // for pending-similar. Watch the has_similar id set on the visible file list;
+    // any change refreshes the top-right "处理相似文档" count.
+    const similarFileIdsKey = displayFiles
+        .filter((f) => f.has_similar && !f.is_multi_version)
+        .map((f) => f.id)
+        .sort()
+        .join(",");
+    useEffect(() => {
+        if (!versionManagementEnabled || spaceIdNum <= 0) return;
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
+    }, [similarFileIdsKey, versionManagementEnabled, spaceIdNum, queryClient]);
+
+    // Invalidate pending-similar and trigger file list refresh after any version action
+    const handleVersionAction = () => {
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
+        queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+        // Signal parent to reload file list (same pattern used by batch delete/retry)
+        onDeleteFile("");
+    };
+
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
         [space.id],
         { fullAccessSpaceIds: isAdmin ? [space.id] : [] },
@@ -885,6 +929,9 @@ export function KnowledgeSpaceContent({
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
                 canShareSpace={canShareSpace}
+                versionManagementEnabled={versionManagementEnabled}
+                pendingSimilarCount={pendingSimilarCount}
+                onProcessSimilar={() => setSimilarDialogOpen(true)}
             />
             </div>
 
@@ -972,6 +1019,9 @@ export function KnowledgeSpaceContent({
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
                                             mobileListMode={isH5 && viewMode === "list"}
+                                            versionManagementEnabled={versionManagementEnabled}
+                                            onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
+                                            onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                         />
                                     </div>
                                 ))}
@@ -1003,6 +1053,9 @@ export function KnowledgeSpaceContent({
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
+                                    versionManagementEnabled={versionManagementEnabled}
+                                    onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
+                                    onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                 />
                             </div>
                         </div>
@@ -1098,6 +1151,59 @@ export function KnowledgeSpaceContent({
                     spaceLevel={space.spaceLevel}
                     grantSubjectScopeSpaceId={space.id}
                 />
+            )}
+
+            {versionManagementEnabled && (
+                <>
+                    <VersionManagementDialog
+                        open={versionMgmtFile !== null}
+                        onOpenChange={(o) => { if (!o) setVersionMgmtFile(null); }}
+                        spaceId={spaceIdNum}
+                        file={versionMgmtFile}
+                        onLinked={() => {
+                            handleVersionAction();
+                            setVersionMgmtFile(null);
+                        }}
+                    />
+                    <VersionHistorySheet
+                        open={versionHistoryFile !== null}
+                        onOpenChange={(o) => { if (!o) setVersionHistoryFile(null); }}
+                        fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
+                        documentTitle={versionHistoryFile?.name}
+                        canManage={isAdmin}
+                        onPreview={(versionFileId) => handlePreviewFile(String(versionFileId))}
+                        onDownload={async (versionFileId) => {
+                            try {
+                                const downloadData = await getFileDownloadApi(
+                                    String(space.id),
+                                    String(versionFileId),
+                                );
+                                const downloadUrl = downloadData.original_url;
+                                if (!downloadUrl) {
+                                    showToast({
+                                        message: localize("com_knowledge.get_download_link_failed"),
+                                        status: "error",
+                                    });
+                                    return;
+                                }
+                                triggerUrlDownload(downloadUrl);
+                            } catch {
+                                showToast({
+                                    message: localize("com_knowledge.download_failed"),
+                                    status: "error",
+                                });
+                            }
+                        }}
+                        onPrimaryChanged={handleVersionAction}
+                        onDeleted={handleVersionAction}
+                    />
+                    <SimilarDocumentDialog
+                        open={similarDialogOpen}
+                        onOpenChange={setSimilarDialogOpen}
+                        spaceId={spaceIdNum}
+                        onProcessed={handleVersionAction}
+                    />
+                </>
             )}
         </div>
     );

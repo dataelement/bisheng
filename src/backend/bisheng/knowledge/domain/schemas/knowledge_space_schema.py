@@ -393,3 +393,7 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     approval_status: Optional[str] = Field(None, description="Approval status for pending uploads")
     approval_reason: Optional[str] = Field(None, description="Approval or safety reject reason")
     is_pending_approval: bool = Field(default=False, description="Whether the file is still pending approval")
+    # Version management fields (populated by list_space_children when version feature is enabled)
+    version_no: Optional[int] = Field(default=None, description="Primary version number for multi-version docs")
+    is_multi_version: bool = Field(default=False, description="Whether this file's logical document has >1 version")
+    has_similar: bool = Field(default=False, description="Whether this file has unresolved similar candidates (similar_status == 1)")

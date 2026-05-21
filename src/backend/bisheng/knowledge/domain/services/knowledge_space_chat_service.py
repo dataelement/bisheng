@@ -28,6 +28,7 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.llm.domain import LLMService
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
@@ -340,6 +341,59 @@ class KnowledgeSpaceChatService:
         await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
         return True
 
+    async def _build_folder_search_kwargs(
+        self,
+        knowledge_id: int,
+        target_file_ids: Optional[List[int]],
+    ) -> Tuple[Optional[dict], Optional[dict]]:
+        """Compute Milvus and ES search_kwargs with primary-version-only filtering.
+
+        Args:
+            knowledge_id: the knowledge space id being queried.
+            target_file_ids: None means "whole space"; a list (possibly empty) means
+                "specific files" derived from folder/tag resolution.
+
+        Returns:
+            (milvus_search_kwargs, es_search_kwargs)
+            Both are None when target_file_ids is non-None but empty (caller should
+            skip retriever construction).
+        """
+        # Fetch non-primary file ids once, used in both branches.
+        excluded: List[int] = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
+            [knowledge_id]
+        )
+
+        if target_file_ids is None:
+            # Branch A: whole-space query — apply not-in filter when exclusions exist.
+            milvus_expr, es_filter = build_primary_only_filter(excluded)
+            milvus_kwargs: dict = {"k": 100, "param": {"ef": 110}}
+            es_kwargs: dict = {"k": 100}
+            if milvus_expr is not None:
+                milvus_kwargs["expr"] = milvus_expr
+            if es_filter:
+                es_kwargs["filter"] = es_filter
+            return milvus_kwargs, es_kwargs
+
+        # Branch B: specific files — remove non-primary ids from the target set.
+        excluded_set = set(excluded)
+        effective_target = [fid for fid in target_file_ids if fid not in excluded_set]
+
+        if not effective_target:
+            # All candidates are non-primary or the set was already empty.
+            return None, None
+
+        # The in-clause already restricts to primary files; no must_not needed.
+        milvus_kwargs = {
+            "k": 100,
+            "param": {"ef": 110},
+            "expr": f"document_id in {effective_target}",
+        }
+        es_kwargs = {
+            "k": 100,
+            "filter": [{"terms": {"metadata.document_id": effective_target}}],
+        }
+        return milvus_kwargs, es_kwargs
+
     async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
                           model_id: int, tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
         """ Folder RAG query """
@@ -380,30 +434,15 @@ class KnowledgeSpaceChatService:
 
         vector_retriever, es_retriever = None, None
 
-        if target_file_ids is None:
-            # Query the whole space
+        milvus_kwargs, es_kwargs = await self._build_folder_search_kwargs(knowledge_id, target_file_ids)
+
+        if milvus_kwargs is not None and es_kwargs is not None:
+            # Build retrievers only when there are matching files to query.
             milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
                                                                                  knowledge=space)
             es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            vector_retriever = milvus_vector.as_retriever(search_kwargs={
-                "k": 100,
-                "param": {"ef": 110}
-            })
-            es_retriever = es_vector.as_retriever(search_kwargs={"k": 100})
-        elif target_file_ids:
-            # Query specific files
-            milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
-                                                                                 knowledge=space)
-            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            vector_retriever = milvus_vector.as_retriever(search_kwargs={
-                "k": 100,
-                "param": {"ef": 110},
-                "expr": f"document_id in {target_file_ids}"
-            })
-            es_retriever = es_vector.as_retriever(search_kwargs={
-                "k": 100,
-                "filter": [{"terms": {"metadata.document_id": target_file_ids}}]
-            })
+            vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
+            es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
 
         # executeQuery(vector_retriever, es_retriever, query)
         async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, tags):

@@ -77,6 +77,17 @@ class KnowledgeFileBase(SQLModelSerializable):
         description='File encoding for shougang deployment, e.g. "GF-STD-SC-20260500000001". '
                     'NULL when shougang is disabled or encoding generation has not run yet.',
     )
+    simhash: Optional[str] = Field(
+        default=None,
+        max_length=16,
+        sa_column=Column(String(16), nullable=True),
+        description='64-bit SimHash hex (16 chars). Computed after parse. NULL when not yet computed.',
+    )
+    similar_status: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text('0')),
+        description='0=no similar / 1=pending (similar detected) / 2=resolved (associated or dismissed).',
+    )
     updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
     updater_name: Optional[str] = Field(default=None, index=True)
     tenant_id: Optional[int] = Field(
@@ -438,11 +449,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
                                    file_ids: List[int] = None, extra_file_ids: List[int] = None,
                                    file_level_path: str = None, order_by: str = None,
                                    order_field: str = None, order_sort: str = "desc",
-                                   *, page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
+                                   *, page: int = 0, page_size: int = 0,
+                                   exclude_file_ids: Optional[List[int]] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
                                                       extra_file_ids=extra_file_ids, order_by=order_by,
                                                       order_field=order_field, order_sort=order_sort)
+        if exclude_file_ids:
+            statement = statement.where(col(KnowledgeFile.id).notin_(exclude_file_ids))
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         async with get_async_db_session() as session:
@@ -700,6 +714,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if op == '=':   return s_actual == s_target
         if op in ('!=', '<>'):  return s_actual != s_target
         return False
+
+    @classmethod
+    async def aget_files_by_similar_status(
+        cls, knowledge_id: int, similar_status: int,
+    ) -> List["KnowledgeFile"]:
+        """Files in a space whose similar_status equals the given value.
+
+        Only parsed-SUCCESS files are returned — pending similar UI shouldn't surface
+        files that aren't yet usable.
+        """
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.similar_status == similar_status,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+        )
+        async with get_async_db_session() as session:
+            result = await session.execute(statement)
+            return list(result.scalars().all())
 
     @classmethod
     def update_file_updater(cls, file_id: int, updater_id: int, updater_name: str) -> None:

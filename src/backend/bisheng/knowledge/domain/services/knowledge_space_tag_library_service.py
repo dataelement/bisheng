@@ -88,7 +88,11 @@ class KnowledgeSpaceTagLibraryService:
         return self.to_detail(library)
 
     async def create_library(
-        self, name: str, description: Optional[str], tags: List[str]
+        self,
+        name: str,
+        description: Optional[str],
+        tags: List[str],
+        is_builtin: bool = False,
     ) -> KnowledgeSpaceTagLibraryDetail:
         normalized = self.normalize_tags(tags)
         library = await KnowledgeSpaceTagLibraryDao.ainsert(
@@ -98,17 +102,11 @@ class KnowledgeSpaceTagLibraryService:
                 description=description,
                 tags=normalized,
                 tag_count=len(normalized),
+                is_builtin=is_builtin,
                 user_id=self.login_user.user_id,
             )
         )
         return self.to_detail(library)
-
-    async def import_text_library(
-        self, name: str, description: Optional[str], content: str
-    ) -> KnowledgeSpaceTagLibraryDetail:
-        return await self.create_library(
-            name=name, description=description, tags=self.parse_text_tags(content)
-        )
 
     async def update_library(
         self,
@@ -134,6 +132,12 @@ class KnowledgeSpaceTagLibraryService:
         if updates:
             library = await KnowledgeSpaceTagLibraryDao.aupdate(library_id, **updates)
         return self.to_detail(library)
+
+    async def get_library_usage(self, library_id: int) -> int:
+        library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
+        if not library:
+            raise KnowledgeSpaceTagLibraryNotExistError()
+        return await KnowledgeSpaceTagLibraryDao.acount_used_by_spaces(library_id)
 
     async def delete_library(self, library_id: int) -> None:
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)

@@ -6,7 +6,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import (
     KnowledgeSpaceTagLibraryCreateReq,
-    KnowledgeSpaceTagLibraryImportReq,
     KnowledgeSpaceTagLibraryUpdateReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
@@ -28,7 +27,7 @@ def get_service(
 @router.get("")
 async def list_tag_libraries(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=500),
     keyword: Optional[str] = Query(default=None),
     svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
 ) -> Any:
@@ -42,17 +41,26 @@ async def create_tag_library(
     req: KnowledgeSpaceTagLibraryCreateReq,
     svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
 ) -> Any:
-    return resp_200(await svc.create_library(req.name, req.description, req.tags))
+    return resp_200(
+        await svc.create_library(
+            req.name, req.description, req.tags, is_builtin=req.is_builtin
+        )
+    )
 
 
-@router.post("/import/text")
-async def import_text_tag_library(
-    req: KnowledgeSpaceTagLibraryImportReq,
+@router.get("/{library_id}/usage")
+async def get_tag_library_usage(
+    library_id: int,
     svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
 ) -> Any:
-    return resp_200(
-        await svc.import_text_library(req.name, req.description, req.content)
-    )
+    """How many knowledge spaces currently bind this library.
+
+    Lets the UI tell the admin the blast radius before deletion: those spaces
+    will have their auto_tag_enabled flipped off and auto_tag_library_id cleared
+    once the library is removed.
+    """
+    count = await svc.get_library_usage(library_id)
+    return resp_200({"count": count})
 
 
 @router.get("/{library_id}")

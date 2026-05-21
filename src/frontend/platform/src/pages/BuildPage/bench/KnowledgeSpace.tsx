@@ -24,6 +24,7 @@ import {
     KnowledgeSpaceSensitivePolicy,
     type KnowledgeSpaceSensitivePolicyHandle,
 } from "./KnowledgeSpaceSensitivePolicy";
+import KnowledgeSpaceTagLibrarySection from "./KnowledgeSpaceTagLibrarySection";
 
 interface KnowledgeConfigForm {
     /** 系统提示词，对应接口 system_prompt */
@@ -32,6 +33,8 @@ interface KnowledgeConfigForm {
     userPrompt: string;
     /** 知识空间检索结果最大字符数，对应接口 max_chunk_size */
     maxChunkSize: number;
+    /** 租户级"自动生成标签"功能可见性，对应接口 auto_tag_visible */
+    autoTagVisible: boolean;
 }
 
 export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
@@ -164,6 +167,13 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
 
                             </div>
 
+                            <KnowledgeSpaceTagLibrarySection
+                                visible={formData.autoTagVisible}
+                                onToggle={(checked) =>
+                                    setFormData((prev) => ({ ...prev, autoTagVisible: checked }))
+                                }
+                            />
+
                             <KnowledgeSpaceSensitivePolicy ref={sensitivePolicyRef} />
 
                             {isGlobalSuper && (
@@ -267,6 +277,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         systemPrompt: '',
         userPrompt: '',
         maxChunkSize: 15000,
+        autoTagVisible: false,
     });
 
     const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string }>({
@@ -285,6 +296,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
             const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
+            const autoTagVisibleFromRes = cfg?.auto_tag_visible ?? cfg?.autoTagVisible;
             // When backend returns no saved value, seed the textarea with the
             // localized default template so it is editable as a real value.
             const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
@@ -294,6 +306,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
                 systemPrompt: resolvedSystemPrompt || t('chatConfig.aiPrompt'),
                 userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
+                autoTagVisible: Boolean(autoTagVisibleFromRes),
             }));
         });
     }, [scopeVersion, t]);
@@ -336,6 +349,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             system_prompt: finalSystemPrompt,
             user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
+            auto_tag_visible: formData.autoTagVisible,
         };
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));

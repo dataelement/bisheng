@@ -71,6 +71,11 @@ class EventType(Enum):
     CREATE_KNOWLEDGE_SPACE = "create_knowledge_space"  # Create Knowledge Space
     DELETE_KNOWLEDGE_SPACE = "delete_knowledge_space"  # Delete Knowledge Space
 
+    LINK_FILE_VERSION = "link_file_version"
+    SET_PRIMARY_VERSION = "set_primary_version"
+    DELETE_FILE_VERSION = "delete_file_version"
+    DISMISS_SIMILAR_FILE = "dismiss_similar_file"
+
 
 # Action object type enumeration
 class ObjectType(Enum):

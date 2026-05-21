@@ -21,6 +21,7 @@ import {
     getCreateSpaceDepartmentsApi,
     getCreateSpaceOptionsApi,
     getCreateSpaceUserGroupsApi,
+    getKnowledgeSpaceAutoTagVisibilityApi,
     getKnowledgeSpaceTagLibrariesApi,
     SpaceLevel,
     VisibilityType,
@@ -97,6 +98,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [autoTagLibraryId, setAutoTagLibraryId] = useState<number | null>(null);
     const [tagLibraries, setTagLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
     const [tagLibrariesLoading, setTagLibrariesLoading] = useState(false);
+    const [autoTagFeatureVisible, setAutoTagFeatureVisible] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
@@ -227,6 +229,15 @@ export function CreateKnowledgeSpaceDrawer({
 
     useEffect(() => {
         if (!open) return;
+        // Tenant-level visibility gate: when the admin disables auto-tag
+        // generation in the workstation config, hide this section entirely.
+        getKnowledgeSpaceAutoTagVisibilityApi()
+            .then((res) => setAutoTagFeatureVisible(Boolean(res?.visible)))
+            .catch(() => setAutoTagFeatureVisible(false));
+    }, [open]);
+
+    useEffect(() => {
+        if (!open || !autoTagFeatureVisible) return;
         setTagLibrariesLoading(true);
         getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 200 })
             .then((res) => {
@@ -243,7 +254,7 @@ export function CreateKnowledgeSpaceDrawer({
                 });
             })
             .finally(() => setTagLibrariesLoading(false));
-    }, [open]);
+    }, [open, autoTagFeatureVisible]);
 
     const handleConfirm = async () => {
         // Guard against double-submit while the previous request is still in-flight.
@@ -269,7 +280,11 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
-        if (autoTagEnabled && !autoTagLibraryId) {
+        // When the tenant-level feature is hidden, drop any local state that
+        // might have been pre-filled in edit mode so we never submit stale flags.
+        const effectiveAutoTagEnabled = autoTagFeatureVisible && autoTagEnabled;
+        const effectiveAutoTagLibraryId = effectiveAutoTagEnabled ? autoTagLibraryId : null;
+        if (effectiveAutoTagEnabled && !effectiveAutoTagLibraryId) {
             showToast({
                 message: localize("com_knowledge.auto_tag_library_required"),
                 severity: NotificationSeverity.WARNING
@@ -284,8 +299,8 @@ export function CreateKnowledgeSpaceDrawer({
             spaceLevel,
             departmentId: spaceLevel === SpaceLevel.DEPARTMENT ? departmentId : undefined,
             userGroupId: spaceLevel === SpaceLevel.TEAM ? userGroupId : undefined,
-            autoTagEnabled,
-            autoTagLibraryId: autoTagEnabled ? autoTagLibraryId : null,
+            autoTagEnabled: effectiveAutoTagEnabled,
+            autoTagLibraryId: effectiveAutoTagLibraryId,
         };
         try {
             setSubmitting(true);
@@ -632,65 +647,67 @@ export function CreateKnowledgeSpaceDrawer({
                                 </div>
                             )}
 
-                            <div className="space-y-3 rounded-[6px] border border-[#E5E6EB] bg-[#FAFBFC] p-4">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div className="min-w-0">
-                                        <Label className="text-[14px] font-medium text-[#1D2129]">
-                                            {localize("com_knowledge.auto_tag_generation")}
-                                        </Label>
-                                        <p className="mt-1 text-[14px] font-normal text-[#999999]">
-                                            {localize("com_knowledge.auto_tag_generation_desc")}
-                                        </p>
-                                    </div>
-                                    <Switch
-                                        checked={autoTagEnabled}
-                                        onCheckedChange={(checked) => {
-                                            setAutoTagEnabled(checked);
-                                            if (!checked) return;
-                                            if (!autoTagLibraryId && tagLibraries.length === 1) {
-                                                setAutoTagLibraryId(tagLibraries[0].id);
-                                            }
-                                        }}
-                                        className="shrink-0 data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
-                                    />
-                                </div>
-
-                                {autoTagEnabled && (
-                                    <div className="space-y-2">
-                                        <Label className="text-[14px] font-medium text-[#1D2129]">
-                                            <span className="mr-1 text-[#F53F3F]">*</span>
-                                            {localize("com_knowledge.auto_tag_library")}
-                                        </Label>
-                                        <Select
-                                            value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
-                                            onValueChange={(value) => setAutoTagLibraryId(Number(value))}
-                                            disabled={tagLibrariesLoading || tagLibraries.length === 0}
-                                        >
-                                            <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
-                                                <SelectValue
-                                                    placeholder={
-                                                        tagLibrariesLoading
-                                                            ? localize("com_knowledge.loading")
-                                                            : localize("com_knowledge.select_auto_tag_library")
-                                                    }
-                                                />
-                                            </SelectTrigger>
-                                            <SelectContent className="z-[150] bg-white">
-                                                {tagLibraries.map((library) => (
-                                                    <SelectItem key={library.id} value={String(library.id)}>
-                                                        {library.name} ({library.tag_count})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {tagLibraries.length === 0 && !tagLibrariesLoading && (
-                                            <p className="text-[12px] text-[#F53F3F]">
-                                                {localize("com_knowledge.no_auto_tag_library")}
+                            {autoTagFeatureVisible && (
+                                <div className="space-y-3 rounded-[6px] border border-[#E5E6EB] bg-[#FAFBFC] p-4">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="min-w-0">
+                                            <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                {localize("com_knowledge.auto_tag_generation")}
+                                            </Label>
+                                            <p className="mt-1 text-[14px] font-normal text-[#999999]">
+                                                {localize("com_knowledge.auto_tag_generation_desc")}
                                             </p>
-                                        )}
+                                        </div>
+                                        <Switch
+                                            checked={autoTagEnabled}
+                                            onCheckedChange={(checked) => {
+                                                setAutoTagEnabled(checked);
+                                                if (!checked) return;
+                                                if (!autoTagLibraryId && tagLibraries.length === 1) {
+                                                    setAutoTagLibraryId(tagLibraries[0].id);
+                                                }
+                                            }}
+                                            className="shrink-0 data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
+                                        />
                                     </div>
-                                )}
-                            </div>
+
+                                    {autoTagEnabled && (
+                                        <div className="space-y-2">
+                                            <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                <span className="mr-1 text-[#F53F3F]">*</span>
+                                                {localize("com_knowledge.auto_tag_library")}
+                                            </Label>
+                                            <Select
+                                                value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
+                                                onValueChange={(value) => setAutoTagLibraryId(Number(value))}
+                                                disabled={tagLibrariesLoading || tagLibraries.length === 0}
+                                            >
+                                                <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
+                                                    <SelectValue
+                                                        placeholder={
+                                                            tagLibrariesLoading
+                                                                ? localize("com_knowledge.loading")
+                                                                : localize("com_knowledge.select_auto_tag_library")
+                                                        }
+                                                    />
+                                                </SelectTrigger>
+                                                <SelectContent className="z-[150] bg-white">
+                                                    {tagLibraries.map((library) => (
+                                                        <SelectItem key={library.id} value={String(library.id)}>
+                                                            {library.name} ({library.tag_count})
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {tagLibraries.length === 0 && !tagLibrariesLoading && (
+                                                <p className="text-[12px] text-[#F53F3F]">
+                                                    {localize("com_knowledge.no_auto_tag_library")}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

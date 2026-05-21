@@ -11,7 +11,8 @@ import {
     Download,
     Tag,
     RotateCcw,
-    Trash2
+    Trash2,
+    FileSearch
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -74,6 +75,10 @@ interface KnowledgeSpaceHeaderProps {
     isAiAssistantOpen?: boolean;
     enableCardMode?: boolean;
     canShareSpace?: boolean;
+    // Version management
+    versionManagementEnabled?: boolean;
+    pendingSimilarCount?: number;
+    onProcessSimilar?: () => void;
 }
 
 export function KnowledgeSpaceHeader({
@@ -110,6 +115,9 @@ export function KnowledgeSpaceHeader({
     isAiAssistantOpen,
     enableCardMode = true,
     canShareSpace = false,
+    versionManagementEnabled = false,
+    pendingSimilarCount = 0,
+    onProcessSimilar,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -277,6 +285,20 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
+            {versionManagementEnabled && pendingSimilarCount > 0 && onProcessSimilar && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-md border border-[#F76F44] bg-[#FFF3E8] px-3 font-normal text-[#F76F44] hover:bg-[#FFE6D2] hover:text-[#F76F44]"
+                    onClick={onProcessSimilar}
+                >
+                    <FileSearch className="size-4" />
+                    {localize("com_knowledge.version.header_process_similar_label")}
+                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded bg-white px-1 text-xs text-[#F76F44]">
+                        {pendingSimilarCount}
+                    </span>
+                </Button>
+            )}
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>

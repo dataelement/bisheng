@@ -56,6 +56,8 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType, FileSource
 )
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
@@ -108,6 +110,9 @@ from bisheng.worker.knowledge import file_worker
 
 if TYPE_CHECKING:
     from bisheng.message.domain.services.message_service import MessageService
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
+        KnowledgeDocumentVersionRepository,
+    )
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 200
@@ -156,6 +161,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.login_user = login_user
         self.message_service: Optional['MessageService'] = None
         self.approval_gate: Optional[ApprovalGate] = None
+        # Injected by DI factory after construction (same pattern as message_service).
+        # When set, list_space_children will exclude non-primary version files and
+        # return version enrichment fields.
+        self.version_repo: Optional['KnowledgeDocumentVersionRepository'] = None
 
     def _ensure_space_async_task_tenant_consistency(
         self, space: Knowledge, operation: str
@@ -3571,6 +3580,62 @@ class KnowledgeSpaceService(KnowledgeUtils):
             content_item_list=content,
         )
 
+    async def _enrich_with_version_info(self, items: List[KnowledgeFile]) -> List[KnowledgeFile]:
+        """Attach version_no / is_multi_version / has_similar to file items in-place.
+
+        Requires self.version_repo to be set.  Folders are skipped (file_type==0).
+        The method mutates each KnowledgeFile object by setting dynamic attributes;
+        these are picked up by _handle_file_folder_extra_info when it calls
+        model_dump() because it updates the dict with the extra fields.
+        Returns the same list for convenience.
+        """
+        if not self.version_repo:
+            return items
+
+        file_items = [it for it in items if it.file_type != FileType.DIR.value]
+        if not file_items:
+            return items
+
+        file_id_list = [f.id for f in file_items]
+        # Fetch primary version rows for all visible file-page items in one query.
+        primary_versions = await self.version_repo.find_primary_versions_by_file_ids(file_id_list)
+        # Map: knowledge_file_id -> KnowledgeDocumentVersion
+        ver_by_file: Dict[int, KnowledgeDocumentVersion] = {
+            v.knowledge_file_id: v for v in primary_versions
+        }
+
+        # Count all versions per document to determine is_multi_version.
+        # Batch by unique document_ids to avoid N queries.
+        # Uses the module-level get_async_db_session so that tests can patch it.
+        from sqlalchemy import func as _func
+        doc_ids = list({v.document_id for v in primary_versions})
+        doc_version_counts: Dict[int, int] = {}
+        if doc_ids:
+            stmt = (
+                select(
+                    KnowledgeDocumentVersion.document_id,
+                    _func.count(KnowledgeDocumentVersion.id),
+                )
+                .where(KnowledgeDocumentVersion.document_id.in_(doc_ids))
+                .group_by(KnowledgeDocumentVersion.document_id)
+            )
+            async with get_async_db_session() as session:
+                rows = (await session.execute(stmt)).all()
+            doc_version_counts = {row[0]: row[1] for row in rows}
+
+        for item in file_items:
+            ver = ver_by_file.get(item.id)
+            if ver is not None:
+                count = doc_version_counts.get(ver.document_id, 1)
+                item._version_no = ver.version_no
+                item._is_multi_version = count > 1
+            else:
+                item._version_no = None
+                item._is_multi_version = False
+            item._has_similar = (item.similar_status == 1)
+
+        return items
+
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
         folder_ids = []
         file_ids = []
@@ -3629,6 +3694,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
                 item["summary"] = one.abstract or ""
+                # Version enrichment fields set by _enrich_with_version_info (if version_repo is set).
+                item["version_no"] = getattr(one, "_version_no", None)
+                item["is_multi_version"] = getattr(one, "_is_multi_version", False)
+                item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
             result.append(item)
 
         return result
@@ -3675,6 +3744,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_type: Optional[int],
         page: int,
         page_size: int,
+        exclude_file_ids: Optional[List[int]] = None,
     ) -> tuple[int, List[KnowledgeFile]]:
         target_start = max(page - 1, 0) * page_size if page_size else 0
         target_end = target_start + page_size if page_size else None
@@ -3695,6 +3765,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 page=scan_page,
                 page_size=_CHILD_PERMISSION_SCAN_BATCH_SIZE,
                 file_type=file_type,
+                exclude_file_ids=exclude_file_ids,
             )
             if not batch_items:
                 break
@@ -3738,6 +3809,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id('folder', parent_id, 'view_folder', space_id=space_id)
         else:
             await self._require_permission_id('knowledge_space', space_id, 'view_space')
+
+        # Exclude non-primary version files so only the current primary revision is visible.
+        exclude_file_ids: Optional[List[int]] = None
+        if self.version_repo is not None:
+            exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
+
         total, visible_page_items = await self._scan_visible_child_items(
             space_id=space_id,
             parent_id=parent_id,
@@ -3748,7 +3825,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_type=file_type,
             page=page,
             page_size=page_size,
+            exclude_file_ids=exclude_file_ids,
         )
+
+        # Enrich page items with version fields (version_no, is_multi_version, has_similar).
+        await self._enrich_with_version_info(visible_page_items)
+
         data = await self._handle_file_folder_extra_info(visible_page_items)
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
@@ -3814,13 +3896,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if filter_files:
                 extra_file_ids = list(set(filter_files) & set(extra_file_ids))
 
+        # Exclude non-primary version files so only the current primary revision is visible.
+        exclude_file_ids: Optional[List[int]] = None
+        if self.version_repo is not None:
+            exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
+
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                           extra_file_ids=extra_file_ids, status=file_status,
                                                           file_level_path=file_level_path, order_by="file_type",
-                                                          order_field=order_field, order_sort=order_sort)
+                                                          order_field=order_field, order_sort=order_sort,
+                                                          exclude_file_ids=exclude_file_ids)
         visible_items = await self._filter_visible_child_items(res, space_id=space_id)
         total = len(visible_items)
-        data = await self._handle_file_folder_extra_info(self._paginate_items(visible_items, page, page_size))
+        page_items = self._paginate_items(visible_items, page, page_size)
+
+        # Enrich page items with version fields (version_no, is_multi_version, has_similar).
+        await self._enrich_with_version_info(page_items)
+
+        data = await self._handle_file_folder_extra_info(page_items)
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
@@ -4076,6 +4169,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, 'id', None):
                         created_files.append(db_file)
+                        # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
+                        # This is independent of the version-management switch (D3): the rows always
+                        # exist so the file list can be document-driven even when the switch is off.
+                        async with get_async_db_session() as v_session:
+                            v_doc = KnowledgeDocument(
+                                knowledge_id=db_file.knowledge_id,
+                                file_level_path=db_file.file_level_path,
+                                level=db_file.level or 0,
+                            )
+                            v_session.add(v_doc)
+                            await v_session.flush()
+                            v_version = KnowledgeDocumentVersion(
+                                document_id=v_doc.id,
+                                knowledge_file_id=db_file.id,
+                                version_no=1,
+                                is_primary=True,
+                            )
+                            v_session.add(v_version)
+                            await v_session.flush()
+                            v_doc.primary_version_id = v_version.id
+                            v_session.add(v_doc)
+                            await v_session.commit()
                     # Get a preview cache of this filekey
                     cache_key = self.get_preview_cache_key(
                         knowledge_id, one

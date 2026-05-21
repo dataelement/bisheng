@@ -291,6 +291,9 @@ export interface KnowledgeFile {
     fileEncoding?: string | null;        // mapped from file_encoding
     summary?: string;
     isPendingApproval?: boolean;
+    version_no?: number;          // primary version number; absent for folders / legacy files
+    is_multi_version?: boolean;   // true when the document has >=2 versions
+    has_similar?: boolean;        // true when similar_status === 1 (pending review)
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -688,6 +691,9 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         isPendingApproval: Boolean(raw?.is_pending_approval),
         fileEncoding: raw?.file_encoding ?? null,
         summary: raw?.summary ?? raw?.abstract ?? "",
+        version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
+        is_multi_version: Boolean(raw?.is_multi_version),
+        has_similar: Boolean(raw?.has_similar),
     };
 }
 
@@ -1151,6 +1157,19 @@ export async function getKnowledgeSpaceTagLibrariesApi(params?: {
         data: Array.isArray(payload?.data) ? payload.data : [],
         total: Number(payload?.total ?? 0),
     };
+}
+
+/**
+ * Whether the knowledge-space auto-tag UI is enabled for the current tenant.
+ * Read-only; backed by the workstation knowledge-space config (with root→tenant
+ * inheritance). Returns { visible: false } when not configured.
+ */
+export async function getKnowledgeSpaceAutoTagVisibilityApi(): Promise<{ visible: boolean }> {
+    const res = await request.get<ApiResponse<{ visible: boolean }>>(
+        `/api/v1/knowledge/space/auto-tag-visibility`
+    );
+    const payload: any = (res as any)?.data ?? res;
+    return { visible: Boolean(payload?.visible) };
 }
 
 /**
@@ -1809,4 +1828,230 @@ export async function updateFileEncoding(
         `/api/v1/knowledge/space/${spaceId}/files/${fileId}/encoding`,
         { encoding },
     );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Version management (2.6 beta2)
+// ─────────────────────────────────────────────────────────────
+
+/** Single entry in a file's version history list */
+export interface FileVersionEntry {
+    version_id: number;
+    version_no: number;
+    is_primary: boolean;
+    knowledge_file_id: number;
+    original_file_name: string;
+    file_code?: string | null;
+    uploader_name?: string | null;
+    uploader_id?: number | null;
+    upload_time?: string | null;     // ISO datetime
+    status?: number | null;          // mirrors FileStatus numeric values
+}
+
+/** Wrapping response from the versions endpoint */
+export interface VersionListResponse {
+    document_id: number;
+    knowledge_id: number;
+    title: string;
+    doc_code?: string | null;
+    current_primary_version_no?: number | null;
+    versions: FileVersionEntry[];
+}
+
+/**
+ * List all versions of a document (identified by any member knowledge_file_id).
+ * GET /api/v1/knowledge/space/file/{knowledge_file_id}/versions
+ */
+export async function getFileVersionsApi(
+    knowledge_file_id: number
+): Promise<VersionListResponse> {
+    const res = await request.get(
+        `/api/v1/knowledge/space/file/${knowledge_file_id}/versions`
+    ) as ApiResponse<VersionListResponse>;
+    return res.data;
+}
+
+/** Payload for linking an existing file to a document as a new version */
+export interface LinkAsNewVersionPayload {
+    knowledge_file_id: number;
+    target_document_id: number;
+}
+
+/** Response from linking a file as a new document version */
+export interface LinkAsNewVersionResponse {
+    document_id: number;
+    new_version_no: number;
+}
+
+/**
+ * Link an existing standalone file to a document as a new version.
+ * POST /api/v1/knowledge/space/document/link
+ */
+export async function linkAsNewVersionApi(
+    payload: LinkAsNewVersionPayload
+): Promise<LinkAsNewVersionResponse> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/document/link`,
+        payload
+    ) as ApiResponse<LinkAsNewVersionResponse>;
+    return res.data;
+}
+
+/** Response from setting a version as primary */
+export interface SetPrimaryResponse {
+    document_id: number;
+    new_primary_version_no: number;
+}
+
+/**
+ * Promote a version to primary (the version that represents the document in search / display).
+ * POST /api/v1/knowledge/space/version/{version_id}/set-primary
+ */
+export async function setPrimaryVersionApi(version_id: number): Promise<SetPrimaryResponse> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/version/${version_id}/set-primary`
+    ) as ApiResponse<SetPrimaryResponse>;
+    return res.data;
+}
+
+/**
+ * Delete a non-primary version (history record only; does not affect the document).
+ * DELETE /api/v1/knowledge/space/version/{version_id}
+ */
+export async function deleteFileVersionApi(version_id: number): Promise<void> {
+    await request.delete(`/api/v1/knowledge/space/version/${version_id}`);
+}
+
+/** Document entry returned by the keyword-search endpoint used in the link dialog */
+export interface SearchableDocumentEntry {
+    document_id: number;
+    title: string;
+    doc_code?: string | null;
+    current_primary_version_no: number;
+    primary_uploader_name?: string | null;
+    primary_upload_time?: string | null;
+}
+
+/**
+ * Search documents within a space by keyword — used to find a target document when linking versions.
+ * current_file_id excludes the source file's own document from the results.
+ * GET /api/v1/knowledge/space/{space_id}/document/search?keyword=...&current_file_id=...
+ */
+export async function searchDocumentsApi(
+    space_id: number,
+    keyword: string,
+    current_file_id: number
+): Promise<SearchableDocumentEntry[]> {
+    const res = await request.get<ApiResponse<SearchableDocumentEntry[]>>(
+        `/api/v1/knowledge/space/${space_id}/document/search`,
+        { params: { keyword, current_file_id } }
+    );
+    return extractList<SearchableDocumentEntry>((res as any)?.data ?? res);
+}
+
+/** Candidate document entry returned by the similarity recommendation API */
+export interface SimilarCandidateEntry {
+    target_document_id: number;
+    title: string;
+    doc_code?: string;
+    current_primary_version_no: number;
+    similarity: number;
+    primary_uploader_name?: string;
+    primary_upload_time?: string;
+}
+
+/**
+ * Get similar document candidates for a newly uploaded file.
+ * GET /api/v1/knowledge/space/file/{file_id}/similar
+ */
+export async function getSimilarCandidatesApi(file_id: number): Promise<SimilarCandidateEntry[]> {
+    const res = await request.get<ApiResponse<SimilarCandidateEntry[]>>(
+        `/api/v1/knowledge/space/file/${file_id}/similar`
+    );
+    return extractList<SimilarCandidateEntry>((res as any)?.data ?? res);
+}
+
+/** Entry in the pending-similar-files list for a space */
+export interface PendingSimilarFileEntry {
+    knowledge_file_id: number;
+    file_name: string;
+    file_code?: string | null;
+    candidate_count: number;
+}
+
+/**
+ * List files in a space that have been flagged as similar (pending user review).
+ * GET /api/v1/knowledge/space/{space_id}/similar-pending
+ */
+export async function getPendingSimilarFilesApi(space_id: number): Promise<PendingSimilarFileEntry[]> {
+    const res = await request.get<ApiResponse<PendingSimilarFileEntry[]>>(
+        `/api/v1/knowledge/space/${space_id}/similar-pending`
+    );
+    return extractList<PendingSimilarFileEntry>((res as any)?.data ?? res);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Version management dialog — reverse-direction merge APIs.
+// These mirror the similar/search/link triplet above but restrict candidates
+// to single-version documents and absorb the picked document INTO the current
+// file's chain (instead of moving the current file into the target chain).
+// Used by RelateDocumentPanel (the per-file version management entry).
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Top-N single-version similar candidates for the current file's version dialog.
+ * GET /api/v1/knowledge/space/file/{file_id}/version-recommendations
+ */
+export async function getVersionRecommendationsApi(
+    file_id: number,
+): Promise<SimilarCandidateEntry[]> {
+    const res = await request.get<ApiResponse<SimilarCandidateEntry[]>>(
+        `/api/v1/knowledge/space/file/${file_id}/version-recommendations`
+    );
+    return extractList<SimilarCandidateEntry>((res as any)?.data ?? res);
+}
+
+/**
+ * Search single-version documents (keyword) — version management merge picker.
+ * GET /api/v1/knowledge/space/{space_id}/document/version-search?keyword=...&current_file_id=...
+ */
+export async function searchVersionSourcesApi(
+    space_id: number,
+    keyword: string,
+    current_file_id: number,
+): Promise<SearchableDocumentEntry[]> {
+    const res = await request.get<ApiResponse<SearchableDocumentEntry[]>>(
+        `/api/v1/knowledge/space/${space_id}/document/version-search`,
+        { params: { keyword, current_file_id } }
+    );
+    return extractList<SearchableDocumentEntry>((res as any)?.data ?? res);
+}
+
+/** Payload for merging a source document into the current file's chain */
+export interface MergeIntoCurrentPayload {
+    current_knowledge_file_id: number;
+    source_document_id: number;
+}
+
+/**
+ * Merge a single-version source document into the current file's document chain
+ * as its new primary version. Source document is deleted afterwards.
+ * POST /api/v1/knowledge/space/version/merge
+ */
+export async function mergeIntoCurrentApi(
+    payload: MergeIntoCurrentPayload,
+): Promise<LinkAsNewVersionResponse> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/version/merge`,
+        payload
+    ) as ApiResponse<LinkAsNewVersionResponse>;
+    return res.data;
+}
+
+/**
+ * Dismiss the similar-file flag for a file (user chose not to link it to any document).
+ * POST /api/v1/knowledge/space/file/{file_id}/dismiss-similar
+ */
+export async function dismissSimilarApi(file_id: number): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/file/${file_id}/dismiss-similar`);
 }

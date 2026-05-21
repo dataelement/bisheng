@@ -33,6 +33,10 @@ class KnowledgeSpaceSubscribeScenarioHandler:
         return {'space_id': req.payload_snapshot.get('space_id')}
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
+        sources = node_config.get('sources') or []
+        if sources:
+            from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
+            return await resolve_approvers_from_sources(sources, req)
         approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
         return [int(one) for one in approver_ids]
 

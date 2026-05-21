@@ -102,9 +102,14 @@ def db_session(db_engine):
 # Asynchronous DB fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope='session')
+@pytest.fixture()
 async def async_db_engine():
-    """Session-scoped async SQLite engine with all test tables created."""
+    """Function-scoped async SQLite engine with all test tables created.
+
+    Each test gets a fresh in-memory DB so committed writes from repo methods
+    (e.g. update_primary_version_id) do not bleed between tests. StaticPool +
+    aiosqlite makes this effectively microsecond-cost per test.
+    """
     from sqlalchemy.ext.asyncio import create_async_engine
 
     engine = create_async_engine(
@@ -112,7 +117,6 @@ async def async_db_engine():
         connect_args={'check_same_thread': False},
         poolclass=StaticPool,
     )
-    # Create tables using sync connection (aiosqlite supports run_sync)
     async with engine.begin() as conn:
         from test.fixtures.table_definitions import (
             TABLE_DEFINITIONS,
@@ -129,16 +133,20 @@ async def async_db_engine():
 
 @pytest.fixture()
 async def async_db_session(async_db_engine):
-    """Function-scoped async session with ROLLBACK isolation."""
+    """Function-scoped async session.
+
+    Isolation is provided by the function-scoped engine (fresh in-memory DB per
+    test), so no explicit rollback is needed — the DB is discarded after yield.
+    """
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    async with async_db_engine.connect() as connection:
-        transaction = await connection.begin()
-        session = AsyncSession(bind=connection)
-        yield session
-        await session.close()
-        if transaction.is_active:
-            await transaction.rollback()
+    # expire_on_commit=False prevents SQLAlchemy from marking objects as expired
+    # after commit(), which would otherwise trigger sync lazy-loads in async
+    # context (MissingGreenlet). In tests we never reuse objects across
+    # transaction boundaries, so this is safe.
+    session = AsyncSession(bind=async_db_engine, expire_on_commit=False)
+    yield session
+    await session.close()
 
 
 # ---------------------------------------------------------------------------

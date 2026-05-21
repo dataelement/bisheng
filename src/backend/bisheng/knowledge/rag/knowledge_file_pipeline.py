@@ -11,6 +11,7 @@ from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
 from bisheng.knowledge.rag.pipeline.transformer.content_safety import ContentSafetyTransformer
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
+from bisheng.knowledge.rag.pipeline.transformer.simhash import SimHashTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
@@ -93,6 +94,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             invoke_user_id=self.invoke_user_id,
             knowledge_file=self.db_file,
         ))
+        abstract_transformers.append(SimHashTransformer(knowledge_file=self.db_file))
         abstract_transformers.append(ExtraFileTransformer(
             loader=self.loader,
             document_id=str(self.db_file.id),
@@ -128,6 +130,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
     def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
         abstract_transformers = self._init_content_safety_transformers()
         abstract_transformers.extend(self._init_abstract_transformers())
+        abstract_transformers.append(SimHashTransformer(knowledge_file=self.db_file))
         abstract_transformers.append(ExtraFileTransformer(
             loader=self.loader,
             document_id=str(self.db_file.id),
