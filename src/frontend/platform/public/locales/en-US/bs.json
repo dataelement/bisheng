@@ -2420,7 +2420,8 @@
     "selectScenarioHint": "Select an approval scenario on the left",
     "tabException": "Exception List",
     "tabFlow": "Flow Management",
-    "searchRole": "Search role…"
+    "searchRole": "Search role…",
+    "searchUser": "Search username…"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

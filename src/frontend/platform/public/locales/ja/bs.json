@@ -2370,6 +2370,7 @@
     "selectScenarioHint": "左側で承認シナリオを選択してください",
     "tabException": "例外フロー一覧",
     "tabFlow": "フロー管理",
-    "searchRole": "ロールを検索…"
+    "searchRole": "ロールを検索…",
+    "searchUser": "ユーザー名を検索…"
   }
 }

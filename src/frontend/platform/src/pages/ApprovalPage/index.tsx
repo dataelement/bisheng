@@ -118,23 +118,23 @@ const FIXED_ROLE_VALUES = [
 ];
 
 // Static menu key options mirroring backend WebMenuResource enum
+// Top-level items only — mirrors the visible toggles in role config (Roles.tsx).
+// Sub-items (create_knowledge, create_app) are excluded: users apply for the
+// parent menu, not sub-toggles.
 const MENU_KEY_VALUES = [
-  { value: 'workstation',    label: 'approvalPage.menuKeyLabel.workstation' },
-  { value: 'admin',          label: 'approvalPage.menuKeyLabel.admin' },
-  { value: 'build',          label: 'approvalPage.menuKeyLabel.build' },
-  { value: 'create_app',     label: 'approvalPage.menuKeyLabel.create_app' },
-  { value: 'knowledge',      label: 'approvalPage.menuKeyLabel.knowledge' },
-  { value: 'knowledge_space',label: 'approvalPage.menuKeyLabel.knowledge_space' },
-  { value: 'model',          label: 'approvalPage.menuKeyLabel.model' },
-  { value: 'tool',           label: 'approvalPage.menuKeyLabel.tool' },
-  { value: 'mcp',            label: 'approvalPage.menuKeyLabel.mcp' },
-  { value: 'channel',        label: 'approvalPage.menuKeyLabel.channel' },
-  { value: 'evaluation',     label: 'approvalPage.menuKeyLabel.evaluation' },
-  { value: 'dataset',        label: 'approvalPage.menuKeyLabel.dataset' },
-  { value: 'mark_task',      label: 'approvalPage.menuKeyLabel.mark_task' },
-  { value: 'board',          label: 'approvalPage.menuKeyLabel.board' },
-  { value: 'home',           label: 'approvalPage.menuKeyLabel.home' },
-  { value: 'apps',           label: 'approvalPage.menuKeyLabel.apps' },
+  // Admin console menus
+  { value: 'board',           label: 'menu.board' },
+  { value: 'model',           label: 'menu.models' },
+  { value: 'log',             label: 'menu.log' },
+  { value: 'knowledge',       label: 'menu.knowledge' },
+  { value: 'build',           label: 'menu.skills' },
+  { value: 'evaluation',      label: 'menu.evaluation' },
+  { value: 'mark_task',       label: 'menu.annotation' },
+  // Workbench menus
+  { value: 'home',            label: 'menu.workbenchHome' },
+  { value: 'apps',            label: 'menu.workbenchApps' },
+  { value: 'subscription',    label: 'menu.workbench1' },
+  { value: 'knowledge_space', label: 'menu.workbench2' },
 ];
 
 const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
@@ -349,7 +349,7 @@ function RouteDialog({
     : (fieldMeta?.values ?? [])
   ).map((v) => ({
     value: v.value,
-    label: v.label.startsWith('approvalPage.') ? t(v.label, { defaultValue: v.value }) : v.label,
+    label: t(v.label, { defaultValue: v.value }),
   }));
   // Apply search filter for applicant_role (search against translated label)
   const effectiveValues = condField === 'applicant_role' && roleSearch
@@ -620,9 +620,12 @@ function NodeDialog({
 
   useEffect(() => {
     if (!userPickerOpen) return;
-    getUsersApi({ name: userSearch, page: 1, pageSize: 50 }).then((res) => {
-      setUserList(res.data ?? []);
-    }).catch(() => setUserList([]));
+    const timer = setTimeout(() => {
+      getUsersApi({ name: userSearch, page: 1, pageSize: 50, simple: true }).then((res) => {
+        setUserList(res.data ?? []);
+      }).catch(() => setUserList([]));
+    }, 300);
+    return () => clearTimeout(timer);
   }, [userPickerOpen, userSearch]);
 
   const openUserPicker = () => {
@@ -776,7 +779,7 @@ function NodeDialog({
           <input
             value={userSearch}
             onChange={(e) => setUserSearch(e.target.value)}
-            placeholder={t("approvalPage.searchRole")}
+            placeholder={t("approvalPage.searchUser")}
             className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
           />
           <div className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
@@ -858,6 +861,11 @@ export default function ApprovalPage() {
 
   // ── dialog states ─────────────────────────────────────────────────────────
   const [showAddScenario, setShowAddScenario] = useState(false);
+  const [editScenarioDialog, setEditScenarioDialog] = useState<{
+    open: boolean;
+    scenario: ApprovalScenarioItem | null;
+    name: string;
+  }>({ open: false, scenario: null, name: "" });
   const [routeDialog, setRouteDialog] = useState<{
     open: boolean;
     initial: Partial<ApprovalRouteItem>;
@@ -967,6 +975,18 @@ export default function ApprovalPage() {
       await loadPage();
     } catch (e: any) {
       toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericUpdateFailed")) });
+    }
+  };
+
+  const handleSaveScenarioName = async () => {
+    const { scenario, name } = editScenarioDialog;
+    if (!scenario || !name.trim()) return;
+    try {
+      await updateApprovalScenarioApi(scenario.id, { scenario_name: name.trim() });
+      setEditScenarioDialog({ open: false, scenario: null, name: "" });
+      await loadPage();
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
     }
   };
 
@@ -1208,20 +1228,20 @@ export default function ApprovalPage() {
                         : "border-border-subtle bg-white hover:bg-gray-50"
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <span className="text-sm font-medium text-text-primary leading-snug">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex-1 min-w-0 text-sm font-medium text-text-primary leading-snug truncate">
                         {s.scenario_name}
                       </span>
-                      <StatusBadge enabled={s.enabled} />
-                    </div>
-                    {/* action icons — shown on hover */}
-                    <div className="mt-2 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <StatusBadge enabled={s.enabled} />
+                        {/* action icons — shown on hover */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         title={t("approvalPage.edit")}
                         onClick={(e) => {
                           e.stopPropagation();
-                          /* scenario name edit not required by spec */
+                          setEditScenarioDialog({ open: true, scenario: s, name: s.scenario_name });
                         }}
                         className="text-gray-400 hover:text-gray-600"
                       >
@@ -1238,6 +1258,8 @@ export default function ApprovalPage() {
                       >
                         <Trash2 size={13} />
                       </button>
+                        </div>
+                      </div>
                     </div>
                   </button>
                 );
@@ -1676,6 +1698,46 @@ export default function ApprovalPage() {
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />
+
+      {/* Edit scenario name dialog */}
+      <Dialog
+        open={editScenarioDialog.open}
+        onOpenChange={(v) => !v && setEditScenarioDialog({ open: false, scenario: null, name: "" })}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("approvalPage.edit")}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="block text-sm text-text-secondary">
+              {t("approvalPage.scenarioSection")}
+              <input
+                value={editScenarioDialog.name}
+                onChange={(e) => setEditScenarioDialog((prev) => ({ ...prev, name: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && void handleSaveScenarioName()}
+                className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setEditScenarioDialog({ open: false, scenario: null, name: "" })}
+              className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            >
+              {t("approvalPage.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={!editScenarioDialog.name.trim()}
+              onClick={() => void handleSaveScenarioName()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+            >
+              {t("approvalPage.save")}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

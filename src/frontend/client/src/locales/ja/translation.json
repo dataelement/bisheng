@@ -1538,6 +1538,7 @@
       "btn_dismiss": "関連付けない",
       "confirm_link_title": "関連付けの確認",
       "confirm_link_description": "「{{name}}」は「{{target}}」の新しいバージョンになります。元の主バージョンは履歴バージョンに降格されます。続行しますか?",
+      "confirm_merge_description": "「{{target}}」は「{{name}}」の新しいバージョンになります。元の主バージョンは履歴バージョンに降格されます。続行しますか?",
       "similar_dialog_title": "類似ドキュメントの処理",
       "similar_dialog_empty": "処理待ちの類似ドキュメントはありません",
       "similar_dialog_left_header": "処理待ち ({{count}})",
@@ -1554,7 +1555,10 @@
       "history_action_download": "ダウンロード",
       "history_action_set_primary": "主バージョンに設定",
       "history_action_delete": "削除",
-      "history_primary_badge": "現在",
+      "history_primary_badge": "主バージョン",
+      "history_label_doc": "ロジカル文書",
+      "history_label_doc_code": "文書コード",
+      "history_label_primary_version": "現在の主バージョン",
       "history_confirm_set_primary_title": "主バージョンを切り替え",
       "history_confirm_set_primary_description": "V{{version}} が主バージョンになり、RAG 検索とチャットに即時反映されます。",
       "history_confirm_delete_title": "履歴バージョンを削除",
@@ -1568,7 +1572,17 @@
       "toast_delete_failure": "バージョンの削除に失敗しました",
       "toast_dismiss_success": "処理済みとしてマークしました",
       "header_process_similar_label": "類似ドキュメントを処理",
-      "pill_similar": "類似"
+      "pill_similar": "類似",
+      "similar_dialog_subtitle": "処理待ち {{count}} 件",
+      "pending_row_recommend_count": "{{count}} 件の推奨",
+      "section_current_file": "現在のファイル",
+      "current_file_recommend_pill": "{{count}} 件の推奨",
+      "section_recommendations_subtitle": "選択すると、現在のファイルが該当ドキュメントの新バージョンになります。",
+      "section_search_subtitle": "キーワードで現在のナレッジ空間のドキュメントを検索し、選択して新バージョンとして関連付けます。",
+      "search_button": "検索",
+      "section_dismiss": "関連付けをスキップ",
+      "section_dismiss_subtitle": "現在のファイルを独立ドキュメントとして保持し、バージョンチェーンに追加しません。",
+      "btn_close": "閉じる"
     }
   },
   "com_subscription": {

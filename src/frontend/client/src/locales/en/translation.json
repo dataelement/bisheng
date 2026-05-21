@@ -1615,6 +1615,7 @@
       "btn_dismiss": "Don't link",
       "confirm_link_title": "Confirm link",
       "confirm_link_description": "\"{{name}}\" will become a new version of \"{{target}}\". The previous primary version becomes a history version. Continue?",
+      "confirm_merge_description": "\"{{target}}\" will become a new version of \"{{name}}\". The previous primary version becomes a history version. Continue?",
       "similar_dialog_title": "Process similar documents",
       "similar_dialog_empty": "No pending similar documents",
       "similar_dialog_left_header": "Pending ({{count}})",
@@ -1631,7 +1632,10 @@
       "history_action_download": "Download",
       "history_action_set_primary": "Set as primary",
       "history_action_delete": "Delete",
-      "history_primary_badge": "Current",
+      "history_primary_badge": "Primary",
+      "history_label_doc": "Logical document",
+      "history_label_doc_code": "Document code",
+      "history_label_primary_version": "Current primary",
       "history_confirm_set_primary_title": "Switch primary version",
       "history_confirm_set_primary_description": "V{{version}} will become the primary version. RAG retrieval and chat will use the new version immediately.",
       "history_confirm_delete_title": "Delete history version",
@@ -1645,7 +1649,17 @@
       "toast_delete_failure": "Failed to delete version",
       "toast_dismiss_success": "Marked as resolved",
       "header_process_similar_label": "Process similar documents",
-      "pill_similar": "Similar"
+      "pill_similar": "Similar",
+      "similar_dialog_subtitle": "{{count}} pending files",
+      "pending_row_recommend_count": "{{count}} recommendations",
+      "section_current_file": "Current file",
+      "current_file_recommend_pill": "{{count}} recommendations",
+      "section_recommendations_subtitle": "Once selected, the current file becomes a new version of the chosen document.",
+      "section_search_subtitle": "Search documents in this knowledge space by keyword; select a result to link as a new version.",
+      "search_button": "Search",
+      "section_dismiss": "Skip linking",
+      "section_dismiss_subtitle": "Keep the current file as a standalone document; do not add it to a version chain.",
+      "btn_close": "Close"
     }
   },
   "com_subscription": {

@@ -373,6 +373,7 @@ async def list_user(*,
                     page_num: Optional[int] = 1,
                     group_id: Annotated[List[int], Query()] = None,
                     role_id: Annotated[List[int], Query()] = None,
+                    simple: bool = False,
                     login_user: LoginUser = Depends(LoginUser.get_login_user)):
     groups = group_id
     roles = role_id
@@ -442,15 +443,32 @@ async def list_user(*,
             user_ids = list(set(roles_user_ids))
 
     users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
+
+    # simple=True: skip avatar/roles/groups — used by lightweight pickers (e.g. approver selector)
+    if simple:
+        res = [
+            {'user_id': one.user_id, 'user_name': one.user_name}
+            for one in users
+        ]
+        return resp_200({'data': res, 'total': total_count})
+
     uid_list = [int(one.user_id) for one in users if getattr(one, "user_id", None) is not None]
     primary_dept_by_user = _primary_department_id_map_for_user_ids(uid_list)
+
+    # Parallelize avatar presigned-URL generation to avoid N serial MinIO round-trips
+    import asyncio as _asyncio
+    avatar_urls = await _asyncio.gather(*[
+        UserService.get_avatar_share_link(one.model_dump().get("avatar"))
+        for one in users
+    ])
+
     res = []
     role_dict = {}
     group_dict = {}
-    for one in users:
+    for one, avatar_url in zip(users, avatar_urls):
         one_data = one.model_dump()
         one_data["department_id"] = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
-        one_data["avatar"] = UserService.get_avatar_share_link_sync(one_data.get("avatar"))
+        one_data["avatar"] = avatar_url
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
         # If not hyper-managed, data needs to be filtered, Cannot see the list of roles and user groups within a user group not managed by him

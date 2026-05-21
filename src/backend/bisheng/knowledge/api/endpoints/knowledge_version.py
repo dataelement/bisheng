@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.api.dependencies import get_knowledge_version_service
-from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkRequest
+from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkRequest, MergeRequest
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
 router = APIRouter(prefix='/knowledge/space', tags=['knowledge_version'])
@@ -87,4 +87,38 @@ async def dismiss_similar(
     svc: KnowledgeVersionService = Depends(get_knowledge_version_service),
 ) -> Any:
     data = await svc.dismiss_similar(knowledge_file_id)
+    return resp_200(data)
+
+
+@router.get('/file/{knowledge_file_id}/version-recommendations')
+async def get_version_recommendations(
+    knowledge_file_id: int,
+    svc: KnowledgeVersionService = Depends(get_knowledge_version_service),
+) -> Any:
+    data = await svc.get_version_recommendations(knowledge_file_id)
+    return resp_200(data)
+
+
+@router.get('/{space_id}/document/version-search')
+async def search_version_sources(
+    space_id: int,
+    keyword: str = Query(""),
+    current_file_id: int = Query(...),
+    svc: KnowledgeVersionService = Depends(get_knowledge_version_service),
+) -> Any:
+    data = await svc.search_version_sources(
+        knowledge_id=space_id, keyword=keyword, current_file_id=current_file_id,
+    )
+    return resp_200(data)
+
+
+@router.post('/version/merge')
+async def merge_version(
+    req: MergeRequest,
+    svc: KnowledgeVersionService = Depends(get_knowledge_version_service),
+) -> Any:
+    data = await svc.merge_source_document_into_current(
+        current_knowledge_file_id=req.current_knowledge_file_id,
+        source_document_id=req.source_document_id,
+    )
     return resp_200(data)

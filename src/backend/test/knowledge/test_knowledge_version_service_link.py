@@ -139,3 +139,77 @@ async def test_link_rejected_when_current_file_not_parsed(enable_switch, async_d
     with pytest.raises(HTTPException) as ctx:
         await svc.link_file_to_document(knowledge_file_id=101, target_document_id=target_doc.id)
     assert ctx.value.status_code == 412
+
+
+@pytest.mark.asyncio
+async def test_link_rejected_when_source_is_primary_of_multi_version_doc(
+    enable_switch, async_db_session, monkeypatch
+):
+    """Source file is the primary of a doc that already has >=2 versions.
+
+    Moving it would orphan the source doc, so the link must be rejected with 409.
+    """
+    target_doc, _ = await _seed_doc(async_db_session, 1, 100, "target.pdf", md5="aaa")
+    # Source doc with V1 (historical) + V2 (primary, current source) — V2 is the file to link
+    source_doc, _ = await _seed_doc(async_db_session, 1, 200, "v1.pdf", md5="bbb")
+    # Demote V1 and add V2 as the new primary
+    chain = await KnowledgeDocumentVersionRepositoryImpl(async_db_session).find_by_document_id(source_doc.id)
+    chain[0].is_primary = False
+    async_db_session.add(chain[0])
+    async_db_session.add(KnowledgeFile(id=201, knowledge_id=1, file_name="v2.pdf",
+                                       file_type=1, status=2, md5="ccc"))
+    await async_db_session.commit()
+    v2 = KnowledgeDocumentVersion(document_id=source_doc.id, knowledge_file_id=201,
+                                  version_no=2, is_primary=True)
+    async_db_session.add(v2)
+    await async_db_session.commit()
+    await async_db_session.refresh(v2)
+    source_doc.primary_version_id = v2.id
+    async_db_session.add(source_doc)
+    await async_db_session.commit()
+
+    svc = _build_svc(async_db_session)
+    with pytest.raises(HTTPException) as ctx:
+        await svc.link_file_to_document(knowledge_file_id=201, target_document_id=target_doc.id)
+    assert ctx.value.status_code == 409
+    assert "multi-version document" in ctx.value.detail
+
+
+@pytest.mark.asyncio
+async def test_link_allowed_when_source_is_historical_version_of_multi_version_doc(
+    enable_switch, async_db_session, monkeypatch
+):
+    """Source file is a non-primary version of a multi-version doc — allowed.
+
+    The historical version is detached from its source doc and attached to target as new primary.
+    """
+    target_doc, _ = await _seed_doc(async_db_session, 1, 100, "target.pdf", md5="aaa")
+    # Source doc with V1 (will become historical) + V2 (primary)
+    source_doc, _ = await _seed_doc(async_db_session, 1, 300, "v1.pdf", md5="ddd")
+    chain = await KnowledgeDocumentVersionRepositoryImpl(async_db_session).find_by_document_id(source_doc.id)
+    chain[0].is_primary = False  # demote V1
+    async_db_session.add(chain[0])
+    async_db_session.add(KnowledgeFile(id=301, knowledge_id=1, file_name="v2.pdf",
+                                       file_type=1, status=2, md5="eee"))
+    await async_db_session.commit()
+    v2 = KnowledgeDocumentVersion(document_id=source_doc.id, knowledge_file_id=301,
+                                  version_no=2, is_primary=True)
+    async_db_session.add(v2)
+    await async_db_session.commit()
+    await async_db_session.refresh(v2)
+    source_doc.primary_version_id = v2.id
+    async_db_session.add(source_doc)
+    await async_db_session.commit()
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
+        "KnowledgeAuditTelemetryService.audit_link_file_version",
+        MagicMock(return_value=None),
+    )
+    svc = _build_svc(async_db_session)
+    # Link the historical V1 (kf=300) to target — should succeed
+    result = await svc.link_file_to_document(knowledge_file_id=300, target_document_id=target_doc.id)
+    assert result.document_id == target_doc.id
+    # Source doc should still exist with v2 as its primary (we only stole the historical one)
+    surviving = await KnowledgeDocumentVersionRepositoryImpl(async_db_session).find_by_document_id(source_doc.id)
+    assert len(surviving) == 1 and surviving[0].knowledge_file_id == 301
