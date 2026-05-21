@@ -861,6 +861,11 @@ export default function ApprovalPage() {
 
   // ── dialog states ─────────────────────────────────────────────────────────
   const [showAddScenario, setShowAddScenario] = useState(false);
+  const [editScenarioDialog, setEditScenarioDialog] = useState<{
+    open: boolean;
+    scenario: ApprovalScenarioItem | null;
+    name: string;
+  }>({ open: false, scenario: null, name: "" });
   const [routeDialog, setRouteDialog] = useState<{
     open: boolean;
     initial: Partial<ApprovalRouteItem>;
@@ -970,6 +975,18 @@ export default function ApprovalPage() {
       await loadPage();
     } catch (e: any) {
       toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericUpdateFailed")) });
+    }
+  };
+
+  const handleSaveScenarioName = async () => {
+    const { scenario, name } = editScenarioDialog;
+    if (!scenario || !name.trim()) return;
+    try {
+      await updateApprovalScenarioApi(scenario.id, { scenario_name: name.trim() });
+      setEditScenarioDialog({ open: false, scenario: null, name: "" });
+      await loadPage();
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
     }
   };
 
@@ -1224,7 +1241,7 @@ export default function ApprovalPage() {
                         title={t("approvalPage.edit")}
                         onClick={(e) => {
                           e.stopPropagation();
-                          /* scenario name edit not required by spec */
+                          setEditScenarioDialog({ open: true, scenario: s, name: s.scenario_name });
                         }}
                         className="text-gray-400 hover:text-gray-600"
                       >
@@ -1679,6 +1696,46 @@ export default function ApprovalPage() {
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />
+
+      {/* Edit scenario name dialog */}
+      <Dialog
+        open={editScenarioDialog.open}
+        onOpenChange={(v) => !v && setEditScenarioDialog({ open: false, scenario: null, name: "" })}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("approvalPage.edit")}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="block text-sm text-text-secondary">
+              {t("approvalPage.scenarioSection")}
+              <input
+                value={editScenarioDialog.name}
+                onChange={(e) => setEditScenarioDialog((prev) => ({ ...prev, name: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && void handleSaveScenarioName()}
+                className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setEditScenarioDialog({ open: false, scenario: null, name: "" })}
+              className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            >
+              {t("approvalPage.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={!editScenarioDialog.name.trim()}
+              onClick={() => void handleSaveScenarioName()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+            >
+              {t("approvalPage.save")}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
