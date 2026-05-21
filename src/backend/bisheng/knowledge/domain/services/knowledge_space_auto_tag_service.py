@@ -26,6 +26,10 @@ from bisheng.llm.domain import LLMService
 
 AUTO_TAG_MAX_CONTENT = 7000
 AUTO_TAG_MAX_RESULT = 5
+DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
+    "你是知识空间文件自动标签分类器。只能从候选标签中选择最相关的标签，"
+    "最多返回 5 个。只输出严格 JSON，格式固定为 {\"tags\": [\"标签名\"]}。"
+)
 
 
 class KnowledgeSpaceAutoTagService:
@@ -70,7 +74,11 @@ class KnowledgeSpaceAutoTagService:
                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
                 user_id=db_file.user_id,
             )
-            selected = cls._invoke_llm(llm, text, library.tags or [])
+            system_prompt = (
+                (llm_config.auto_tag_prompt or "").strip()
+                or DEFAULT_AUTO_TAG_SYSTEM_PROMPT
+            )
+            selected = cls._invoke_llm(llm, text, library.tags or [], system_prompt)
             matched = cls._match_library_tags(selected, library.tags or [])
             if not matched:
                 logger.info(
@@ -129,17 +137,16 @@ class KnowledgeSpaceAutoTagService:
         return content[:AUTO_TAG_MAX_CONTENT]
 
     @staticmethod
-    def _invoke_llm(llm, text: str, library_tags: List[str]) -> List[str]:
+    def _invoke_llm(
+        llm,
+        text: str,
+        library_tags: List[str],
+        system_prompt: str = DEFAULT_AUTO_TAG_SYSTEM_PROMPT,
+    ) -> List[str]:
         candidate_text = "\n".join(f"- {tag}" for tag in library_tags)
         response = llm.invoke(
             [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是知识空间文件自动标签分类器。只能从候选标签中选择最相关的标签，"
-                        '最多返回 5 个。只输出严格 JSON，格式固定为 {"tags": ["标签名"]}。'
-                    ),
-                },
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": f"候选标签：\n{candidate_text}\n\n文件内容：\n{text}",

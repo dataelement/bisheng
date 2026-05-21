@@ -1,7 +1,7 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -16,7 +16,7 @@ import {
     type KnowledgeSpaceTagLibraryListItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -280,15 +280,12 @@ export default function KnowledgeSpaceTagLibrarySection({
                 {visible && (
                     <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                         <div className="mb-3 flex items-center gap-2">
-                            <div className="relative w-[280px]">
-                                <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                                <Input
-                                    className="pl-9"
-                                    placeholder={t("build.searchTagLibrary", "搜索标签库名称")}
-                                    value={keyword}
-                                    onChange={(e) => setKeyword(e.target.value)}
-                                />
-                            </div>
+                            <SearchInput
+                                className="w-[280px]"
+                                placeholder={t("build.searchTagLibrary", "搜索标签库名称")}
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                            />
                             <div className="ml-auto">
                                 <Button onClick={openCreate}>
                                     <Plus className="mr-2 size-4" />
