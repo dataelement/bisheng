@@ -20,6 +20,8 @@ import {
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
+    MAX_FOLDER_UPLOAD_COUNT,
+    MAX_UPLOAD_COUNT,
     getAllowedExtensions,
     getFileInputAccept,
     triggerUrlDownload,
@@ -58,6 +60,10 @@ interface KnowledgeSpaceContentProps {
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
     onNavigateFolder: (folderId?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
+    onUploadFolder: (
+        files: FileList | File[],
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+    ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
     onRenameFile: (fileId: string, newName: string) => void;
@@ -89,6 +95,7 @@ export function KnowledgeSpaceContent({
     onSort,
     onNavigateFolder,
     onUploadFile,
+    onUploadFolder,
     onCreateFolder,
     onDownloadFile,
     onRenameFile,
@@ -508,10 +515,16 @@ export function KnowledgeSpaceContent({
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const folderInputRef = useRef<HTMLInputElement>(null);
 
     const triggerUpload = () => {
         if (!canUploadFile) return;
         fileInputRef.current?.click();
+    };
+
+    const triggerUploadFolder = () => {
+        if (!canUploadFile) return;
+        folderInputRef.current?.click();
     };
 
     useEffect(() => {
@@ -534,7 +547,7 @@ export function KnowledgeSpaceContent({
         if (e.target.files && e.target.files.length > 0) {
             const filesList = Array.from(e.target.files);
 
-            if (filesList.length > 50) {
+            if (filesList.length > MAX_UPLOAD_COUNT) {
                 showToast({ message: localize("com_knowledge.max_upload_50"), status: "error" });
                 if (fileInputRef.current) fileInputRef.current.value = "";
                 return;
@@ -559,6 +572,19 @@ export function KnowledgeSpaceContent({
             }
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
+    };
+
+    // Folder upload: hand the full FileList over to the hook, which handles
+    // hidden-folder rejection, dup-name check, count cap, and silent filtering.
+    const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const filesList = e.target.files;
+        if (filesList && filesList.length > 0 && canUploadFile) {
+            onUploadFolder(filesList, {
+                allowedExtensions,
+                maxSizeMB: maxFileSizeMB,
+            });
+        }
+        if (folderInputRef.current) folderInputRef.current.value = "";
     };
 
     // ─── Drag and drop ──────────────────────────────────────────────────
@@ -871,6 +897,21 @@ export function KnowledgeSpaceContent({
                 onChange={handleFileChange}
                 accept={fileInputAccept}
             />
+            {/* Hidden Folder Input — `webkitdirectory` makes the picker select
+                a directory instead of files; each File carries its
+                `webkitRelativePath`. No `accept` here: filtering by extension
+                is done in the hook (silently) per spec. */}
+            <input
+                type="file"
+                multiple
+                className="hidden"
+                ref={folderInputRef}
+                onChange={handleFolderChange}
+                // `webkitdirectory`/`directory` are non-standard but accepted
+                // by every browser we ship to. React typings don't list them.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                {...({ webkitdirectory: "", directory: "" } as any)}
+            />
             {/* Header */}
             <div className="shrink-0">
             <KnowledgeSpaceHeader
@@ -890,6 +931,7 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
+                onTriggerUploadFolder={triggerUploadFolder}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(

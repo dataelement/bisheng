@@ -106,6 +106,9 @@ export const DEFAULT_MAX_FILE_SIZE_MB = 200;
 /** Maximum number of files per upload batch */
 export const MAX_UPLOAD_COUNT = 50;
 
+/** Maximum number of files per folder upload batch */
+export const MAX_FOLDER_UPLOAD_COUNT = 1000;
+
 /** Maximum folder nesting depth */
 export const MAX_FOLDER_DEPTH = 10;
 
@@ -181,6 +184,47 @@ export function formatTimeCard(dateString: string): string {
 
     const isToday = date.toDateString() === new Date().toDateString();
     return isToday ? `${HH}:${min}` : `${yyyy}-${mm}-${dd}`;
+}
+
+/** True if the leading segment of a name is hidden (dot-prefixed, e.g. `.git`). */
+export function isHiddenName(name: string): boolean {
+    return name.startsWith(".");
+}
+
+/**
+ * Extract the top-level folder segment from a `webkitRelativePath`.
+ * For `Docs/a.pdf` returns `Docs`; for `Docs/Sub/b.pdf` also returns `Docs`.
+ */
+export function getRootFolderName(relativePath: string): string {
+    if (!relativePath) return "";
+    return relativePath.split("/")[0] || "";
+}
+
+/**
+ * Folder upload silently keeps only files at the *root* of the picked folder
+ * (one path segment after the folder name) and drops:
+ *   - files nested inside any sub-folder
+ *   - hidden files (leading dot)
+ *   - unsupported extensions
+ *   - files exceeding the size limit
+ *
+ * Caller is expected to have already handled the integral-batch rejections
+ * (hidden root folder / duplicate folder name / > MAX_FOLDER_UPLOAD_COUNT).
+ */
+export function filterFolderUploadFiles(
+    files: File[],
+    options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+): File[] {
+    const maxBytes = options.maxSizeMB * 1024 * 1024;
+    return files.filter((file) => {
+        const rel = file.webkitRelativePath || file.name;
+        if (rel.split("/").length !== 2) return false;
+        if (isHiddenName(file.name)) return false;
+        if (file.size > maxBytes) return false;
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (!ext || !options.allowedExtensions.includes(ext)) return false;
+        return true;
+    });
 }
 
 /**

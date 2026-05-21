@@ -1351,10 +1351,17 @@ export async function deleteFolderApi(space_id: string, folder_id: string): Prom
  */
 export async function uploadFileToServerApi(
     space_id: string,
-    file: File
+    file: File,
+    /**
+     * Explicit filename for the multipart part. Defaults to `file.name`.
+     * Pass this when uploading Files from a `<input webkitdirectory>` picker —
+     * Chromium otherwise uses `file.webkitRelativePath` (e.g. `Docs/a.pdf`)
+     * as the multipart filename, which the backend persists verbatim.
+     */
+    filename?: string,
 ): Promise<UploadFileResponse> {
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file, filename ?? file.name);
     const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         // Preserve status_code and data so the caller can render the localized

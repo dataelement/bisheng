@@ -3,6 +3,7 @@ import {
     List,
     Upload,
     FolderPlus,
+    FolderUp,
     ChevronDown,
     ChevronLeft,
     CircleQuestionMark,
@@ -54,6 +55,7 @@ interface KnowledgeSpaceHeaderProps {
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
+    onTriggerUploadFolder: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
     /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
@@ -97,6 +99,7 @@ export function KnowledgeSpaceHeader({
     onSort,
     onCreateFolder,
     onTriggerUpload,
+    onTriggerUploadFolder,
     canCreateFolder = false,
     canUploadFile = false,
     supportedFormatsLabel,
@@ -354,6 +357,31 @@ export function KnowledgeSpaceHeader({
                             <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
                                 <Upload className="mr-2 size-4" />
                                 <span className="flex-1">{localize("com_knowledge.upload_file")}</span>
+                                {supportedFormatsLabel && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                                onPointerDown={(e) => e.stopPropagation()}
+                                                className="ml-2 inline-flex items-center text-[#86909C] hover:text-[#4E5969]"
+                                                aria-label={localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
+                                            >
+                                                <CircleQuestionMark className="size-3.5" />
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[320px] z-[260] bg-[rgba(23,23,23,0.85)]">
+                                            {localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
+                            </DropdownMenuItem>
+                        )}
+                        {canUploadFile && (
+                            <DropdownMenuItem onClick={onTriggerUploadFolder} className="cursor-pointer">
+                                <FolderUp className="mr-2 size-4" />
+                                <span className="flex-1">{localize("com_knowledge.upload_folder")}</span>
                                 {supportedFormatsLabel && (
                                     <Tooltip>
                                         <TooltipTrigger asChild>

@@ -726,6 +726,7 @@ export default function Knowledge() {
                                         }}
                                         onNavigateFolder={fileManager.handleNavigateFolder}
                                         onUploadFile={fileUpload.handleUploadFile}
+                                        onUploadFolder={fileUpload.handleUploadFolder}
                                         onCreateFolder={fileUpload.handleCreateFolder}
                                         onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
                                         onRenameFile={fileUpload.handleRenameFile}
