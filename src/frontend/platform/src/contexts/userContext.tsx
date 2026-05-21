@@ -213,9 +213,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 if (target) {
                     history.pushState(null, '', BASE_URL + target.path);
                 } else {
-                    // menu-pending is always in the router (no permission guard),
-                    // so it's a safe fallback even when menu_approval_mode=false.
-                    history.pushState(null, '', BASE_URL + '/menu-pending');
+                    // No accessible content menu. If approval mode is on, land on the
+                    // first approvable menu so the user sees an apply button.
+                    // Otherwise fall back to the generic placeholder.
+                    const APPROVABLE_ORDER = ['board', 'build', 'knowledge', 'model', 'evaluation', 'mark_task', 'log'];
+                    const firstApprovable = res.menu_approval_mode
+                        ? APPROVABLE_ORDER[0]
+                        : null;
+                    const fallback = firstApprovable
+                        ? `/menu-pending?menu=${firstApprovable}`
+                        : '/menu-pending';
+                    history.pushState(null, '', BASE_URL + fallback);
                 }
             } else {
                 // 403
