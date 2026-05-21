@@ -169,6 +169,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     || web_menu.some((k: string) => adminMenuKeys.has(k))
                 )
             if (!canAccessPlatform) {
+                // Check if the user can at least access the workspace client.
+                // If neither platform nor workspace is accessible, redirect to /403
+                // to avoid a back-and-forth redirect loop between the two apps.
+                const canAccessWorkspace =
+                    res.has_workbench
+                    ?? (
+                        web_menu.includes('workstation')
+                        || web_menu.includes('frontend')
+                    )
+                if (!canAccessWorkspace) {
+                    history.pushState(null, '', BASE_URL + '/403')
+                    return
+                }
                 toast({
                     variant: 'error',
                     description: i18next.t('menu.noAdminConsoleAccess'),
