@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from bisheng.approval.domain.models.approval_scenario import (
     ApprovalFlowDefinition,
     ApprovalFlowVersion,
@@ -147,7 +149,7 @@ class ApprovalScenarioAdminService:
             ApprovalFlowDefinition(
                 tenant_id=tenant_id,
                 scenario_id=scenario_id,
-                flow_code=payload['flow_code'],
+                flow_code=payload.get('flow_code') or f'flow_{uuid4().hex[:8]}',
                 flow_name=payload['flow_name'],
                 is_active=bool(payload.get('is_active', True)),
             )
@@ -176,8 +178,7 @@ class ApprovalScenarioAdminService:
             raise ValueError(f'flow not found: {flow_definition_id}')
         if 'flow_name' in payload and payload['flow_name']:
             row.flow_name = payload['flow_name']
-        if 'flow_code' in payload and payload['flow_code']:
-            row.flow_code = payload['flow_code']
+        # flow_code is auto-generated and not user-editable
         if 'is_active' in payload:
             row.is_active = bool(payload['is_active'])
         updated = await ApprovalScenarioRepository.update_flow_definition(row)
@@ -208,13 +209,15 @@ class ApprovalScenarioAdminService:
         version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
         if version is None:
             raise ValueError(f'active flow version not found: {flow_definition_id}')
+        node_order = int(payload.get('node_order', 0))
+        node_code = f'node_{node_order}_{uuid4().hex[:8]}'
         row = await ApprovalScenarioRepository.create_node_definition(
             ApprovalNodeDefinition(
                 tenant_id=tenant_id,
                 flow_version_id=version.id,
-                node_code=payload['node_code'],
+                node_code=node_code,
                 node_name=payload['node_name'],
-                node_order=int(payload.get('node_order', 0)),
+                node_order=node_order,
                 node_mode=payload['node_mode'],
                 approver_config=payload.get('approver_config') or {},
                 extra_config=payload.get('extra_config') or {},
@@ -235,8 +238,6 @@ class ApprovalScenarioAdminService:
             raise ValueError(f'node not found: {node_definition_id}')
         if 'node_name' in payload and payload['node_name']:
             row.node_name = payload['node_name']
-        if 'node_code' in payload and payload['node_code']:
-            row.node_code = payload['node_code']
         if 'node_order' in payload:
             row.node_order = int(payload['node_order'])
         if 'node_mode' in payload and payload['node_mode']:

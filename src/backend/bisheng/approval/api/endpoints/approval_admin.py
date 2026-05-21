@@ -46,19 +46,16 @@ class RouteUpdateReq(BaseModel):
 
 
 class FlowCreateReq(BaseModel):
-    flow_code: str
     flow_name: str
     is_active: bool = True
 
 
 class FlowUpdateReq(BaseModel):
-    flow_code: str | None = None
     flow_name: str | None = None
     is_active: bool | None = None
 
 
 class NodeCreateReq(BaseModel):
-    node_code: str
     node_name: str
     node_order: int = 0
     node_mode: str
@@ -67,7 +64,6 @@ class NodeCreateReq(BaseModel):
 
 
 class NodeUpdateReq(BaseModel):
-    node_code: str | None = None
     node_name: str | None = None
     node_order: int | None = None
     node_mode: str | None = None

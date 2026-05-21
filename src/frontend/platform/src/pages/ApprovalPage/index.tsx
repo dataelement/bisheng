@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import SelectSearch from "@/components/bs-ui/select/select";
-import { getRolesApi } from "@/controllers/API/user";
+import { getRolesApi, getUsersApi } from "@/controllers/API/user";
 import { Switch } from "@/components/bs-ui/switch";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
@@ -366,11 +366,11 @@ function RouteDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{initial.id ? "编辑条件分支" : "新增条件分支"}</DialogTitle>
+          <DialogTitle>{initial.id ? t("approvalPage.editRoute") : t("approvalPage.addRoute")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <label className="block text-sm text-text-secondary">
-            分支名称
+            {t("approvalPage.routeNameLabel")}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -381,14 +381,14 @@ function RouteDialog({
 
           {/* Condition */}
           <div className="rounded-lg border border-border-subtle bg-gray-50 p-3 space-y-3">
-            <div className="text-xs font-medium text-text-secondary">匹配条件（从上到下匹配，命中即停止）</div>
+            <div className="text-xs font-medium text-text-secondary">{t("approvalPage.matchConditionHint")}</div>
             <div className="flex items-center gap-2">
               <select
                 value={condField}
                 onChange={(e) => handleFieldChange(e.target.value)}
                 className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
               >
-                <option value="">无条件（始终命中）</option>
+                <option value="">{t("approvalPage.noCondition")}</option>
                 {conditionFields.map((f) => (
                   <option key={f} value={f}>
                     {CONDITION_FIELD_META[f]
@@ -407,8 +407,8 @@ function RouteDialog({
                         <SelectSearch
                           value={condValue}
                           options={effectiveValues}
-                          selectPlaceholder="请选择"
-                          inputPlaceholder="搜索身份 / 角色名…"
+                          selectPlaceholder={t("approvalPage.pleaseSelect")}
+                          inputPlaceholder={t("approvalPage.searchRole")}
                           onValueChange={(v) => setCondValue(v)}
                           onChange={(e) => setRoleSearch(e.target.value)}
                           onOpenChange={() => setRoleSearch("")}
@@ -420,7 +420,7 @@ function RouteDialog({
                         onChange={(e) => setCondValue(e.target.value)}
                         className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
                       >
-                        <option value="">请选择</option>
+                        <option value="">{t("approvalPage.pleaseSelect")}</option>
                         {effectiveValues.map((v) => (
                           <option key={v.value} value={v.value}>
                             {v.label}
@@ -432,7 +432,7 @@ function RouteDialog({
                     <input
                       value={condValue}
                       onChange={(e) => setCondValue(e.target.value)}
-                      placeholder="请输入条件值"
+                      placeholder={t("approvalPage.inputConditionValue")}
                       className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
                     />
                   )}
@@ -440,31 +440,31 @@ function RouteDialog({
               )}
             </div>
             {condField && !condValue && (
-              <p className="text-xs text-amber-500">请填写条件值，否则该分支将始终命中</p>
+              <p className="text-xs text-amber-500">{t("approvalPage.conditionValueWarning")}</p>
             )}
           </div>
 
           {/* Route type */}
           <label className="block text-sm text-text-secondary">
-            处理方式
+            {t("approvalPage.routeTypeLabel")}
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             >
-              <option value="pass">无需审批，直接通过</option>
-              <option value="flow">进入审批流程</option>
+              <option value="pass">{t("approvalPage.routeTypePassFull")}</option>
+              <option value="flow">{t("approvalPage.routeTypeFlowFull")}</option>
             </select>
           </label>
           {type === "flow" && (
             <label className="block text-sm text-text-secondary">
-              绑定审批流程
+              {t("approvalPage.bindFlow")}
               <select
                 value={flowId}
                 onChange={(e) => setFlowId(e.target.value)}
                 className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
               >
-                <option value="">请选择流程</option>
+                <option value="">{t("approvalPage.selectFlow")}</option>
                 {flows.map((f) => (
                   <option key={f.id} value={String(f.id)}>
                     {f.flow_name || f.flow_code}
@@ -480,7 +480,7 @@ function RouteDialog({
             onClick={onClose}
             className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
           >
-            取消
+            {t("approvalPage.cancel")}
           </button>
           <button
             type="button"
@@ -495,7 +495,7 @@ function RouteDialog({
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
           >
-            保存
+            {t("approvalPage.save")}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -512,39 +512,29 @@ function FlowDialog({
   open: boolean;
   initial: Partial<ApprovalFlowItem>;
   onClose: () => void;
-  onConfirm: (data: { flow_name: string; flow_code: string }) => void;
+  onConfirm: (data: { flow_name: string }) => void;
 }) {
+  const { t } = useTranslation("bs");
   const [name, setName] = useState(initial.flow_name ?? "");
-  const [code, setCode] = useState(initial.flow_code ?? "");
   useEffect(() => {
     if (open) {
       setName(initial.flow_name ?? "");
-      setCode(initial.flow_code ?? "");
     }
-  }, [open, initial.flow_name, initial.flow_code]);
+  }, [open, initial.flow_name]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{initial.id ? "编辑审批流程" : "新建审批流程"}</DialogTitle>
+          <DialogTitle>{initial.id ? t("approvalPage.editFlow") : t("approvalPage.createFlow")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <label className="block text-sm text-text-secondary">
-            流程名称
+            {t("approvalPage.flowNameLabel")}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="如：菜单权限审批流程 A"
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
-            />
-          </label>
-          <label className="block text-sm text-text-secondary">
-            流程编码
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="如：menu_flow_a"
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             />
           </label>
@@ -555,15 +545,15 @@ function FlowDialog({
             onClick={onClose}
             className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
           >
-            取消
+            {t("approvalPage.cancel")}
           </button>
           <button
             type="button"
-            disabled={!name.trim() || !code.trim()}
-            onClick={() => onConfirm({ flow_name: name.trim(), flow_code: code.trim() })}
+            disabled={!name.trim()}
+            onClick={() => onConfirm({ flow_name: name.trim() })}
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
           >
-            保存
+            {t("approvalPage.save")}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -590,16 +580,22 @@ function NodeDialog({
   onClose: () => void;
   onConfirm: (data: {
     node_name: string;
-    node_code: string;
     node_mode: string;
     approver_config: Record<string, unknown>;
   }) => void;
 }) {
   const [name, setName] = useState(initial.node_name ?? "");
-  const [code, setCode] = useState(initial.node_code ?? "");
   const { t } = useTranslation("bs");
   const [mode, setMode] = useState(initial.node_mode ?? "or");
-  const [sources, setSources] = useState<{ type: string; label: string }[]>([]);
+  type SourceEntry = { type: string; label: string; userIds?: number[]; userNames?: string[] };
+  const [sources, setSources] = useState<SourceEntry[]>([]);
+
+  // user picker state for direct_user source
+  const [userPickerOpen, setUserPickerOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [userList, setUserList] = useState<{ user_id: number; user_name: string }[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
 
   const getApproverLabel = (type: string) => {
     const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
@@ -609,17 +605,53 @@ function NodeDialog({
   useEffect(() => {
     if (open) {
       setName(initial.node_name ?? "");
-      setCode(initial.node_code ?? "");
       setMode(initial.node_mode ?? "or");
       const cfg = initial.approver_config as Record<string, unknown> | undefined;
-      const rawSources = (cfg?.sources as { type: string; label?: string }[] | undefined) ?? [];
+      const rawSources = (cfg?.sources as { type: string; user_ids?: number[]; label?: string }[] | undefined) ?? [];
       setSources(
-        rawSources.map((s) => ({ type: s.type, label: getApproverLabel(s.type) })),
+        rawSources.map((s) => ({
+          type: s.type,
+          label: getApproverLabel(s.type),
+          userIds: s.user_ids,
+        })),
       );
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!userPickerOpen) return;
+    getUsersApi({ name: userSearch, page: 1, pageSize: 50 }).then((res) => {
+      setUserList(res.data ?? []);
+    }).catch(() => setUserList([]));
+  }, [userPickerOpen, userSearch]);
+
+  const openUserPicker = () => {
+    const existing = sources.find((s) => s.type === "direct_user");
+    setSelectedUserIds(existing?.userIds ?? []);
+    setSelectedUserNames(existing?.userNames ?? []);
+    setUserSearch("");
+    setUserPickerOpen(true);
+  };
+
+  const confirmUserPicker = () => {
+    if (!selectedUserIds.length) return;
+    setSources((prev) => {
+      const without = prev.filter((s) => s.type !== "direct_user");
+      return [...without, {
+        type: "direct_user",
+        label: getApproverLabel("direct_user"),
+        userIds: selectedUserIds,
+        userNames: selectedUserNames,
+      }];
+    });
+    setUserPickerOpen(false);
+  };
+
   const addSource = (type: string) => {
+    if (type === "direct_user") {
+      openUserPicker();
+      return;
+    }
     if (sources.some((s) => s.type === type)) return;
     setSources((prev) => [...prev, { type, label: getApproverLabel(type) }]);
   };
@@ -629,14 +661,15 @@ function NodeDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{initial.id ? "编辑审批节点" : "新增审批节点"}</DialogTitle>
+          <DialogTitle>{initial.id ? t("approvalPage.editNode") : t("approvalPage.addNode")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <label className="block text-sm text-text-secondary">
-            节点名称
+            {t("approvalPage.nodeNameLabel")}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -644,24 +677,25 @@ function NodeDialog({
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             />
           </label>
-          <label className="block text-sm text-text-secondary">
-            节点编码
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="如：dept_admin_review"
-              className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
-            />
-          </label>
           <div className="text-sm text-text-secondary">
-            审批人来源
+            {t("approvalPage.approverSourceSectionLabel")}
             <div className="mt-1 flex flex-wrap gap-2">
               {sources.map((s) => (
                 <span
                   key={s.type}
                   className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
                 >
-                  {s.label}
+                  {s.type === "direct_user" ? (
+                    <button
+                      type="button"
+                      onClick={openUserPicker}
+                      className="hover:text-primary"
+                    >
+                      {s.label}{s.userIds?.length ? ` (${s.userIds.length})` : ""}
+                    </button>
+                  ) : (
+                    s.label
+                  )}
                   <button
                     type="button"
                     onClick={() => removeSource(s.type)}
@@ -676,7 +710,7 @@ function NodeDialog({
                 onChange={(e) => e.target.value && addSource(e.target.value)}
                 className="h-7 rounded-full border border-dashed border-border-subtle bg-gray-50 px-2 text-xs text-text-secondary outline-none"
               >
-                <option value="">＋ 添加审批人</option>
+                <option value="">＋ {t("approvalPage.addApprover")}</option>
                 {APPROVER_SOURCE_OPTIONS.filter((o) => !sources.some((s) => s.type === o.value)).map(
                   (o) => (
                     <option key={o.value} value={o.value}>
@@ -688,14 +722,14 @@ function NodeDialog({
             </div>
           </div>
           <label className="block text-sm text-text-secondary">
-            节点模式
+            {t("approvalPage.nodeModeLabel")}
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value)}
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             >
-              <option value="or">或签（任一人同意即通过）</option>
-              <option value="and">会签（所有人同意才通过）</option>
+              <option value="or">{t("approvalPage.nodeModeOrFull")}</option>
+              <option value="and">{t("approvalPage.nodeModeAndFull")}</option>
             </select>
           </label>
         </div>
@@ -705,26 +739,102 @@ function NodeDialog({
             onClick={onClose}
             className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
           >
-            取消
+            {t("approvalPage.cancel")}
           </button>
           <button
             type="button"
-            disabled={!name.trim() || !code.trim()}
+            disabled={!name.trim()}
             onClick={() =>
               onConfirm({
                 node_name: name.trim(),
-                node_code: code.trim(),
                 node_mode: mode,
-                approver_config: { sources },
+                approver_config: {
+                  sources: sources.map((s) =>
+                    s.type === "direct_user"
+                      ? { type: s.type, user_ids: s.userIds ?? [] }
+                      : { type: s.type },
+                  ),
+                },
               })
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
           >
-            保存
+            {t("approvalPage.save")}
           </button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* User picker for direct_user source */}
+
+    <Dialog open={userPickerOpen} onOpenChange={(v) => !v && setUserPickerOpen(false)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("approvalPage.approverSource.direct_user")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <input
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder={t("approvalPage.searchRole")}
+            className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+          />
+          <div className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
+            {userList.length === 0 && (
+              <div className="py-4 text-center text-xs text-text-secondary">暂无用户</div>
+            )}
+            {userList.map((u) => {
+              const checked = selectedUserIds.includes(u.user_id);
+              return (
+                <label
+                  key={u.user_id}
+                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      if (checked) {
+                        setSelectedUserIds((ids) => ids.filter((id) => id !== u.user_id));
+                        setSelectedUserNames((names) => names.filter((_, i) => selectedUserIds[i] !== u.user_id));
+                      } else {
+                        setSelectedUserIds((ids) => [...ids, u.user_id]);
+                        setSelectedUserNames((names) => [...names, u.user_name]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-border-subtle accent-primary"
+                  />
+                  <span className="text-sm text-text-primary">{u.user_name}</span>
+                </label>
+              );
+            })}
+          </div>
+          {selectedUserIds.length > 0 && (
+            <div className="text-xs text-text-secondary">
+              已选 {selectedUserIds.length} 人：{selectedUserNames.join("、")}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={() => setUserPickerOpen(false)}
+            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+          >
+            {t("approvalPage.cancel")}
+          </button>
+          <button
+            type="button"
+            disabled={!selectedUserIds.length}
+            onClick={confirmUserPicker}
+            className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+          >
+            {t("approvalPage.save")}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -847,7 +957,7 @@ export default function ApprovalPage() {
       setShowAddScenario(false);
       await loadPage();
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "创建失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericCreateFailed")) });
     }
   };
 
@@ -856,14 +966,14 @@ export default function ApprovalPage() {
       await updateApprovalScenarioApi(scenario.id, { enabled: !scenario.enabled });
       await loadPage();
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "更新失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericUpdateFailed")) });
     }
   };
 
   const handleDeleteScenario = (scenario: ApprovalScenarioItem) => {
     bsConfirm({
-      title: "删除审批场景",
-      desc: `确认删除「${scenario.scenario_name}」？已发起的审批实例不受影响`,
+      title: t("approvalPage.deleteScenarioTitle"),
+      desc: t("approvalPage.deleteScenarioDesc", { name: scenario.scenario_name }),
       onOk: async (next) => {
         try {
           await deleteApprovalScenarioApi(scenario.id);
@@ -871,7 +981,7 @@ export default function ApprovalPage() {
           await loadPage();
           next();
         } catch (e: any) {
-          toast({ title: "提示", variant: "error", description: String(e || "删除失败") });
+          toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericDeleteFailed")) });
         }
       },
     });
@@ -903,7 +1013,7 @@ export default function ApprovalPage() {
       setRouteDialog({ open: false, initial: {} });
       await loadRoutes(selectedScenarioId);
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "保存失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
     }
   };
 
@@ -917,21 +1027,21 @@ export default function ApprovalPage() {
       });
       if (selectedScenarioId) await loadRoutes(selectedScenarioId);
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "更新失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericUpdateFailed")) });
     }
   };
 
   const handleDeleteRoute = (route: ApprovalRouteItem) => {
     bsConfirm({
-      title: "删除条件分支",
-      desc: `确认删除分支「${route.route_name}」？`,
+      title: t("approvalPage.deleteRouteTitle"),
+      desc: t("approvalPage.deleteRouteDesc", { name: route.route_name }),
       onOk: async (next) => {
         try {
           await deleteApprovalRouteApi(route.id);
           if (selectedScenarioId) await loadRoutes(selectedScenarioId);
           next();
         } catch (e: any) {
-          toast({ title: "提示", variant: "error", description: String(e || "删除失败") });
+          toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericDeleteFailed")) });
         }
       },
     });
@@ -950,12 +1060,12 @@ export default function ApprovalPage() {
       );
       await loadRoutes(selectedScenarioId);
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "排序失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSortFailed")) });
     }
   };
 
   // ── flow actions ──────────────────────────────────────────────────────────
-  const handleSaveFlow = async (data: { flow_name: string; flow_code: string }) => {
+  const handleSaveFlow = async (data: { flow_name: string }) => {
     if (!selectedScenarioId) return;
     try {
       let newId = flowDialog.initial.id;
@@ -968,14 +1078,14 @@ export default function ApprovalPage() {
       setFlowDialog({ open: false, initial: {} });
       await loadFlows(selectedScenarioId, newId);
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "保存失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
     }
   };
 
   const handleDeleteFlow = (flow: ApprovalFlowItem) => {
     bsConfirm({
-      title: "删除审批流程",
-      desc: `确认删除流程「${flow.flow_name}」？`,
+      title: t("approvalPage.deleteFlowTitle"),
+      desc: t("approvalPage.deleteFlowDesc", { name: flow.flow_name }),
       onOk: async (next) => {
         try {
           await deleteApprovalFlowApi(flow.id);
@@ -983,7 +1093,7 @@ export default function ApprovalPage() {
           if (selectedScenarioId) await loadFlows(selectedScenarioId);
           next();
         } catch (e: any) {
-          toast({ title: "提示", variant: "error", description: String(e || "删除失败") });
+          toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericDeleteFailed")) });
         }
       },
     });
@@ -992,7 +1102,6 @@ export default function ApprovalPage() {
   // ── node actions ──────────────────────────────────────────────────────────
   const handleSaveNode = async (data: {
     node_name: string;
-    node_code: string;
     node_mode: string;
     approver_config: Record<string, unknown>;
   }) => {
@@ -1009,21 +1118,21 @@ export default function ApprovalPage() {
       setNodeDialog({ open: false, initial: {} });
       setNodes(await listApprovalNodesApi(selectedFlowId));
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "保存失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
     }
   };
 
   const handleDeleteNode = (node: ApprovalNodeItem) => {
     bsConfirm({
-      title: "删除审批节点",
-      desc: `确认删除节点「${node.node_name}」？`,
+      title: t("approvalPage.deleteNodeTitle"),
+      desc: t("approvalPage.deleteNodeDesc", { name: node.node_name }),
       onOk: async (next) => {
         try {
           await deleteApprovalNodeApi(node.id);
           if (selectedFlowId) setNodes(await listApprovalNodesApi(selectedFlowId));
           next();
         } catch (e: any) {
-          toast({ title: "提示", variant: "error", description: String(e || "删除失败") });
+          toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericDeleteFailed")) });
         }
       },
     });
@@ -1036,11 +1145,11 @@ export default function ApprovalPage() {
   ) => {
     try {
       await retryApprovalExceptionApi(item.id, payload);
-      toast({ title: "提示", variant: "success", description: "处理成功" });
+      toast({ title: t("approvalPage.hint"), variant: "success", description: t("approvalPage.genericOperateSuccess") });
       setExceptionApproverInputs((c) => ({ ...c, [item.id]: "" }));
       await loadPage();
     } catch (e: any) {
-      toast({ title: "提示", variant: "error", description: String(e || "操作失败") });
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericOperateFailed")) });
     }
   };
 
@@ -1049,7 +1158,7 @@ export default function ApprovalPage() {
     <div className="flex h-full flex-col bg-background-main-content">
       {/* page header */}
       <div className="border-b border-border-subtle px-6 pt-6 pb-0">
-        <h1 className="text-xl font-semibold text-text-primary">审批管理</h1>
+        <h1 className="text-xl font-semibold text-text-primary">{t("approvalPage.title")}</h1>
         {/* tabs */}
         <div className="mt-4 flex gap-1">
           {(["flow", "exception"] as const).map((tab) => (
@@ -1063,7 +1172,7 @@ export default function ApprovalPage() {
                   : "text-text-secondary hover:text-text-primary"
               }`}
             >
-              {tab === "flow" ? "流程管理" : "异常流程列表"}
+              {tab === "flow" ? t("approvalPage.tabFlow") : t("approvalPage.tabException")}
             </button>
           ))}
         </div>
@@ -1075,14 +1184,14 @@ export default function ApprovalPage() {
           {/* left: scenario list */}
           <aside className="flex w-[268px] shrink-0 flex-col border-r border-border-subtle bg-white">
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-              <span className="text-sm font-semibold text-text-primary">审批场景</span>
+              <span className="text-sm font-semibold text-text-primary">{t("approvalPage.scenarioSection")}</span>
               <button
                 type="button"
                 onClick={() => setShowAddScenario(true)}
                 className="inline-flex items-center gap-1 rounded border border-border-subtle px-2.5 py-1 text-xs text-text-primary hover:bg-gray-50"
               >
                 <Plus size={12} />
-                新增
+                {t("approvalPage.add")}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -1109,7 +1218,7 @@ export default function ApprovalPage() {
                     <div className="mt-2 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
-                        title="编辑"
+                        title={t("approvalPage.edit")}
                         onClick={(e) => {
                           e.stopPropagation();
                           /* scenario name edit not required by spec */
@@ -1120,7 +1229,7 @@ export default function ApprovalPage() {
                       </button>
                       <button
                         type="button"
-                        title="删除"
+                        title={t("approvalPage.delete")}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteScenario(s);
@@ -1135,7 +1244,7 @@ export default function ApprovalPage() {
               })}
               {scenarios.length === 0 && (
                 <div className="py-8 text-center text-xs text-text-secondary">
-                  暂无审批场景，点击右上角新增
+                  {t("approvalPage.noScenarios")}
                 </div>
               )}
             </div>
@@ -1145,7 +1254,7 @@ export default function ApprovalPage() {
           <main className="flex flex-1 flex-col overflow-y-auto">
             {!selectedScenario ? (
               <div className="flex flex-1 items-center justify-center text-sm text-text-secondary">
-                请在左侧选择一个审批场景
+                {t("approvalPage.selectScenarioHint")}
               </div>
             ) : (
               <div className="flex flex-col gap-0">
@@ -1158,7 +1267,7 @@ export default function ApprovalPage() {
                     <StatusBadge enabled={selectedScenario.enabled} />
                   </div>
                   <div className="flex items-center gap-2 text-sm text-text-secondary">
-                    <span>启用</span>
+                    <span>{t("approvalPage.enabled")}</span>
                     <Switch
                       checked={!!selectedScenario.enabled}
                       onCheckedChange={() => void handleToggleScenario(selectedScenario)}
@@ -1171,21 +1280,21 @@ export default function ApprovalPage() {
                   <div className="bg-white px-6 pt-0 pb-4">
                     <SectionHeader
                       icon={<Filter size={14} />}
-                      title="条件分支"
-                      hint="从上到下依次校验"
+                      title={t("approvalPage.routeTitle")}
+                      hint={t("approvalPage.routeSectionHint")}
                       action={
                         <ActionBtn
                           variant="outline"
                           onClick={() => setRouteDialog({ open: true, initial: {} })}
                         >
-                          <Plus size={12} /> 新增分支
+                          <Plus size={12} /> {t("approvalPage.createRoute")}
                         </ActionBtn>
                       }
                     />
                     <div className="rounded-lg border border-border-subtle overflow-hidden">
                       {routes.length === 0 && (
                         <div className="py-6 text-center text-xs text-text-secondary">
-                          暂无条件分支，点击右上角新增
+                          {t("approvalPage.noRoutes")}
                         </div>
                       )}
                       {routes.map((route, idx) => {
@@ -1220,7 +1329,7 @@ export default function ApprovalPage() {
                               {route.route_type === "pass" ? (
                                 <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs text-green-600">
                                   <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                                  无需审批，直接通过
+                                  {t("approvalPage.routeTypePassFull")}
                                 </span>
                               ) : (
                                 <div className="flex items-center gap-2">
@@ -1231,7 +1340,7 @@ export default function ApprovalPage() {
                                     type="button"
                                     className="inline-flex items-center gap-1 rounded border border-border-subtle px-2 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
                                   >
-                                    <Eye size={11} /> 流程预览
+                                    <Eye size={11} /> {t("approvalPage.flowPreview")}
                                   </button>
                                 </div>
                               )}
@@ -1249,7 +1358,7 @@ export default function ApprovalPage() {
                                 <ChevronDown size={14} />
                               </ActionBtn>
                               <ActionBtn
-                                label="编辑"
+                                label={t("approvalPage.edit")}
                                 onClick={() =>
                                   setRouteDialog({
                                     open: true,
@@ -1259,7 +1368,7 @@ export default function ApprovalPage() {
                               >
                                 <Pencil size={13} />
                               </ActionBtn>
-                              <ActionBtn label="删除" onClick={() => handleDeleteRoute(route)}>
+                              <ActionBtn label={t("approvalPage.delete")} onClick={() => handleDeleteRoute(route)}>
                                 <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
                               </ActionBtn>
                             </div>
@@ -1276,18 +1385,10 @@ export default function ApprovalPage() {
                   <div className="bg-white px-6 pt-0 pb-6">
                     <SectionHeader
                       icon={<Users size={14} />}
-                      title="审批流程"
-                      action={
-                        <ActionBtn
-                          variant="outline"
-                          onClick={() => setNodeDialog({ open: true, initial: {} })}
-                        >
-                          <Plus size={12} /> 新增节点
-                        </ActionBtn>
-                      }
+                      title={t("approvalPage.flowTitle")}
                     />
 
-                    {/* flow selector row */}
+                    {/* flow selector + actions row */}
                     <div className="mb-4 flex items-center gap-3">
                       <select
                         value={selectedFlowId ?? ""}
@@ -1298,7 +1399,7 @@ export default function ApprovalPage() {
                         }}
                         className="h-9 rounded-lg border border-border-subtle bg-white px-3 text-sm text-text-primary outline-none"
                       >
-                        <option value="">请选择流程</option>
+                        <option value="">{t("approvalPage.selectFlow")}</option>
                         {flows.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.flow_name || f.flow_code}
@@ -1307,33 +1408,45 @@ export default function ApprovalPage() {
                       </select>
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
                       <div className="ml-auto flex items-center gap-2">
+                        {selectedFlow && (
+                          <>
+                            <ActionBtn
+                              variant="outline"
+                              onClick={() => setFlowDialog({ open: true, initial: selectedFlow })}
+                            >
+                              {t("approvalPage.editFlowBtn")}
+                            </ActionBtn>
+                            <ActionBtn
+                              variant="outline"
+                              onClick={() => handleDeleteFlow(selectedFlow)}
+                            >
+                              {t("approvalPage.deleteFlowBtn")}
+                            </ActionBtn>
+                            <ActionBtn
+                              variant="outline"
+                              onClick={() => setNodeDialog({ open: true, initial: {} })}
+                            >
+                              <Plus size={12} /> {t("approvalPage.addNodeBtn")}
+                            </ActionBtn>
+                          </>
+                        )}
                         <ActionBtn
                           variant="outline"
-                          onClick={() =>
-                            setFlowDialog({
-                              open: true,
-                              initial: selectedFlow ?? {},
-                            })
-                          }
+                          onClick={() => setFlowDialog({ open: true, initial: {} })}
                         >
-                          {selectedFlow ? "编辑流程" : "新建流程"}
+                          {t("approvalPage.createFlowBtn")}
                         </ActionBtn>
-                        {selectedFlow && (
-                          <ActionBtn onClick={() => handleDeleteFlow(selectedFlow)}>
-                            <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
-                          </ActionBtn>
-                        )}
                       </div>
                     </div>
 
                     {/* node list */}
                     {!selectedFlowId ? (
                       <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
-                        请先选择或新建一个审批流程
+                        {t("approvalPage.selectFlowHint")}
                       </div>
                     ) : nodes.length === 0 ? (
                       <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
-                        暂无节点，点击右上角新增节点
+                        {t("approvalPage.noNodes")}
                       </div>
                     ) : (
                       <div className="rounded-lg border border-border-subtle overflow-hidden">
@@ -1378,8 +1491,8 @@ export default function ApprovalPage() {
                                     }}
                                     className="h-7 rounded border border-border-subtle bg-white px-2 text-xs text-text-primary outline-none"
                                   >
-                                    <option value="or">或签</option>
-                                    <option value="and">会签</option>
+                                    <option value="or">{t("approvalPage.nodeModeOr")}</option>
+                                    <option value="and">{t("approvalPage.nodeModeAnd")}</option>
                                   </select>
                                   <ActionBtn
                                     onClick={() =>
@@ -1412,11 +1525,11 @@ export default function ApprovalPage() {
                                   onClick={() => setNodeDialog({ open: true, initial: node })}
                                   className="inline-flex items-center gap-1 rounded-full border border-dashed border-border-subtle px-2.5 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
                                 >
-                                  <Plus size={10} /> 添加审批人
+                                  <Plus size={10} /> {t("approvalPage.addApprover")}
                                   <ChevronDown size={10} />
                                 </button>
                                 <span className="inline-flex items-center rounded border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-secondary">
-                                  {node.node_mode === "and" ? "会签" : "或签"}
+                                  {node.node_mode === "and" ? t("approvalPage.nodeModeAnd") : t("approvalPage.nodeModeOr")}
                                 </span>
                               </div>
                             </div>
@@ -1437,7 +1550,7 @@ export default function ApprovalPage() {
         <div className="flex-1 overflow-y-auto p-6">
           {exceptions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-sm text-text-secondary">
-              暂无异常流程
+              {t("approvalPage.noExceptions")}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1450,19 +1563,22 @@ export default function ApprovalPage() {
                     <div>
                       <div className="text-sm font-medium text-text-primary">
                         {item.exception_type === "route_missing"
-                          ? "条件分支未命中"
+                          ? t("approvalPage.exceptionTypeMissing")
                           : item.exception_type === "approver_empty"
-                            ? "审批人为空"
+                            ? t("approvalPage.exceptionTypeEmpty")
                             : item.exception_type === "execute_failed"
-                              ? "业务执行失败"
+                              ? t("approvalPage.exceptionTypeFailed")
                               : item.exception_type}{" "}
                         <span className="ml-1 text-xs text-text-secondary">
                           #{item.id}
                         </span>
                       </div>
                       <div className="mt-1 text-xs text-text-secondary">
-                        审批实例 #{item.instance_id ?? "--"} · 状态：{item.status ?? "--"} ·{" "}
-                        {item.create_time ?? "--"}
+                        {t("approvalPage.exceptionInstanceInfo", {
+                          id: item.instance_id ?? "--",
+                          status: item.status ?? "--",
+                          time: item.create_time ?? "--",
+                        })}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1470,7 +1586,7 @@ export default function ApprovalPage() {
                         variant="outline"
                         onClick={() => void handleRetryException(item)}
                       >
-                        重试
+                        {t("approvalPage.retryAction")}
                       </ActionBtn>
                       {item.exception_type === "approver_empty" && (
                         <>
@@ -1482,7 +1598,7 @@ export default function ApprovalPage() {
                                 [item.id]: e.target.value,
                               }))
                             }
-                            placeholder="输入用户 ID，多个用逗号分隔"
+                            placeholder={t("approvalPage.inputApproverIds")}
                             className="h-8 rounded-lg border border-border-subtle bg-white px-3 text-xs text-text-primary outline-none"
                           />
                           <ActionBtn
@@ -1494,9 +1610,9 @@ export default function ApprovalPage() {
                                 .filter((n) => n > 0);
                               if (!ids.length) {
                                 toast({
-                                  title: "提示",
+                                  title: t("approvalPage.hint"),
                                   variant: "error",
-                                  description: "请输入有效的用户 ID",
+                                  description: t("approvalPage.invalidUserId"),
                                 });
                                 return;
                               }
@@ -1506,7 +1622,7 @@ export default function ApprovalPage() {
                               });
                             }}
                           >
-                            指定审批人
+                            {t("approvalPage.assignApproversAction")}
                           </ActionBtn>
                           <ActionBtn
                             variant="outline"
@@ -1514,7 +1630,7 @@ export default function ApprovalPage() {
                               void handleRetryException(item, { action: "skip_node" })
                             }
                           >
-                            跳过节点
+                            {t("approvalPage.skipNodeAction")}
                           </ActionBtn>
                         </>
                       )}
