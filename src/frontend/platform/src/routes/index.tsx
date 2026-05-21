@@ -20,6 +20,7 @@ const FlowPage = lazy(() => import("@/pages/BuildPage/flow"));
 const SkillPage = lazy(() => import("@/pages/BuildPage/skills/editSkill"));
 const L2Edit = lazy(() => import("@/pages/BuildPage/skills/l2Edit"));
 const SkillToolsPage = lazy(() => import("@/pages/BuildPage/tools"));
+const KnowledgeSpaceTagLibraries = lazy(() => import("@/pages/BuildPage/tagLibraries"));
 const SkillChatPage = lazy(() => import("@/pages/ChatAppPage"));
 const ChatAssitantShare = lazy(() => import("@/pages/ChatAppPage/chatAssitantShare"));
 const ChatShare = lazy(() => import("@/pages/ChatAppPage/chatShare"));
@@ -44,6 +45,7 @@ const Finetune = lazy(() => import("@/pages/ModelPage/finetune").then(module => 
 const Management = lazy(() => import("@/pages/ModelPage/manage"));
 const Report = lazy(() => import("@/pages/Report"));
 const SystemPage = lazy(() => import("@/pages/SystemPage"));
+const ApprovalPage = lazy(() => import("@/pages/ApprovalPage"));
 const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const TenantPage = lazy(() => import("@/pages/TenantPage"));
@@ -92,6 +94,7 @@ const privateRouter = [
       // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
+      { path: "build/tag-libraries", element: <KnowledgeSpaceTagLibraries />, permission: 'build', },
       { path: "build/client", element: <WorkBenchPage />, permission: 'workstation' },
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
@@ -101,6 +104,7 @@ const privateRouter = [
       { path: "model/finetune", element: <Finetune />, permission: 'model' },
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
+      { path: "approval", element: <ApprovalPage />, permission: 'sys' },
       { path: "log", element: <LogPage />, permission: "log" },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail />, permission: "log" },
       { path: "log/chatlog/:cid", element: <DailyChatDetail />, permission: "log" },

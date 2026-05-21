@@ -132,10 +132,6 @@ bisheng/
 ├── docker/                         # Docker Compose 部署
 └── docs/                           # 架构文档 + PRD
 
-bisheng-gateway/                    # 商业版 API 网关 (独立仓库，Java)
-├── src/main/java/com/dataelem/gateway/  # Spring Cloud Gateway 应用
-├── pom.xml                         # Maven 构建
-└── db/                             # 数据库初始化 SQL
 ```
 
 ### 后端入口与启动
@@ -239,7 +235,16 @@ DatabaseManager → RedisManager → MinioManager → EsConnManager(业务) → 
 
 ### 数据流
 
-同步：浏览器 → Nginx :8860 → Vite → FastAPI :7860 → Service → DAO → MySQL/Redis。异步：FastAPI → Celery → Milvus/ES/MinIO。WebSocket 通过 ChatManager 回调流式输出。
+同步：浏览器 → Nginx :8860 → Vite → FastAPI :7860 → Service → Repository → 底层数据库查询。异步：FastAPI → Celery → Milvus/ES/MinIO。WebSocket 通过 ChatManager 回调流式输出。
+
+### 双库兼容红线（MySQL + 达梦）
+
+- **默认双库**：后端新功能必须同时兼容 MySQL 与达梦（DM8），不能把 MySQL 当作唯一生产数据库。
+- **模型类型**：结构化字段统一优先使用 `bisheng.core.database.dialect_helpers.JsonType`；大文本统一优先使用 `LargeText`；`update_time` 统一使用 `UPDATE_TIME_SERVER_DEFAULT`。
+- **禁止 MySQL 专属写法**：新增模型、迁移、守卫逻辑中，不得直接引入仅 MySQL 可用的 `JSON`、`LONGTEXT`、`ON UPDATE CURRENT_TIMESTAMP`、`information_schema`、`DATABASE()` 等假设。
+- **查询约束**：除非同时提供达梦分支并验证通过，否则不要依赖 `JSON_EXTRACT`、`JSON_UNQUOTE`、`JSON_CONTAINS`、`JSON_SEARCH` 等 MySQL JSON SQL；凡是业务上需要检索/排序/过滤的字段，优先拆成显式列，不要只放在 JSON/CLOB 快照里。
+- **迁移约束**：表存在性、列存在性、索引存在性检查统一走 SQLAlchemy `inspect()` 或 `core/database` / alembic helper，不能直接查 MySQL 元数据表。
+- **Feature 约束**：凡是新增表、迁移、方言敏感查询的 feature，`spec.md` 和 `tasks.md` 都要显式写入 MySQL + 达梦兼容要求，并至少包含一个方言级验证任务。
 
 ## 开发约定
 
@@ -255,14 +260,19 @@ module_name/
     endpoints/                   # 按功能拆分的端点文件
   domain/
     services/                    # 领域服务（核心业务逻辑）
-    models/                      # 领域模型（ORM 实体 + DAO）
+    models/                      # 领域模型（ORM 实体）
     schemas/                     # Pydantic DTO
-    repositories/                # 仓储层（可选）
+    repositories/                # 仓储层（默认承接数据库访问）
 ```
 
-**调用链路**：`Router → Endpoint → Service → Repository(可选) → DAO (database/models/) → MySQL`
+**调用链路**：`Router → Endpoint → Service → Repository → 底层数据库查询`
 
-**DAO 命名约定**：同步 `get_xxx()` / `create_xxx()` / `update_xxx()`，异步 `aget_xxx()` / `acreate_xxx()`。通过 `get_sync_db_session()` / `get_async_db_session()` 获取会话，均为 `@classmethod`。
+**仓储优先原则**：
+- 新功能默认走 `api -> service -> repository -> database`，Service 不直接拼 ORM 查询，Endpoint 不直接访问 `database/models/`。
+- 现有 DAO 属于存量兼容层，后续逐步淘汰；除非是在原有存量代码里做最小改动修复，否则不要为新业务继续新增 DAO 风格数据库入口。
+- Repository 负责封装查询、持久化、分页、事务边界内的数据访问细节；Service 负责业务编排、权限、状态流转和领域规则。
+
+**DAO 迁移说明**：保留历史 `get_xxx()` / `create_xxx()` / `update_xxx()`、`aget_xxx()` / `acreate_xxx()` 风格方法用于存量兼容，但新 feature 不应再以 DAO 作为首选数据访问层。
 
 **新增业务模块**：① 在 `src/backend/bisheng/` 下创建模块目录（含 `api/` 和 `domain/`）→ ② 在模块 `api/router.py` 创建 APIRouter → ③ 在 `src/backend/bisheng/api/router.py` 注册路由
 
@@ -564,6 +574,9 @@ OpenFGA (ReBAC)                     role 表 (策略角色 RBAC，保留)
 | 前端 Platform | 手动验证（待搭建 Vitest 后转自动化） | 无测试框架 |
 | 前端 Client | 手动验证（有 Jest 配置但无用例） | 有 Jest 但空 |
 | E2E | API 端到端测试 + 手动验证清单 | 无浏览器 E2E 框架 |
+
+- **测试目录约束**：新增后端测试按模块归档到 `src/backend/test/<module>/` 下，例如 `test/approval/`、`test/knowledge/`、`test/workflow/`；不要继续把模块测试统一堆到 `src/backend/test/` 根目录。
+- **例外**：只有跨模块公共夹具、全局集成冒烟、或历史存量测试迁移未完成时，才允许保留在根目录。
 
 ### 审查命令
 

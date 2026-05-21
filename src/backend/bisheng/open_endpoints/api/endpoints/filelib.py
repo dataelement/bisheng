@@ -5,6 +5,7 @@ from typing import List, Literal, Optional
 from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
                      UploadFile)
 from loguru import logger
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
@@ -131,11 +132,11 @@ async def upload_file(
                                     file_list=[KnowledgeFileOne(file_path=file_path, excel_rule=excel_rule)])
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(loging_user)
-    res = await sync_func_to_async(KnowledgeService.process_knowledge_file)(request=request,
-                                                                            login_user=loging_user,
-                                                                            background_tasks=background_tasks,
-                                                                            req_data=req_data,
-                                                                            upload_limit_bytes=upload_limit_bytes)
+    res = await KnowledgeService.aprocess_knowledge_file(request=request,
+                                                         login_user=loging_user,
+                                                         background_tasks=background_tasks,
+                                                         req_data=req_data,
+                                                         upload_limit_bytes=upload_limit_bytes)
     return resp_200(data=res[0])
 
 
@@ -204,7 +205,8 @@ async def post_chunks(request: Request,
                                     file_list=[KnowledgeFileOne(file_path=file_path)])
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-    res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(
+    res = await run_in_threadpool(
+        KnowledgeService.sync_process_knowledge_file,
         request, login_user, req_data, upload_limit_bytes=upload_limit_bytes,
     )
     return resp_200(data=res[0])
@@ -230,13 +232,13 @@ async def post_string_chunks(request: Request, document: ChunkInput):
                                                      ensure_ascii=False))
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-    knowledge, failed_files, process_files, _ = await sync_func_to_async(KnowledgeService.save_knowledge_file)(
+    knowledge, failed_files, process_files, _ = await KnowledgeService.asave_knowledge_file(
         login_user, req_data, upload_limit_bytes=upload_limit_bytes,
     )
     if failed_files:
         return resp_200(data=failed_files[0])
 
-    res = await sync_func_to_async(text_knowledge)(knowledge, process_files[0], document.documents)
+    res = await run_in_threadpool(text_knowledge, knowledge, process_files[0], document.documents)
 
     return resp_200(data=res)
 

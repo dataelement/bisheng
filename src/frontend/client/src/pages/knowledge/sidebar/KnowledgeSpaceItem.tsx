@@ -1,7 +1,7 @@
 import { Building2, ChevronDown, ChevronRight, LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { KnowledgeSpace } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -262,6 +262,13 @@ export default function KnowledgeSpaceItem({
                     <KnowledgeFolderTree
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
+                        // Mirror the right-side panel: MEMBER-role users hide FAILED
+                        // items, so the tree must apply the same status filter.
+                        fileStatus={
+                            space.role === SpaceRole.MEMBER
+                                ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED
+                                : undefined
+                        }
                         onSelectFolder={handleSelectFolder}
                     />
                 </div>

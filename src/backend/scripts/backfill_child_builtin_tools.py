@@ -3,18 +3,11 @@ import argparse
 import asyncio
 import gc
 import json
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-BACKEND_SRC = ROOT / "src" / "backend"
-if str(BACKEND_SRC) not in sys.path:
-    sys.path.insert(0, str(BACKEND_SRC))
 
 from sqlmodel import col, select  # noqa: E402
 
-from bisheng.core.context.tenant import bypass_tenant_filter  # noqa: E402
 from bisheng.core.context.manager import close_app_context  # noqa: E402
+from bisheng.core.context.tenant import bypass_tenant_filter  # noqa: E402
 from bisheng.core.database import get_async_db_session  # noqa: E402
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant  # noqa: E402
 from bisheng.tool.domain.const import ToolPresetType  # noqa: E402

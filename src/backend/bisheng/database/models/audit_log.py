@@ -178,6 +178,13 @@ _UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
     'llm.server.create',
     'llm.server.update',
     'llm.server.delete',
+    'approval.scenario.create',
+    'approval.task.approve',
+    'approval.task.reject',
+    'approval.instance.withdraw',
+    'approval.instance.resubmit',
+    'approval.menu_access.revoke_grant',
+    'approval.exception.retry',
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
@@ -186,6 +193,7 @@ _UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
 _V2_NAMESPACE_TO_ACTION_PREFIX: Dict[str, str] = {
     'tenant': 'tenant.',
     'llm': 'llm.server.',
+    'approval': 'approval.',
 }
 
 

@@ -72,6 +72,14 @@ class KnowledgeBase(SQLModelSerializable):
             comment='F017: Root resource shared to all children (mirrors FGA shared_with tuples)',
         ),
     )
+    auto_tag_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text('0'), comment='是否启用自动标签'),
+    )
+    auto_tag_library_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, index=True, comment='绑定的自动标签库ID'),
+    )
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -117,6 +125,8 @@ class KnowledgeCreate(BaseModel):
     is_released: bool = Field(default=False, description='is released to knowledge space square')
     auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
     is_shared: bool = Field(default=False)
+    auto_tag_enabled: bool = Field(default=False)
+    auto_tag_library_id: Optional[int] = None
     metadata_fields: Optional[List[Dict]] = Field(default=None,
                                                   description="Metadata Field Configuration for Knowledge Base")
     is_partition: Optional[bool] = None

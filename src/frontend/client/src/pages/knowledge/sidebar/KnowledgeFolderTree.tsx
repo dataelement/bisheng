@@ -1,7 +1,11 @@
 import { ChevronRight, Folder, FolderOpen } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { KnowledgeFolderNode, listKnowledgeFolders } from "~/api/knowledge";
 import { cn } from "~/utils";
+import {
+    KNOWLEDGE_SPACE_FILES_REFRESH_EVENT,
+    type KnowledgeSpaceFilesRefreshEventDetail,
+} from "../hooks/useFileManager";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +27,13 @@ export interface FolderSelectPayload {
 interface KnowledgeFolderTreeProps {
     knowledgeId: string | number;
     currentFolderId?: string;
+    /**
+     * Status filter — must mirror what the right-side file panel sends so the
+     * tree and the panel show the same folders. For MEMBER-role users this is
+     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     * Pass a stable reference (module constant or undefined) to avoid refetch churn.
+     */
+    fileStatus?: number[];
     onSelectFolder: (folder: FolderSelectPayload | null) => void;
 }
 
@@ -35,6 +46,15 @@ function mapToTree(nodes: KnowledgeFolderNode[]): TreeNode[] {
         expanded: false,
         children: undefined,
     }));
+}
+
+/** Collect ids of all currently-expanded nodes anywhere in the tree. */
+function collectExpandedIds(nodes: TreeNode[], acc: Set<number>): Set<number> {
+    for (const n of nodes) {
+        if (n.expanded) acc.add(n.id);
+        if (Array.isArray(n.children)) collectExpandedIds(n.children, acc);
+    }
+    return acc;
 }
 
 // ─── Single node row ──────────────────────────────────────────────────────────
@@ -101,7 +121,7 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
             {node.expanded && Array.isArray(node.children) && node.children.length > 0 && (
                 <div>
                     {node.children.map((child) => (
-                        <TreeNodeRowMemo
+                        <TreeNodeRow
                             key={child.id}
                             node={child}
                             depth={depth + 1}
@@ -116,21 +136,30 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
     );
 }
 
-// Memoised to avoid full-tree re-renders on every ancestor state change
-const TreeNodeRowMemo = TreeNodeRow;
-
 // ─── Root component ──────────────────────────────────────────────────────────
 
-export function KnowledgeFolderTree({ knowledgeId, currentFolderId, onSelectFolder }: KnowledgeFolderTreeProps) {
+export function KnowledgeFolderTree({
+    knowledgeId,
+    currentFolderId,
+    fileStatus,
+    onSelectFolder,
+}: KnowledgeFolderTreeProps) {
     const [roots, setRoots] = useState<TreeNode[]>([]);
     const [rootLoading, setRootLoading] = useState(false);
 
-    // Load root folders on mount or when knowledgeId changes
+    // Mirror the latest tree into a ref so refreshTree can read it without
+    // becoming a new function on every state change.
+    const rootsRef = useRef<TreeNode[]>([]);
+    useEffect(() => {
+        rootsRef.current = roots;
+    }, [roots]);
+
+    // Load root folders on mount or when knowledgeId / fileStatus changes
     useEffect(() => {
         if (!knowledgeId) return;
         let cancelled = false;
         setRootLoading(true);
-        listKnowledgeFolders({ space_id: knowledgeId, parent_id: null })
+        listKnowledgeFolders({ space_id: knowledgeId, parent_id: null, file_status: fileStatus })
             .then(({ items }) => {
                 if (cancelled) return;
                 setRoots(mapToTree(items));
@@ -142,7 +171,7 @@ export function KnowledgeFolderTree({ knowledgeId, currentFolderId, onSelectFold
                 if (!cancelled) setRootLoading(false);
             });
         return () => { cancelled = true; };
-    }, [knowledgeId]);
+    }, [knowledgeId, fileStatus]);
 
     /** Immutably update a node anywhere in the tree by id. */
     const updateNode = useCallback((
@@ -174,7 +203,7 @@ export function KnowledgeFolderTree({ knowledgeId, currentFolderId, onSelectFold
 
         // Fetch children
         setRoots((prev) => updateNode(prev, node.id, (n) => ({ ...n, loading: true })));
-        listKnowledgeFolders({ space_id: knowledgeId, parent_id: node.id })
+        listKnowledgeFolders({ space_id: knowledgeId, parent_id: node.id, file_status: fileStatus })
             .then(({ items }) => {
                 setRoots((prev) =>
                     updateNode(prev, node.id, (n) => ({
@@ -195,11 +224,59 @@ export function KnowledgeFolderTree({ knowledgeId, currentFolderId, onSelectFold
                     }))
                 );
             });
-    }, [knowledgeId, updateNode]);
+    }, [knowledgeId, fileStatus, updateNode]);
 
     const handleSelect = useCallback((node: TreeNode) => {
         onSelectFolder({ id: String(node.id), name: node.name });
     }, [onSelectFolder]);
+
+    // Re-fetch a freshly-loaded subtree, re-expanding nodes that were open before.
+    const rebuildWithExpansion = useCallback(async (
+        nodes: TreeNode[],
+        expandedIds: Set<number>,
+    ): Promise<TreeNode[]> => {
+        return Promise.all(nodes.map(async (n) => {
+            if (!expandedIds.has(n.id)) return n;
+            try {
+                const { items } = await listKnowledgeFolders({
+                    space_id: knowledgeId, parent_id: n.id, file_status: fileStatus,
+                });
+                const children = await rebuildWithExpansion(mapToTree(items), expandedIds);
+                return { ...n, expanded: true, loading: false, children };
+            } catch {
+                return { ...n, expanded: true, loading: false, children: [] };
+            }
+        }));
+    }, [knowledgeId, fileStatus]);
+
+    /** Full tree refresh that preserves which nodes were expanded. */
+    const refreshTree = useCallback(async () => {
+        if (!knowledgeId) return;
+        const expandedIds = collectExpandedIds(rootsRef.current, new Set<number>());
+        try {
+            const { items } = await listKnowledgeFolders({
+                space_id: knowledgeId, parent_id: null, file_status: fileStatus,
+            });
+            const fresh = await rebuildWithExpansion(mapToTree(items), expandedIds);
+            setRoots(fresh);
+        } catch {
+            // Keep the current tree on failure — a stale tree beats an empty one.
+        }
+    }, [knowledgeId, fileStatus, rebuildWithExpansion]);
+
+    // Refresh when the right-side panel reports a folder change for this space.
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
+            // No spaceId → global refresh; otherwise only react to our own space.
+            if (detail?.spaceId != null && String(detail.spaceId) !== String(knowledgeId)) {
+                return;
+            }
+            refreshTree();
+        };
+        window.addEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handler);
+        return () => window.removeEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handler);
+    }, [knowledgeId, refreshTree]);
 
     if (rootLoading) {
         return (

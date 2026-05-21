@@ -12,7 +12,6 @@ import {
     getSpaceChildrenApi,
     searchSpaceChildrenApi,
 } from "~/api/knowledge";
-import { approvalRequestToKnowledgeFiles, listApprovalRequestsApi } from "~/api/approval";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
@@ -27,10 +26,20 @@ interface UseFileManagerOptions {
     enabled?: boolean;
 }
 
-const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
+export const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
 
-interface KnowledgeSpaceFilesRefreshEventDetail {
+export interface KnowledgeSpaceFilesRefreshEventDetail {
     spaceId?: number | string;
+}
+
+/** Dispatch the global "knowledge space files changed" event (folder create/delete/rename, etc). */
+export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): void {
+    window.dispatchEvent(
+        new CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>(
+            KNOWLEDGE_SPACE_FILES_REFRESH_EVENT,
+            { detail: { spaceId } },
+        ),
+    );
 }
 
 /**
@@ -88,50 +97,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         order_sort: sortDirection || undefined,
                         file_status: fileStatusNums,
                     });
-                let mergedData = res.data;
-                let mergedTotal = res.total;
-                if (activeSpace.spaceKind === "department") {
-                    try {
-                        const approvalRes = await listApprovalRequestsApi({
-                            space_id: Number(activeSpace.id),
-                            statuses: ["pending_review", "rejected", "sensitive_rejected", "finalize_failed"],
-                            page: 1,
-                            page_size: 100,
-                        });
-                        let approvalFiles = approvalRes.data.flatMap((row) =>
-                            approvalRequestToKnowledgeFiles(row, activeSpace.id)
-                        );
-                        if (currentFolderId !== undefined) {
-                            approvalFiles = approvalFiles.filter(
-                                (file) => file.parentId === currentFolderId
-                            );
-                        } else {
-                            approvalFiles = approvalFiles.filter((file) => !file.parentId);
-                        }
-                        if (searchQuery.trim()) {
-                            const keyword = searchQuery.trim().toLowerCase();
-                            approvalFiles = approvalFiles.filter((file) =>
-                                file.name.toLowerCase().includes(keyword)
-                            );
-                        }
-                        // Apply the same status filtering logic as the backend API
-                        if (statusFilter.length > 0) {
-                            approvalFiles = approvalFiles.filter(
-                                (file) => file.status !== undefined && statusFilter.includes(file.status)
-                            );
-                        } else if (isMember) {
-                            // Match the default API behavior for members: exclude FAILED
-                            approvalFiles = approvalFiles.filter((file) => file.status !== FileStatus.FAILED);
-                        }
-                        const existingIds = new Set(res.data.map((file) => file.id));
-                        const uniqueApprovalFiles = approvalFiles.filter((file) => !existingIds.has(file.id));
-                        mergedData = [...uniqueApprovalFiles, ...res.data];
-                        mergedTotal = res.total + uniqueApprovalFiles.length;
-                    } catch {
-                        // Approval list is additive only; degrade gracefully to the
-                        // base file list if approval data cannot be loaded.
-                    }
-                }
+                const mergedData = res.data;
+                const mergedTotal = res.total;
                 setFiles(mergedData);
                 setTotal(mergedTotal);
                 setCurrentPage(page);

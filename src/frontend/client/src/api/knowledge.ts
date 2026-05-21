@@ -101,6 +101,8 @@ export interface KnowledgeSpace {
     updatedAt: string;            // mapped from update_time
     tags: string[];
     isReleased: boolean;          // mapped from is_released
+    autoTagEnabled?: boolean;
+    autoTagLibraryId?: number | null;
 
     // Used only by the "square explore" UI
     isFollowed?: boolean;
@@ -213,9 +215,24 @@ interface RawKnowledgeSpace {
     update_time?: string;
     tags?: string[];
     is_released?: boolean;
+    auto_tag_enabled?: boolean;
+    auto_tag_library_id?: number | null;
     is_pending?: boolean;
     is_followed?: boolean;
     subscription_status?: string;
+}
+
+export interface KnowledgeSpaceTagLibraryListItem {
+    id: number;
+    name: string;
+    description?: string | null;
+    tag_count: number;
+    is_builtin: boolean;
+}
+
+export interface KnowledgeSpaceTagLibraryPage {
+    data: KnowledgeSpaceTagLibraryListItem[];
+    total: number;
 }
 
 interface RawSpaceChild {
@@ -303,6 +320,8 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         updatedAt: raw.update_time || "",
         tags: Array.isArray(raw.tags) ? raw.tags : [],
         isReleased: raw.is_released ?? false,
+        autoTagEnabled: raw.auto_tag_enabled ?? false,
+        autoTagLibraryId: raw.auto_tag_library_id ?? null,
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
         // Some detail endpoints may carry subscription_status; keep it if present.
@@ -854,6 +873,8 @@ export async function createSpaceApi(data: {
     icon?: string;
     auth_type: string;
     is_released?: boolean;
+    auto_tag_enabled?: boolean;
+    auto_tag_library_id?: number | null;
 }): Promise<KnowledgeSpace> {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;
@@ -878,11 +899,29 @@ export async function updateSpaceApi(
         icon?: string;
         auth_type?: string;
         is_released?: boolean;
+        auto_tag_enabled?: boolean;
+        auto_tag_library_id?: number | null;
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");
     const res = await request.put(`/api/v1/knowledge/space/${space_id}`, data) as ApiResponse<RawKnowledgeSpace>;
     return mapSpace(res.data);
+}
+
+export async function getKnowledgeSpaceTagLibrariesApi(params?: {
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+}): Promise<KnowledgeSpaceTagLibraryPage> {
+    const res = await request.get<ApiResponse<KnowledgeSpaceTagLibraryPage>>(
+        `/api/v1/knowledge/space/tag-libraries`,
+        { params }
+    );
+    const payload: any = (res as any)?.data ?? res;
+    return {
+        data: Array.isArray(payload?.data) ? payload.data : [],
+        total: Number(payload?.total ?? 0),
+    };
 }
 
 /**
@@ -1104,6 +1143,12 @@ export interface KnowledgeFolderNode {
 export async function listKnowledgeFolders(params: {
     space_id: string | number;
     parent_id?: string | number | null;
+    /**
+     * Status filter — must mirror what the right-side file panel sends so the
+     * tree and the panel stay consistent. For MEMBER-role users this should be
+     * SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED; omit for admins/creators.
+     */
+    file_status?: number[];
 }): Promise<{ items: KnowledgeFolderNode[]; total: number }> {
     if (!params.space_id) return { items: [], total: 0 };
     const res = await request.get<any>(
@@ -1116,7 +1161,9 @@ export async function listKnowledgeFolders(params: {
                 page_size: 200,
                 order_field: "file_name",
                 order_sort: "asc",
+                file_status: params.file_status?.length ? params.file_status : undefined,
             },
+            paramsSerializer: request.paramsSerializer,
         }
     );
     const payload: any = res?.data ?? res ?? {};

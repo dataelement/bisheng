@@ -147,6 +147,11 @@ def _compile_update_time_default_dm(element, compiler, **kw):
     return "CURRENT_TIMESTAMP"
 
 
+@compiles(_UpdateTimeServerDefault, "sqlite")
+def _compile_update_time_default_sqlite(element, compiler, **kw):
+    return "CURRENT_TIMESTAMP"
+
+
 # Singleton — import and use directly in sa_column definitions
 UPDATE_TIME_SERVER_DEFAULT = _UpdateTimeServerDefault()
 

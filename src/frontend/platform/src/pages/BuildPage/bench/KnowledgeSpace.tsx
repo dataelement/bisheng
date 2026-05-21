@@ -18,7 +18,6 @@ import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { DepartmentKnowledgeSpaceApprovalDialog } from "./DepartmentKnowledgeSpaceApprovalDialog";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import {
@@ -47,12 +46,10 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
     } = useKnowledgeConfig(scopeVersion);
     const sensitivePolicyRef = useRef<KnowledgeSpaceSensitivePolicyHandle>(null);
     const [managerOpen, setManagerOpen] = useState(false);
-    const [approvalTarget, setApprovalTarget] = useState<DepartmentKnowledgeSpaceSummary | null>(null);
     const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([]);
     const [departmentSpacesLoading, setDepartmentSpacesLoading] = useState(false);
     const { user } = useContext(userContext);
     const navigate = useNavigate();
-    const showSensitiveCheckControl = false;
     const canManageWorkbench = canManageWorkbenchConfig(user);
     const isGlobalSuper = isGlobalSuperUser(user);
 
@@ -78,29 +75,6 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
             loadDepartmentSpaces();
         }
     }, [isGlobalSuper, user.user_id]);
-
-    const handleDepartmentSpaceSettingsSaved = (
-        spaceId: number,
-        settings: Pick<DepartmentKnowledgeSpaceSummary, "approval_enabled" | "sensitive_check_enabled">,
-    ) => {
-        setDepartmentSpaces((prev) => prev.map((space) => (
-            space.id === spaceId
-                ? {
-                    ...space,
-                    approval_enabled: settings.approval_enabled,
-                    sensitive_check_enabled: settings.sensitive_check_enabled,
-                }
-                : space
-        )));
-        if (approvalTarget?.id === spaceId) {
-            setApprovalTarget({
-                ...approvalTarget,
-                approval_enabled: settings.approval_enabled,
-                sensitive_check_enabled: settings.sensitive_check_enabled,
-            });
-        }
-        void loadDepartmentSpaces();
-    };
 
     const handleSave = async () => {
         const sensitiveSaved = await sensitivePolicyRef.current?.save();
@@ -201,7 +175,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                                     {t("bench.departmentKnowledgeSpace", "部门知识空间")}
                                                 </p>
                                                 <p className="mt-1 text-sm text-[#86909C]">
-                                                    {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，以及每个部门知识空间单独的上传审批策略。")}
+                                                    {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，并查看已绑定部门的知识空间。")}
                                                 </p>
                                             </div>
                                             <Button
@@ -254,41 +228,6 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                                                     <p className="mt-2 text-xs text-[#86909C]">
                                                                         {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
                                                                     </p>
-                                                                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                                        <span
-                                                                            className={
-                                                                                space.approval_enabled
-                                                                                    ? "rounded bg-[#E6EDFC] px-2 py-0.5 text-xs text-[#165DFF]"
-                                                                                    : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
-                                                                            }
-                                                                        >
-                                                                            {space.approval_enabled
-                                                                                ? t("bench.departmentKnowledgeSpaceApprovalOn", "审批开启")
-                                                                                : t("bench.departmentKnowledgeSpaceApprovalOff", "审批关闭")}
-                                                                        </span>
-                                                                        {showSensitiveCheckControl && (
-                                                                            <span
-                                                                                className={
-                                                                                    space.sensitive_check_enabled
-                                                                                        ? "rounded bg-[#FFF1F0] px-2 py-0.5 text-xs text-[#F53F3F]"
-                                                                                        : "rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]"
-                                                                                }
-                                                                            >
-                                                                                {space.sensitive_check_enabled
-                                                                                    ? t("bench.departmentKnowledgeSpaceSensitiveCheckOn", "内容安全开启")
-                                                                                    : t("bench.departmentKnowledgeSpaceSensitiveCheckOff", "内容安全关闭")}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex items-center gap-2 shrink-0">
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        className="h-7 px-3 bg-gray-50"
-                                                                        onClick={() => setApprovalTarget(space)}
-                                                                    >
-                                                                        {t("bench.departmentKnowledgeSpaceApprovalSettings", "审批设置")}
-                                                                    </Button>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -314,15 +253,6 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                         open={managerOpen}
                         onOpenChange={setManagerOpen}
                         onCreated={loadDepartmentSpaces}
-                    />
-                    <DepartmentKnowledgeSpaceApprovalDialog
-                        open={!!approvalTarget}
-                        onOpenChange={(open) => {
-                            if (!open) setApprovalTarget(null);
-                        }}
-                        space={approvalTarget}
-                        onSaved={handleDepartmentSpaceSettingsSaved}
-                        showSensitiveCheckControl={showSensitiveCheckControl}
                     />
                 </>
             )}
