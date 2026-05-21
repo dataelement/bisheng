@@ -96,8 +96,13 @@ export default function MainLayout() {
         u.has_workbench
         ?? (isMenu('workstation'))
 
-    /** 需审批模式：无显式权限时仍展示侧栏入口，路由落到空白占位页 */
-    const showAdminNav = (menu: string) => isMenu(menu) || (menuApprovalMode && hasAdminEntry)
+    // Admin-console menus that can be applied for via the approval system.
+    // Mirrors MENU_KEY_VALUES in ApprovalPage (top-level admin menus only).
+    const APPROVAL_MENUS = new Set(['board', 'build', 'knowledge', 'model', 'evaluation', 'mark_task', 'log'])
+
+    /** Show if user has permission OR if the menu supports approval requests */
+    const showAdminNav = (menu: string) =>
+        isMenu(menu) || (menuApprovalMode && hasAdminEntry && APPROVAL_MENUS.has(menu))
 
     return <div className="flex">
         <div className="bg-background-main w-full h-screen">
