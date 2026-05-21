@@ -2376,6 +2376,8 @@
     "menuApprovalDesc": "你的角色当前未包含该菜单权限，点击下方按钮发起申请，审批通过后即可访问。",
     "menuApply": "申请菜单权限",
     "menuApplying": "提交中…",
-    "menuApplied": "已提交申请"
+    "menuApplied": "已提交申请",
+    "menuNoPermission": "暂无该菜单权限",
+    "menuNoPermissionDesc": "你的角色当前未包含该菜单权限，请联系管理员开通。"
   }
 }

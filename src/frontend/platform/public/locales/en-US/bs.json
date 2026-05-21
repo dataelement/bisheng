@@ -2426,7 +2426,9 @@
     "menuApprovalDesc": "Your role does not include this menu permission. Click the button below to apply; access will be granted after approval.",
     "menuApply": "Apply for Access",
     "menuApplying": "Submitting…",
-    "menuApplied": "Application Submitted"
+    "menuApplied": "Application Submitted",
+    "menuNoPermission": "No permission for this menu",
+    "menuNoPermissionDesc": "Your role does not include this menu permission. Please contact your administrator."
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

@@ -2376,6 +2376,8 @@
     "menuApprovalDesc": "あなたのロールにはこのメニュー権限が含まれていません。下のボタンをクリックして申請してください。承認後にアクセスできます。",
     "menuApply": "アクセスを申請",
     "menuApplying": "送信中…",
-    "menuApplied": "申請済み"
+    "menuApplied": "申請済み",
+    "menuNoPermission": "このメニューの権限がありません",
+    "menuNoPermissionDesc": "あなたのロールにはこのメニュー権限が含まれていません。管理者にお問い合わせください。"
   }
 }

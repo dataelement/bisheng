@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { applyMenuAccessApi } from "@/controllers/API/approval";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { userContext } from "@/contexts/userContext";
 
 /** Menu key → i18n label mapping, aligned with MainLayout sidebar */
 const MENU_LABEL_KEYS: Record<string, string> = {
@@ -16,15 +17,17 @@ const MENU_LABEL_KEYS: Record<string, string> = {
   log:         "menu.log",
 };
 
-/** 需审批模式：无菜单权限时占位页，支持在页内发起申请 */
+/** 菜单无权限占位页：approval 模式展示申请按钮，非 approval 模式展示无权限提示 */
 export default function MenuPermissionPlaceholder() {
   const { t } = useTranslation("bs");
   const location = useLocation();
   const { toast } = useToast();
+  const { user } = useContext(userContext);
 
   const menuKey = new URLSearchParams(location.search).get("menu") ?? "";
   const menuLabelKey = menuKey ? MENU_LABEL_KEYS[menuKey] : "";
   const menuName = menuLabelKey ? t(menuLabelKey, { defaultValue: menuKey }) : "";
+  const approvalEnabled = Boolean(user?.menu_approval_mode);
 
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -46,12 +49,16 @@ export default function MenuPermissionPlaceholder() {
     <div className="flex h-full w-full items-center justify-center bg-background-main-content px-6">
       <div className="max-w-md rounded-xl border border-border-subtle bg-background-primary p-8 text-center shadow-sm">
         <h2 className="text-lg font-semibold text-text-primary">
-          {menuName ? `「${menuName}」${t("approvalPage.menuNeedsApproval", { defaultValue: "菜单需审批开通" })}` : t("approvalPage.menuNeedsApproval", { defaultValue: "当前菜单需审批开通" })}
+          {menuName
+            ? `「${menuName}」${t(approvalEnabled ? "approvalPage.menuNeedsApproval" : "approvalPage.menuNoPermission", { defaultValue: approvalEnabled ? "菜单需审批开通" : "暂无该菜单权限" })}`
+            : t(approvalEnabled ? "approvalPage.menuNeedsApproval" : "approvalPage.menuNoPermission", { defaultValue: approvalEnabled ? "当前菜单需审批开通" : "暂无该菜单权限" })}
         </h2>
         <p className="mt-3 text-sm leading-6 text-text-secondary">
-          {t("approvalPage.menuApprovalDesc", { defaultValue: "你的角色当前未包含该菜单权限。点击下方按钮发起申请，审批通过后即可访问。" })}
+          {approvalEnabled
+            ? t("approvalPage.menuApprovalDesc", { defaultValue: "你的角色当前未包含该菜单权限，点击下方按钮发起申请，审批通过后即可访问。" })
+            : t("approvalPage.menuNoPermissionDesc", { defaultValue: "你的角色当前未包含该菜单权限，请联系管理员开通。" })}
         </p>
-        {menuKey && (
+        {approvalEnabled && menuKey && (
           <button
             type="button"
             disabled={applying || applied}
