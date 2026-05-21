@@ -54,7 +54,7 @@
 
 - [ ] **T002A**: 通用审批中心 ORM 模型 + Alembic 迁移
   **文件**: `src/backend/bisheng/approval/domain/models/approval_scenario.py`, `src/backend/bisheng/approval/domain/models/approval_instance.py`, `src/backend/bisheng/approval/domain/models/user_menu_access.py`, `src/backend/bisheng/core/database/alembic/versions/<timestamp>_approval_center_init.py`
-  **逻辑**: 按 spec §5 新建 11 张 SQLModel 表（`approval_scenario`、`approval_route_rule`、`approval_flow_definition`、`approval_flow_version`、`approval_node_definition`、`approval_instance`、`approval_task`、`approval_exception`、`approval_outbox`、`approval_action_log`、`user_menu_access`）；所有表带 `tenant_id`、`create_time`、`update_time`；JSON 字段使用 `JsonType`，时间戳使用 `UPDATE_TIME_SERVER_DEFAULT`，不写 MySQL 专属 DDL；同时提交 Alembic 迁移文件，迁移守卫使用 `inspect()` 不用 `information_schema`
+  **逻辑**: 按 spec §5 新建 11 张 SQLModel 表（`approval_scenario`、`approval_route_rule`、`approval_flow_definition`、`approval_flow_version`、`approval_node_definition`、`approval_instance`、`approval_task`、`approval_exception`、`approval_outbox`、`approval_action_log`、`user_menu_access`）；所有表带 `tenant_id`、`create_time`、`update_time`；JSON 字段使用 `JsonType`，时间戳使用 `UPDATE_TIME_SERVER_DEFAULT`，不写 MySQL 专属 DDL；同时提交 Alembic 迁移文件，迁移守卫使用 `inspect()` 不用 `information_schema`。注意 `approval_route_rule` 必须包含 `enabled BOOLEAN NOT NULL DEFAULT 1` 字段（见 spec §5.3），`_match_first_route` 依赖此字段跳过禁用分支
   **测试**: 无（基础设施任务，T001 在 T002B 完成后验证）
   **覆盖 AC**: —
   **依赖**: 无

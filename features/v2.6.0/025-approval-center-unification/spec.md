@@ -171,6 +171,25 @@
 ### 5.3 核心字段设计
 
 ```python
+class ApprovalRouteRule(SQLModelSerializable, table=True):
+    __tablename__ = "approval_route_rule"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, index=True)
+    scenario_id: int = Field(sa_column=Column(Integer, nullable=False, index=True))
+    route_name: str = Field(sa_column=Column(String(255), nullable=False))
+    route_type: str = Field(sa_column=Column(String(32), nullable=False, index=True))  # 'pass' | 'flow'
+    sort_order: int = Field(default=0, sa_column=Column(Integer, nullable=False, index=True))
+    flow_definition_id: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True, index=True))
+    match_config: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
+    # {"field": "applicant_role", "value": "admin"} — 空 dict 表示无条件（始终命中）
+    enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default=text('1')))
+    # 禁用时 _match_first_route 跳过该分支，不参与匹配
+    create_time: Optional[datetime] = Field(sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")))
+    update_time: Optional[datetime] = Field(sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+```
+
+```python
 class ApprovalInstance(SQLModelSerializable, table=True):
     __tablename__ = "approval_instance"
 

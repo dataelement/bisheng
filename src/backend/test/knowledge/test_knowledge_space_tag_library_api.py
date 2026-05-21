@@ -54,17 +54,7 @@ def _service() -> SimpleNamespace:
                 name="新标签库",
                 description="",
                 tag_count=2,
-                is_builtin=False,
-                tags=["A", "B"],
-            )
-        ),
-        import_text_library=AsyncMock(
-            return_value=KnowledgeSpaceTagLibraryDetail(
-                id=3,
-                name="导入标签库",
-                description="",
-                tag_count=2,
-                is_builtin=False,
+                is_builtin=True,
                 tags=["A", "B"],
             )
         ),
@@ -79,6 +69,7 @@ def _service() -> SimpleNamespace:
             )
         ),
         delete_library=AsyncMock(return_value=None),
+        get_library_usage=AsyncMock(return_value=3),
     )
 
 
@@ -116,18 +107,19 @@ def test_get_tag_library_returns_tags():
     service.get_library.assert_awaited_once_with(1)
 
 
-def test_create_import_update_and_delete_tag_library_routes_thread_payloads():
+def test_create_update_and_delete_tag_library_routes_thread_payloads():
     service = _service()
     app = _mount_app(service)
 
     with TestClient(app) as client:
         create_resp = client.post(
             "/api/v1/knowledge/space/tag-libraries",
-            json={"name": "新标签库", "description": "", "tags": ["A", "B"]},
-        )
-        import_resp = client.post(
-            "/api/v1/knowledge/space/tag-libraries/import/text",
-            json={"name": "导入标签库", "description": "", "content": "A\nB\n"},
+            json={
+                "name": "新标签库",
+                "description": "",
+                "tags": ["A", "B"],
+                "is_builtin": True,
+            },
         )
         update_resp = client.put(
             "/api/v1/knowledge/space/tag-libraries/1",
@@ -137,11 +129,9 @@ def test_create_import_update_and_delete_tag_library_routes_thread_payloads():
 
     assert create_resp.status_code == 200
     assert create_resp.json()["data"]["tags"] == ["A", "B"]
-    service.create_library.assert_awaited_once_with("新标签库", "", ["A", "B"])
-
-    assert import_resp.status_code == 200
-    assert import_resp.json()["data"]["tag_count"] == 2
-    service.import_text_library.assert_awaited_once_with("导入标签库", "", "A\nB\n")
+    service.create_library.assert_awaited_once_with(
+        "新标签库", "", ["A", "B"], is_builtin=True
+    )
 
     assert update_resp.status_code == 200
     assert update_resp.json()["data"]["tags"] == ["合同"]
@@ -155,3 +145,45 @@ def test_create_import_update_and_delete_tag_library_routes_thread_payloads():
     assert delete_resp.status_code == 200
     assert delete_resp.json()["data"] is True
     service.delete_library.assert_awaited_once_with(1)
+
+
+def test_create_tag_library_defaults_is_builtin_false():
+    service = _service()
+    app = _mount_app(service)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/knowledge/space/tag-libraries",
+            json={"name": "新标签库", "description": "", "tags": ["A", "B"]},
+        )
+
+    assert resp.status_code == 200
+    service.create_library.assert_awaited_once_with(
+        "新标签库", "", ["A", "B"], is_builtin=False
+    )
+
+
+def test_tag_library_usage_endpoint_returns_count():
+    service = _service()
+    app = _mount_app(service)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/v1/knowledge/space/tag-libraries/1/usage")
+
+    assert resp.status_code == 200
+    assert resp.json()["data"] == {"count": 3}
+    service.get_library_usage.assert_awaited_once_with(1)
+
+
+def test_import_endpoint_is_removed():
+    service = _service()
+    app = _mount_app(service)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/knowledge/space/tag-libraries/import/text",
+            json={"name": "导入标签库", "description": "", "content": "A\nB\n"},
+        )
+
+    # The dedicated import endpoint was removed; FastAPI returns 404.
+    assert resp.status_code == 404

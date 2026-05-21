@@ -101,6 +101,7 @@ export async function updateApprovalRouteApi(
     sort_order?: number;
     flow_definition_id?: number | null;
     match_config?: Record<string, any>;
+    enabled?: boolean;
   },
 ): Promise<ApprovalRouteItem> {
   return await axios.put(`/api/v1/approval/admin/routes/${routeRuleId}`, data);
@@ -117,7 +118,6 @@ export async function listApprovalFlowsApi(scenarioId: number): Promise<Approval
 export async function createApprovalFlowApi(
   scenarioId: number,
   data: {
-    flow_code: string;
     flow_name: string;
     is_active?: boolean;
   },
@@ -128,7 +128,6 @@ export async function createApprovalFlowApi(
 export async function updateApprovalFlowApi(
   flowDefinitionId: number,
   data: {
-    flow_code?: string;
     flow_name?: string;
     is_active?: boolean;
   },
@@ -143,7 +142,6 @@ export async function listApprovalNodesApi(flowDefinitionId: number): Promise<Ap
 export async function createApprovalNodeApi(
   flowDefinitionId: number,
   data: {
-    node_code: string;
     node_name: string;
     node_order?: number;
     node_mode: string;
@@ -157,7 +155,6 @@ export async function createApprovalNodeApi(
 export async function updateApprovalNodeApi(
   nodeDefinitionId: number,
   data: {
-    node_code?: string;
     node_name?: string;
     node_order?: number;
     node_mode?: string;

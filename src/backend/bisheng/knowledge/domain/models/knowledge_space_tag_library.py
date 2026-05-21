@@ -8,12 +8,11 @@ from sqlalchemy import (
     Integer,
     String,
     func,
-    select,
     text,
     update,
     delete,
 )
-from sqlmodel import Field, col
+from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
@@ -167,13 +166,38 @@ class KnowledgeSpaceTagLibraryDao:
             return True
 
     @classmethod
+    async def acount_used_by_spaces(cls, library_id: int) -> int:
+        """Count knowledge spaces that have this library bound (tenant-filtered by SELECT).
+
+        Used by the pre-delete confirmation flow to tell the admin how many spaces
+        will lose their auto-tag binding if they proceed.
+        """
+        from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+        statement = select(func.count(Knowledge.id)).where(
+            Knowledge.auto_tag_library_id == library_id
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement) or 0
+
+    @classmethod
     async def aclear_space_bindings(cls, library_id: int) -> None:
         from bisheng.knowledge.domain.models.knowledge import Knowledge
 
         async with get_async_db_session() as session:
+            library = (
+                await session.exec(
+                    select(KnowledgeSpaceTagLibrary).where(
+                        KnowledgeSpaceTagLibrary.id == library_id
+                    )
+                )
+            ).first()
+            if not library:
+                return
             await session.exec(
                 update(Knowledge)
                 .where(Knowledge.auto_tag_library_id == library_id)
+                .where(Knowledge.tenant_id == library.tenant_id)
                 .values(auto_tag_enabled=False, auto_tag_library_id=None)
             )
             await session.commit()
