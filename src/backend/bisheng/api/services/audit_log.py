@@ -457,6 +457,38 @@ class AuditLogService:
                            str(knowledge_id), file_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
+    def link_file_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: file linked into an existing logical document as a new version."""
+        logger.info(f"act=link_file_version user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.LINK_FILE_VERSION, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def set_primary_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: a historical version was promoted to primary."""
+        logger.info(f"act=set_primary_version user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.SET_PRIMARY_VERSION, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def delete_file_version(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: historical version deleted."""
+        logger.info(f"act=delete_file_version user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.DELETE_FILE_VERSION, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
+    def dismiss_similar_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, doc_summary: str):
+        """Audit: user dismissed a similar-file recommendation."""
+        logger.info(f"act=dismiss_similar_file user={user.user_name} ip={ip_address}"
+                    f" knowledge={knowledge_id} summary={doc_summary}")
+        cls._knowledge_log(user, ip_address, EventType.DISMISS_SIMILAR_FILE, ObjectType.FILE,
+                           str(knowledge_id), doc_summary, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+
+    @classmethod
     def _system_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: EventType,
                     object_type: ObjectType, object_id: str, object_name: str, note: str = ''):
 

@@ -1,4 +1,5 @@
-from unittest.mock import AsyncMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from test.test_knowledge_space_service import (
@@ -8,6 +9,16 @@ from test.test_knowledge_space_service import (
     _make_space,
 )
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+
+
+@asynccontextmanager
+async def _noop_db_session():
+    """No-op async DB session for tests that don't verify doc/version rows."""
+    session = MagicMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    session.commit = AsyncMock()
+    yield session
 
 
 @pytest.fixture
@@ -36,6 +47,10 @@ async def test_department_space_upload_does_not_create_approval_request(service)
         new_callable=AsyncMock,
         return_value=None,
     ), patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
         "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
         return_value=added_file,
     ) as mock_process_one_file, patch(
@@ -47,6 +62,9 @@ async def test_department_space_upload_does_not_create_approval_request(service)
     ), patch(
         "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
         new_callable=AsyncMock,
+    ), patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+        new=_noop_db_session,
     ), patch(
         "bisheng.approval.domain.services.approval_service.ApprovalService.create_department_space_upload_request",
         new_callable=AsyncMock,

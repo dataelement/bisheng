@@ -118,4 +118,11 @@ export type BishengConfig = {
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */
   enable_etl4lm: boolean;
+  /** Knowledge space feature flags */
+  knowledges?: {
+    version_management?: {
+      enabled: boolean;
+      simhash_similarity_threshold?: number;
+    };
+  };
 };

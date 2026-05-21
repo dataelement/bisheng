@@ -352,12 +352,27 @@ class PaddleOcrConf(BaseModel):
     request_kwargs: Dict = Field(default_factory=dict, description='PaddleOcrService Request Arguments')
 
 
+class VersionManagementConf(BaseModel):
+    """ Version Management Configure """
+    enabled: bool = Field(default=False, description="Enable knowledge-space file version management")
+    simhash_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold (1 - hamming/64) to flag a file as 'similar'. Range [0, 1].",
+    )
+
+
 class KnowledgeConf(BaseModel):
     """ Knowledge Configure """
     loader_provider: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
     etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description='Etl4lm Configure')
     mineru: MineruConf = Field(default_factory=MineruConf, description='Mineru Configure')
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description='PaddleOcr Config')
+    version_management: VersionManagementConf = Field(
+        default_factory=VersionManagementConf,
+        description='Version Management Configure',
+    )
 
 
 class IntelligenceCenterConf(BaseModel):

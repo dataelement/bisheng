@@ -16,14 +16,91 @@ Created by F000-test-infrastructure.
 """
 
 import sys
+import types
 from unittest.mock import MagicMock
+
+# ---------------------------------------------------------------------------
+# knowledge_utils stub — must be installed BEFORE any module that imports
+# KnowledgeSpaceService, because subscribe_handler.py imports
+# KnowledgeSpaceService at module top, and KnowledgeSpaceService extends
+# KnowledgeUtils.  If redis_manager is already mocked when that import
+# happens, KnowledgeUtils would silently become a MagicMock auto-attribute,
+# making KnowledgeSpaceService a MagicMock subclass and poisoning all tests
+# that run after test_knowledge_version_endpoint.py in the same session.
+#
+# The placeholder is a real Python class so that `class KnowledgeSpaceService
+# (KnowledgeUtils)` produces a genuine class — not a MagicMock.  The real
+# KnowledgeUtils implementation is never needed in unit tests because every
+# test that touches KnowledgeSpaceService patches it via monkeypatch /
+# _load_service_class helpers.
+# ---------------------------------------------------------------------------
+_knowledge_utils_mod = types.ModuleType("bisheng.knowledge.domain.services.knowledge_utils")
+
+
+class _KnowledgeUtilsPlaceholder:
+    """Test-only placeholder for KnowledgeUtils.
+
+    Provides stub implementations of every method that KnowledgeSpaceService
+    (and its tests) call directly so tests do not fail with AttributeError even
+    when _install_schema_stubs() skips re-installing the module because it is
+    already present in sys.modules.
+    """
+
+    @classmethod
+    async def update_folder_update_time(cls, *args, **kwargs):
+        return None
+
+    @staticmethod
+    def update_folder_update_time_sync(*args, **kwargs):
+        return None
+
+    @classmethod
+    def get_preview_cache_key(cls, *args, **kwargs):
+        return "preview-cache-key"
+
+    @classmethod
+    async def process_retry_files(cls, *args, **kwargs):
+        return ([], set())
+
+    @classmethod
+    async def process_rebuild_file(cls, *args, **kwargs):
+        return None
+
+    @classmethod
+    def ensure_milvus_schema_ready(cls, *args, **kwargs):
+        return None
+
+    @classmethod
+    def get_knowledge_file_object_name(cls, *args, **kwargs):
+        return ""
+
+    @classmethod
+    def resolve_source_object_name(cls, *args, **kwargs):
+        return None
+
+    @classmethod
+    def resolve_preview_object_name(cls, *args, **kwargs):
+        return None
+
+    @classmethod
+    def get_knowledge_abstract_llm(cls, *args, **kwargs):
+        return None, None
+
+    chunk_split = "\n----------\n"
+    schema_ready_lock_ttl = 60
+    schema_ready_wait_seconds = 20
+    schema_ready_poll_interval = 0.5
+
+
+_knowledge_utils_mod.KnowledgeUtils = _KnowledgeUtilsPlaceholder
+sys.modules["bisheng.knowledge.domain.services.knowledge_utils"] = _knowledge_utils_mod
 
 # Pre-mock celery before any bisheng module can import it (settings.py uses celery.schedules).
 # Must happen before the MultiTenantConf import below, which traverses the config chain.
 # F011 adds: docstring_parser (pulled in by bisheng.utils.util when tenant_service imports),
 # fakeredis (some fixtures), and a defensive list of optional dependencies.
 for _mod in (
-    'celery', 'celery.schedules', 'celery.app', 'celery.app.task',
+    'celery', 'celery.schedules', 'celery.app', 'celery.app.task', 'celery.signals',
     'docstring_parser',
     'redis', 'redis.asyncio', 'redis.exceptions',
 ):
@@ -37,6 +114,7 @@ from bisheng.core.config.multi_tenant import MultiTenantConf
 PREMOCK_MODULES: list[str] = [
     # config_service and telemetry — deepest offenders
     'bisheng.common.services',
+    'bisheng.common.services.base',
     'bisheng.common.services.config_service',
     'bisheng.common.services.telemetry',
     'bisheng.common.services.telemetry.telemetry_service',
@@ -55,6 +133,13 @@ PREMOCK_MODULES: list[str] = [
     # F011: tenant_service pulls in redis_manager/openfga on import
     'bisheng.core.cache.redis_conn',
     'bisheng.core.cache.redis_manager',
+    # worker/celery modules — run celery setup at import time, break in test env
+    'bisheng.worker',
+    'bisheng.worker.main',
+    'bisheng.worker.knowledge',
+    'bisheng.worker.knowledge.file_worker',
+    'bisheng.worker.approval',
+    'bisheng.worker.approval.tasks',
 ]
 
 

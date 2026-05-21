@@ -1,4 +1,4 @@
-import { Download, Edit, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
+import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -17,6 +17,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import { Badge } from "~/components/ui/Badge";
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -42,6 +43,9 @@ interface FileCardProps {
     mobileListMode?: boolean;
     /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
     hideDownloadActions?: boolean;
+    versionManagementEnabled?: boolean;
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
 }
 
 export function FileCard({
@@ -66,6 +70,9 @@ export function FileCard({
     hideSelectionCheckbox = false,
     mobileListMode = false,
     hideDownloadActions = false,
+    versionManagementEnabled = false,
+    onOpenVersionManagement,
+    onOpenVersionHistory,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -192,12 +199,29 @@ export function FileCard({
             );
         }
 
+        const versionBadge = versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
+            <Badge variant="secondary" className="ml-1 shrink-0 text-xs">{`V${file.version_no}`}</Badge>
+        );
+        const similarIndicator = versionManagementEnabled && file.has_similar && (
+            <span className="mr-1 shrink-0 rounded bg-[#FFF3E8] px-1.5 py-0.5 text-xs text-[#F76F44]">
+                {localize("com_knowledge.version.pill_similar")}
+            </span>
+        );
+
         if ((!isAdmin && !approvalStatusLabel) || isFolder) {
-            return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
+            return (
+                <div className="flex min-w-0 items-center">
+                    {similarIndicator}
+                    <span className={cn("truncate", nameToneClass)}>{file.name}</span>
+                    {versionBadge}
+                </div>
+            );
         }
         return (
             <div className="flex min-w-0 items-center gap-2">
+                {similarIndicator}
                 <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
+                {versionBadge}
                 {renderStatusBadge()}
             </div>
         );
@@ -393,6 +417,24 @@ export function FileCard({
                                                 {localize("com_knowledge.retry")}
                                             </DropdownMenuItem>
                                         )}
+                                        {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                                                className="flex items-center"
+                                            >
+                                                <GitBranch className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.version.menu_version_management")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {versionManagementEnabled && !isFolder && file.is_multi_version && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                                                className="flex items-center"
+                                            >
+                                                <History className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.version.menu_version_history")}
+                                            </DropdownMenuItem>
+                                        )}
                                         {canDelete && (
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -527,6 +569,24 @@ export function FileCard({
                                     >
                                         <RefreshCw className="mr-2 size-4 shrink-0" />
                                         {localize("com_knowledge.retry")}
+                                    </DropdownMenuItem>
+                                )}
+                                {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                                        className="flex items-center"
+                                    >
+                                        <GitBranch className="mr-2 size-4 shrink-0" />
+                                        {localize("com_knowledge.version.menu_version_management")}
+                                    </DropdownMenuItem>
+                                )}
+                                {versionManagementEnabled && !isFolder && file.is_multi_version && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                                        className="flex items-center"
+                                    >
+                                        <History className="mr-2 size-4 shrink-0" />
+                                        {localize("com_knowledge.version.menu_version_history")}
                                     </DropdownMenuItem>
                                 )}
                                 {canDelete && (

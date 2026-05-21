@@ -83,3 +83,22 @@ class KnowledgeAuditTelemetryService:
         AuditLogService.delete_knowledge_file(
             login_user, get_request_ip(request), knowledge_id, file_name
         )
+
+    @staticmethod
+    def audit_link_file_version(login_user, request, knowledge_id: int, doc_title: str, version_no: int) -> None:
+        summary = f"{doc_title}#V{version_no}"
+        AuditLogService.link_file_version(login_user, get_request_ip(request), knowledge_id, summary)
+
+    @staticmethod
+    def audit_set_primary_version(login_user, request, knowledge_id: int, doc_title: str, version_no: int) -> None:
+        summary = f"{doc_title}#V{version_no}"
+        AuditLogService.set_primary_version(login_user, get_request_ip(request), knowledge_id, summary)
+
+    @staticmethod
+    def audit_delete_file_version(login_user, request, knowledge_id: int, doc_title: str, version_no: int) -> None:
+        summary = f"{doc_title}#V{version_no}"
+        AuditLogService.delete_file_version(login_user, get_request_ip(request), knowledge_id, summary)
+
+    @staticmethod
+    def audit_dismiss_similar_file(login_user, request, knowledge_id: int, file_name: str) -> None:
+        AuditLogService.dismiss_similar_file(login_user, get_request_ip(request), knowledge_id, file_name)

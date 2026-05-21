@@ -23,6 +23,9 @@ knowledges: # 知识库相关配置
       x-api-key: "11"
     request_kwargs:
       useChartRecognition: false
+  version_management:
+    enabled: false
+    simhash_similarity_threshold: 0.85
 
 llm_request:
   # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值

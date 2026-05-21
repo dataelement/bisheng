@@ -167,6 +167,9 @@ CREATE TABLE IF NOT EXISTS knowledge (
     state INTEGER DEFAULT 1,
     is_released INTEGER DEFAULT 0,
     auth_type VARCHAR(32) DEFAULT 'public',
+    is_shared INTEGER NOT NULL DEFAULT 0,
+    auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
+    auto_tag_library_id INTEGER,
     metadata_fields JSON,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -268,16 +271,53 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     tenant_id INTEGER NOT NULL DEFAULT 1,
     user_name VARCHAR(255),
     knowledge_id INTEGER NOT NULL,
+    thumbnails VARCHAR(512),
     file_name VARCHAR(200) NOT NULL,
     file_type INTEGER DEFAULT 1,
     file_source VARCHAR(32),
     level INTEGER DEFAULT 0,
     file_level_path VARCHAR(512),
+    abstract TEXT,
+    file_size INTEGER,
+    md5 VARCHAR(255),
+    parse_type VARCHAR(32),
+    split_rule TEXT,
+    preview_file_object_name VARCHAR(512),
+    bbox_object_name VARCHAR(512) DEFAULT '',
     status INTEGER DEFAULT 5,
     object_name VARCHAR(512),
-    remark VARCHAR(512),
+    user_metadata JSON,
+    remark VARCHAR(4096) DEFAULT '',
+    file_encoding VARCHAR(64),
+    simhash VARCHAR(16),
+    similar_status INTEGER NOT NULL DEFAULT 0,
+    updater_id INTEGER,
+    updater_name VARCHAR(255),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_KNOWLEDGE_DOCUMENT = """\
+CREATE TABLE IF NOT EXISTS knowledge_document (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    knowledge_id INTEGER NOT NULL,
+    file_level_path VARCHAR(512),
+    level INTEGER DEFAULT 0,
+    primary_version_id INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_KNOWLEDGE_DOCUMENT_VERSION = """\
+CREATE TABLE IF NOT EXISTS knowledge_document_version (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL,
+    knowledge_file_id INTEGER NOT NULL,
+    version_no INTEGER NOT NULL,
+    is_primary INTEGER NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uk_kdv_document_version UNIQUE (document_id, version_no)
 )"""
 
 TABLE_GPTS_TOOLS = """\
@@ -432,6 +472,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'userrole': TABLE_USER_ROLE,
     'space_channel_member': TABLE_SPACE_CHANNEL_MEMBER,
     'knowledgefile': TABLE_KNOWLEDGE_FILE,
+    'knowledge_document': TABLE_KNOWLEDGE_DOCUMENT,
+    'knowledge_document_version': TABLE_KNOWLEDGE_DOCUMENT_VERSION,
     't_gpts_tools': TABLE_GPTS_TOOLS,
     'channel': TABLE_CHANNEL,
     # F018: owner transfer targets the standalone assistant table.

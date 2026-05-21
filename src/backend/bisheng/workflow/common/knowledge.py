@@ -11,6 +11,7 @@ from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldType
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.workflow.common.condition import ComparisonType
@@ -277,6 +278,36 @@ class RagUtils(BaseNode):
         else:
             self.init_file_retriever()
 
+    def _fetch_non_primary_file_ids(self, knowledge_ids: List[int]) -> List[int]:
+        """Best-effort sync fetch of non-primary file ids for the given knowledges.
+
+        Workflow runs in sync Celery worker context, so asyncio.run() is safe.
+        Failures degrade gracefully — version filter is excluded but retrieval still works.
+        """
+        if not knowledge_ids:
+            return []
+        import asyncio
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+            KnowledgeDocumentVersionRepositoryImpl,
+        )
+
+        async def _fetch():
+            async with get_async_db_session() as session:
+                repo = KnowledgeDocumentVersionRepositoryImpl(session)
+                return await repo.find_non_primary_file_ids_by_knowledge_ids(knowledge_ids)
+
+        try:
+            return asyncio.run(_fetch())
+        except RuntimeError:
+            logger.warning(
+                "version filter skipped: already in async context", exc_info=True
+            )
+            return []
+        except Exception:
+            logger.warning("version filter fetch failed", exc_info=True)
+            return []
+
     def init_knowledge_retriever(self):
         """ retriever from knowledge base """
         if not self._knowledge_vector_list:
@@ -294,23 +325,51 @@ class RagUtils(BaseNode):
         all_es_filter = []
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
+
+        # Bulk-fetch non-primary file ids once for all knowledges in the retriever.
+        # Applying the union to every knowledge's filter is correct — each collection
+        # only contains its own files, so cross-knowledge ids are no-ops.
+        knowledge_ids = list(self._knowledge_vector_list.keys())
+        excluded_file_ids = self._fetch_non_primary_file_ids(knowledge_ids)
+
         for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
             knowledge = knowledge_info.get('knowledge')
             milvus_vector = knowledge_info.get('milvus')
             es_vector = knowledge_info.get('es')
-            milvus_filter, es_filter = self._metadata_filter.get_knowledge_filter(knowledge=knowledge,
-                                                                                  parent_node=self)
-            if milvus_filter is None and es_filter is None:
+            milvus_filter_str, es_filter = self._metadata_filter.get_knowledge_filter(
+                knowledge=knowledge, parent_node=self
+            )
+            if milvus_filter_str is None and es_filter is None:
                 continue
+
+            # Combine metadata filter with primary-only version filter.
+            # build_primary_only_filter expects:
+            #   base_milvus_expr: str | None
+            #   base_es_filter: List[dict] | None  (the list under the "filter" key)
+            base_es_list = es_filter.get("filter") if es_filter else None
+            combined_milvus_expr, combined_es_list = build_primary_only_filter(
+                excluded_file_ids,
+                base_milvus_expr=milvus_filter_str or None,
+                base_es_filter=base_es_list,
+            )
+
             if milvus_vector:
                 all_milvus.append(milvus_vector)
-                milvus_filter = {"expr": milvus_filter} if milvus_filter else {}
-                logger.debug(f'retrieve milvus filter: {milvus_filter}')
-                all_milvus_filter.append(milvus_filter | self._retriever_kwargs)
+                milvus_extra = {"expr": combined_milvus_expr} if combined_milvus_expr else {}
+                logger.debug(f'retrieve milvus filter: {milvus_extra}')
+                all_milvus_filter.append(milvus_extra | self._retriever_kwargs)
             if es_vector:
                 all_es.append(es_vector)
-                logger.debug(f'retrieve es filter: {es_filter}')
-                all_es_filter.append(es_filter | self._retriever_kwargs)
+                # Reconstruct the ES search_kwargs dict: preserve any base keys from
+                # es_filter (e.g. "filter") and override "filter" with combined list.
+                combined_es_filter = dict(es_filter) if es_filter else {}
+                if combined_es_list:
+                    combined_es_filter["filter"] = combined_es_list
+                elif "filter" in combined_es_filter:
+                    # No exclusions, no base filter list — remove empty entry.
+                    del combined_es_filter["filter"]
+                logger.debug(f'retrieve es filter: {combined_es_filter}')
+                all_es_filter.append(combined_es_filter | self._retriever_kwargs)
 
         if all_milvus:
             self._multi_milvus_retriever = MultiRetriever(
