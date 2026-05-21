@@ -72,7 +72,7 @@
         "sourceTracingModelTooltip": "Auto-extract keywords for source tracing. Uses jieba if not configured.",
         "workInformationModel": "Workbench Information Summary Model",
     "workInformationModelTooltip": "Used for workbench sidebar dialog title generation and SOP name/description generation. Recommend a model with fewer parameters and faster response.",
-    "documentSummaryModel": "Doc Summary for Knowledge Base",
+    "documentSummaryModel": "Doc Summary / Tag Generation Model",
     "documentSummaryModelTooltip": "Summarizes content into title for vector DB. Not summarized if not configured.",
     "summaryGeneration": "Summary generation",
     "autoTagGeneration": "Auto tag generation",

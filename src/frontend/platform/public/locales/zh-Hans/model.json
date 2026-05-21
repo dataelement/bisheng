@@ -67,7 +67,7 @@
     "lingsiTaskModel": "$t(bs:linsight)任务执行模型",
     "executionMode": "执行模式",
     "sourceTracingModelTooltip": "用于知识库（含工作台知识空间）问答溯源，使用 LLM 自动从答案中提取关键词，来帮助用户快速定位到答案的可能来源段落，如果这里没有配置，则会使用 jieba 分词来输出答案中的关键词。",
-    "documentSummaryModel": "文档知识库总结模型",
+    "documentSummaryModel": "文档摘要/标签生成模型",
     "documentSummaryModelTooltip": "将文档内容总结为一个标题，然后将标题和chunk合并存储到向量库内, 不配置则不总结文档。",
     "summaryGeneration": "摘要生成",
     "autoTagGeneration": "自动标签生成",
