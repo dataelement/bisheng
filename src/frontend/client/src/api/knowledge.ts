@@ -931,6 +931,19 @@ export async function getKnowledgeSpaceTagLibrariesApi(params?: {
 }
 
 /**
+ * Whether the knowledge-space auto-tag UI is enabled for the current tenant.
+ * Read-only; backed by the workstation knowledge-space config (with root→tenant
+ * inheritance). Returns { visible: false } when not configured.
+ */
+export async function getKnowledgeSpaceAutoTagVisibilityApi(): Promise<{ visible: boolean }> {
+    const res = await request.get<ApiResponse<{ visible: boolean }>>(
+        `/api/v1/knowledge/space/auto-tag-visibility`
+    );
+    const payload: any = (res as any)?.data ?? res;
+    return { visible: Boolean(payload?.visible) };
+}
+
+/**
  * Get space detail info
  */
 export async function getSpaceInfoApi(space_id: string): Promise<KnowledgeSpace> {
