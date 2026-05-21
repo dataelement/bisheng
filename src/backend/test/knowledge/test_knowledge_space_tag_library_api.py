@@ -93,6 +93,24 @@ def test_list_tag_libraries_returns_tag_count_without_tags():
     )
 
 
+def test_list_tag_libraries_accepts_page_size_up_to_500():
+    """Admin section pulls page_size=200 in one shot; the Query upper bound
+    must not regress below that or the page errors out with a pydantic
+    ValidationError envelope that surfaces as "[object Object]" in the UI."""
+    service = _service()
+    app = _mount_app(service)
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/v1/knowledge/space/tag-libraries", params={"page_size": 200}
+        )
+
+    assert resp.status_code == 200
+    service.list_libraries.assert_awaited_once_with(
+        page=1, page_size=200, keyword=None
+    )
+
+
 def test_get_tag_library_returns_tags():
     service = _service()
     app = _mount_app(service)

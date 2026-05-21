@@ -20,12 +20,40 @@ customAxios.interceptors.request.use(function (config) {
     return Promise.reject(error);
 });
 
+// Best-effort flatten of any value into a user-readable string for a toast.
+// Required because the backend's status_message can be an array of pydantic
+// errors (e.g. validation failures), and `String([{...}])` renders as
+// "[object Object]". Picks .msg/.message/.detail/.status_message on objects,
+// recurses arrays, and JSON.stringify is the last resort.
+function coerceErrorMessage(value: any): string {
+    if (value === null || value === undefined) return ""
+    if (typeof value === "string") return value
+    if (typeof value === "number" || typeof value === "boolean") return String(value)
+    if (value instanceof Error) return value.message || String(value)
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => coerceErrorMessage(item))
+            .filter(Boolean)
+            .join("; ")
+    }
+    if (typeof value === "object") {
+        const pick = value.msg ?? value.message ?? value.detail ?? value.status_message
+        if (pick !== undefined) return coerceErrorMessage(pick)
+        try {
+            return JSON.stringify(value)
+        } catch {
+            return String(value)
+        }
+    }
+    return String(value)
+}
+
 // Backend unified envelope: { status_code, status_message, data }.
 // Picks the friendliest available message: i18n by status_code, then
 // status_message → i18n key map, finally the raw status_message.
 function decodeEnvelopeMessage(envelope: any) {
     const statusCode = envelope?.status_code
-    const statusMessage = String(envelope?.status_message || "")
+    const statusMessage = coerceErrorMessage(envelope?.status_message)
     // Without defaultValue, an unregistered status_code renders as the literal
     // key string "errors.<num>". Fall back to status_message so the user at
     // least sees the backend's raw text instead of a debug-looking key.
@@ -153,7 +181,7 @@ customAxios.interceptors.response.use(function (response) {
         toast({
             title: `${i18next.t('prompt')}`,
             variant: 'error',
-            description: String(errorMessage),
+            description: coerceErrorMessage(errorMessage),
         })
         return Promise.reject(null);
     }
@@ -161,7 +189,7 @@ customAxios.interceptors.response.use(function (response) {
     toast({
         title: `${i18next.t('prompt')}`,
         variant: 'error',
-        description: error.message
+        description: coerceErrorMessage(error?.message || error)
     })
     // window.errorAlerts([error.message])
     return Promise.reject(null);
@@ -185,7 +213,7 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         toast({
             title: `${i18next.t('prompt')}`,
             variant: 'error',
-            description: typeof error === 'string' ? error : JSON.stringify(error)
+            description: coerceErrorMessage(error)
         })
         console.error('逻辑异常 :>> ', error);
         return false

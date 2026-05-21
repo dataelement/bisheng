@@ -27,7 +27,7 @@ def get_service(
 @router.get("")
 async def list_tag_libraries(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=500),
     keyword: Optional[str] = Query(default=None),
     svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
 ) -> Any:
