@@ -665,7 +665,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                     <SelectContent className="z-[150] bg-white">
                                                         {tagLibraries.map((library) => (
                                                             <SelectItem key={library.id} value={String(library.id)}>
-                                                                {library.name} ({library.tag_count})
+                                                                {library.name}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
@@ -724,33 +724,33 @@ export function CreateKnowledgeSpaceDrawer({
                                                         <span className="mr-1 text-[#F53F3F]">*</span>
                                                         {localize("com_knowledge.auto_tag_mode_custom")}
                                                     </Label>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[12px] text-[#86909C]">
-                                                            {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => txtInputRef.current?.click()}
-                                                            className="inline-flex h-6 items-center gap-1 rounded-[4px] border border-[#E5E6EB] bg-white px-2 text-[12px] text-[#4E5969] hover:bg-[#F2F3F5]"
-                                                        >
-                                                            <Upload className="h-3 w-3" />
-                                                            {localize("com_knowledge.upload_txt")}
-                                                        </button>
-                                                        <input
-                                                            ref={txtInputRef}
-                                                            type="file"
-                                                            accept=".txt"
-                                                            className="hidden"
-                                                            onChange={handleUploadTxt}
-                                                        />
-                                                    </div>
+                                                    <span className="text-[12px] text-[#86909C]">
+                                                        {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
+                                                    </span>
                                                 </div>
-                                                <Textarea
-                                                    value={autoTagCustomTagsText}
-                                                    onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
-                                                    placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
-                                                    className="min-h-[120px] rounded-[6px] border-[#E5E6EB] bg-white text-[14px]"
-                                                />
+                                                <div className="relative">
+                                                    <Textarea
+                                                        value={autoTagCustomTagsText}
+                                                        onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
+                                                        placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
+                                                        className="min-h-[120px] resize-none rounded-[6px] border-[#E5E6EB] bg-white pr-24 text-[14px]"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => txtInputRef.current?.click()}
+                                                        className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-[#165DFF] hover:underline"
+                                                    >
+                                                        <Upload className="h-3 w-3" />
+                                                        {localize("com_knowledge.upload_txt")}
+                                                    </button>
+                                                    <input
+                                                        ref={txtInputRef}
+                                                        type="file"
+                                                        accept=".txt"
+                                                        className="hidden"
+                                                        onChange={handleUploadTxt}
+                                                    />
+                                                </div>
                                             </TabsContent>
                                         </Tabs>
                                     )}

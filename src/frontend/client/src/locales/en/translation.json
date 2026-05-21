@@ -1475,7 +1475,7 @@
     "auto_tag_generation_desc": "After an uploaded file parses successfully, the system silently generates file tags from the bound tag library.",
     "auto_tag_library": "Tag library",
     "auto_tag_library_required": "Select a non-empty tag library before enabling auto tag generation",
-    "auto_tag_mode_library": "Choose Tag Library",
+    "auto_tag_mode_library": "Built-in Library",
     "auto_tag_mode_custom": "Custom Tags",
     "auto_tag_library_preview": "Tag Preview",
     "auto_tag_library_preview_empty": "This tag library has no tags yet",

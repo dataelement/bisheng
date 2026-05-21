@@ -1399,7 +1399,7 @@
     "auto_tag_generation_desc": "アップロードファイルの解析が成功すると、紐付けたタグライブラリに基づいてファイルタグを静かに生成します。",
     "auto_tag_library": "タグライブラリ",
     "auto_tag_library_required": "自動タグ生成を有効にするには、空でないタグライブラリを選択してください",
-    "auto_tag_mode_library": "タグライブラリを選択",
+    "auto_tag_mode_library": "組み込みタグライブラリ",
     "auto_tag_mode_custom": "カスタムタグ",
     "auto_tag_library_preview": "タグプレビュー",
     "auto_tag_library_preview_empty": "このタグライブラリにはまだタグがありません",
