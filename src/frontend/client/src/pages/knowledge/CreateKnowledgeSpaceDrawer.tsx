@@ -68,6 +68,7 @@ interface CreateKnowledgeSpaceDrawerProps {
     onManageMembers?: () => void;
     mode?: "create" | "edit";
     editingSpace?: KnowledgeSpace | null;
+    initialSpaceLevel?: SpaceLevel;
 }
 
 export function CreateKnowledgeSpaceDrawer({
@@ -78,6 +79,7 @@ export function CreateKnowledgeSpaceDrawer({
     onManageMembers,
     mode = "create",
     editingSpace,
+    initialSpaceLevel,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -189,6 +191,11 @@ export function CreateKnowledgeSpaceDrawer({
             resetForm();
             return;
         }
+        if (mode === "create") {
+            resetForm();
+            setSpaceLevel(initialSpaceLevel ?? SpaceLevel.PERSONAL);
+            return;
+        }
         if (mode === "edit" && editingSpace) {
             setName(editingSpace.name || "");
             setDescription(editingSpace.description || "");
@@ -208,7 +215,7 @@ export function CreateKnowledgeSpaceDrawer({
             setAutoTagLibraryId(editingSpace.autoTagLibraryId ?? null);
             setShowSuccess(false);
         }
-    }, [open, mode, editingSpace]);
+    }, [open, mode, editingSpace, initialSpaceLevel]);
 
     useEffect(() => {
         if (!open || mode !== "create" || !createOptions) return;

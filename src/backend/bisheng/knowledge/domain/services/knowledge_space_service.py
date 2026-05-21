@@ -3624,9 +3624,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(one.id, {"file_num": 0, "success_file_num": 0})
                 item.update(counts)
+                item["summary"] = ""
             else:
                 item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
+                item["summary"] = one.abstract or ""
             result.append(item)
 
         return result

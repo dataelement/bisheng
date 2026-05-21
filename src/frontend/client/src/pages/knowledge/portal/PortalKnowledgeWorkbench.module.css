@@ -1,0 +1,1055 @@
+.workbench {
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  overflow: hidden;
+  background: #eaf0f7;
+  color: #273142;
+  font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  box-sizing: border-box;
+}
+
+.spaceSidebar {
+  width: 280px;
+  min-width: 280px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #dfe7f2;
+  overflow: hidden;
+  transition: width 180ms ease, min-width 180ms ease;
+}
+
+.spaceSidebar.spaceSidebarCollapsed {
+  width: 72px;
+  min-width: 72px;
+  background: #fbfdff;
+}
+
+.spaceHeader {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  background: linear-gradient(90deg, #edf6ff 0%, #fff 100%);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.spaceHeaderIcon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #2c76f4;
+  background: #e7f0ff;
+}
+
+.spaceList {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.groupRow,
+.groupToggleButton,
+.groupCreateButton,
+.groupExpandButton,
+.spaceRow,
+.spaceSelectButton,
+.spaceMenuButton,
+.createSpaceRow,
+.collapsedGroupButton,
+.collapsedExpandButton,
+.folderAction,
+.treeExpandButton,
+.treeItemButton,
+.treeLoadMore,
+.toolbarButton,
+.iconAction,
+.breadcrumbButton,
+.pagerButton,
+.primaryButton,
+.secondaryButton,
+.dangerlessButton {
+  border: 0;
+  font: inherit;
+}
+
+.collapsedSidebar {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0 14px;
+}
+
+.collapsedGroupList {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.collapsedGroupButton,
+.collapsedExpandButton {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #4f6075;
+  background: transparent;
+  cursor: pointer;
+}
+
+.collapsedGroupButton:hover,
+.collapsedExpandButton:hover {
+  color: #2c76f4;
+  background: #eef4ff;
+}
+
+.collapsedGroupIcon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.collapsedExpandButton {
+  border-top: 1px solid transparent;
+}
+
+.groupRow {
+  width: 100%;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 14px 0 54px;
+  color: #545a60;
+  background: transparent;
+  text-align: left;
+}
+
+.groupToggleButton {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.groupToggleButton strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.groupCreateButton,
+.groupExpandButton {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #545a60;
+  background: transparent;
+  cursor: pointer;
+}
+
+.groupCreateButton:not(:disabled):hover,
+.groupExpandButton:hover {
+  color: #2c76f4;
+  background: #eef4ff;
+}
+
+.groupCreateButton:disabled {
+  color: #c3cad5;
+  cursor: not-allowed;
+}
+
+.spaceRow {
+  width: calc(100% - 32px);
+  height: 35px;
+  margin-left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 0;
+  border-radius: 5px;
+  color: #273142;
+  background: transparent;
+  text-align: left;
+}
+
+.spaceRow:hover {
+  background: #f4f8ff;
+}
+
+.spaceSelectButton {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 0 60px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.spaceMenuArea {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spaceMenuButton {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  color: #4e5969;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.spaceRow:hover .spaceMenuButton,
+.spaceMenuButton:focus-visible,
+.spaceMenuButtonOpen {
+  opacity: 1;
+}
+
+.spaceMenuButton:hover,
+.spaceMenuButtonOpen {
+  color: #2c76f4;
+  background: #eef4ff;
+}
+
+.createSpaceRow {
+  width: calc(100% - 32px);
+  height: 35px;
+  margin-left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 60px;
+  border-radius: 5px;
+  color: #273142;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.createSpaceRow:hover {
+  color: #3662e3;
+  background: #eef4ff;
+}
+
+.spaceRowActive {
+  color: #3662e3;
+  background: #eef4ff;
+  font-weight: 600;
+}
+
+.spaceName {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.emptySpace {
+  padding: 3px 14px 7px 78px;
+  color: #9aa6b8;
+  font-size: 12px;
+}
+
+.sidebarFooter {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-right: 14px;
+  border: 0;
+  border-top: 1px solid #e5edf7;
+  background: #fff;
+  color: #545a60;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.sidebarFooter:hover {
+  color: #2c76f4;
+  background: #f7fbff;
+}
+
+.filePane {
+  width: 280px;
+  min-width: 280px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f9fcff;
+  border-right: 1px solid #dfe7f2;
+}
+
+.filePaneHeader {
+  padding: 16px 14px 0;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #273142;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sectionTitle::before {
+  content: "";
+  width: 4px;
+  height: 12px;
+  background: #2c76f4;
+}
+
+.searchBox {
+  height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 0 9px;
+  border: 1px solid #d9d9da;
+  border-radius: 2px;
+  background: #fff;
+  color: #768499;
+}
+
+.searchInput {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #273142;
+  font-size: 13px;
+}
+
+.searchInput::placeholder {
+  color: #768499;
+}
+
+.fileActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  flex-wrap: wrap;
+}
+
+.folderAction {
+  width: 29px;
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dee2ec;
+  border-radius: 4px;
+  background: #fff;
+  color: #2c76f4;
+  cursor: pointer;
+}
+
+.folderAction:disabled {
+  color: #aab4c2;
+  cursor: not-allowed;
+}
+
+.breadcrumb {
+  min-height: 25px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 14px 3px;
+  color: #768499;
+  font-size: 12px;
+}
+
+.breadcrumbButton {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  color: #3662e3;
+  cursor: pointer;
+}
+
+.fileList {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 10px;
+}
+
+.treeRow {
+  width: 100%;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: transparent;
+  color: #273142;
+  text-align: left;
+}
+
+.treeRow:hover {
+  background: #f2f7ff;
+}
+
+.treeRowActive {
+  width: calc(100% - 32px);
+  margin-left: 16px;
+  border-radius: 5px;
+  color: #3662e3;
+  background: #e6efff;
+  font-weight: 600;
+}
+
+.treeExpandButton,
+.treeItemButton,
+.treeLoadMore {
+  border: 0;
+  font: inherit;
+}
+
+.treeExpandButton,
+.treeExpandPlaceholder {
+  width: 14px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.treeExpandButton {
+  color: #545a60;
+  background: transparent;
+  cursor: pointer;
+}
+
+.treeExpandButton:hover {
+  color: #2c76f4;
+}
+
+.treeCheckbox {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  accent-color: #2c76f4;
+  cursor: pointer;
+}
+
+.treeItemButton {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fileName {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.folderCount {
+  flex: 0 0 auto;
+  color: #22a06b;
+  font-size: 12px;
+}
+
+.fileStatusBadge {
+  flex: 0 0 auto;
+  height: 19px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 19px;
+  white-space: nowrap;
+}
+
+.fileStatusSuccess {
+  color: #22a06b;
+  background: #e8ffea;
+}
+
+.fileStatusInfo {
+  color: #2c76f4;
+  background: #e8f3ff;
+}
+
+.fileStatusDanger {
+  color: #f04438;
+  background: #fff2f0;
+}
+
+.selectionCount {
+  color: #3662e3;
+  font-size: 12px;
+  line-height: 29px;
+  white-space: nowrap;
+}
+
+.searchResultTitle {
+  padding: 0 14px 6px;
+  color: #3662e3;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.treeLoadingRow {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  color: #768499;
+  font-size: 12px;
+}
+
+.treeLoadMore {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: #3662e3;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.treeLoadMore:disabled {
+  color: #9aa6b8;
+  cursor: not-allowed;
+}
+
+.createFolderInput {
+  min-width: 0;
+  flex: 1;
+  height: 22px;
+  border: 1px solid #2c76f4;
+  border-radius: 3px;
+  padding: 0 5px;
+  outline: none;
+  background: #fff;
+  color: #273142;
+  font-size: 13px;
+}
+
+.filePager {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-top: 1px solid #e5edf7;
+  color: #768499;
+  font-size: 12px;
+}
+
+.pagerButton {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid #dee2ec;
+  border-radius: 4px;
+  background: #fff;
+  color: #545a60;
+  cursor: pointer;
+}
+
+.pagerButton:disabled {
+  color: #b8c2d2;
+  cursor: not-allowed;
+}
+
+.documentArea {
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  height: 100%;
+  flex: 1;
+  position: relative;
+  display: flex;
+  background: #fff;
+}
+
+.documentShell {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px 26px;
+  overflow: hidden;
+}
+
+.documentHeader {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 0 0 auto;
+}
+
+.docIcon {
+  width: 50px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #fff;
+  background: linear-gradient(135deg, #79b8ff 0%, #266cf0 100%);
+  box-shadow: 0 6px 14px rgba(44, 118, 244, 0.22);
+}
+
+.docTitleBlock {
+  min-width: 0;
+  flex: 1;
+}
+
+.docTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #273142;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.docPath {
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #888;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.docActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.iconAction {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #edf5ff;
+  color: #2c76f4;
+  cursor: pointer;
+}
+
+.iconAction:disabled {
+  color: #aab4c2;
+  cursor: not-allowed;
+}
+
+.divider {
+  height: 1px;
+  margin-top: 20px;
+  background: #e5e8ef;
+  flex: 0 0 auto;
+}
+
+.summaryBar {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 19px;
+  padding: 12px 14px;
+  border-radius: 5px;
+  background: #f4f6f9;
+  color: #545a60;
+  flex: 0 0 auto;
+}
+
+.summaryTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: #273142;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.summaryText {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.summaryButton {
+  height: 29px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: #3662e3;
+  color: #fff;
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+.previewHost {
+  min-height: 0;
+  flex: 1;
+  margin-top: 20px;
+  overflow: auto;
+}
+
+.previewCard {
+  min-height: 100%;
+  color: #273142;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.docContentTitle {
+  margin: 0 0 12px;
+  color: #273142;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.docSectionTitle {
+  margin: 16px 0 5px;
+  color: #273142;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.previewFrame {
+  height: 100%;
+  min-height: 460px;
+  border: 1px solid #eef2f7;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fbfbfb;
+}
+
+.stateBox {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #768499;
+  text-align: center;
+}
+
+.stateTitle {
+  color: #273142;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.toolRail {
+  width: 44px;
+  min-width: 44px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding-top: 20px;
+  border-left: 1px solid #dfe7f2;
+  background: #f9fcff;
+}
+
+.documentEmptyState {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.toolbarButton {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+}
+
+.toolbarButton:hover,
+.toolbarButtonActive {
+  color: #2c76f4;
+  background: #eaf2ff;
+}
+
+.toolbarButton:disabled {
+  color: #b8c2d2;
+  cursor: not-allowed;
+}
+
+.toolbarButton[aria-disabled="true"]:not(:disabled) {
+  color: #b8c2d2;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 44px;
+  z-index: 20;
+  width: 340px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #dfe7f2;
+  background: #fff;
+  box-shadow: -12px 0 24px rgba(31, 47, 70, 0.08);
+}
+
+.drawerHeader {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.drawerTitle {
+  color: #273142;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.drawerBody {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+}
+
+.detailList {
+  display: grid;
+  gap: 12px;
+}
+
+.detailItem {
+  display: grid;
+  gap: 4px;
+}
+
+.detailLabel {
+  color: #768499;
+  font-size: 12px;
+}
+
+.detailValue {
+  overflow-wrap: anywhere;
+  color: #273142;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tagChip {
+  max-width: 124px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #eef4ff;
+  color: #3662e3;
+  font-size: 12px;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerlessButton {
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: #3662e3;
+  color: #fff;
+}
+
+.secondaryButton {
+  border: 1px solid #dee2ec;
+  background: #fff;
+  color: #273142;
+}
+
+.dangerlessButton {
+  border: 1px solid #dee2ec;
+  background: #f8fbff;
+  color: #3662e3;
+}
+
+.buttonStack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.placeholderList {
+  display: grid;
+  gap: 8px;
+}
+
+.placeholderItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px dashed #d4dceb;
+  border-radius: 6px;
+  color: #768499;
+  background: #f9fbff;
+  font-size: 13px;
+}
+
+.placeholderItem span:first-child {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.statusBadge {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #eef4ff;
+  color: #3662e3;
+  font-size: 11px;
+}
+
+.dialogList {
+  max-height: 270px;
+  overflow-y: auto;
+  padding: 7px 0;
+}
+
+.dialogListItem {
+  padding: 4px 0;
+  color: #545a60;
+  font-size: 13px;
+}
+
+@media (max-width: 1280px) {
+  .spaceSidebar {
+    width: 240px;
+    min-width: 240px;
+  }
+
+  .filePane {
+    width: 260px;
+    min-width: 260px;
+  }
+
+  .docActions {
+    gap: 8px;
+  }
+}

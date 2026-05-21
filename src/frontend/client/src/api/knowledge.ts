@@ -289,6 +289,7 @@ export interface KnowledgeFile {
     approvalStatus?: string;
     approvalReason?: string;
     fileEncoding?: string | null;        // mapped from file_encoding
+    summary?: string;
     isPendingApproval?: boolean;
     // Transient UI-only fields
     isCreating?: boolean;
@@ -366,6 +367,9 @@ interface RawSpaceChild {
     approval_status?: string;
     approval_reason?: string;
     is_pending_approval?: boolean;
+    file_encoding?: string | null;
+    abstract?: string | null;
+    summary?: string | null;
 }
 
 /** Raw file record returned by addFiles / knowledge file APIs */
@@ -631,7 +635,7 @@ export function extractKnowledgeFileSensitiveCheck(raw: any): KnowledgeFileSensi
 }
 
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
-function mapChild(raw: any, spaceId: string): KnowledgeFile {
+export function mapChild(raw: any, spaceId: string): KnowledgeFile {
     // Backend keys in children response usually look like:
     // id, file_name, file_type(0|1), file_level_path, knowledge_id,
     // status(numeric), update_time/create_time, tags(list of {id,name}) for files
@@ -683,6 +687,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
         fileEncoding: raw?.file_encoding ?? null,
+        summary: raw?.summary ?? raw?.abstract ?? "",
     };
 }
 

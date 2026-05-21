@@ -387,6 +387,7 @@ class RemoveSpaceMemberRequest(BaseModel):
 
 class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     """Knowledge Space File Response"""
+    summary: str = Field(default="", description="Read-only summary mapped from file abstract")
     old_file_level_path: Optional[str] = Field(None, description="Old File Level Path")
     approval_request_id: Optional[int] = Field(None, description="Approval request id for pending uploads")
     approval_status: Optional[str] = Field(None, description="Approval status for pending uploads")
