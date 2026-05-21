@@ -118,24 +118,23 @@ const FIXED_ROLE_VALUES = [
 ];
 
 // Static menu key options mirroring backend WebMenuResource enum
-// Mirrors WORKBENCH_MENU_OPTIONS + ADMIN_MENU_OPTIONS in Roles.tsx.
-// Uses the same menu.* i18n keys so names stay consistent with role config.
+// Top-level items only — mirrors the visible toggles in role config (Roles.tsx).
+// Sub-items (create_knowledge, create_app) are excluded: users apply for the
+// parent menu, not sub-toggles.
 const MENU_KEY_VALUES = [
   // Admin console menus
-  { value: 'board',            label: 'menu.board' },
-  { value: 'model',            label: 'menu.models' },
-  { value: 'log',              label: 'menu.log' },
-  { value: 'knowledge',        label: 'menu.knowledge' },
-  { value: 'create_knowledge', label: 'menu.createKnowledge' },
-  { value: 'build',            label: 'menu.skills' },
-  { value: 'create_app',       label: 'menu.createApp' },
-  { value: 'evaluation',       label: 'menu.evaluation' },
-  { value: 'mark_task',        label: 'menu.annotation' },
+  { value: 'board',           label: 'menu.board' },
+  { value: 'model',           label: 'menu.models' },
+  { value: 'log',             label: 'menu.log' },
+  { value: 'knowledge',       label: 'menu.knowledge' },
+  { value: 'build',           label: 'menu.skills' },
+  { value: 'evaluation',      label: 'menu.evaluation' },
+  { value: 'mark_task',       label: 'menu.annotation' },
   // Workbench menus
-  { value: 'home',             label: 'menu.workbenchHome' },
-  { value: 'apps',             label: 'menu.workbenchApps' },
-  { value: 'subscription',     label: 'menu.workbench1' },
-  { value: 'knowledge_space',  label: 'menu.workbench2' },
+  { value: 'home',            label: 'menu.workbenchHome' },
+  { value: 'apps',            label: 'menu.workbenchApps' },
+  { value: 'subscription',    label: 'menu.workbench1' },
+  { value: 'knowledge_space', label: 'menu.workbench2' },
 ];
 
 const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
