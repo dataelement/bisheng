@@ -1228,14 +1228,14 @@ export default function ApprovalPage() {
                         : "border-border-subtle bg-white hover:bg-gray-50"
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <span className="text-sm font-medium text-text-primary leading-snug">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex-1 min-w-0 text-sm font-medium text-text-primary leading-snug truncate">
                         {s.scenario_name}
                       </span>
-                      <StatusBadge enabled={s.enabled} />
-                    </div>
-                    {/* action icons — shown on hover */}
-                    <div className="mt-2 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <StatusBadge enabled={s.enabled} />
+                        {/* action icons — shown on hover */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         title={t("approvalPage.edit")}
@@ -1258,6 +1258,8 @@ export default function ApprovalPage() {
                       >
                         <Trash2 size={13} />
                       </button>
+                        </div>
+                      </div>
                     </div>
                   </button>
                 );
