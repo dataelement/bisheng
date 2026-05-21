@@ -42,6 +42,7 @@ class RouteUpdateReq(BaseModel):
     sort_order: int | None = None
     flow_definition_id: int | None = None
     match_config: dict | None = None
+    enabled: bool | None = None
 
 
 class FlowCreateReq(BaseModel):

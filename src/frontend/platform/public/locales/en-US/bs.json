@@ -2316,7 +2316,52 @@
     "exceptionResolveSuccess": "Exception resolved successfully",
     "exceptionResolveFailed": "Failed to resolve exception",
     "flowFallback": "Flow",
-    "nodeFallback": "Node"
+    "nodeFallback": "Node",
+    "conditionLabel": "Available Condition Fields",
+    "approverSourceLabel": "Approver Sources",
+    "systemRole": "System Role",
+    "condition": {
+      "applicant_role": "Applicant Identity",
+      "menu_key": "Applied Menu",
+      "space_type": "Knowledge Space Type"
+    },
+    "approverSource": {
+      "direct_user": "Specified User",
+      "department_admin": "Applicant's Dept Admin",
+      "tenant_admin": "Tenant Admin",
+      "channel_admin": "Channel Admin",
+      "space_admin": "Space Admin",
+      "knowledge_space_owner": "Space Owner",
+      "knowledge_space_manager": "Space Manager"
+    },
+    "roleValue": {
+      "admin": "System Admin",
+      "tenant_admin": "Tenant Admin",
+      "dept_admin": "Dept Admin"
+    },
+    "spaceType": {
+      "public": "Public",
+      "department": "Department",
+      "team": "Team"
+    },
+    "menuKeyLabel": {
+      "workstation": "Workstation",
+      "admin": "Admin Console",
+      "build": "App Builder",
+      "create_app": "Create App",
+      "knowledge": "Knowledge Mgmt",
+      "knowledge_space": "Knowledge Space",
+      "model": "Model Mgmt",
+      "tool": "Tool Mgmt",
+      "mcp": "MCP Services",
+      "channel": "Channel Mgmt",
+      "evaluation": "Evaluation",
+      "dataset": "Dataset",
+      "mark_task": "Annotation",
+      "board": "Dashboard",
+      "home": "Home",
+      "apps": "App Center"
+    }
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

@@ -2266,6 +2266,51 @@
     "exceptionResolveSuccess": "例外フローを処理しました",
     "exceptionResolveFailed": "例外フローの処理に失敗しました",
     "flowFallback": "承認フロー",
-    "nodeFallback": "フローノード"
+    "nodeFallback": "フローノード",
+    "conditionLabel": "利用可能な条件フィールド",
+    "approverSourceLabel": "利用可能な承認者ソース",
+    "systemRole": "システムロール",
+    "condition": {
+      "applicant_role": "申請者の権限",
+      "menu_key": "申請メニュー",
+      "space_type": "ナレッジスペースタイプ"
+    },
+    "approverSource": {
+      "direct_user": "指定ユーザー",
+      "department_admin": "申請者の部署管理者",
+      "tenant_admin": "テナント管理者",
+      "channel_admin": "チャンネル管理者",
+      "space_admin": "スペース管理者",
+      "knowledge_space_owner": "スペースオーナー",
+      "knowledge_space_manager": "スペースマネージャー"
+    },
+    "roleValue": {
+      "admin": "システム管理者",
+      "tenant_admin": "テナント管理者",
+      "dept_admin": "部署管理者"
+    },
+    "spaceType": {
+      "public": "パブリック",
+      "department": "部署",
+      "team": "チーム"
+    },
+    "menuKeyLabel": {
+      "workstation": "ワークスペース",
+      "admin": "管理コンソール",
+      "build": "アプリ構築",
+      "create_app": "アプリ作成",
+      "knowledge": "ナレッジ管理",
+      "knowledge_space": "ナレッジスペース",
+      "model": "モデル管理",
+      "tool": "ツール管理",
+      "mcp": "MCPサービス",
+      "channel": "チャンネル管理",
+      "evaluation": "評価",
+      "dataset": "データセット",
+      "mark_task": "アノテーション",
+      "board": "ダッシュボード",
+      "home": "ホーム",
+      "apps": "アプリセンター"
+    }
   }
 }

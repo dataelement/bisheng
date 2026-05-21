@@ -35,6 +35,7 @@ class ApprovalRouteRuleBase(SQLModelSerializable):
     sort_order: int = Field(default=0, sa_column=Column(Integer, nullable=False, index=True))
     flow_definition_id: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True, index=True))
     match_config: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
+    enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default=text('1')))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 

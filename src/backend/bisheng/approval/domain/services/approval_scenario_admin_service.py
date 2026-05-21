@@ -125,6 +125,8 @@ class ApprovalScenarioAdminService:
             row.flow_definition_id = payload['flow_definition_id']
         if 'match_config' in payload:
             row.match_config = payload['match_config'] or {}
+        if 'enabled' in payload:
+            row.enabled = bool(payload['enabled'])
         updated = await ApprovalScenarioRepository.update_route_rule(row)
         return updated.model_dump()
 

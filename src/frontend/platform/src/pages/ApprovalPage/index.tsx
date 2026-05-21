@@ -108,65 +108,86 @@ interface ConditionFieldMeta {
   values?: { value: string; label: string }[];
 }
 
+// All label strings below are i18n keys resolved with t() at render time.
+
 // Static fixed identity labels (always present regardless of system roles)
 const FIXED_ROLE_VALUES = [
-  { value: 'admin', label: '系统管理员' },
-  { value: 'tenant_admin', label: '租户管理员' },
-  { value: 'dept_admin', label: '部门管理员' },
+  { value: 'admin',        label: 'approvalPage.roleValue.admin' },
+  { value: 'tenant_admin', label: 'approvalPage.roleValue.tenant_admin' },
+  { value: 'dept_admin',   label: 'approvalPage.roleValue.dept_admin' },
 ];
 
 // Static menu key options mirroring backend WebMenuResource enum
 const MENU_KEY_VALUES = [
-  { value: 'workstation', label: '工作台' },
-  { value: 'admin', label: '管理后台' },
-  { value: 'build', label: '应用构建' },
-  { value: 'create_app', label: '新建应用' },
-  { value: 'knowledge', label: '知识管理' },
-  { value: 'knowledge_space', label: '知识空间' },
-  { value: 'model', label: '模型管理' },
-  { value: 'tool', label: '工具管理' },
-  { value: 'mcp', label: 'MCP 服务' },
-  { value: 'channel', label: '频道管理' },
-  { value: 'evaluation', label: '模型评测' },
-  { value: 'dataset', label: '数据集管理' },
-  { value: 'mark_task', label: '标注任务' },
-  { value: 'board', label: '数据看板' },
-  { value: 'home', label: '首页（工作台）' },
-  { value: 'apps', label: '应用中心' },
+  { value: 'workstation',    label: 'approvalPage.menuKeyLabel.workstation' },
+  { value: 'admin',          label: 'approvalPage.menuKeyLabel.admin' },
+  { value: 'build',          label: 'approvalPage.menuKeyLabel.build' },
+  { value: 'create_app',     label: 'approvalPage.menuKeyLabel.create_app' },
+  { value: 'knowledge',      label: 'approvalPage.menuKeyLabel.knowledge' },
+  { value: 'knowledge_space',label: 'approvalPage.menuKeyLabel.knowledge_space' },
+  { value: 'model',          label: 'approvalPage.menuKeyLabel.model' },
+  { value: 'tool',           label: 'approvalPage.menuKeyLabel.tool' },
+  { value: 'mcp',            label: 'approvalPage.menuKeyLabel.mcp' },
+  { value: 'channel',        label: 'approvalPage.menuKeyLabel.channel' },
+  { value: 'evaluation',     label: 'approvalPage.menuKeyLabel.evaluation' },
+  { value: 'dataset',        label: 'approvalPage.menuKeyLabel.dataset' },
+  { value: 'mark_task',      label: 'approvalPage.menuKeyLabel.mark_task' },
+  { value: 'board',          label: 'approvalPage.menuKeyLabel.board' },
+  { value: 'home',           label: 'approvalPage.menuKeyLabel.home' },
+  { value: 'apps',           label: 'approvalPage.menuKeyLabel.apps' },
 ];
 
 const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
   applicant_role: {
-    label: '申请人身份',
-    // Base values only; RouteDialog dynamically appends system roles from API
+    label: 'approvalPage.condition.applicant_role',
     values: FIXED_ROLE_VALUES,
   },
   menu_key: {
-    label: '申请菜单',
+    label: 'approvalPage.condition.menu_key',
     values: MENU_KEY_VALUES,
   },
   space_type: {
-    label: '知识空间类型',
+    label: 'approvalPage.condition.space_type',
     values: [
-      { value: 'public', label: '公共' },
-      { value: 'department', label: '部门' },
-      { value: 'team', label: '团队' },
+      { value: 'public',     label: 'approvalPage.spaceType.public' },
+      { value: 'department', label: 'approvalPage.spaceType.department' },
+      { value: 'team',       label: 'approvalPage.spaceType.team' },
     ],
   },
 };
 
-function conditionLabel(matchConfig: { field?: string; value?: string } | null | undefined): string {
+// Approver source type i18n key map
+const APPROVER_SOURCE_LABEL_KEYS: Record<string, string> = {
+  direct_user:             'approvalPage.approverSource.direct_user',
+  department_admin:        'approvalPage.approverSource.department_admin',
+  tenant_admin:            'approvalPage.approverSource.tenant_admin',
+  channel_admin:           'approvalPage.approverSource.channel_admin',
+  space_admin:             'approvalPage.approverSource.space_admin',
+  knowledge_space_owner:   'approvalPage.approverSource.knowledge_space_owner',
+  knowledge_space_manager: 'approvalPage.approverSource.knowledge_space_manager',
+};
+
+type TFn = (key: string, opts?: Record<string, string>) => string;
+
+function conditionLabel(
+  matchConfig: { field?: string; value?: string } | null | undefined,
+  t: TFn,
+): string {
   if (!matchConfig?.field) return '';
   const meta = CONDITION_FIELD_META[matchConfig.field];
-  const fieldLabel = meta?.label ?? matchConfig.field;
+  const fieldLabel = meta
+    ? t(meta.label, { defaultValue: matchConfig.field })
+    : matchConfig.field;
   const value = matchConfig.value ?? '';
   if (!value) return fieldLabel;
-  // For applicant_role, look up static fixed labels first
-  const staticMatch = FIXED_ROLE_VALUES.find((v) => v.value === value)
-    ?? meta?.values?.find((v) => v.value === value);
-  // role_{id} values: show as "系统角色 #{id}" if no static label found
-  const valLabel = staticMatch?.label
-    ?? (value.startsWith('role_') ? `系统角色 #${value.slice(5)}` : value);
+  const staticMatch =
+    FIXED_ROLE_VALUES.find((v) => v.value === value) ??
+    meta?.values?.find((v) => v.value === value);
+  const valLabel = staticMatch
+    ? t(staticMatch.label, { defaultValue: staticMatch.value })
+    : value.startsWith('role_')
+      ? `${t('approvalPage.systemRole', { defaultValue: '系统角色' })} #${value.slice(5)}`
+      : value;
   return `${fieldLabel} = ${valLabel}`;
 }
 
@@ -185,6 +206,7 @@ function AddScenarioDialog({
   onClose: () => void;
   onConfirm: (preset: ApprovalScenarioPreset) => void;
 }) {
+  const { t } = useTranslation("bs");
   const available = useMemo(
     () => presets.filter((p) => !existingCodes.has(p.scenario_code)),
     [presets, existingCodes],
@@ -195,22 +217,31 @@ function AddScenarioDialog({
   }, [open, available]);
 
   const preset = available.find((p) => p.scenario_code === selected) ?? null;
+
+  const conditionFieldLabels = (preset?.condition_fields ?? [])
+    .map((f) => t(`approvalPage.condition.${f}`, { defaultValue: f }))
+    .join("、");
+
+  const approverSourceLabels = (preset?.approver_source_types ?? [])
+    .map((s) => t(APPROVER_SOURCE_LABEL_KEYS[s] ?? `approvalPage.approverSource.${s}`, { defaultValue: s }))
+    .join("、");
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>新增审批场景</DialogTitle>
+          <DialogTitle>{t("approvalPage.addScenarioTitle", { defaultValue: "新增审批场景" })}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <label className="block text-sm text-text-secondary">
-            场景名称
+            {t("approvalPage.scenarioNameLabel", { defaultValue: "场景名称" })}
             <select
               value={selected}
               onChange={(e) => setSelected(e.target.value)}
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             >
               {available.length === 0 && (
-                <option value="">（所有预置场景已添加）</option>
+                <option value="">{t("approvalPage.allPresetsAdded", { defaultValue: "（所有预置场景已添加）" })}</option>
               )}
               {available.map((p) => (
                 <option key={p.scenario_code} value={p.scenario_code}>
@@ -220,10 +251,19 @@ function AddScenarioDialog({
             </select>
           </label>
           {preset && (
-            <div className="rounded-lg bg-gray-50 p-3 text-xs text-text-secondary space-y-1">
-              <div>Handler: {preset.handler_key || "--"}</div>
-              <div>条件字段: {(preset.condition_fields || []).join(", ") || "--"}</div>
-              <div>审批人来源: {(preset.approver_source_types || []).join(", ") || "--"}</div>
+            <div className="rounded-lg bg-gray-50 p-3 text-xs text-text-secondary space-y-1.5">
+              {conditionFieldLabels && (
+                <div>
+                  <span className="font-medium text-text-primary">{t("approvalPage.conditionLabel")}：</span>
+                  {conditionFieldLabels}
+                </div>
+              )}
+              {approverSourceLabels && (
+                <div>
+                  <span className="font-medium text-text-primary">{t("approvalPage.approverSourceLabel")}：</span>
+                  {approverSourceLabels}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -233,7 +273,7 @@ function AddScenarioDialog({
             onClick={onClose}
             className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
           >
-            取消
+            {t("cancel", { defaultValue: "取消" })}
           </button>
           <button
             type="button"
@@ -241,7 +281,7 @@ function AddScenarioDialog({
             onClick={() => preset && onConfirm(preset)}
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
           >
-            确认添加
+            {t("approvalPage.confirmAdd", { defaultValue: "确认添加" })}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -300,12 +340,18 @@ function RouteDialog({
     }
   }, [open]);
 
+  const { t } = useTranslation("bs");
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
   // For applicant_role: merge static fixed labels with dynamically loaded system roles
-  const allRoleValues = condField === 'applicant_role'
+  // Translate i18n keys to display text here so downstream components receive plain strings
+  const allRoleValues = (condField === 'applicant_role'
     ? [...FIXED_ROLE_VALUES, ...systemRoles]
-    : (fieldMeta?.values ?? []);
-  // Apply search filter for applicant_role
+    : (fieldMeta?.values ?? [])
+  ).map((v) => ({
+    value: v.value,
+    label: v.label.startsWith('approvalPage.') ? t(v.label, { defaultValue: v.value }) : v.label,
+  }));
+  // Apply search filter for applicant_role (search against translated label)
   const effectiveValues = condField === 'applicant_role' && roleSearch
     ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
     : allRoleValues;
@@ -345,7 +391,9 @@ function RouteDialog({
                 <option value="">无条件（始终命中）</option>
                 {conditionFields.map((f) => (
                   <option key={f} value={f}>
-                    {CONDITION_FIELD_META[f]?.label ?? f}
+                    {CONDITION_FIELD_META[f]
+                      ? t(CONDITION_FIELD_META[f].label, { defaultValue: f })
+                      : f}
                   </option>
                 ))}
               </select>
@@ -523,11 +571,12 @@ function FlowDialog({
   );
 }
 
+// i18n keys for approver source options (same source as APPROVER_SOURCE_LABEL_KEYS)
 const APPROVER_SOURCE_OPTIONS = [
-  { value: "applicant_department_admin", label: "申请人部门管理员" },
-  { value: "specified_user", label: "指定用户" },
-  { value: "knowledge_space_owner", label: "知识空间 Owner" },
-  { value: "knowledge_space_manager", label: "知识空间管理员" },
+  { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
+  { value: "direct_user",             labelKey: "approvalPage.approverSource.direct_user" },
+  { value: "knowledge_space_owner",   labelKey: "approvalPage.approverSource.knowledge_space_owner" },
+  { value: "knowledge_space_manager", labelKey: "approvalPage.approverSource.knowledge_space_manager" },
 ];
 
 function NodeDialog({
@@ -548,8 +597,14 @@ function NodeDialog({
 }) {
   const [name, setName] = useState(initial.node_name ?? "");
   const [code, setCode] = useState(initial.node_code ?? "");
+  const { t } = useTranslation("bs");
   const [mode, setMode] = useState(initial.node_mode ?? "or");
   const [sources, setSources] = useState<{ type: string; label: string }[]>([]);
+
+  const getApproverLabel = (type: string) => {
+    const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
+    return opt ? t(opt.labelKey, { defaultValue: type }) : type;
+  };
 
   useEffect(() => {
     if (open) {
@@ -559,19 +614,14 @@ function NodeDialog({
       const cfg = initial.approver_config as Record<string, unknown> | undefined;
       const rawSources = (cfg?.sources as { type: string; label?: string }[] | undefined) ?? [];
       setSources(
-        rawSources.map((s) => ({
-          type: s.type,
-          label:
-            APPROVER_SOURCE_OPTIONS.find((o) => o.value === s.type)?.label ?? s.label ?? s.type,
-        })),
+        rawSources.map((s) => ({ type: s.type, label: getApproverLabel(s.type) })),
       );
     }
   }, [open]);
 
   const addSource = (type: string) => {
     if (sources.some((s) => s.type === type)) return;
-    const label = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type)?.label ?? type;
-    setSources((prev) => [...prev, { type, label }]);
+    setSources((prev) => [...prev, { type, label: getApproverLabel(type) }]);
   };
 
   const removeSource = (type: string) => {
@@ -630,7 +680,7 @@ function NodeDialog({
                 {APPROVER_SOURCE_OPTIONS.filter((o) => !sources.some((s) => s.type === o.value)).map(
                   (o) => (
                     <option key={o.value} value={o.value}>
-                      {o.label}
+                      {t(o.labelKey, { defaultValue: o.value })}
                     </option>
                   ),
                 )}
@@ -863,6 +913,7 @@ export default function ApprovalPage() {
         route_name: route.route_name,
         route_type: route.route_type,
         flow_definition_id: route.flow_definition_id ?? null,
+        enabled: route.enabled === false,
       });
       if (selectedScenarioId) await loadRoutes(selectedScenarioId);
     } catch (e: any) {
@@ -1138,7 +1189,7 @@ export default function ApprovalPage() {
                         </div>
                       )}
                       {routes.map((route, idx) => {
-                        const matchLabel = conditionLabel(route.match_config);
+                        const matchLabel = conditionLabel(route.match_config, t);
                         const flowName = flows.find(
                           (f) => f.id === route.flow_definition_id,
                         )?.flow_name;
@@ -1350,9 +1401,10 @@ export default function ApprovalPage() {
                                     className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
                                   >
                                     <Users size={10} className="text-text-secondary" />
-                                    {APPROVER_SOURCE_OPTIONS.find(
-                                      (o) => o.value === src.type,
-                                    )?.label ?? src.label ?? src.type}
+                                    {(() => {
+                                      const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
+                                      return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
+                                    })()}
                                   </span>
                                 ))}
                                 <button

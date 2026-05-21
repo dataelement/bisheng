@@ -2266,6 +2266,51 @@
     "exceptionResolveSuccess": "异常流程处理完成",
     "exceptionResolveFailed": "异常流程处理失败",
     "flowFallback": "审批流程",
-    "nodeFallback": "流程节点"
+    "nodeFallback": "流程节点",
+    "conditionLabel": "可用条件字段",
+    "approverSourceLabel": "可用审批人来源",
+    "systemRole": "系统角色",
+    "condition": {
+      "applicant_role": "申请人身份",
+      "menu_key": "申请菜单",
+      "space_type": "知识空间类型"
+    },
+    "approverSource": {
+      "direct_user": "指定用户",
+      "department_admin": "申请人部门管理员",
+      "tenant_admin": "租户管理员",
+      "channel_admin": "频道管理员",
+      "space_admin": "知识空间管理员",
+      "knowledge_space_owner": "知识空间 Owner",
+      "knowledge_space_manager": "知识空间管理员"
+    },
+    "roleValue": {
+      "admin": "系统管理员",
+      "tenant_admin": "租户管理员",
+      "dept_admin": "部门管理员"
+    },
+    "spaceType": {
+      "public": "公共",
+      "department": "部门",
+      "team": "团队"
+    },
+    "menuKeyLabel": {
+      "workstation": "工作台",
+      "admin": "管理后台",
+      "build": "应用构建",
+      "create_app": "新建应用",
+      "knowledge": "知识管理",
+      "knowledge_space": "知识空间",
+      "model": "模型管理",
+      "tool": "工具管理",
+      "mcp": "MCP 服务",
+      "channel": "频道管理",
+      "evaluation": "模型评测",
+      "dataset": "数据集管理",
+      "mark_task": "标注任务",
+      "board": "数据看板",
+      "home": "首页（工作台）",
+      "apps": "应用中心"
+    }
   }
 }

@@ -101,6 +101,7 @@ export async function updateApprovalRouteApi(
     sort_order?: number;
     flow_definition_id?: number | null;
     match_config?: Record<string, any>;
+    enabled?: boolean;
   },
 ): Promise<ApprovalRouteItem> {
   return await axios.put(`/api/v1/approval/admin/routes/${routeRuleId}`, data);
