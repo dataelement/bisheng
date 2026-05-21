@@ -494,6 +494,7 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "shapely" },
+    { name = "simhash" },
     { name = "sqlmodel" },
     { name = "supabase" },
     { name = "sympy" },
@@ -598,6 +599,7 @@ requires-dist = [
     { name = "redis", specifier = ">=7.0.1" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "shapely", specifier = ">=2.1.2" },
+    { name = "simhash", specifier = ">=2.1.2" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
     { name = "supabase", specifier = ">=2.23.3" },
     { name = "sympy", specifier = ">=1.14.0" },
@@ -6679,6 +6681,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
+]
+
+[[package]]
+name = "simhash"
+version = "2.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/2a/2bed94a174fb53931c67c3581869d9c485db7ea64e0c7e8a7d6018c6defe/simhash-2.1.2.tar.gz", hash = "sha256:533bc8cf41e4e6dd83f0b1847363516bf3323e0fa92e63d9e6df4e281e882e1b", size = 4660, upload-time = "2022-03-03T01:24:26.765Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/86/0f4a39a50fcf510753b7abd98b728e66c14fefe89bad9ef5824745bf7b9f/simhash-2.1.2-py3-none-any.whl", hash = "sha256:968de16c82c227a631aa00e57ab58f9e4ee9e47e8408486199a9eb59c1d6979b", size = 4714, upload-time = "2022-03-03T01:24:22.255Z" },
 ]
 
 [[package]]

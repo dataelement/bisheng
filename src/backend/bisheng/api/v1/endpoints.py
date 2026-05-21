@@ -66,6 +66,17 @@ def get_env():
     env['enable_etl4lm'] = bool(etl_for_lm_url)
     env['multi_tenant_enabled'] = bisheng_settings.multi_tenant.enabled
 
+    # Expose knowledge-space version management flag so the client can toggle UI affordances.
+    vm = getattr(bisheng_settings.get_knowledge(), 'version_management', None)
+    env['knowledges'] = {
+        'version_management': {
+            'enabled': bool(vm.enabled) if vm else False,
+            'simhash_similarity_threshold': (
+                vm.simhash_similarity_threshold if vm else 0.85
+            ),
+        }
+    }
+
     return resp_200(env)
 
 

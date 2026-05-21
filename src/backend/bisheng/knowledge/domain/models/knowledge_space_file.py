@@ -77,6 +77,7 @@ class SpaceFileDao(KnowledgeFileDao):
             page: int = 1,
             page_size: int = 20,
             file_type: Optional[int] = None,
+            exclude_file_ids: Optional[List[int]] = None,
     ) -> List[KnowledgeFile]:
         """
         Async: List direct children (folders first, then files) under a given parent.
@@ -98,6 +99,8 @@ class SpaceFileDao(KnowledgeFileDao):
             filters.append(KnowledgeFile.id.in_(file_ids))
         if file_type is not None:
             filters.append(KnowledgeFile.file_type == file_type)
+        if exclude_file_ids:
+            filters.append(col(KnowledgeFile.id).notin_(exclude_file_ids))
 
         if file_status:
             from sqlalchemy.orm import aliased

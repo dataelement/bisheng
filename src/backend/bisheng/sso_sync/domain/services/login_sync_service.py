@@ -299,6 +299,25 @@ class LoginSyncService:
                         user.user_id,
                         [DefaultRole],
                     )
+                    # 2.5 SSO-401 fix: pre-create the user_tenant row with
+                    # is_active=1 so the subsequent login-time
+                    # UserTenantSyncService.sync_user finds an active row
+                    # whose tenant matches the no-primary-department leaf
+                    # (ROOT_TENANT_ID) and hits the cheap no-op branch
+                    # (user_tenant_sync_service.py:88). Without is_active=1
+                    # the sync flips status + bumps token_version, which
+                    # invalidates any JWT already on the client side.
+                    # Old (migrated) users avoid this because F011's backfill
+                    # set is_active=1 for them.
+                    from bisheng.database.models.tenant import UserTenantDao
+                    activated = await UserTenantDao.aactivate_user_tenant(
+                        user.user_id, ROOT_TENANT_ID,
+                    )
+                    logger.info(
+                        'SSO new user created with active user_tenant: '
+                        'user_id=%s external_id=%s source=%s tenant_id=%s',
+                        user.user_id, ext, row_source, activated.tenant_id,
+                    )
                 except Exception as e:  # pragma: no cover — rare integrity race
                     logger.error(
                         'F014 could not create SSO user %s: %s', ext, e,

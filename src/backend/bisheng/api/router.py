@@ -18,6 +18,7 @@ from bisheng.knowledge.api.router import (
     knowledge_router,
     knowledge_space_router,
     knowledge_space_tag_library_router,
+    knowledge_version_router,
 )
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
@@ -46,6 +47,7 @@ router.include_router(endpoints_router)
 router.include_router(knowledge_router)
 router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
+router.include_router(knowledge_version_router)
 router.include_router(server_router)
 router.include_router(user_router)
 router.include_router(qa_router)

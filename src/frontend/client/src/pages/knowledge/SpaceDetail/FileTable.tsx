@@ -10,11 +10,14 @@ import {
     Edit,
     FileImageIcon,
     FileUserIcon,
+    GitBranch,
+    History,
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
     Shield,
-    Tag, Trash2
+    Tag, Trash2,
+    FileSearch
 } from "lucide-react";
 import {
     Checkbox,
@@ -38,6 +41,7 @@ import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import { Badge } from "~/components/ui/Badge";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
@@ -525,9 +529,12 @@ interface FileTableProps {
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
+    versionManagementEnabled?: boolean;
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -646,6 +653,9 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 shougangEnabled={shougangEnabled}
                                 canEditEncoding={canEditEncoding}
                                 onEditEncoding={handleOpenEditEncoding}
+                                versionManagementEnabled={versionManagementEnabled}
+                                onOpenVersionManagement={onOpenVersionManagement}
+                                onOpenVersionHistory={onOpenVersionHistory}
                             />
                         ))}
                     </TableBody>
@@ -702,6 +712,9 @@ function FileRow({
     shougangEnabled = false,
     canEditEncoding = false,
     onEditEncoding,
+    versionManagementEnabled = false,
+    onOpenVersionManagement,
+    onOpenVersionHistory,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -727,6 +740,9 @@ function FileRow({
     shougangEnabled?: boolean;
     canEditEncoding?: boolean;
     onEditEncoding?: (file: KnowledgeFile) => void;
+    versionManagementEnabled?: boolean;
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -836,6 +852,28 @@ function FileRow({
                                 {localize("com_permission.manage_permission")}
                             </DropdownMenuItem>
                         )}
+                        {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenVersionManagement?.(file);
+                                }}
+                            >
+                                <GitBranch className="mr-2 size-4" />
+                                {localize("com_knowledge.version.menu_version_management")}
+                            </DropdownMenuItem>
+                        )}
+                        {versionManagementEnabled && !isFolder && file.is_multi_version && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenVersionHistory?.(file);
+                                }}
+                            >
+                                <History className="mr-2 size-4" />
+                                {localize("com_knowledge.version.menu_version_history")}
+                            </DropdownMenuItem>
+                        )}
                         {canDelete && (
                             <DropdownMenuItem
                                 className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
@@ -916,25 +954,38 @@ function FileRow({
                             className="flex-1 h-7 px-2 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal text-[#1d2129]"
                         />
                     ) : (
-                        <span
-                            className={cn(
-                                "text-sm truncate flex-1",
-                                namePreviewable
-                                    ? "cursor-pointer text-[#165dff] hover:text-[#4080FF]"
-                                    : "cursor-default text-[#4e5969]"
+                        <>
+                            {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
+                                <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                                    {`V${file.version_no}`}
+                                </span>
                             )}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (isFolder) {
-                                    onNavigateFolder?.();
-                                    return;
-                                }
-                                if (!namePreviewable) return;
-                                onPreview?.();
-                            }}
-                        >
-                            <span className="block truncate">{file.name}</span>
-                        </span>
+                            {versionManagementEnabled && file.has_similar && (
+                                <span className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44]">
+                                    <FileSearch className="size-3" />
+                                    {localize("com_knowledge.version.pill_similar")}
+                                </span>
+                            )}
+                            <span
+                                className={cn(
+                                    "text-sm truncate flex-1",
+                                    namePreviewable
+                                        ? "cursor-pointer text-[#165dff] hover:text-[#4080FF]"
+                                        : "cursor-default text-[#4e5969]"
+                                )}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isFolder) {
+                                        onNavigateFolder?.();
+                                        return;
+                                    }
+                                    if (!namePreviewable) return;
+                                    onPreview?.();
+                                }}
+                            >
+                                <span className="block truncate">{file.name}</span>
+                            </span>
+                        </>
                     )}
                 </div>
                 {/* 固定列右侧阴影 */}
