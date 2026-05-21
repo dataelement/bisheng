@@ -2421,7 +2421,16 @@
     "tabException": "Exception List",
     "tabFlow": "Flow Management",
     "searchRole": "Search role…",
-    "searchUser": "Search username…"
+    "searchUser": "Search username…",
+    "menuNeedsApproval": "Menu requires approval",
+    "menuApprovalDesc": "Your role does not include this menu permission. Click the button below to apply; access will be granted after approval.",
+    "menuApply": "Apply for Access",
+    "menuApplying": "Submitting…",
+    "menuApplied": "Application Submitted",
+    "menuNoPermission": "No permission for this menu",
+    "menuNoPermissionDesc": "Your role does not include this menu permission. Please contact your administrator.",
+    "menuApplyReasonLabel": "Reason",
+    "menuApplyReasonPlaceholder": "Please enter your reason (optional)"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

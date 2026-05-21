@@ -53,6 +53,15 @@ class KnowledgeSpaceTagLibraryBase(SQLModelSerializable):
             Boolean, nullable=False, server_default=text("0"), comment="是否内置标签库"
         ),
     )
+    owner_knowledge_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            index=True,
+            comment="拥有该私有库的知识空间ID; NULL 表示租户公共库",
+        ),
+    )
     user_id: int = Field(
         default=0,
         sa_column=Column(
@@ -82,7 +91,9 @@ class KnowledgeSpaceTagLibrary(KnowledgeSpaceTagLibraryBase, table=True):
 class KnowledgeSpaceTagLibraryDao:
     @classmethod
     async def acount(cls, keyword: Optional[str] = None) -> int:
-        statement = select(func.count(KnowledgeSpaceTagLibrary.id))
+        statement = select(func.count(KnowledgeSpaceTagLibrary.id)).where(
+            KnowledgeSpaceTagLibrary.owner_knowledge_id.is_(None)
+        )
         if keyword:
             statement = statement.where(
                 KnowledgeSpaceTagLibrary.name.like(f"%{keyword}%")
@@ -94,7 +105,9 @@ class KnowledgeSpaceTagLibraryDao:
     async def alist(
         cls, page: int = 1, page_size: int = 20, keyword: Optional[str] = None
     ) -> List[KnowledgeSpaceTagLibrary]:
-        statement = select(KnowledgeSpaceTagLibrary)
+        statement = select(KnowledgeSpaceTagLibrary).where(
+            KnowledgeSpaceTagLibrary.owner_knowledge_id.is_(None)
+        )
         if keyword:
             statement = statement.where(
                 KnowledgeSpaceTagLibrary.name.like(f"%{keyword}%")
@@ -199,5 +212,76 @@ class KnowledgeSpaceTagLibraryDao:
                 .where(Knowledge.auto_tag_library_id == library_id)
                 .where(Knowledge.tenant_id == library.tenant_id)
                 .values(auto_tag_enabled=False, auto_tag_library_id=None)
+            )
+            await session.commit()
+
+    @classmethod
+    async def aget_private_for_knowledge(
+        cls, knowledge_id: int
+    ) -> Optional[KnowledgeSpaceTagLibrary]:
+        async with get_async_db_session() as session:
+            return (
+                await session.exec(
+                    select(KnowledgeSpaceTagLibrary).where(
+                        KnowledgeSpaceTagLibrary.owner_knowledge_id == knowledge_id
+                    )
+                )
+            ).first()
+
+    @classmethod
+    async def aupsert_private(
+        cls,
+        knowledge_id: int,
+        tenant_id: Optional[int],
+        user_id: int,
+        tags: List[str],
+    ) -> KnowledgeSpaceTagLibrary:
+        """Insert or update the private tag library bound to ``knowledge_id``.
+
+        Private libraries are 1:1 with a knowledge space, hidden from the
+        admin-facing list. The auto-tag service reads them like any other
+        library, so changing tags here is enough — no extra wiring required.
+        """
+        normalized = list(tags)
+        async with get_async_db_session() as session:
+            existing = (
+                await session.exec(
+                    select(KnowledgeSpaceTagLibrary).where(
+                        KnowledgeSpaceTagLibrary.owner_knowledge_id == knowledge_id
+                    )
+                )
+            ).first()
+            if existing:
+                existing.tags = normalized
+                existing.tag_count = len(normalized)
+                if tenant_id is not None and existing.tenant_id != tenant_id:
+                    existing.tenant_id = tenant_id
+                session.add(existing)
+                await session.commit()
+                await session.refresh(existing)
+                return existing
+
+            row = KnowledgeSpaceTagLibrary(
+                tenant_id=tenant_id,
+                name=f"__private__{knowledge_id}",
+                description=None,
+                tags=normalized,
+                tag_count=len(normalized),
+                is_builtin=False,
+                user_id=user_id or 0,
+                owner_knowledge_id=knowledge_id,
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return row
+
+    @classmethod
+    async def adelete_private_for_knowledge(cls, knowledge_id: int) -> None:
+        async with get_async_db_session() as session:
+            await session.exec(
+                delete(KnowledgeSpaceTagLibrary).where(
+                    col(KnowledgeSpaceTagLibrary.owner_knowledge_id) == knowledge_id
+                )
             )
             await session.commit()

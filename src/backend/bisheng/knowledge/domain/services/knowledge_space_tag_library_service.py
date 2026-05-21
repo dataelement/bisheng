@@ -137,6 +137,11 @@ class KnowledgeSpaceTagLibraryService:
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
         if not library:
             raise KnowledgeSpaceTagLibraryNotExistError()
+        if library.owner_knowledge_id is not None:
+            # Private libraries are 1:1 with their owner space and never
+            # surface in the admin tag library list, so the "usage count"
+            # concept does not apply.
+            return 0
         return await KnowledgeSpaceTagLibraryDao.acount_used_by_spaces(library_id)
 
     async def delete_library(self, library_id: int) -> None:
@@ -145,6 +150,10 @@ class KnowledgeSpaceTagLibraryService:
             raise KnowledgeSpaceTagLibraryNotExistError()
         if library.is_builtin:
             raise KnowledgeSpaceTagLibraryInvalidError(message="内置标签库不能删除")
+        if library.owner_knowledge_id is not None:
+            raise KnowledgeSpaceTagLibraryInvalidError(
+                message="私有标签库不能从此入口删除"
+            )
         await KnowledgeSpaceTagLibraryDao.aclear_space_bindings(library_id)
         await KnowledgeSpaceTagLibraryDao.adelete(library_id)
 
@@ -157,6 +166,10 @@ class KnowledgeSpaceTagLibraryService:
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
         if not library:
             raise KnowledgeSpaceTagLibraryNotExistError()
+        if library.owner_knowledge_id is not None:
+            # Block public callers from accidentally binding another space's
+            # private library by id; the dedicated upsert path manages those.
+            raise KnowledgeSpaceTagLibraryInvalidError(message="无效的标签库")
         if library.tag_count <= 0 or not library.tags:
             raise KnowledgeSpaceTagLibraryInvalidError(
                 message="开启自动标签时必须绑定非空标签库"

@@ -103,6 +103,10 @@ export interface KnowledgeSpace {
     isReleased: boolean;          // mapped from is_released
     autoTagEnabled?: boolean;
     autoTagLibraryId?: number | null;
+    /** "library" when bound to a tenant tag library, "custom" when backed by per-space tags */
+    autoTagMode?: "library" | "custom";
+    /** Populated only when autoTagMode === "custom" */
+    autoTagCustomTags?: string[] | null;
 
     // Used only by the "square explore" UI
     isFollowed?: boolean;
@@ -220,6 +224,8 @@ interface RawKnowledgeSpace {
     is_released?: boolean;
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
+    auto_tag_mode?: "library" | "custom";
+    auto_tag_custom_tags?: string[] | null;
     is_pending?: boolean;
     is_followed?: boolean;
     subscription_status?: string;
@@ -325,6 +331,10 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         isReleased: raw.is_released ?? false,
         autoTagEnabled: raw.auto_tag_enabled ?? false,
         autoTagLibraryId: raw.auto_tag_library_id ?? null,
+        autoTagMode: raw.auto_tag_mode ?? (raw.auto_tag_custom_tags ? "custom" : "library"),
+        autoTagCustomTags: Array.isArray(raw.auto_tag_custom_tags)
+            ? raw.auto_tag_custom_tags
+            : null,
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
         // Some detail endpoints may carry subscription_status; keep it if present.
@@ -881,6 +891,7 @@ export async function createSpaceApi(data: {
     is_released?: boolean;
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
+    auto_tag_custom_tags?: string[] | null;
 }): Promise<KnowledgeSpace> {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;
@@ -907,11 +918,34 @@ export async function updateSpaceApi(
         is_released?: boolean;
         auto_tag_enabled?: boolean;
         auto_tag_library_id?: number | null;
+        auto_tag_custom_tags?: string[] | null;
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");
     const res = await request.put(`/api/v1/knowledge/space/${space_id}`, data) as ApiResponse<RawKnowledgeSpace>;
     return mapSpace(res.data);
+}
+
+export interface KnowledgeSpaceTagLibraryDetail extends KnowledgeSpaceTagLibraryListItem {
+    tags: string[];
+}
+
+/** Fetch a single tag library with its full tag list, used for the preview chips. */
+export async function getKnowledgeSpaceTagLibraryDetailApi(
+    library_id: number,
+): Promise<KnowledgeSpaceTagLibraryDetail> {
+    const res = await request.get<ApiResponse<KnowledgeSpaceTagLibraryDetail>>(
+        `/api/v1/knowledge/space/tag-libraries/${library_id}`,
+    );
+    const payload: any = (res as any)?.data ?? res;
+    return {
+        id: Number(payload?.id),
+        name: String(payload?.name ?? ""),
+        description: payload?.description ?? null,
+        tag_count: Number(payload?.tag_count ?? 0),
+        is_builtin: Boolean(payload?.is_builtin),
+        tags: Array.isArray(payload?.tags) ? payload.tags : [],
+    };
 }
 
 export async function getKnowledgeSpaceTagLibrariesApi(params?: {
@@ -1351,10 +1385,17 @@ export async function deleteFolderApi(space_id: string, folder_id: string): Prom
  */
 export async function uploadFileToServerApi(
     space_id: string,
-    file: File
+    file: File,
+    /**
+     * Explicit filename for the multipart part. Defaults to `file.name`.
+     * Pass this when uploading Files from a `<input webkitdirectory>` picker —
+     * Chromium otherwise uses `file.webkitRelativePath` (e.g. `Docs/a.pdf`)
+     * as the multipart filename, which the backend persists verbatim.
+     */
+    filename?: string,
 ): Promise<UploadFileResponse> {
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file, filename ?? file.name);
     const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         // Preserve status_code and data so the caller can render the localized

@@ -458,6 +458,7 @@ export default function Knowledge() {
                     is_released,
                     auto_tag_enabled: form.autoTagEnabled,
                     auto_tag_library_id: form.autoTagLibraryId,
+                    auto_tag_custom_tags: form.autoTagCustomTags,
                 });
                 if (activeSpace?.id === updated.id) setActiveSpace({ ...updated, role: activeSpace.role });
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
@@ -471,6 +472,7 @@ export default function Knowledge() {
                     is_released,
                     auto_tag_enabled: form.autoTagEnabled,
                     auto_tag_library_id: form.autoTagLibraryId,
+                    auto_tag_custom_tags: form.autoTagCustomTags,
                 });
                 setActiveSpace(newSpace);
 
@@ -726,6 +728,7 @@ export default function Knowledge() {
                                         }}
                                         onNavigateFolder={fileManager.handleNavigateFolder}
                                         onUploadFile={fileUpload.handleUploadFile}
+                                        onUploadFolder={fileUpload.handleUploadFolder}
                                         onCreateFolder={fileUpload.handleCreateFolder}
                                         onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
                                         onRenameFile={fileUpload.handleRenameFile}
