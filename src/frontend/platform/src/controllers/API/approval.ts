@@ -203,3 +203,11 @@ export async function retryApprovalExceptionApi(
     approver_user_ids: payload.approver_user_ids ?? [],
   });
 }
+
+export async function applyMenuAccessApi(data: {
+  menu_key: string;
+  menu_name: string;
+  reason?: string;
+}): Promise<Record<string, any>> {
+  return await axios.post(`/api/v1/approval/menu-access/apply`, data);
+}

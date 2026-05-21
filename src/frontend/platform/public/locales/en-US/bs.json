@@ -2421,7 +2421,12 @@
     "tabException": "Exception List",
     "tabFlow": "Flow Management",
     "searchRole": "Search role…",
-    "searchUser": "Search username…"
+    "searchUser": "Search username…",
+    "menuNeedsApproval": "Menu requires approval",
+    "menuApprovalDesc": "Your role does not include this menu permission. Click the button below to apply; access will be granted after approval.",
+    "menuApply": "Apply for Access",
+    "menuApplying": "Submitting…",
+    "menuApplied": "Application Submitted"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",

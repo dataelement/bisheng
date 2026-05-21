@@ -174,20 +174,20 @@ export default function MainLayout() {
                         </NavLink> */}
                         {
                             showAdminNav('board') && <>
-                                <NavLink to={isMenu('board') ? '/dashboard ' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <NavLink to={isMenu('board') ? '/dashboard' : '/menu-pending?menu=board'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DashboardIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dashboard')}</span>
                                 </NavLink>
                             </>
                         }
                         {
                             (showAdminNav('build') || canManageWorkbenchConfig) &&
-                            <NavLink to={isMenu('build') ? '/build' : (canManageWorkbenchConfig ? '/build/client' : '/menu-pending')} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
+                            <NavLink to={isMenu('build') ? '/build' : (canManageWorkbenchConfig ? '/build/client' : '/menu-pending?menu=build')} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
                                 <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                             </NavLink>
                         }
                         {
                             showAdminNav('knowledge') &&
-                            <NavLink to={isMenu('knowledge') ? '/filelib' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            <NavLink to={isMenu('knowledge') ? '/filelib' : '/menu-pending?menu=knowledge'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
                             </NavLink>
                         }
@@ -200,25 +200,25 @@ export default function MainLayout() {
                         }
                         {
                             showAdminNav('model') &&
-                            <NavLink to={isMenu('model') ? '/model' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            <NavLink to={isMenu('model') ? '/model' : '/menu-pending?menu=model'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                             </NavLink>
                         }
                         {
                             showAdminNav('evaluation') &&
-                            <NavLink to={isMenu('evaluation') ? '/evaluation' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            <NavLink to={isMenu('evaluation') ? '/evaluation' : '/menu-pending?menu=evaluation'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <EvaluatingIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.evaluation')}</span>
                             </NavLink>
                         }
                         {
                             showAdminNav('mark_task') &&
-                            <NavLink to={isMenu('mark_task') ? '/label' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            <NavLink to={isMenu('mark_task') ? '/label' : '/menu-pending?menu=mark_task'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <LabelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.annotation')}</span>
                             </NavLink>
                         }
                         {
                             showAdminNav('log') &&
-                            <NavLink to={isMenu('log') ? '/log' : '/menu-pending'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            <NavLink to={isMenu('log') ? '/log' : '/menu-pending?menu=log'} className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                             </NavLink>
                         }
