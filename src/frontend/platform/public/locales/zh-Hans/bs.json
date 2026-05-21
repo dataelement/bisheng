@@ -2370,6 +2370,7 @@
     "selectScenarioHint": "请在左侧选择一个审批场景",
     "tabException": "异常流程列表",
     "tabFlow": "流程管理",
-    "searchRole": "搜索身份 / 角色名…"
+    "searchRole": "搜索身份 / 角色名…",
+    "searchUser": "搜索用户名…"
   }
 }

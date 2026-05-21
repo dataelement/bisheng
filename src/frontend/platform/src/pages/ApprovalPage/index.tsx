@@ -620,9 +620,12 @@ function NodeDialog({
 
   useEffect(() => {
     if (!userPickerOpen) return;
-    getUsersApi({ name: userSearch, page: 1, pageSize: 50 }).then((res) => {
-      setUserList(res.data ?? []);
-    }).catch(() => setUserList([]));
+    const timer = setTimeout(() => {
+      getUsersApi({ name: userSearch, page: 1, pageSize: 50, simple: true }).then((res) => {
+        setUserList(res.data ?? []);
+      }).catch(() => setUserList([]));
+    }, 300);
+    return () => clearTimeout(timer);
   }, [userPickerOpen, userSearch]);
 
   const openUserPicker = () => {
@@ -776,7 +779,7 @@ function NodeDialog({
           <input
             value={userSearch}
             onChange={(e) => setUserSearch(e.target.value)}
-            placeholder={t("approvalPage.searchRole")}
+            placeholder={t("approvalPage.searchUser")}
             className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
           />
           <div className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
