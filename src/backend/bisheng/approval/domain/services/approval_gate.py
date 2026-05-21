@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable
 
 from bisheng.approval.domain.models.approval_instance import (
+    ApprovalActionLog,
     ApprovalException,
     ApprovalExceptionType,
     ApprovalInstance,
@@ -208,6 +209,16 @@ class ApprovalGate:
                 )
             )
             task_ids.append(task.id)
+        await self.instance_repository.create_action_log(
+            ApprovalActionLog(
+                tenant_id=req.tenant_id,
+                instance_id=instance.id,
+                action='submitted',
+                operator_user_id=req.applicant_user_id,
+                operator_user_name=req.applicant_user_name,
+                detail={},
+            )
+        )
         return ApprovalGateResult(
             decision=ApprovalGateDecision.PENDING,
             instance_id=instance.id,

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { applyMenuAccessApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
@@ -17,6 +17,13 @@ const MENU_LABEL_KEYS: Record<string, string> = {
   apps: 'com_nav_app_center',
 };
 
+const PLUGIN_DEFAULT_ROUTES: Record<string, string> = {
+  home: '/c/new',
+  knowledge_space: '/knowledge',
+  subscription: '/channel',
+  apps: '/apps',
+};
+
 export default function MenuUnavailablePage() {
   const bishengEnv = useRecoilValue(bishengConfState);
   const configured = bishengEnv?.workbench_menu_unavailable_message;
@@ -24,6 +31,7 @@ export default function MenuUnavailablePage() {
   const message = trimmed || DEFAULT_MESSAGE;
   const [searchParams] = useSearchParams();
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const localize = useLocalize();
   const { showToast } = useToastContext();
 
@@ -32,6 +40,14 @@ export default function MenuUnavailablePage() {
     && Boolean((user as { plugins?: string[] } | null)?.plugins?.includes(pluginId));
   const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
   const canApply = Boolean(pluginId) && menuApprovalMode && !hasPlugin;
+
+  // If the user already has the permission (e.g. approval was granted and they refreshed),
+  // redirect to the target page automatically.
+  useEffect(() => {
+    if (!hasPlugin || !pluginId) return;
+    const target = PLUGIN_DEFAULT_ROUTES[pluginId] ?? '/';
+    navigate(target, { replace: true });
+  }, [hasPlugin, pluginId]);
   const menuName = pluginId ? localize((MENU_LABEL_KEYS[pluginId] || pluginId) as any) : '';
 
   const [showDialog, setShowDialog] = useState(false);

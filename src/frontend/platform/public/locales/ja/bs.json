@@ -1349,7 +1349,12 @@
       "channel": "チャンネル",
       "knowledge_space": "ナレッジスペース",
       "tenant": "テナント",
-      "llm_server": "モデルプロバイダ"
+      "llm_server": "モデルプロバイダ",
+      "approval_instance": "審査インスタンス",
+      "approval_task": "審査タスク",
+      "approval_exception": "審査例外",
+      "approval_scenario": "審査シナリオ",
+      "approval_flow": "審査フロー"
     },
     "appUsage": "アプリ利用状況",
     "systemOperations": "システム操作",

@@ -1366,7 +1366,12 @@
       "channel": "Channel",
       "knowledge_space": "Knowledge Space",
       "tenant": "Tenant",
-      "llm_server": "Model Provider"
+      "llm_server": "Model Provider",
+      "approval_instance": "Approval Instance",
+      "approval_task": "Approval Task",
+      "approval_exception": "Approval Exception",
+      "approval_scenario": "Approval Scenario",
+      "approval_flow": "Approval Flow"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",

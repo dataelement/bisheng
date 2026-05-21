@@ -18,7 +18,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog";
+import { Dialog, DialogContent } from "../ui/Dialog";
 
 type ApprovalCenterTarget = {
   tab?: ApprovalCenterTab;
@@ -32,52 +32,94 @@ export interface ApprovalCenterDialogProps {
   target?: ApprovalCenterTarget;
 }
 
-function getTaskId(item?: ApprovalTaskItem | ApprovalTaskDetail | null): number | null {
-  const raw = item?.task_id ?? item?.id;
-  const num = Number(raw);
-  return Number.isFinite(num) ? num : null;
+type TaskFilter = "pending_me" | "processed";
+type RequestsFilter = "in_progress" | "completed";
+const IN_PROGRESS_STATUSES = new Set(["pending", "exception", "execute_failed"]);
+
+function getId(item: { task_id?: number; id?: number; instance_id?: number } | null | undefined, type: "task" | "instance"): number | null {
+  const raw = type === "task" ? (item?.task_id ?? item?.id) : ((item as any)?.instance_id ?? item?.id);
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
-function getInstanceId(item?: ApprovalInstanceItem | ApprovalInstanceDetail | null): number | null {
-  const raw = item?.instance_id ?? item?.id;
-  const num = Number(raw);
-  return Number.isFinite(num) ? num : null;
+function formatSerialNo(instanceId: number, ts?: string | null): string {
+  const d = ts ? new Date(ts) : new Date();
+  return `SP${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(instanceId).padStart(4, "0")}`;
 }
 
-function getStatusText(localize: ReturnType<typeof useLocalize>, status?: string | null) {
-  const normalized = String(status || "").toLowerCase();
-  switch (normalized) {
-    case "pending":
-      return localize("com_approval_status_pending");
-    case "approved":
-      return localize("com_approval_status_approved");
-    case "rejected":
-      return localize("com_approval_status_rejected");
-    case "withdrawn":
-      return localize("com_approval_status_withdrawn");
-    case "execute_failed":
-      return localize("com_approval_status_execute_failed");
-    default:
-      return status || "--";
-  }
+function formatTime(ts?: string | Date | null): string {
+  if (!ts) return "--";
+  const d = new Date(ts as string);
+  if (Number.isNaN(d.getTime())) return String(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function getDisplayTitle(item: Record<string, any> | null | undefined, fallback: string) {
+function StatusBadge({ status, instanceStatus, localize }: { status?: string | null; instanceStatus?: string | null; localize: ReturnType<typeof useLocalize> }) {
+  const s = String(status || "").toLowerCase();
+  const is = String(instanceStatus || "").toLowerCase();
+  // Combine task status and instance status for display
+  const effective = s === "approved" && is === "execute_failed" ? "execute_failed" : s;
+  const MAP: Record<string, { text: string; cls: string }> = {
+    pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-[#165dff]" },
+    approved:       { text: localize("com_approval_task_badge_approved"),   cls: "bg-[#e8ffea] text-[#00b42a]" },
+    rejected:       { text: localize("com_approval_task_badge_rejected"),   cls: "bg-[#fff2f0] text-[#f53f3f]" },
+    cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
+    skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
+    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
+    exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
+    // for instance status in my_requests
+    withdrawn:      { text: localize("com_approval_status_withdrawn"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
+    executed:       { text: localize("com_approval_badge_approved"),        cls: "bg-[#e8ffea] text-[#00b42a]" },
+  };
+  const { text, cls } = MAP[effective] ?? MAP[s] ?? { text: status ?? "--", cls: "bg-[#f7f8fa] text-[#86909c]" };
+  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
+}
+
+function TimelineStep({ action, operatorName, createTime, detail, localize }: {
+  action?: string; operatorName?: string | null; createTime?: string | null;
+  detail?: Record<string, any> | null; localize: ReturnType<typeof useLocalize>;
+}) {
+  const a = String(action || "").toLowerCase();
+  const dotCls = a === "approved" ? "bg-[#00b42a] text-white" : a === "rejected" ? "bg-[#f53f3f] text-white" :
+    a === "withdrawn" ? "bg-[#86909c] text-white" : "bg-[#165dff] text-white";
+  const icon = a === "approved" ? "✓" : a === "rejected" ? "✗" : "●";
+  const title = a === "submitted" ? localize("com_approval_step_submitted") :
+    a === "resubmitted" ? localize("com_approval_action_resubmitted") :
+    a === "approved" ? localize("com_approval_action_approved") :
+    a === "rejected" ? localize("com_approval_action_rejected") :
+    a === "withdrawn" ? localize("com_approval_action_withdrawn") :
+    (localize(`com_approval_action_${a}` as any, { defaultValue: a }) as string);
+  const desc = a === "submitted" ? localize("com_approval_step_submitted_desc") : operatorName ?? null;
+  const comment = detail?.comment || detail?.reason;
   return (
-    item?.business_name ||
-    item?.title ||
-    item?.detail?.menu_name ||
-    item?.payload_snapshot?.menu_name ||
-    fallback
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px]", dotCls)}>{icon}</span>
+        <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />
+      </div>
+      <div className="pb-4 min-w-0 pt-0.5">
+        <div className="text-[14px] font-medium text-[#1d2129]">{title}</div>
+        {desc && <div className="mt-0.5 text-[12px] text-[#86909c]">{desc}</div>}
+        {comment && <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>}
+        <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(createTime)}</div>
+      </div>
+    </div>
   );
 }
 
-function renderDetailRows(detail: Record<string, any> | null | undefined) {
-  if (!detail) return [];
-  return Object.entries(detail).filter(([, value]) => value !== undefined && value !== null && value !== "");
+function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#165dff] text-[11px] text-white">●</span>
+      </div>
+      <div className="pt-0.5">
+        <div className="text-[14px] font-medium text-[#1d2129]">{nodeName || "--"}</div>
+      </div>
+    </div>
+  );
 }
 
-/** Translate raw snapshot field keys to human-readable labels */
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
   const map: Record<string, string> = {
     menu_key:   localize("com_approval_field_menu_key" as any),
@@ -90,402 +132,320 @@ function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>)
   return map[key] ?? key;
 }
 
-export function ApprovalCenterDialog({
-  open,
-  onOpenChange,
-  target,
-}: ApprovalCenterDialogProps) {
+function InfoGrid({ rows }: { rows: [string, string][] }) {
+  return (
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
+      {rows.map(([label, value]) => (
+        <div key={label} className="bg-white px-4 py-3">
+          <div className="text-[12px] text-[#86909c]">{label}</div>
+          <div className="mt-1 text-[14px] font-medium text-[#1d2129] break-all">{value || "--"}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCenterDialogProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
+
   const [activeTab, setActiveTab] = useState<ApprovalCenterTab>(target?.tab ?? "my_tasks");
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("pending_me");
+  const [requestsFilter, setRequestsFilter] = useState<RequestsFilter>("in_progress");
+
   const [taskItems, setTaskItems] = useState<ApprovalTaskItem[]>([]);
   const [requestItems, setRequestItems] = useState<ApprovalInstanceItem[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(target?.taskId ?? null);
-  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(target?.instanceId ?? null);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
   const [taskDetail, setTaskDetail] = useState<ApprovalTaskDetail | null>(null);
   const [requestDetail, setRequestDetail] = useState<ApprovalInstanceDetail | null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const resetTarget = () => {
-    setActiveTab(target?.tab ?? "my_tasks");
-    setSelectedTaskId(target?.taskId ?? null);
-    setSelectedInstanceId(target?.instanceId ?? null);
-  };
+  const filteredTaskItems = useMemo(() => {
+    if (taskFilter === "pending_me") return taskItems.filter((t) => t.status === "pending");
+    return taskItems.filter((t) => t.status !== "pending");
+  }, [taskItems, taskFilter]);
 
-  const loadTasks = async (preferredTaskId?: number | null) => {
+  const filteredRequestItems = useMemo(() => {
+    if (requestsFilter === "in_progress") return requestItems.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""));
+    return requestItems.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+  }, [requestItems, requestsFilter]);
+
+  const toast = (ok: boolean) => showToast({
+    message: localize(ok ? "com_approval_toast_success" : "com_approval_toast_failed"),
+    severity: ok ? NotificationSeverity.SUCCESS : NotificationSeverity.INFO,
+  });
+
+  const loadTasks = async (preferredId?: number | null) => {
     setLoadingList(true);
     try {
-      const response = await listMyApprovalTasksApi();
-      setTaskItems(response.data);
-      const nextId = preferredTaskId ?? getTaskId(response.data[0]);
+      const resp = await listMyApprovalTasksApi();
+      setTaskItems(resp.data);
+      const nextId = preferredId ?? getId(resp.data[0], "task");
       setSelectedTaskId(nextId);
-      if (nextId) {
-        setLoadingDetail(true);
-        const detail = await getMyApprovalTaskDetailApi(nextId);
-        setTaskDetail(detail);
-      } else {
-        setTaskDetail(null);
-      }
-    } finally {
-      setLoadingList(false);
-      setLoadingDetail(false);
-    }
+      if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
+      else setTaskDetail(null);
+    } finally { setLoadingList(false); setLoadingDetail(false); }
   };
 
-  const loadRequests = async (preferredInstanceId?: number | null) => {
+  const loadRequests = async (preferredId?: number | null) => {
     setLoadingList(true);
     try {
-      const response = await listMyApprovalRequestsApi();
-      setRequestItems(response.data);
-      const nextId = preferredInstanceId ?? getInstanceId(response.data[0]);
+      const resp = await listMyApprovalRequestsApi();
+      setRequestItems(resp.data);
+      const nextId = preferredId ?? getId(resp.data[0], "instance");
       setSelectedInstanceId(nextId);
-      if (nextId) {
-        setLoadingDetail(true);
-        const detail = await getApprovalInstanceDetailApi(nextId);
-        setRequestDetail(detail);
-      } else {
-        setRequestDetail(null);
-      }
-    } finally {
-      setLoadingList(false);
-      setLoadingDetail(false);
-    }
+      if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
+      else setRequestDetail(null);
+    } finally { setLoadingList(false); setLoadingDetail(false); }
   };
 
   useEffect(() => {
     if (!open) return;
-    resetTarget();
+    setActiveTab(target?.tab ?? "my_tasks");
+    setSelectedTaskId(target?.taskId ?? null);
+    setSelectedInstanceId(target?.instanceId ?? null);
   }, [open, target?.instanceId, target?.tab, target?.taskId]);
 
   useEffect(() => {
     if (!open) return;
-    if (activeTab === "my_tasks") {
-      void loadTasks(target?.taskId ?? selectedTaskId);
-      return;
-    }
-    void loadRequests(target?.instanceId ?? selectedInstanceId);
+    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? selectedTaskId);
+    else void loadRequests(target?.instanceId ?? selectedInstanceId);
   }, [open, activeTab]);
 
-  const currentDetailRows = useMemo(() => {
-    const detail = activeTab === "my_tasks"
-      ? (taskDetail?.detail_snapshot ?? taskDetail?.detail ?? taskDetail?.payload_snapshot)
-      : (requestDetail?.detail_snapshot ?? requestDetail?.payload_snapshot);
-    return renderDetailRows(detail);
-  }, [activeTab, requestDetail, taskDetail]);
-
-  const openTask = async (taskId: number) => {
-    setSelectedTaskId(taskId);
-    setLoadingDetail(true);
-    try {
-      setTaskDetail(await getMyApprovalTaskDetailApi(taskId));
-    } finally {
-      setLoadingDetail(false);
-    }
+  // Auto-select first visible item when sub-filter changes
+  const autoSelectTask = (items: ApprovalTaskItem[]) => {
+    const first = getId(items[0], "task");
+    setSelectedTaskId(first);
+    if (first) { setLoadingDetail(true); getMyApprovalTaskDetailApi(first).then(setTaskDetail).finally(() => setLoadingDetail(false)); }
+    else setTaskDetail(null);
+  };
+  const autoSelectRequest = (items: ApprovalInstanceItem[]) => {
+    const first = getId(items[0], "instance");
+    setSelectedInstanceId(first);
+    if (first) { setLoadingDetail(true); getApprovalInstanceDetailApi(first).then(setRequestDetail).finally(() => setLoadingDetail(false)); }
+    else setRequestDetail(null);
   };
 
-  const openRequest = async (instanceId: number) => {
-    setSelectedInstanceId(instanceId);
-    setLoadingDetail(true);
-    try {
-      setRequestDetail(await getApprovalInstanceDetailApi(instanceId));
-    } finally {
-      setLoadingDetail(false);
-    }
+  useEffect(() => { if (activeTab === "my_tasks") autoSelectTask(filteredTaskItems); }, [taskFilter]);
+  useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
+
+  const openTask = async (id: number) => {
+    setSelectedTaskId(id); setLoadingDetail(true);
+    try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
+  };
+  const openRequest = async (id: number) => {
+    setSelectedInstanceId(id); setLoadingDetail(true);
+    try { setRequestDetail(await getApprovalInstanceDetailApi(id)); } finally { setLoadingDetail(false); }
   };
 
   const runTaskDecision = async (action: "approve" | "reject") => {
     if (!selectedTaskId) return;
     setActionLoading(true);
-    try {
-      const detail = await decideApprovalTaskApi(selectedTaskId, { action });
-      setTaskDetail(detail);
-      await loadTasks(selectedTaskId);
-      showToast({
-        message: localize("com_approval_toast_success"),
-        severity: NotificationSeverity.SUCCESS,
-      });
-    } catch {
-      showToast({
-        message: localize("com_approval_toast_failed"),
-        severity: NotificationSeverity.INFO,
-      });
-    } finally {
-      setActionLoading(false);
-    }
+    try { await decideApprovalTaskApi(selectedTaskId, { action }); await loadTasks(selectedTaskId); toast(true); }
+    catch { toast(false); } finally { setActionLoading(false); }
   };
-
   const runWithdraw = async () => {
     if (!selectedInstanceId) return;
     setActionLoading(true);
-    try {
-      const detail = await withdrawApprovalInstanceApi(selectedInstanceId, {});
-      setRequestDetail(detail);
-      await loadRequests(selectedInstanceId);
-      showToast({
-        message: localize("com_approval_toast_success"),
-        severity: NotificationSeverity.SUCCESS,
-      });
-    } catch {
-      showToast({
-        message: localize("com_approval_toast_failed"),
-        severity: NotificationSeverity.INFO,
-      });
-    } finally {
-      setActionLoading(false);
-    }
+    try { await withdrawApprovalInstanceApi(selectedInstanceId, {}); await loadRequests(selectedInstanceId); toast(true); }
+    catch { toast(false); } finally { setActionLoading(false); }
   };
-
-  const runRevokeGrant = async () => {
-    if (!selectedInstanceId) return;
-    setActionLoading(true);
-    try {
-      await revokeMenuAccessGrantApi(selectedInstanceId, {});
-      await loadRequests(selectedInstanceId);
-      showToast({
-        message: localize("com_approval_toast_success"),
-        severity: NotificationSeverity.SUCCESS,
-      });
-    } catch {
-      showToast({
-        message: localize("com_approval_toast_failed"),
-        severity: NotificationSeverity.INFO,
-      });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const runResubmit = async () => {
     if (!selectedInstanceId) return;
     setActionLoading(true);
-    try {
-      const detail = await resubmitApprovalInstanceApi(selectedInstanceId, {});
-      setRequestDetail(detail);
-      await loadRequests(selectedInstanceId);
-      showToast({
-        message: localize("com_approval_toast_success"),
-        severity: NotificationSeverity.SUCCESS,
-      });
-    } catch {
-      showToast({
-        message: localize("com_approval_toast_failed"),
-        severity: NotificationSeverity.INFO,
-      });
-    } finally {
-      setActionLoading(false);
-    }
+    try { await resubmitApprovalInstanceApi(selectedInstanceId, {}); await loadRequests(selectedInstanceId); toast(true); }
+    catch { toast(false); } finally { setActionLoading(false); }
+  };
+  const runRevokeGrant = async () => {
+    // Approver revokes from my_tasks using the task's instance_id
+    const instanceId = taskDetail?.instance_id;
+    if (!instanceId) return;
+    setActionLoading(true);
+    try { await revokeMenuAccessGrantApi(instanceId, {}); await loadTasks(selectedTaskId); toast(true); }
+    catch { toast(false); } finally { setActionLoading(false); }
   };
 
-  const listItems = activeTab === "my_tasks" ? taskItems : requestItems;
-  const selectedId = activeTab === "my_tasks" ? selectedTaskId : selectedInstanceId;
-  const selectedTitle = activeTab === "my_tasks"
-    ? getDisplayTitle(taskDetail, localize("com_approval_empty_detail"))
-    : getDisplayTitle(requestDetail, localize("com_approval_empty_detail"));
-  const selectedStatus = activeTab === "my_tasks"
-    ? getStatusText(localize, taskDetail?.status)
-    : getStatusText(localize, requestDetail?.status);
-  const canApproveTask = activeTab === "my_tasks" && String(taskDetail?.status || "").toLowerCase() === "pending";
-  const canWithdrawRequest = activeTab === "my_requests" && String(requestDetail?.status || "").toLowerCase() === "pending";
-  const canResubmitRequest = activeTab === "my_requests" && String(requestDetail?.status || "").toLowerCase() === "rejected";
-  const canRevokeGrant =
-    activeTab === "my_requests" &&
-    String(requestDetail?.scenario_code || "").toLowerCase() === "menu_access_request" &&
-    String(requestDetail?.status || "").toLowerCase() === "approved";
+  const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
+  const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
+  const canResubmit = activeTab === "my_requests" && requestDetail?.status === "rejected";
+  // Only the approver (my_tasks) can revoke a granted menu permission
+  const canRevoke =
+    activeTab === "my_tasks" &&
+    String(taskDetail?.scenario_code ?? "").toLowerCase() === "menu_access_request" &&
+    ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase());
+
+  const dialogTitle = activeTab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests");
+  const dialogSubtitle = activeTab === "my_tasks" ? localize("com_approval_my_approval_desc") : localize("com_approval_my_requests_desc");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-2xl p-0">
         <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-white">
-          <DialogHeader className="border-b border-[#f2f3f5] px-6 py-5 text-left">
-            <DialogTitle className="text-[18px] font-semibold text-[#1d2129]">
-              {localize("com_approval_center_title")}
-            </DialogTitle>
-          </DialogHeader>
+          {/* Header */}
+          <div className="border-b border-[#f2f3f5] px-6 py-4">
+            <h2 className="text-[18px] font-semibold text-[#1d2129]">{dialogTitle}</h2>
+            <p className="mt-0.5 text-[13px] text-[#86909c]">{dialogSubtitle}</p>
+          </div>
 
-          <div className="flex items-center gap-2 border-b border-[#f2f3f5] px-6 py-3">
-            <button
-              type="button"
-              className={cn(
-                "rounded-lg px-4 py-2 text-[14px] transition-colors",
-                activeTab === "my_tasks"
-                  ? "bg-[#e8f3ff] text-[#165dff]"
-                  : "text-[#4e5969] hover:bg-[#f7f8fa]",
-              )}
-              onClick={() => setActiveTab("my_tasks")}
-            >
-              {localize("com_approval_my_tasks")}
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "rounded-lg px-4 py-2 text-[14px] transition-colors",
-                activeTab === "my_requests"
-                  ? "bg-[#e8f3ff] text-[#165dff]"
-                  : "text-[#4e5969] hover:bg-[#f7f8fa]",
-              )}
-              onClick={() => setActiveTab("my_requests")}
-            >
-              {localize("com_approval_my_requests")}
-            </button>
+          {/* Top tabs */}
+          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-6 py-2">
+            <div className="flex gap-1">
+              {(["my_tasks", "my_requests"] as ApprovalCenterTab[]).map((tab) => (
+                <button key={tab} type="button"
+                  className={cn("rounded-lg px-4 py-2 text-[14px] transition-colors",
+                    activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
+                  onClick={() => setActiveTab(tab)}>
+                  {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4]">
+              <span>⌕</span>
+              <span>{localize("com_approval_search_placeholder")}</span>
+            </div>
           </div>
 
           <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)]">
-            <div className="min-h-0 border-r border-[#f2f3f5] bg-[#fafbfc]">
-              {loadingList ? (
-                <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">
-                  {localize("com_approval_loading")}
-                </div>
-              ) : listItems.length === 0 ? (
-                <div className="flex h-full items-center justify-center px-6 text-center text-[14px] text-[#86909c]">
-                  {localize("com_approval_empty_list")}
-                </div>
-              ) : (
-                <div className="h-full overflow-y-auto p-3">
-                  {listItems.map((item) => {
-                    const itemId = activeTab === "my_tasks" ? getTaskId(item as ApprovalTaskItem) : getInstanceId(item as ApprovalInstanceItem);
-                    const active = itemId === selectedId;
-                    return (
-                      <button
-                        key={`${activeTab}-${itemId}`}
-                        type="button"
-                        className={cn(
-                          "mb-2 flex w-full flex-col rounded-xl border px-4 py-3 text-left transition-colors",
-                          active
-                            ? "border-[#165dff] bg-white shadow-[0_4px_20px_rgba(22,93,255,0.08)]"
-                            : "border-transparent bg-white hover:border-[#d9e3f0]",
-                        )}
-                        onClick={() => {
-                          if (!itemId) return;
-                          if (activeTab === "my_tasks") {
-                            void openTask(itemId);
-                            return;
-                          }
-                          void openRequest(itemId);
-                        }}
-                      >
-                        <span className="text-[14px] font-medium text-[#1d2129]">
-                          {getDisplayTitle(item, localize("com_approval_empty_detail"))}
-                        </span>
-                        <span className="mt-2 text-[12px] text-[#86909c]">
-                          {getStatusText(localize, item.status)}
-                        </span>
+            {/* Left list */}
+            <div className="flex min-h-0 flex-col border-r border-[#f2f3f5] bg-[#fafbfc]">
+              <div className="flex gap-1 px-3 pt-3 pb-1">
+                {activeTab === "my_tasks"
+                  ? (["pending_me", "processed"] as TaskFilter[]).map((f) => (
+                      <button key={f} type="button"
+                        className={cn("rounded-md px-3 py-1 text-[13px] transition-colors",
+                          taskFilter === f ? "bg-[#165dff] text-white" : "text-[#4e5969] hover:bg-[#edf0f5]")}
+                        onClick={() => setTaskFilter(f)}>
+                        {f === "pending_me" ? localize("com_approval_task_filter_pending") : localize("com_approval_task_filter_processed")}
                       </button>
-                    );
-                  })}
+                    ))
+                  : (["in_progress", "completed"] as RequestsFilter[]).map((f) => (
+                      <button key={f} type="button"
+                        className={cn("rounded-md px-3 py-1 text-[13px] transition-colors",
+                          requestsFilter === f ? "bg-[#165dff] text-white" : "text-[#4e5969] hover:bg-[#edf0f5]")}
+                        onClick={() => setRequestsFilter(f)}>
+                        {f === "in_progress" ? localize("com_approval_status_pending") : localize("com_approval_tab_completed")}
+                      </button>
+                    ))}
+              </div>
+
+              {loadingList ? (
+                <div className="flex flex-1 items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_loading")}</div>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+                  {(activeTab === "my_tasks" ? filteredTaskItems : filteredRequestItems).length === 0 ? (
+                    <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_empty_list")}</div>
+                  ) : activeTab === "my_tasks"
+                    ? filteredTaskItems.map((item) => {
+                        const id = getId(item, "task");
+                        return (
+                          <button key={`t-${id}`} type="button"
+                            className={cn("mt-2 w-full rounded-xl border px-4 py-3 text-left transition-colors",
+                              selectedTaskId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
+                            onClick={() => id && openTask(id)}>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
+                            </div>
+                            {item.current_node_name && (
+                              <div className="mt-1.5 text-[12px] text-[#86909c]">
+                                {localize("com_approval_current_node_label")}：{item.current_node_name}
+                              </div>
+                            )}
+                            <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
+                              <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
+                              <span>{formatTime(item.create_time)}</span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    : filteredRequestItems.map((item) => {
+                        const id = getId(item, "instance");
+                        return (
+                          <button key={`r-${id}`} type="button"
+                            className={cn("mt-2 w-full rounded-xl border px-4 py-3 text-left transition-colors",
+                              selectedInstanceId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
+                            onClick={() => id && openRequest(id)}>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <StatusBadge status={item.status} localize={localize} />
+                            </div>
+                            {(item.current_node_name || item.current_approver_names) && (
+                              <div className="mt-1.5 flex flex-wrap gap-x-3 text-[12px] text-[#86909c]">
+                                {item.current_node_name && <span>{localize("com_approval_current_node_label")}：{item.current_node_name}</span>}
+                                {item.current_approver_names && <span>{localize("com_approval_approver_label")}：{item.current_approver_names}</span>}
+                              </div>
+                            )}
+                            <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
+                              <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
+                              <span>{formatTime(item.create_time)}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
                 </div>
               )}
             </div>
 
-            <div className="min-h-0 overflow-y-auto px-6 py-5">
-              {loadingDetail ? (
-                <div className="flex h-full min-h-[280px] items-center justify-center text-[14px] text-[#86909c]">
-                  {localize("com_approval_loading")}
-                </div>
-              ) : !selectedId ? (
-                <div className="flex h-full min-h-[280px] items-center justify-center text-[14px] text-[#86909c]">
-                  {localize("com_approval_empty_detail")}
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  <div>
-                    <h3 className="text-[20px] font-semibold text-[#1d2129]">{selectedTitle}</h3>
-                    <p className="mt-2 text-[14px] text-[#4e5969]">
-                      {localize("com_approval_status_label")} {selectedStatus}
-                    </p>
-                  </div>
+            {/* Right detail */}
+            <div className="flex min-h-0 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                {loadingDetail ? (
+                  <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_loading")}</div>
+                ) : activeTab === "my_tasks" && taskDetail ? (
+                  <TaskDetailPanel detail={taskDetail} localize={localize} />
+                ) : activeTab === "my_requests" && requestDetail ? (
+                  <RequestDetailPanel detail={requestDetail} localize={localize} />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_empty_detail")}</div>
+                )}
+              </div>
 
-                  {currentDetailRows.length > 0 && (
-                    <div className="rounded-2xl border border-[#f2f3f5] bg-[#fafbfc] p-4">
-                      <div className="mb-3 text-[14px] font-medium text-[#1d2129]">
-                        {localize("com_approval_detail_section")}
-                      </div>
-                      <div className="space-y-2 text-[14px] text-[#4e5969]">
-                        {currentDetailRows.map(([key, value]) => (
-                          <div key={key} className="flex gap-3">
-                            <span className="w-[140px] shrink-0 text-[#86909c]">{localizeFieldKey(key, localize)}</span>
-                            <span className="break-all">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+              {/* Fixed footer buttons */}
+              {(isTaskPending || isInstancePending || canResubmit || canRevoke) && (
+                <div className="flex items-center justify-end gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                  <button type="button"
+                    className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
+                    onClick={() => onOpenChange(false)}>
+                    {localize("com_ui_close")}
+                  </button>
+                  {isTaskPending && (
+                    <>
+                      <button type="button" disabled={actionLoading}
+                        className="rounded-lg border border-[#f53f3f] px-4 py-2 text-[14px] text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60"
+                        onClick={() => runTaskDecision("reject")}>
+                        {localize("com_approval_action_reject")}
+                      </button>
+                      <button type="button" disabled={actionLoading}
+                        className="rounded-lg bg-[#165dff] px-5 py-2 text-[14px] text-white hover:bg-[#1350e8] disabled:opacity-60"
+                        onClick={() => runTaskDecision("approve")}>
+                        {localize("com_approval_action_approve")}
+                      </button>
+                    </>
                   )}
-
-                  {requestDetail?.action_logs && requestDetail.action_logs.length > 0 && (
-                    <div className="rounded-2xl border border-[#f2f3f5] bg-white p-4">
-                      <div className="mb-3 text-[14px] font-medium text-[#1d2129]">
-                        {localize("com_approval_progress_section")}
-                      </div>
-                      <div className="space-y-3">
-                        {requestDetail.action_logs.map((log, index) => (
-                          <div key={`${log.id ?? index}`} className="rounded-xl bg-[#fafbfc] px-4 py-3">
-                            <div className="text-[14px] text-[#1d2129]">
-                              {log.operator_user_name || "--"} · {
-                                log.action
-                                  ? (localize(`com_approval_action_${log.action}` as any, { defaultValue: log.action }) as string)
-                                  : "--"
-                              }
-                            </div>
-                            <div className="mt-1 text-[12px] text-[#86909c]">{log.create_time || "--"}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {isInstancePending && (
+                    <button type="button" disabled={actionLoading}
+                      className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60"
+                      onClick={runWithdraw}>
+                      {localize("com_approval_action_withdraw")}
+                    </button>
                   )}
-
-                  <div className="flex flex-wrap gap-3">
-                    {canApproveTask && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          className="rounded-lg border border-[#00b42a] px-4 py-2 text-[14px] text-[#00b42a] hover:bg-[#f0fff4] disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={() => void runTaskDecision("approve")}
-                        >
-                          {localize("com_approval_action_approve")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          className="rounded-lg border border-[#f53f3f] px-4 py-2 text-[14px] text-[#f53f3f] hover:bg-[#fff2f0] disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={() => void runTaskDecision("reject")}
-                        >
-                          {localize("com_approval_action_reject")}
-                        </button>
-                      </>
-                    )}
-                    {canWithdrawRequest && (
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff] disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={() => void runWithdraw()}
-                      >
-                        {localize("com_approval_action_withdraw")}
-                      </button>
-                    )}
-                    {canResubmitRequest && (
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        className="rounded-lg border border-[#722ed1] px-4 py-2 text-[14px] text-[#722ed1] hover:bg-[#f9f0ff] disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={() => void runResubmit()}
-                      >
-                        {localize("com_approval_action_resubmit")}
-                      </button>
-                    )}
-                    {canRevokeGrant && (
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        className="rounded-lg border border-[#ff7d00] px-4 py-2 text-[14px] text-[#ff7d00] hover:bg-[#fff7e8] disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={() => void runRevokeGrant()}
-                      >
-                        {localize("com_approval_action_revoke_grant")}
-                      </button>
-                    )}
-                  </div>
+                  {canResubmit && (
+                    <button type="button" disabled={actionLoading}
+                      className="rounded-lg bg-[#722ed1] px-4 py-2 text-[14px] text-white hover:bg-[#6327b3] disabled:opacity-60"
+                      onClick={runResubmit}>
+                      {localize("com_approval_action_resubmit")}
+                    </button>
+                  )}
+                  {canRevoke && (
+                    <button type="button" disabled={actionLoading}
+                      className="rounded-lg border border-[#ff7d00] px-4 py-2 text-[14px] text-[#ff7d00] hover:bg-[#fff7e8] disabled:opacity-60"
+                      onClick={runRevokeGrant}>
+                      {localize("com_approval_action_revoke_grant")}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -493,5 +453,153 @@ export function ApprovalCenterDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DetailHeader({ title, status, instanceStatus, serialNo, scenarioName, createTime, localize }: {
+  title?: string; status?: string; instanceStatus?: string; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 text-[#86909c]">📄</span>
+        <h3 className="flex-1 text-[18px] font-semibold text-[#1d2129] leading-snug">{title || "--"}</h3>
+        <StatusBadge status={status} instanceStatus={instanceStatus} localize={localize} />
+      </div>
+      <p className="mt-1.5 text-[13px] text-[#86909c] pl-6">
+        {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
+      </p>
+    </div>
+  );
+}
+
+function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize> }) {
+  const instanceId = detail.instance_id;
+  const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
+
+  const basicRows: [string, string][] = [
+    [localize("com_approval_field_serial_no"),      serialNo],
+    [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
+    [localize("com_approval_field_business_target"),detail.business_name || "--"],
+    [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
+    [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
+    [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
+    [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.instance_status ?? detail.status}` as any, { defaultValue: detail.instance_status || detail.status || "--" }) as string],
+  ];
+
+  const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  const showContent = detailEntries.length > 0;
+
+  return (
+    <div className="space-y-5">
+      <DetailHeader title={detail.business_name} status={detail.status} instanceStatus={detail.instance_status}
+        serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
+
+      <div>
+        <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
+        <InfoGrid rows={basicRows} />
+      </div>
+
+      {showContent && (
+        <div>
+          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_business_content")}</div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
+            {detailEntries.map(([k, v]) => (
+              <div key={k} className="bg-white px-4 py-3">
+                <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
+                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detail.reason && (
+        <div>
+          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_apply_reason")}</div>
+          <div className="rounded-xl bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
+        </div>
+      )}
+
+      {(detail.action_logs && detail.action_logs.length > 0) || detail.current_node_name ? (
+        <div>
+          <div className="mb-3 flex items-center gap-1.5 text-[14px] font-medium text-[#1d2129]">
+            <span className="text-[16px]">⊙</span>
+            {localize("com_approval_progress_section")}
+          </div>
+          {(detail.action_logs || []).map((log, i) => (
+            <TimelineStep key={log.id ?? i} action={log.action} operatorName={log.operator_user_name}
+              createTime={log.create_time} detail={log.detail} localize={localize} />
+          ))}
+          {detail.status === "pending" && detail.current_node_name && (
+            <PendingTimelineStep nodeName={detail.current_node_name} />
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize> }) {
+  const id = detail.instance_id ?? detail.id;
+  const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
+
+  const basicRows: [string, string][] = [
+    [localize("com_approval_field_serial_no"),      serialNo],
+    [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
+    [localize("com_approval_field_business_target"),detail.business_name || "--"],
+    [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
+    [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
+    [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
+    [localize("com_approval_field_current_approver"),detail.current_approver_names || "--"],
+    [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
+  ];
+
+  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+
+  return (
+    <div className="space-y-5">
+      <DetailHeader title={detail.business_name} status={detail.status} serialNo={serialNo}
+        scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
+
+      <div>
+        <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
+        <InfoGrid rows={basicRows} />
+      </div>
+
+      {detailEntries.length > 0 && (
+        <div>
+          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_business_content")}</div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
+            {detailEntries.map(([k, v]) => (
+              <div key={k} className="bg-white px-4 py-3">
+                <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
+                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detail.reason && (
+        <div>
+          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_apply_reason")}</div>
+          <div className="rounded-xl bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
+        </div>
+      )}
+
+      {detail.action_logs && detail.action_logs.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center gap-1.5 text-[14px] font-medium text-[#1d2129]">
+            <span className="text-[16px]">⊙</span>
+            {localize("com_approval_progress_section")}
+          </div>
+          {detail.action_logs.map((log, i) => (
+            <TimelineStep key={log.id ?? i} action={log.action} operatorName={log.operator_user_name}
+              createTime={log.create_time} detail={log.detail} localize={localize} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

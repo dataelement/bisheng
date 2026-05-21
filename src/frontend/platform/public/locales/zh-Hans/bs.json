@@ -1349,7 +1349,12 @@
       "channel": "频道",
       "knowledge_space": "知识空间",
       "tenant": "租户",
-      "llm_server": "模型供应方"
+      "llm_server": "模型供应方",
+      "approval_instance": "审批实例",
+      "approval_task": "审批任务",
+      "approval_exception": "审批异常",
+      "approval_scenario": "审批场景",
+      "approval_flow": "审批流程"
     },
     "appUsage": "应用使用",
     "systemOperations": "系统操作",
