@@ -13,7 +13,6 @@ import {
     SheetHeader,
     SheetTitle
 } from "~/components/ui/Sheet";
-import { Switch } from "~/components/ui/Switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
@@ -583,28 +582,45 @@ export function CreateKnowledgeSpaceDrawer({
                             )}
 
                             {autoTagFeatureVisible && (
-                                <div className="space-y-3 rounded-[6px] border border-[#E5E6EB] bg-[#FAFBFC] p-4">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="min-w-0">
-                                            <Label className="text-[14px] font-medium text-[#1D2129]">
-                                                {localize("com_knowledge.auto_tag_generation")}
-                                            </Label>
-                                            <p className="mt-1 text-[14px] font-normal text-[#999999]">
-                                                {localize("com_knowledge.auto_tag_generation_desc")}
-                                            </p>
-                                        </div>
-                                        <Switch
-                                            checked={autoTagEnabled}
-                                            onCheckedChange={(checked) => {
-                                                setAutoTagEnabled(checked);
-                                                if (!checked) return;
-                                                if (!autoTagLibraryId && tagLibraries.length === 1) {
-                                                    setAutoTagLibraryId(tagLibraries[0].id);
-                                                }
-                                            }}
-                                            className="shrink-0 data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
-                                        />
-                                    </div>
+                                <div className="space-y-3">
+                                    <Label className="text-[14px] text-[#1D2129]">
+                                        <span className="text-[#F53F3F]">*</span>
+                                        {localize("com_knowledge.auto_tag_generation")}
+                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
+                                            {localize("com_knowledge.auto_tag_generation_desc")}
+                                        </span>
+                                    </Label>
+                                    <RadioGroup.Root
+                                        value={autoTagEnabled ? "yes" : "no"}
+                                        onValueChange={(v) => {
+                                            const checked = v === "yes";
+                                            setAutoTagEnabled(checked);
+                                            if (!checked) return;
+                                            if (!autoTagLibraryId && tagLibraries.length === 1) {
+                                                setAutoTagLibraryId(tagLibraries[0].id);
+                                            }
+                                        }}
+                                        className="flex gap-6"
+                                    >
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <RadioGroup.Item
+                                                value="yes"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                            >
+                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                            </RadioGroup.Item>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <RadioGroup.Item
+                                                value="no"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                            >
+                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                            </RadioGroup.Item>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
+                                        </label>
+                                    </RadioGroup.Root>
 
                                     {autoTagEnabled && (
                                         <Tabs
@@ -627,7 +643,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 </TabsTrigger>
                                             </TabsList>
 
-                                            <TabsContent value="library" className="mt-0 space-y-2 rounded-none p-0">
+                                            <TabsContent value="library" className="space-y-2">
                                                 <Label className="text-[14px] font-medium text-[#1D2129]">
                                                     <span className="mr-1 text-[#F53F3F]">*</span>
                                                     {localize("com_knowledge.auto_tag_library")}
@@ -702,7 +718,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 )}
                                             </TabsContent>
 
-                                            <TabsContent value="custom" className="mt-0 space-y-2 rounded-none p-0">
+                                            <TabsContent value="custom" className="space-y-2">
                                                 <div className="flex items-center justify-between">
                                                     <Label className="text-[14px] font-medium text-[#1D2129]">
                                                         <span className="mr-1 text-[#F53F3F]">*</span>
