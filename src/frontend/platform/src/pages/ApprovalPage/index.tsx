@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
+import SelectSearch from "@/components/bs-ui/select/select";
 import { getRolesApi } from "@/controllers/API/user";
 import { Switch } from "@/components/bs-ui/switch";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -276,6 +277,7 @@ function RouteDialog({
   const [condField, setCondField] = useState(initial.match_config?.field ?? "");
   const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
   const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
+  const [roleSearch, setRoleSearch] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -284,6 +286,7 @@ function RouteDialog({
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
       setCondField(initial.match_config?.field ?? "");
       setCondValue(initial.match_config?.value ?? "");
+      setRoleSearch("");
       // Load system roles for applicant_role condition values
       getRolesApi("").then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.data ?? []);
@@ -299,10 +302,14 @@ function RouteDialog({
 
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
   // For applicant_role: merge static fixed labels with dynamically loaded system roles
-  const effectiveValues = condField === 'applicant_role'
+  const allRoleValues = condField === 'applicant_role'
     ? [...FIXED_ROLE_VALUES, ...systemRoles]
     : (fieldMeta?.values ?? []);
-  const hasEnumValues = effectiveValues.length > 0;
+  // Apply search filter for applicant_role
+  const effectiveValues = condField === 'applicant_role' && roleSearch
+    ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
+    : allRoleValues;
+  const hasEnumValues = allRoleValues.length > 0;
 
   const handleFieldChange = (f: string) => {
     setCondField(f);
@@ -346,18 +353,33 @@ function RouteDialog({
                 <>
                   <span className="text-xs text-text-secondary">=</span>
                   {hasEnumValues ? (
-                    <select
-                      value={condValue}
-                      onChange={(e) => setCondValue(e.target.value)}
-                      className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                    >
-                      <option value="">请选择</option>
-                      {effectiveValues.map((v) => (
-                        <option key={v.value} value={v.value}>
-                          {v.label}
-                        </option>
-                      ))}
-                    </select>
+                    condField === 'applicant_role' ? (
+                      // Searchable dropdown for applicant_role (may have many system roles)
+                      <div className="flex-1">
+                        <SelectSearch
+                          value={condValue}
+                          options={effectiveValues}
+                          selectPlaceholder="请选择"
+                          inputPlaceholder="搜索身份 / 角色名…"
+                          onValueChange={(v) => setCondValue(v)}
+                          onChange={(e) => setRoleSearch(e.target.value)}
+                          onOpenChange={() => setRoleSearch("")}
+                        />
+                      </div>
+                    ) : (
+                      <select
+                        value={condValue}
+                        onChange={(e) => setCondValue(e.target.value)}
+                        className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                      >
+                        <option value="">请选择</option>
+                        {effectiveValues.map((v) => (
+                          <option key={v.value} value={v.value}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </select>
+                    )
                   ) : (
                     <input
                       value={condValue}
