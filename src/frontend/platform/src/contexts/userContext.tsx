@@ -197,7 +197,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
             const pathName = location.pathname.replace(BASE_URL, '');
 
-            // Jump to the route based on permissions 
+            // Jump to the route based on permissions
             if (pathName === '/admin') {
                 const MENU_ROUTE_MAP = [
                     { key: 'board', path: '/dashboard' },
@@ -206,12 +206,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     { key: 'model', path: '/model/management' },
                     { key: 'evaluation', path: '/evaluation' },
                     { key: 'mark_task', path: '/label' }, // 与角色菜单 third_id 一致
+                    // workstation: 工作台配置页，始终有路由权限
+                    { key: 'workstation', path: '/build/client' },
                 ];
                 const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
                 if (target) {
                     history.pushState(null, '', BASE_URL + target.path);
                 } else {
-                    history.pushState(null, '', BASE_URL + '/label');
+                    // menu-pending is always in the router (no permission guard),
+                    // so it's a safe fallback even when menu_approval_mode=false.
+                    history.pushState(null, '', BASE_URL + '/menu-pending');
                 }
             } else {
                 // 403
