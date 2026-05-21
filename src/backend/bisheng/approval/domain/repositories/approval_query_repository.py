@@ -2,11 +2,27 @@ from __future__ import annotations
 
 from sqlmodel import select
 
-from bisheng.approval.domain.models.approval_instance import ApprovalException, ApprovalInstance, ApprovalTask
+from bisheng.approval.domain.models.approval_instance import (
+    ApprovalException,
+    ApprovalInstance,
+    ApprovalTask,
+    ApprovalTaskStatus,
+)
 from bisheng.core.database import get_async_db_session
 
 
 class ApprovalQueryRepository:
+    @classmethod
+    async def list_pending_tasks_for_instances(cls, instance_ids: list[int]) -> list[ApprovalTask]:
+        if not instance_ids:
+            return []
+        statement = select(ApprovalTask).where(
+            ApprovalTask.instance_id.in_(instance_ids),
+            ApprovalTask.status == ApprovalTaskStatus.PENDING,
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
     @classmethod
     async def list_instances_by_applicant(cls, tenant_id: int, applicant_user_id: int) -> list[ApprovalInstance]:
         statement = select(ApprovalInstance).where(

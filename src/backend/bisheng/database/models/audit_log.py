@@ -366,6 +366,7 @@ class AuditLogDao(AuditLogBase):
         metadata: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
         operator_name: Optional[str] = None,
+        object_name: Optional[str] = None,
     ) -> AuditLog:
         """Structured audit_log insert (v2.5.1 schema).
 
@@ -412,6 +413,7 @@ class AuditLogDao(AuditLogBase):
             reason=reason,
             audit_metadata=metadata,
             ip_address=ip_address,
+            object_name=object_name,
         )
         with bypass_tenant_filter():
             async with get_async_db_session() as session:

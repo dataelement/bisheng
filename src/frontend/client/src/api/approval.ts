@@ -14,9 +14,14 @@ export interface ApprovalTaskItem {
   id?: number;
   instance_id?: number;
   scenario_code?: string;
+  scenario_name?: string;
   business_name?: string;
   status?: string;
+  instance_status?: string;
+  current_node_name?: string | null;
   applicant_user_name?: string;
+  applicant_department_id?: number | null;
+  applicant_department_name?: string | null;
   create_time?: string;
   update_time?: string;
 }
@@ -25,18 +30,31 @@ export interface ApprovalInstanceItem {
   instance_id?: number;
   id?: number;
   scenario_code?: string;
+  scenario_name?: string;
   business_name?: string;
   status?: string;
   applicant_user_name?: string;
+  applicant_department_id?: number | null;
+  applicant_department_name?: string | null;
+  current_node_name?: string | null;
+  current_approver_names?: string | null;
   create_time?: string;
   update_time?: string;
 }
 
 export interface ApprovalTaskDetail extends ApprovalTaskItem {
   comment?: string | null;
+  reason?: string | null;
   detail_snapshot?: Record<string, any>;
   payload_snapshot?: Record<string, any>;
   detail?: Record<string, any>;
+  action_logs?: Array<{
+    id?: number;
+    action?: string;
+    operator_user_name?: string;
+    create_time?: string;
+    detail?: Record<string, any>;
+  }>;
 }
 
 export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
