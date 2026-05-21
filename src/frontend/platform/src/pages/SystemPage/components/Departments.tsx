@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Loader2 } from "lucide-react"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentTreeNode } from "@/types/api/department"
@@ -21,6 +22,9 @@ export default function Departments() {
   const isSuperAdmin = user?.role === "admin"
   const showTrafficControlTab = isSuperAdmin && appConfig.isPro
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
+  // Start in loading so the first paint shows a spinner — /departments/tree
+  // can take many seconds at scale (tens of thousands of departments).
+  const [loadingTree, setLoadingTree] = useState(true)
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -44,19 +48,24 @@ export default function Departments() {
   }, [])
 
   const loadTree = useCallback((removedDeptId?: string) => {
-    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
-      if (res) {
-        setTree(res)
-        if (removedDeptId && selectedDeptId === removedDeptId) {
-          selectFallbackDepartment(res)
-          return
+    setLoadingTree(true)
+    captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
+      .then((res) => {
+        if (res) {
+          setTree(res)
+          if (removedDeptId && selectedDeptId === removedDeptId) {
+            selectFallbackDepartment(res)
+            return
+          }
+          if (!selectedDeptId && res.length > 0) {
+            setSelectedDeptId(res[0].dept_id)
+            setSelectedDept(res[0])
+          }
         }
-        if (!selectedDeptId && res.length > 0) {
-          setSelectedDeptId(res[0].dept_id)
-          setSelectedDept(res[0])
-        }
-      }
-    })
+      })
+      .finally(() => {
+        setLoadingTree(false)
+      })
   }, [selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
@@ -182,14 +191,20 @@ export default function Departments() {
         className="flex min-w-[240px] flex-col border-r pr-4 pt-2"
         style={{ width: leftPaneWidth }}
       >
-        <DepartmentTree
-          data={tree}
-          selectedDeptId={selectedDeptId}
-          onSelect={handleSelect}
-          onCreateChild={handleCreateClick}
-          scrollRequest={treeScrollRequest}
-          onScrollRequestHandled={handleTreeScrollHandled}
-        />
+        {loadingTree ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <DepartmentTree
+            data={tree}
+            selectedDeptId={selectedDeptId}
+            onSelect={handleSelect}
+            onCreateChild={handleCreateClick}
+            scrollRequest={treeScrollRequest}
+            onScrollRequestHandled={handleTreeScrollHandled}
+          />
+        )}
         <button
           className="mt-4 w-full rounded-md border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-primary hover:text-primary"
           onClick={() => handleCreateClick()}

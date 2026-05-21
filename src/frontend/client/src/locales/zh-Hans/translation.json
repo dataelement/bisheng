@@ -1402,7 +1402,7 @@
     "auto_tag_generation_desc": "上传文件解析成功后，系统会基于绑定标签库静默生成文件标签。",
     "auto_tag_library": "标签库",
     "auto_tag_library_required": "开启自动标签生成时必须绑定一个非空标签库",
-    "auto_tag_mode_library": "选择标签库",
+    "auto_tag_mode_library": "内置标签库",
     "auto_tag_mode_custom": "自定义标签",
     "auto_tag_library_preview": "标签预览",
     "auto_tag_library_preview_empty": "标签库暂无标签",

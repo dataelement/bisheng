@@ -9,7 +9,7 @@ import { Button } from "@/components/bs-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import { cn } from "@/utils"
 import { DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight } from "lucide-react"
+import { Building2, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
 import type { MouseEvent, ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -42,6 +42,12 @@ export interface TreeDepartmentSelectProps {
    * @default true
    */
   modal?: boolean
+  /**
+   * Set true while the parent is still fetching department data. The popover
+   * then shows a loading row instead of the "no department" empty hint —
+   * relevant at large scale where /api/v1/departments/tree can take seconds.
+   */
+  loading?: boolean
 }
 
 /** 在树中按主键 id 查找节点 */
@@ -122,6 +128,7 @@ export function TreeDepartmentSelect({
   searchPlaceholder,
   showMemberCount = false,
   modal = true,
+  loading = false,
 }: TreeDepartmentSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -322,7 +329,11 @@ export function TreeDepartmentSelect({
               {noneText}
             </button>
           )}
-          {nodes.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : nodes.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
               {emptyText ?? t("system.treeDepartmentSelectEmpty")}
             </p>
