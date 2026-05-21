@@ -1879,5 +1879,7 @@
     "toast_success": "承認操作を送信しました",
     "toast_failed": "承認操作に失敗しました。後でもう一度お試しください"
   },
-  "com_menu_unavailable_no_permission": "このメニューの権限がありません"
+  "com_menu_unavailable_no_permission": "このメニューの権限がありません",
+  "com_approval_my_tasks": "自分のタスク",
+  "com_approval_my_requests": "自分の申請"
 }

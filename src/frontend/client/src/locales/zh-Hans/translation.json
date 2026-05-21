@@ -1885,5 +1885,7 @@
     "toast_success": "审批操作已提交",
     "toast_failed": "审批操作失败，请稍后重试"
   },
-  "com_menu_unavailable_no_permission": "当前菜单暂无权限"
+  "com_menu_unavailable_no_permission": "当前菜单暂无权限",
+  "com_approval_my_tasks": "我的待办",
+  "com_approval_my_requests": "我的申请"
 }

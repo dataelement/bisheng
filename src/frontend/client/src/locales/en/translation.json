@@ -1956,5 +1956,7 @@
     "toast_success": "Approval action submitted",
     "toast_failed": "Approval action failed. Please try again later."
   },
-  "com_menu_unavailable_no_permission": "No permission for this menu"
+  "com_menu_unavailable_no_permission": "No permission for this menu",
+  "com_approval_my_tasks": "My Tasks",
+  "com_approval_my_requests": "My Requests"
 }
