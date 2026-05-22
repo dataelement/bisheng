@@ -344,7 +344,18 @@ export function TreeDepartmentSelect({
                 className="mb-1 shrink-0"
                 onChange={(e) => setKeyword(e.target.value)}
               />
-              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div
+                className="min-h-0 flex-1 overflow-y-auto pr-1"
+                // Mirror Radix Select's viewport trick: when this popover is
+                // nested inside a Radix Dialog, react-remove-scroll captures
+                // wheel events on the document and preventDefault()s native
+                // scrolling for anything outside the Dialog subtree. The
+                // bubble-phase handler still fires, so we drive scrollTop
+                // ourselves to keep mouse-wheel working.
+                onWheel={(e) => {
+                  e.currentTarget.scrollTop += e.deltaY
+                }}
+              >
                 {nodes.map((node) => (
                   <TreeNode key={node.id} node={node} depth={0} />
                 ))}

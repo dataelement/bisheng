@@ -218,6 +218,14 @@ class ApprovalCenterService:
         dept_ids = [r.applicant_department_id for r in rows if r.applicant_department_id]
         approver_names_map, dept_name_map = await cls._enrich_with_approver_and_dept(instance_ids, dept_ids)
 
+        # Batch-check which menu_access instances have had their grant revoked
+        from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
+        menu_executed_ids = [
+            r.id for r in rows
+            if r.scenario_code == 'menu_access_request' and r.status == 'executed'
+        ]
+        revoked_instance_ids = await UserMenuAccessRepository.get_revoked_instance_ids(menu_executed_ids)
+
         data = [
             {
                 'instance_id': row.id,
@@ -225,6 +233,7 @@ class ApprovalCenterService:
                 'scenario_name': row.scenario_name,
                 'business_name': row.business_name,
                 'status': row.status,
+                'grant_revoked': row.id in revoked_instance_ids,
                 'applicant_user_name': row.applicant_user_name,
                 'applicant_department_id': row.applicant_department_id,
                 'applicant_department_name': dept_name_map.get(row.applicant_department_id) if row.applicant_department_id else None,
@@ -258,14 +267,35 @@ class ApprovalCenterService:
             if depts:
                 dept_name = depts[0].name
 
-        pending_task_uids = [t.approver_user_id for t in tasks if t.status == 'pending']
+        all_task_uids = list({t.approver_user_id for t in tasks})
+        task_user_name_map: dict[int, str] = {}
         current_approver_names: str | None = None
-        if pending_task_uids:
+        if all_task_uids:
             from bisheng.user.domain.models.user import UserDao
-            users = await UserDao.aget_user_by_ids(pending_task_uids)
-            names = [u.user_name for u in (users or [])]
-            if names:
-                current_approver_names = '、'.join(names)
+            task_users = await UserDao.aget_user_by_ids(all_task_uids)
+            task_user_name_map = {u.user_id: u.user_name for u in (task_users or [])}
+            pending_names = [task_user_name_map[t.approver_user_id]
+                             for t in tasks if t.status == 'pending' and t.approver_user_id in task_user_name_map]
+            if pending_names:
+                current_approver_names = '、'.join(pending_names)
+
+        # Fetch full flow node definitions so the frontend can show all nodes,
+        # not just tasks that have already been created.
+        flow_nodes: list = []
+        if instance.flow_version_id:
+            from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            flow_nodes = [
+                {
+                    'node_code': nd.node_code,
+                    'node_name': nd.node_name,
+                    'node_order': nd.node_order,
+                    'node_mode': nd.node_mode,
+                }
+                for nd in node_defs
+            ]
 
         return {
             'instance_id': instance.id,
@@ -287,13 +317,17 @@ class ApprovalCenterService:
                 {
                     'task_id': task.id,
                     'approver_user_id': task.approver_user_id,
+                    'approver_user_name': task_user_name_map.get(task.approver_user_id),
                     'node_name': task.node_name,
+                    'node_order': task.node_order,
+                    'node_mode': task.node_mode,
                     'status': task.status,
                     'comment': task.comment,
                     'update_time': task.update_time,
                 }
                 for task in tasks
             ],
+            'flow_nodes': flow_nodes,
             'action_logs': [
                 {
                     'id': log.id,

@@ -22,6 +22,13 @@ export interface ApprovalTaskItem {
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
+  // task-level fields (when inside ApprovalInstanceDetail.tasks)
+  approver_user_id?: number;
+  approver_user_name?: string | null;
+  node_name?: string | null;
+  node_order?: number;
+  node_mode?: string;
+  comment?: string | null;
   create_time?: string;
   update_time?: string;
 }
@@ -33,6 +40,7 @@ export interface ApprovalInstanceItem {
   scenario_name?: string;
   business_name?: string;
   status?: string;
+  grant_revoked?: boolean;
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
@@ -57,6 +65,13 @@ export interface ApprovalTaskDetail extends ApprovalTaskItem {
   }>;
 }
 
+export interface ApprovalFlowNode {
+  node_code?: string;
+  node_name?: string;
+  node_order?: number;
+  node_mode?: string;
+}
+
 export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   reason?: string | null;
   granted_keys?: string[];
@@ -64,6 +79,7 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   payload_snapshot?: Record<string, any>;
   detail_snapshot?: Record<string, any>;
   tasks?: ApprovalTaskItem[];
+  flow_nodes?: ApprovalFlowNode[];
   action_logs?: Array<{
     id?: number;
     action?: string;
@@ -182,6 +198,13 @@ export async function resubmitApprovalInstanceApi(
   const response = await request.post<ApiResponse<ApprovalInstanceDetail>>(
     `/api/v1/approval/instances/${instanceId}/resubmit`,
     data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function checkMenuAccessPendingApi(menuKey: string): Promise<{ has_pending: boolean; instance_id: number | null; status: string | null }> {
+  const response = await request.get<ApiResponse<{ has_pending: boolean; instance_id: number | null; status: string | null }>>(
+    `/api/v1/approval/menu-access/pending-check?menu_key=${encodeURIComponent(menuKey)}`,
   );
   return unwrapPayload(response);
 }

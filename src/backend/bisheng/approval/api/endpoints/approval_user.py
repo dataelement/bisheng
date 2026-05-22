@@ -102,6 +102,26 @@ async def resubmit_instance(
     return resp_200(data)
 
 
+@router.get('/menu-access/pending-check')
+async def check_menu_access_pending(
+    menu_key: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+    business_key = f'menu:{menu_key}:user:{login_user.user_id}'
+    duplicate = await ApprovalInstanceRepository.find_duplicate_active_instance(
+        tenant_id=login_user.tenant_id,
+        scenario_code='menu_access_request',
+        business_key=business_key,
+        applicant_user_id=login_user.user_id,
+    )
+    return resp_200({
+        'has_pending': duplicate is not None,
+        'instance_id': duplicate.id if duplicate else None,
+        'status': duplicate.status if duplicate else None,
+    })
+
+
 @router.post('/menu-access/apply')
 async def apply_menu_access(
     req: MenuAccessApplyReq,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.approval.domain.models.user_menu_access import (
     UserMenuAccess,
@@ -75,6 +75,19 @@ class UserMenuAccessRepository:
             await session.commit()
             await session.refresh(row)
         return row
+
+    @classmethod
+    async def get_revoked_instance_ids(cls, instance_ids: list[int]) -> set[int]:
+        """Return the subset of instance_ids whose approval grant has been revoked."""
+        if not instance_ids:
+            return set()
+        statement = select(UserMenuAccess.grant_instance_id).where(
+            col(UserMenuAccess.grant_instance_id).in_(instance_ids),
+            UserMenuAccess.status == UserMenuAccessStatus.REVOKED,
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {r for r in rows if r is not None}
 
     @classmethod
     async def revoke_grant(

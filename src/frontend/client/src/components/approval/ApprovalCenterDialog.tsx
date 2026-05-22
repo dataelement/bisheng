@@ -75,9 +75,9 @@ function StatusBadge({ status, instanceStatus, localize }: { status?: string | n
   return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
 }
 
-function TimelineStep({ action, operatorName, createTime, detail, localize }: {
+function TimelineStep({ action, operatorName, createTime, detail, localize, isLast }: {
   action?: string; operatorName?: string | null; createTime?: string | null;
-  detail?: Record<string, any> | null; localize: ReturnType<typeof useLocalize>;
+  detail?: Record<string, any> | null; localize: ReturnType<typeof useLocalize>; isLast?: boolean;
 }) {
   const a = String(action || "").toLowerCase();
   const dotCls = a === "approved" ? "bg-[#00b42a] text-white" : a === "rejected" ? "bg-[#f53f3f] text-white" :
@@ -95,9 +95,9 @@ function TimelineStep({ action, operatorName, createTime, detail, localize }: {
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
         <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px]", dotCls)}>{icon}</span>
-        <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />
+        {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
       </div>
-      <div className="pb-4 min-w-0 pt-0.5">
+      <div className={cn("min-w-0 pt-0.5", isLast ? "pb-1" : "pb-4")}>
         <div className="text-[14px] font-medium text-[#1d2129]">{title}</div>
         {desc && <div className="mt-0.5 text-[12px] text-[#86909c]">{desc}</div>}
         {comment && <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>}
@@ -370,7 +370,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                             onClick={() => id && openRequest(id)}>
                             <div className="flex items-start justify-between gap-2">
                               <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
-                              <StatusBadge status={item.status} localize={localize} />
+                              <div className="flex shrink-0 items-center gap-1">
+                                {item.grant_revoked && (
+                                  <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
+                                    {localize("com_approval_grant_revoked")}
+                                  </span>
+                                )}
+                                <StatusBadge status={item.status} localize={localize} />
+                              </div>
                             </div>
                             {(item.current_node_name || item.current_approver_names) && (
                               <div className="mt-1.5 flex flex-wrap gap-x-3 text-[12px] text-[#86909c]">
@@ -588,16 +595,79 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
         </div>
       )}
 
-      {detail.action_logs && detail.action_logs.length > 0 && (
+      {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0)) && (
         <div>
           <div className="mb-3 flex items-center gap-1.5 text-[14px] font-medium text-[#1d2129]">
             <span className="text-[16px]">⊙</span>
             {localize("com_approval_progress_section")}
           </div>
-          {detail.action_logs.map((log, i) => (
-            <TimelineStep key={log.id ?? i} action={log.action} operatorName={log.operator_user_name}
-              createTime={log.create_time} detail={log.detail} localize={localize} />
-          ))}
+          {/* submitted / resubmitted logs first */}
+          {(detail.action_logs || [])
+            .filter((l) => l.action === "submitted" || l.action === "resubmitted")
+            .map((log, i) => (
+              <TimelineStep key={log.id ?? `s${i}`} action={log.action} operatorName={log.operator_user_name}
+                createTime={log.create_time} detail={log.detail} localize={localize} isLast={false} />
+            ))}
+          {/* all flow nodes — use flow_nodes as skeleton; fall back to tasks */}
+          {(() => {
+            const nodes = detail.flow_nodes && detail.flow_nodes.length > 0
+              ? [...detail.flow_nodes].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0))
+              : [...(detail.tasks || [])].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0));
+            const hasTrailingLogs = (detail.action_logs || []).some(
+              (l) => l.action !== "submitted" && l.action !== "resubmitted"
+            );
+            return nodes.map((node: any, i) => {
+              // Find the matching task for this node (if it exists)
+              const matchedTask = (detail.tasks || []).find(
+                (t) => t.node_order === node.node_order || t.node_name === node.node_name
+              );
+              const s = String(matchedTask?.status || (node.task_id ? node.status : "not_started")).toLowerCase();
+              const isNotStarted = !matchedTask && !node.task_id;
+              const dotColor = isNotStarted ? "bg-[#e5e6eb]" :
+                s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
+                (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
+              const statusLabel = isNotStarted ? localize("com_approval_node_not_started") :
+                s === "approved" ? localize("com_approval_status_approved") :
+                s === "rejected" ? localize("com_approval_status_rejected") :
+                s === "pending" ? localize("com_approval_status_pending") :
+                s === "skipped" ? localize("com_approval_status_skipped") :
+                localize("com_approval_status_cancelled");
+              const isLast = i === nodes.length - 1 && !hasTrailingLogs;
+              const approverName = matchedTask?.approver_user_name;
+              const comment = matchedTask?.comment;
+              const updateTime = matchedTask?.update_time;
+              return (
+                <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotColor)} />
+                    {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
+                  </div>
+                  <div className={cn("min-w-0", isLast ? "pb-1" : "pb-4")}>
+                    <div className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
+                      {node.node_name || "--"}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-[#86909c]">
+                      {approverName && <span>{approverName} · </span>}
+                      {statusLabel}
+                    </div>
+                    {comment && (
+                      <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>
+                    )}
+                    {updateTime && !isNotStarted && s !== "pending" && (
+                      <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(updateTime)}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+          {/* other action logs (withdrawn, cancelled, etc.) */}
+          {(detail.action_logs || [])
+            .filter((l) => l.action !== "submitted" && l.action !== "resubmitted")
+            .map((log, i, arr) => (
+              <TimelineStep key={log.id ?? `l${i}`} action={log.action} operatorName={log.operator_user_name}
+                createTime={log.create_time} detail={log.detail} localize={localize} isLast={i === arr.length - 1} />
+            ))}
         </div>
       )}
     </div>

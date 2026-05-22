@@ -564,22 +564,26 @@ function FlowDialog({
   );
 }
 
-// i18n keys for approver source options (same source as APPROVER_SOURCE_LABEL_KEYS)
+// i18n keys for all known approver source options
 const APPROVER_SOURCE_OPTIONS = [
-  { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
   { value: "direct_user",             labelKey: "approvalPage.approverSource.direct_user" },
+  { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
   { value: "knowledge_space_owner",   labelKey: "approvalPage.approverSource.knowledge_space_owner" },
   { value: "knowledge_space_manager", labelKey: "approvalPage.approverSource.knowledge_space_manager" },
+  { value: "channel_owner",           labelKey: "approvalPage.approverSource.channel_owner" },
+  { value: "channel_manager",         labelKey: "approvalPage.approverSource.channel_manager" },
 ];
 
 function NodeDialog({
   open,
   initial,
+  allowedSourceTypes,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   initial: Partial<ApprovalNodeItem>;
+  allowedSourceTypes?: string[];
   onClose: () => void;
   onConfirm: (data: {
     node_name: string;
@@ -602,6 +606,11 @@ function NodeDialog({
   const [userLoading, setUserLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
+
+  // Filter global list to only those allowed for the current scenario
+  const effectiveSourceOptions = allowedSourceTypes
+    ? APPROVER_SOURCE_OPTIONS.filter((o) => allowedSourceTypes.includes(o.value))
+    : APPROVER_SOURCE_OPTIONS;
 
   const getApproverLabel = (type: string) => {
     const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
@@ -746,7 +755,7 @@ function NodeDialog({
                 className="h-7 rounded-full border border-dashed border-border-subtle bg-gray-50 px-2 text-xs text-text-secondary outline-none"
               >
                 <option value="">＋ {t("approvalPage.addApprover")}</option>
-                {APPROVER_SOURCE_OPTIONS.filter((o) => !sources.some((s) => s.type === o.value)).map(
+                {effectiveSourceOptions.filter((o) => !sources.some((s) => s.type === o.value)).map(
                   (o) => (
                     <option key={o.value} value={o.value}>
                       {t(o.labelKey, { defaultValue: o.value })}
@@ -926,6 +935,11 @@ export default function ApprovalPage() {
     open: boolean;
     initial: Partial<ApprovalNodeItem>;
   }>({ open: false, initial: {} });
+  const [flowPreviewDialog, setFlowPreviewDialog] = useState<{
+    open: boolean;
+    flowName: string;
+    nodes: ApprovalNodeItem[];
+  }>({ open: false, flowName: "", nodes: [] });
 
   // ── exception state ───────────────────────────────────────────────────────
   const [exceptionApproverInputs, setExceptionApproverInputs] = useState<
@@ -955,6 +969,12 @@ export default function ApprovalPage() {
     // then prepend the always-included fields so they appear first.
     const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
+  }, [selectedScenario, presets]);
+  // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)
+  const activeSourceTypes = useMemo<string[] | undefined>(() => {
+    if (!selectedScenario) return undefined;
+    const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
+    return preset?.approver_source_types;
   }, [selectedScenario, presets]);
   const existingCodes = useMemo(
     () => new Set(scenarios.map((s) => s.scenario_code)),
@@ -1167,6 +1187,18 @@ export default function ApprovalPage() {
     });
   };
 
+  // ── flow preview ─────────────────────────────────────────────────────────
+  const handleFlowPreview = async (route: ApprovalRouteItem) => {
+    if (!route.flow_definition_id) return;
+    const flowName = flows.find((f) => f.id === route.flow_definition_id)?.flow_name ?? `流程 #${route.flow_definition_id}`;
+    try {
+      const nodeList = await listApprovalNodesApi(route.flow_definition_id);
+      setFlowPreviewDialog({ open: true, flowName, nodes: nodeList });
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericLoadFailed")) });
+    }
+  };
+
   // ── node actions ──────────────────────────────────────────────────────────
   const handleSaveNode = async (data: {
     node_name: string;
@@ -1187,6 +1219,23 @@ export default function ApprovalPage() {
       setNodes(await listApprovalNodesApi(selectedFlowId));
     } catch (e: any) {
       toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
+    }
+  };
+
+  const moveNode = async (index: number, direction: "up" | "down") => {
+    if (!selectedFlowId) return;
+    const swapIdx = direction === "up" ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= nodes.length) return;
+    const nodeA = nodes[index];
+    const nodeB = nodes[swapIdx];
+    try {
+      await Promise.all([
+        updateApprovalNodeApi(nodeA.id, { node_order: nodeB.node_order }),
+        updateApprovalNodeApi(nodeB.id, { node_order: nodeA.node_order }),
+      ]);
+      setNodes(await listApprovalNodesApi(selectedFlowId));
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSortFailed")) });
     }
   };
 
@@ -1428,6 +1477,7 @@ export default function ApprovalPage() {
                                   </span>
                                   <button
                                     type="button"
+                                    onClick={() => void handleFlowPreview(route)}
                                     className="inline-flex items-center gap-1 rounded border border-border-subtle px-2 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
                                   >
                                     <Eye size={11} /> {t("approvalPage.flowPreview")}
@@ -1564,10 +1614,10 @@ export default function ApprovalPage() {
                                   </div>
                                 </div>
                                 <div className="shrink-0 flex items-center gap-1.5">
-                                  <ActionBtn onClick={() => {}}>
+                                  <ActionBtn onClick={() => void moveNode(idx, "up")}>
                                     <ChevronUp size={14} />
                                   </ActionBtn>
-                                  <ActionBtn onClick={() => {}}>
+                                  <ActionBtn onClick={() => void moveNode(idx, "down")}>
                                     <ChevronDown size={14} />
                                   </ActionBtn>
                                   <select
@@ -1842,9 +1892,79 @@ export default function ApprovalPage() {
       <NodeDialog
         open={nodeDialog.open}
         initial={nodeDialog.initial}
+        allowedSourceTypes={activeSourceTypes}
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />
+
+      {/* Flow preview dialog */}
+      <Dialog
+        open={flowPreviewDialog.open}
+        onOpenChange={(v) => !v && setFlowPreviewDialog({ open: false, flowName: "", nodes: [] })}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{flowPreviewDialog.flowName}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 max-h-[60vh] overflow-y-auto">
+            {flowPreviewDialog.nodes.length === 0 ? (
+              <div className="py-8 text-center text-sm text-text-secondary">
+                {t("approvalPage.noNodes")}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {flowPreviewDialog.nodes.map((node, idx) => {
+                  const sources: { type: string; user_names?: string[]; userNames?: string[] }[] =
+                    (node.approver_config?.sources as any[]) ?? [];
+                  return (
+                    <div key={node.id} className="rounded-lg border border-border-subtle p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-medium text-text-primary">
+                          {node.node_name || node.node_code}
+                        </span>
+                        <span className="ml-auto inline-flex items-center rounded border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-secondary">
+                          {node.node_mode === "and" ? t("approvalPage.nodeModeAnd") : t("approvalPage.nodeModeOr")}
+                        </span>
+                      </div>
+                      {sources.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5 pl-8">
+                          {sources.map((src: any) => {
+                            const userNames: string[] = src.user_names ?? src.userNames ?? [];
+                            if (src.type === "direct_user" && userNames.length > 0) {
+                              return userNames.map((name: string) => (
+                                <span
+                                  key={`${src.type}-${name}`}
+                                  className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                                >
+                                  <Users size={10} className="text-text-secondary" />
+                                  {name}
+                                </span>
+                              ));
+                            }
+                            const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
+                            return (
+                              <span
+                                key={src.type}
+                                className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                              >
+                                <Users size={10} className="text-text-secondary" />
+                                {opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit scenario name dialog */}
       <Dialog

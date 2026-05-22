@@ -64,3 +64,18 @@ class ApprovalMenuApplyDisabledError(BaseErrorCode):
 class ApprovalSettingsPermissionDeniedError(BaseErrorCode):
     Code: int = 18112
     Msg: str = 'Only super admin can modify approval settings'
+
+
+class ApprovalRetryNoFlowRouteError(BaseErrorCode):
+    Code: int = 18113
+    Msg: str = 'No enabled flow route found for this scenario'
+
+
+class ApprovalRetryNoActiveFlowVersionError(BaseErrorCode):
+    Code: int = 18114
+    Msg: str = 'No active flow version found for the bound flow'
+
+
+class ApprovalRetryNoFlowNodesError(BaseErrorCode):
+    Code: int = 18115
+    Msg: str = 'The approval flow has no nodes configured'
