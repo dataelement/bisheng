@@ -75,7 +75,7 @@ function StatusBadge({ status, instanceStatus, localize }: { status?: string | n
   return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
 }
 
-function TimelineStep({ action, operatorName, createTime, detail, localize }: {
+function TimelineStep({ action, operatorName, createTime, detail, localize, isLast }: {
   action?: string; operatorName?: string | null; createTime?: string | null;
   detail?: Record<string, any> | null; localize: ReturnType<typeof useLocalize>; isLast?: boolean;
 }) {
