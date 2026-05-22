@@ -70,10 +70,12 @@ export default function MenuUnavailablePage() {
         message: localize('com_menu_unavailable_apply_success'),
         severity: NotificationSeverity.SUCCESS,
       });
-    } catch {
+    } catch (err) {
       showToast({
-        message: localize('com_menu_unavailable_apply_failed'),
-        severity: NotificationSeverity.INFO,
+        message: (err instanceof Error && err.message)
+          ? err.message
+          : localize('com_menu_unavailable_apply_failed'),
+        severity: NotificationSeverity.ERROR,
       });
     } finally {
       setSubmitting(false);
