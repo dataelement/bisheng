@@ -2333,6 +2333,8 @@
       "department_admin": "Applicant's Dept Admin",
       "tenant_admin": "Tenant Admin",
       "channel_admin": "Channel Admin",
+      "channel_owner": "Channel Owner",
+      "channel_manager": "Channel Manager",
       "space_admin": "Space Admin",
       "knowledge_space_owner": "Space Owner",
       "knowledge_space_manager": "Space Manager"

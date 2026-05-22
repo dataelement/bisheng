@@ -2283,9 +2283,11 @@
       "department_admin": "申请人部门管理员",
       "tenant_admin": "租户管理员",
       "channel_admin": "频道管理员",
+      "channel_owner": "频道 Owner",
+      "channel_manager": "频道 Manager",
       "space_admin": "知识空间管理员",
       "knowledge_space_owner": "知识空间 Owner",
-      "knowledge_space_manager": "知识空间管理员"
+      "knowledge_space_manager": "知识空间 Manager"
     },
     "roleValue": {
       "admin": "系统管理员",

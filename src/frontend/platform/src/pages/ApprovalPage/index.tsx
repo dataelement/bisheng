@@ -564,22 +564,26 @@ function FlowDialog({
   );
 }
 
-// i18n keys for approver source options (same source as APPROVER_SOURCE_LABEL_KEYS)
+// i18n keys for all known approver source options
 const APPROVER_SOURCE_OPTIONS = [
-  { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
   { value: "direct_user",             labelKey: "approvalPage.approverSource.direct_user" },
+  { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
   { value: "knowledge_space_owner",   labelKey: "approvalPage.approverSource.knowledge_space_owner" },
   { value: "knowledge_space_manager", labelKey: "approvalPage.approverSource.knowledge_space_manager" },
+  { value: "channel_owner",           labelKey: "approvalPage.approverSource.channel_owner" },
+  { value: "channel_manager",         labelKey: "approvalPage.approverSource.channel_manager" },
 ];
 
 function NodeDialog({
   open,
   initial,
+  allowedSourceTypes,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   initial: Partial<ApprovalNodeItem>;
+  allowedSourceTypes?: string[];
   onClose: () => void;
   onConfirm: (data: {
     node_name: string;
@@ -602,6 +606,11 @@ function NodeDialog({
   const [userLoading, setUserLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
+
+  // Filter global list to only those allowed for the current scenario
+  const effectiveSourceOptions = allowedSourceTypes
+    ? APPROVER_SOURCE_OPTIONS.filter((o) => allowedSourceTypes.includes(o.value))
+    : APPROVER_SOURCE_OPTIONS;
 
   const getApproverLabel = (type: string) => {
     const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
@@ -746,7 +755,7 @@ function NodeDialog({
                 className="h-7 rounded-full border border-dashed border-border-subtle bg-gray-50 px-2 text-xs text-text-secondary outline-none"
               >
                 <option value="">＋ {t("approvalPage.addApprover")}</option>
-                {APPROVER_SOURCE_OPTIONS.filter((o) => !sources.some((s) => s.type === o.value)).map(
+                {effectiveSourceOptions.filter((o) => !sources.some((s) => s.type === o.value)).map(
                   (o) => (
                     <option key={o.value} value={o.value}>
                       {t(o.labelKey, { defaultValue: o.value })}
@@ -960,6 +969,12 @@ export default function ApprovalPage() {
     // then prepend the always-included fields so they appear first.
     const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
+  }, [selectedScenario, presets]);
+  // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)
+  const activeSourceTypes = useMemo<string[] | undefined>(() => {
+    if (!selectedScenario) return undefined;
+    const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
+    return preset?.approver_source_types;
   }, [selectedScenario, presets]);
   const existingCodes = useMemo(
     () => new Set(scenarios.map((s) => s.scenario_code)),
@@ -1877,6 +1892,7 @@ export default function ApprovalPage() {
       <NodeDialog
         open={nodeDialog.open}
         initial={nodeDialog.initial}
+        allowedSourceTypes={activeSourceTypes}
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />

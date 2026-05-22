@@ -2283,6 +2283,8 @@
       "department_admin": "申請者の部署管理者",
       "tenant_admin": "テナント管理者",
       "channel_admin": "チャンネル管理者",
+      "channel_owner": "チャンネルオーナー",
+      "channel_manager": "チャンネルマネージャー",
       "space_admin": "スペース管理者",
       "knowledge_space_owner": "スペースオーナー",
       "knowledge_space_manager": "スペースマネージャー"
