@@ -926,6 +926,11 @@ export default function ApprovalPage() {
     open: boolean;
     initial: Partial<ApprovalNodeItem>;
   }>({ open: false, initial: {} });
+  const [flowPreviewDialog, setFlowPreviewDialog] = useState<{
+    open: boolean;
+    flowName: string;
+    nodes: ApprovalNodeItem[];
+  }>({ open: false, flowName: "", nodes: [] });
 
   // ── exception state ───────────────────────────────────────────────────────
   const [exceptionApproverInputs, setExceptionApproverInputs] = useState<
@@ -1165,6 +1170,18 @@ export default function ApprovalPage() {
         }
       },
     });
+  };
+
+  // ── flow preview ─────────────────────────────────────────────────────────
+  const handleFlowPreview = async (route: ApprovalRouteItem) => {
+    if (!route.flow_definition_id) return;
+    const flowName = flows.find((f) => f.id === route.flow_definition_id)?.flow_name ?? `流程 #${route.flow_definition_id}`;
+    try {
+      const nodeList = await listApprovalNodesApi(route.flow_definition_id);
+      setFlowPreviewDialog({ open: true, flowName, nodes: nodeList });
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericLoadFailed")) });
+    }
   };
 
   // ── node actions ──────────────────────────────────────────────────────────
@@ -1445,6 +1462,7 @@ export default function ApprovalPage() {
                                   </span>
                                   <button
                                     type="button"
+                                    onClick={() => void handleFlowPreview(route)}
                                     className="inline-flex items-center gap-1 rounded border border-border-subtle px-2 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
                                   >
                                     <Eye size={11} /> {t("approvalPage.flowPreview")}
@@ -1862,6 +1880,75 @@ export default function ApprovalPage() {
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />
+
+      {/* Flow preview dialog */}
+      <Dialog
+        open={flowPreviewDialog.open}
+        onOpenChange={(v) => !v && setFlowPreviewDialog({ open: false, flowName: "", nodes: [] })}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{flowPreviewDialog.flowName}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 max-h-[60vh] overflow-y-auto">
+            {flowPreviewDialog.nodes.length === 0 ? (
+              <div className="py-8 text-center text-sm text-text-secondary">
+                {t("approvalPage.noNodes")}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {flowPreviewDialog.nodes.map((node, idx) => {
+                  const sources: { type: string; user_names?: string[]; userNames?: string[] }[] =
+                    (node.approver_config?.sources as any[]) ?? [];
+                  return (
+                    <div key={node.id} className="rounded-lg border border-border-subtle p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-medium text-text-primary">
+                          {node.node_name || node.node_code}
+                        </span>
+                        <span className="ml-auto inline-flex items-center rounded border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-secondary">
+                          {node.node_mode === "and" ? t("approvalPage.nodeModeAnd") : t("approvalPage.nodeModeOr")}
+                        </span>
+                      </div>
+                      {sources.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5 pl-8">
+                          {sources.map((src: any) => {
+                            const userNames: string[] = src.user_names ?? src.userNames ?? [];
+                            if (src.type === "direct_user" && userNames.length > 0) {
+                              return userNames.map((name: string) => (
+                                <span
+                                  key={`${src.type}-${name}`}
+                                  className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                                >
+                                  <Users size={10} className="text-text-secondary" />
+                                  {name}
+                                </span>
+                              ));
+                            }
+                            const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
+                            return (
+                              <span
+                                key={src.type}
+                                className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                              >
+                                <Users size={10} className="text-text-secondary" />
+                                {opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit scenario name dialog */}
       <Dialog
