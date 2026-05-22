@@ -1,23 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Bot,
-    Brain,
+    BriefcaseBusiness,
     ChevronDown,
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
+    Clock,
     Copy,
-    Database,
     Download,
-    FileArchive,
-    FileCode2,
     FileText,
     Folder,
     FolderPlus,
+    FunnelIcon,
     Globe2,
     History,
-    Import,
+    ListChecks,
     Link2,
     LogOut,
     LockKeyhole,
@@ -28,11 +27,9 @@ import {
     Plus,
     Search,
     Settings,
-    Settings2,
     Share2,
     ShieldCheck,
-    Sparkles,
-    Tags,
+    SquarePen,
     Upload,
     UsersRound,
     X,
@@ -66,6 +63,7 @@ import {
     getGroupedSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
+    fileStatusToNumber,
     pinSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
@@ -76,6 +74,8 @@ import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import {
     DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
@@ -89,6 +89,7 @@ import {
     sidebarListMoreMenuItemClassName,
     sidebarListMoreMenuLabelClassName,
 } from "~/components/SidebarListMoreMenu";
+import LegacyFileIcon from "~/components/ui/icon/File";
 import FilePreview from "../FilePreview";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { EditTagsModal } from "../SpaceDetail/EditTagsModal";
@@ -103,7 +104,8 @@ import { formatTime, triggerUrlDownload } from "../knowledgeUtils";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 type SpaceGroupKey = "public" | "department" | "team" | "personal";
-type PanelKey = "details" | "summary" | "tags" | "permission" | "share" | "ai" | "features";
+type PanelKey = "properties" | "time" | "source" | "usage" | "share" | "ai";
+type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission";
 
 interface SpaceGroup {
     key: SpaceGroupKey;
@@ -146,18 +148,40 @@ const GROUP_ICON_SRC: Record<SpaceGroupKey, string> = {
     personal: "/assets/knowledge-portal/space-personal.png",
 };
 
-const DISABLED_FEATURES = [
-    { label: "导入网页", icon: Globe2 },
-    { label: "Markdown 在线发布", icon: FileCode2 },
-    { label: "API 导入", icon: Database },
-    { label: "DWG/PDF 图纸专项", icon: FileArchive },
-    { label: "智能入库", icon: Sparkles },
-    { label: "复杂版本管理", icon: History },
-    { label: "分段规则", icon: Settings2 },
+const STATUS_FILTER_OPTIONS: Array<{ status: FileStatus; label: string }> = [
+    { status: FileStatus.UPLOADING, label: "上传中" },
+    { status: FileStatus.WAITING, label: "排队中" },
+    { status: FileStatus.PROCESSING, label: "解析中" },
+    { status: FileStatus.REBUILDING, label: "重建中" },
+    { status: FileStatus.SUCCESS, label: "成功" },
+    { status: FileStatus.FAILED, label: "失败" },
+    { status: FileStatus.VIOLATION, label: "违规" },
+    { status: FileStatus.TIMEOUT, label: "超时" },
 ];
+
+type LegacyFileIconType = ComponentProps<typeof LegacyFileIcon>["type"];
+
+const LEGACY_FILE_ICON_TYPE_BY_EXTENSION: Record<string, LegacyFileIconType | "xlsx"> = {
+    md: "md",
+    txt: "txt",
+    html: "html",
+    csv: "csv",
+    xls: "csv",
+    xlsx: "xlsx",
+    pdf: "pdf",
+    doc: "doc",
+    docx: "docx",
+};
 
 function isFolder(file: KnowledgeFile) {
     return file.type === FileType.FOLDER;
+}
+
+function getPortalFileIconType(file: KnowledgeFile): LegacyFileIconType | "xlsx" {
+    if (isFolder(file)) return "dir";
+    const parts = file.name.split(".");
+    const extension = parts.length > 1 ? parts.pop()?.toLowerCase() || "" : "";
+    return LEGACY_FILE_ICON_TYPE_BY_EXTENSION[extension] || "txt";
 }
 
 function isPreviewable(file: KnowledgeFile) {
@@ -296,6 +320,12 @@ function toNumericIds(files: KnowledgeFile[]) {
         .filter((id) => Number.isFinite(id));
 }
 
+function toStatusNumbers(statuses: FileStatus[]) {
+    return statuses
+        .map(fileStatusToNumber)
+        .filter((status) => Number.isFinite(status));
+}
+
 export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -319,6 +349,7 @@ export default function PortalKnowledgeWorkbench() {
     const [searchText, setSearchText] = useState("");
     const [folderDraft, setFolderDraft] = useState("新建文件夹");
     const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
+    const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
     const [spacePermissionOpen, setSpacePermissionOpen] = useState(false);
@@ -335,6 +366,7 @@ export default function PortalKnowledgeWorkbench() {
     const [searchMode, setSearchMode] = useState(false);
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
     const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
@@ -558,6 +590,10 @@ export default function PortalKnowledgeWorkbench() {
         () => currentFolderId ? findTreeNodePath(treeNodes, currentFolderId) : [],
         [currentFolderId, treeNodes],
     );
+    const statusFilterNumbers = useMemo(
+        () => toStatusNumbers(statusFilter),
+        [statusFilter],
+    );
 
     const setRootFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
         setTreeNodes((prev) => {
@@ -606,6 +642,7 @@ export default function PortalKnowledgeWorkbench() {
                 space_id: spaceId,
                 page,
                 page_size: TREE_PAGE_SIZE,
+                file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
             setTreeNodes((prev) => append
@@ -626,7 +663,7 @@ export default function PortalKnowledgeWorkbench() {
                 setTreeRootLoadingMore(false);
             }
         }
-    }, [activeSpace?.id, showToast]);
+    }, [activeSpace?.id, showToast, statusFilterNumbers]);
 
     const reloadFiles = useCallback(async () => {
         setSearchMode(false);
@@ -644,6 +681,7 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: folderId,
                 page: 1,
                 page_size: TREE_PAGE_SIZE,
+                file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
             setTreeNodes((prev) => updateTreeNode(prev, folderId, (node) => ({
@@ -659,7 +697,7 @@ export default function PortalKnowledgeWorkbench() {
             if (activeSpaceIdRef.current !== spaceId) return;
             showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, currentFolderId, loadRootTree, showToast]);
+    }, [activeSpace?.id, currentFolderId, loadRootTree, showToast, statusFilterNumbers]);
 
     const fileUpload = useFileUpload({
         activeSpace,
@@ -720,6 +758,7 @@ export default function PortalKnowledgeWorkbench() {
     useEffect(() => {
         setSelectedFile(null);
         setActivePanel(null);
+        setSummaryExpanded(false);
         setSearchText("");
         setSearchMode(false);
         setSearchResults([]);
@@ -743,6 +782,10 @@ export default function PortalKnowledgeWorkbench() {
             setSelectedFile(null);
         }
     }, [displayedFiles, selectedFile]);
+
+    useEffect(() => {
+        setSummaryExpanded(false);
+    }, [selectedFile?.id]);
 
     useEffect(() => {
         if (currentFolderId && !findTreeNode(treeNodes, currentFolderId)) {
@@ -915,6 +958,7 @@ export default function PortalKnowledgeWorkbench() {
                 keyword,
                 page: 1,
                 page_size: TREE_PAGE_SIZE,
+                file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
             setSearchResults(res.data);
@@ -927,7 +971,23 @@ export default function PortalKnowledgeWorkbench() {
                 setSearchLoading(false);
             }
         }
-    }, [activeSpace?.id, searchText, showToast]);
+    }, [activeSpace?.id, searchText, showToast, statusFilterNumbers]);
+
+    const handleToggleStatusFilter = useCallback((status: FileStatus, checked: boolean) => {
+        setStatusFilter((prev) => {
+            const exists = prev.includes(status);
+            if (checked && !exists) return [...prev, status];
+            if (!checked && exists) return prev.filter((item) => item !== status);
+            return prev;
+        });
+        setSearchText("");
+        setSearchMode(false);
+        setSearchResults([]);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+        setSelectedFile(null);
+        setCurrentFolderId(undefined);
+    }, []);
 
     const handleSelectFile = useCallback(
         (file: KnowledgeFile) => {
@@ -994,6 +1054,7 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: node.file.id,
                 page: 1,
                 page_size: TREE_PAGE_SIZE,
+                file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
@@ -1014,7 +1075,7 @@ export default function PortalKnowledgeWorkbench() {
             })));
             showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, showToast]);
+    }, [activeSpace?.id, showToast, statusFilterNumbers]);
 
     const handleLoadMoreChildren = useCallback(async (node: PortalFileTreeNode) => {
         const spaceId = activeSpace?.id;
@@ -1028,6 +1089,7 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: node.file.id,
                 page: nextPage,
                 page_size: TREE_PAGE_SIZE,
+                file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
@@ -1043,7 +1105,7 @@ export default function PortalKnowledgeWorkbench() {
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, loading: false })));
             showToast({ message: "加载更多失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, showToast]);
+    }, [activeSpace?.id, showToast, statusFilterNumbers]);
 
     const confirmCreateFolder = useCallback(() => {
         if (!fileUpload.creatingFolder) return;
@@ -1151,6 +1213,21 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace, showToast]);
 
+    const handleCopyFileEncoding = useCallback(async () => {
+        const fileEncoding = selectedFile?.fileEncoding?.trim();
+        if (!fileEncoding) {
+            showToast({ message: "暂无文件编码", severity: NotificationSeverity.INFO });
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(fileEncoding);
+            showToast({ message: "文件编码已复制", severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: "复制失败，请重试", severity: NotificationSeverity.ERROR });
+        }
+    }, [selectedFile?.fileEncoding, showToast]);
+
     const handleConfirmCreateSpace = useCallback(async (form: CreateKnowledgeSpaceFormData) => {
         try {
             const authType =
@@ -1210,17 +1287,21 @@ export default function PortalKnowledgeWorkbench() {
     const renderDrawer = () => {
         if (!activePanel) return null;
         const panelTitleMap: Record<PanelKey, string> = {
-            details: "文档信息",
-            summary: "文档摘要",
-            tags: "标签管理",
-            permission: "权限管理",
+            properties: "属性",
+            time: "时间",
+            source: "来源",
+            usage: "使用",
             share: "分享",
             ai: "AI 助手",
-            features: "能力入口",
+        };
+        const placeholderTextMap: Partial<Record<PanelKey, string>> = {
+            time: "文件时间线暂未开放",
+            source: "文件来源信息暂未开放",
+            usage: "文件使用统计暂未开放",
         };
 
         return (
-            <aside className={s.drawer}>
+            <aside className={s.drawer} data-testid="portal-info-drawer">
                 <div className={s.drawerHeader}>
                     <div className={s.drawerTitle}>{panelTitleMap[activePanel]}</div>
                     <button type="button" className={s.toolbarButton} onClick={() => setActivePanel(null)} aria-label="关闭">
@@ -1228,7 +1309,7 @@ export default function PortalKnowledgeWorkbench() {
                     </button>
                 </div>
                 <div className={s.drawerBody}>
-                    {activePanel === "details" ? (
+                    {activePanel === "properties" ? (
                         <div className={s.detailList}>
                             <div className={s.detailItem}>
                                 <span className={s.detailLabel}>知识库</span>
@@ -1253,58 +1334,15 @@ export default function PortalKnowledgeWorkbench() {
                         </div>
                     ) : null}
 
-                    {activePanel === "summary" ? (
+                    {activePanel === "time" || activePanel === "source" || activePanel === "usage" ? (
                         <div className={s.detailList}>
                             <div className={s.detailItem}>
-                                <span className={s.detailLabel}>摘要内容</span>
-                                <span className={s.detailValue}>{selectedFile?.summary || "暂无摘要"}</span>
+                                <span className={s.detailLabel}>状态</span>
+                                <span className={s.detailValue}>暂未开放</span>
                             </div>
-                        </div>
-                    ) : null}
-
-                    {activePanel === "tags" ? (
-                        <div>
-                            {selectedFile?.tags?.length ? (
-                                <div className={s.tagList}>
-                                    {selectedFile.tags.map((tag) => (
-                                        <span className={s.tagChip} key={`${tag.id}-${tag.name}`} title={tag.name}>
-                                            {tag.name}
-                                        </span>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className={s.detailValue}>暂无标签</div>
-                            )}
-                            <div className={s.buttonStack}>
-                                <button
-                                    type="button"
-                                    className={s.primaryButton}
-                                    disabled={!selectedFile}
-                                    onClick={() => setTagModalOpen(true)}
-                                >
-                                    <Tags size={14} />
-                                    编辑标签
-                                </button>
-                            </div>
-                        </div>
-                    ) : null}
-
-                    {activePanel === "permission" ? (
-                        <div className={s.detailList}>
                             <div className={s.detailItem}>
-                                <span className={s.detailLabel}>管理对象</span>
-                                <span className={s.detailValue}>{selectedFile?.name || activeSpace?.name || "-"}</span>
-                            </div>
-                            <div className={s.buttonStack}>
-                                <button
-                                    type="button"
-                                    className={s.primaryButton}
-                                    disabled={!selectedFile}
-                                    onClick={() => setPermissionOpen(true)}
-                                >
-                                    <ShieldCheck size={14} />
-                                    打开权限管理
-                                </button>
+                                <span className={s.detailLabel}>说明</span>
+                                <span className={s.detailValue}>{placeholderTextMap[activePanel]}</span>
                             </div>
                         </div>
                     ) : null}
@@ -1333,26 +1371,6 @@ export default function PortalKnowledgeWorkbench() {
                         />
                     ) : null}
 
-                    {activePanel === "features" ? (
-                        <div className={s.placeholderList}>
-                            {DISABLED_FEATURES.map((feature) => {
-                                const Icon = feature.icon;
-                                return (
-                                    <button
-                                        key={feature.label}
-                                        type="button"
-                                        className={s.placeholderItem}
-                                        onClick={showUnavailable}
-                                    >
-                                        <span>
-                                            <Icon size={14} /> {feature.label}
-                                        </span>
-                                        <span className={s.statusBadge}>暂未开放</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    ) : null}
                 </div>
             </aside>
         );
@@ -1505,7 +1523,10 @@ export default function PortalKnowledgeWorkbench() {
                         handleSelectFile(file);
                     }}
                 >
-                    {isFolder(file) ? <Folder size={14} /> : <FileText size={14} />}
+                    <LegacyFileIcon
+                        type={getPortalFileIconType(file) as LegacyFileIconType}
+                        className={s.treeFileTypeIcon}
+                    />
                     {file.isCreating ? (
                         <input
                             autoFocus
@@ -1555,22 +1576,17 @@ export default function PortalKnowledgeWorkbench() {
     };
 
     const toolbarItems: Array<{
-        key: PanelKey | "download" | "web" | "markdown" | "api" | "smart" | "version";
+        key: PortalToolRailKey;
         title: string;
         icon: typeof PanelRight;
-        disabled?: boolean;
-        action?: () => void;
+        panelKey?: Extract<PanelKey, "properties" | "time" | "source" | "usage">;
     }> = [
-        { key: "details", title: "文档信息", icon: PanelRight },
-        { key: "summary", title: "摘要", icon: FileText },
+        { key: "toggle", title: "侧边栏展开和关闭", icon: PanelRight },
+        { key: "properties", title: "属性", icon: FileText, panelKey: "properties" },
+        { key: "time", title: "时间", icon: Clock, panelKey: "time" },
+        { key: "source", title: "来源", icon: Link2, panelKey: "source" },
+        { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
         { key: "permission", title: "权限", icon: LockKeyhole },
-        { key: "share", title: "分享", icon: Share2 },
-        { key: "ai", title: "AI 助手", icon: Bot },
-        { key: "tags", title: "标签", icon: Tags },
-        { key: "download", title: "下载", icon: Download, action: () => void handleDownloadSelected() },
-        { key: "features", title: "更多能力", icon: Brain },
-        { key: "smart", title: "智能入库", icon: Sparkles, disabled: true },
-        { key: "version", title: "复杂版本管理", icon: History, disabled: true },
     ];
 
     return (
@@ -1739,39 +1755,97 @@ export default function PortalKnowledgeWorkbench() {
                             }}
                         />
                     </div>
-                    <div className={s.fileActions}>
-                        {selectedCount > 0 ? (
-                            <>
-                                <span className={s.selectionCount}>已选择 {selectedCount} 项</span>
-                                <button type="button" className={s.folderAction} onClick={clearBatchSelection} title="取消选择" aria-label="取消选择">
-                                    <X size={14} />
+                    <div className={s.fileActions} data-testid="portal-file-actions">
+                        <button
+                            type="button"
+                            className={s.folderAction}
+                            onClick={() => uploadInputRef.current?.click()}
+                            disabled={!activeSpace || !canUploadFile}
+                            title={canUploadFile ? "上传" : "无上传权限"}
+                            aria-label="上传"
+                        >
+                            <Upload size={14} />
+                        </button>
+                        <button
+                            type="button"
+                            className={s.folderAction}
+                            onClick={showUnavailable}
+                            title="网页链接"
+                            aria-label="网页链接"
+                        >
+                            <Globe2 size={14} />
+                        </button>
+                        <button
+                            type="button"
+                            className={s.folderAction}
+                            onClick={showUnavailable}
+                            title="在线创建文档"
+                            aria-label="在线创建文档"
+                        >
+                            <SquarePen size={14} />
+                        </button>
+                        <button
+                            type="button"
+                            className={s.folderAction}
+                            onClick={() => fileUpload.handleCreateFolder()}
+                            disabled={!activeSpace || searchMode || !canCreateFolder}
+                            title={canCreateFolder ? "新建文件夹" : "无创建权限"}
+                            aria-label="新建文件夹"
+                        >
+                            <FolderPlus size={14} />
+                        </button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    type="button"
+                                    className={`${s.folderAction} ${statusFilter.length ? s.folderActionActive : ""}`}
+                                    title={statusFilter.length ? `筛选：已选择 ${statusFilter.length} 项` : "筛选"}
+                                    aria-label="筛选"
+                                >
+                                    <FunnelIcon size={14} />
                                 </button>
-                                <button type="button" className={s.folderAction} onClick={() => void handleBatchDownload()} disabled={!selectedDownloadable} title="批量下载" aria-label="批量下载">
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className={s.actionMenu}>
+                                <div className={s.actionMenuTitle}>状态</div>
+                                {STATUS_FILTER_OPTIONS.map((option) => (
+                                    <DropdownMenuCheckboxItem
+                                        key={option.status}
+                                        checked={statusFilter.includes(option.status)}
+                                        onCheckedChange={(checked) => handleToggleStatusFilter(option.status, Boolean(checked))}
+                                        onSelect={(event) => event.preventDefault()}
+                                    >
+                                        {option.label}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    type="button"
+                                    className={`${s.folderAction} ${selectedCount > 0 ? s.folderActionActive : ""}`}
+                                    disabled={selectedCount === 0}
+                                    title={selectedCount > 0 ? `批量操作：已选择 ${selectedCount} 项` : "请先选择文件"}
+                                    aria-label="批量操作"
+                                >
+                                    <ListChecks size={14} />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className={s.actionMenu}>
+                                <DropdownMenuItem onClick={() => void handleBatchDownload()} disabled={!selectedDownloadable}>
                                     <Download size={14} />
-                                </button>
-                                <button type="button" className={s.folderAction} onClick={() => void handleBatchRetry()} disabled={!canBatchRetry} title="批量重试" aria-label="批量重试">
+                                    <span>批量下载</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleBatchRetry()} disabled={!canBatchRetry}>
                                     <History size={14} />
-                                </button>
-                                <button type="button" className={s.folderAction} onClick={() => void handleBatchDelete()} disabled={!selectedDeletable} title="批量删除" aria-label="批量删除">
+                                    <span>批量重试</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleBatchDelete()} disabled={!selectedDeletable}>
                                     <X size={14} />
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <button type="button" className={s.folderAction} onClick={() => uploadInputRef.current?.click()} disabled={!activeSpace || !canUploadFile} title={canUploadFile ? "上传文件" : "无上传权限"}>
-                                    <Upload size={14} />
-                                </button>
-                                <button type="button" className={s.folderAction} onClick={() => fileUpload.handleCreateFolder()} disabled={!activeSpace || searchMode || !canCreateFolder} title={canCreateFolder ? "新建文件夹" : "无创建权限"}>
-                                    <Folder size={14} />
-                                </button>
-                                <button type="button" className={s.folderAction} onClick={showUnavailable} title="导入网页">
-                                    <Globe2 size={14} />
-                                </button>
-                                <button type="button" className={s.folderAction} onClick={showUnavailable} title="API 导入">
-                                    <Import size={14} />
-                                </button>
-                            </>
-                        )}
+                                    <span>批量删除</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                     <input
                         ref={uploadInputRef}
@@ -1836,36 +1910,51 @@ export default function PortalKnowledgeWorkbench() {
                                     <h1 className={s.docTitle}>{selectedFile.name}</h1>
                                     <div className={s.docPath}>{documentPath}</div>
                                 </div>
-                                <div className={s.docActions}>
-                                    <button type="button" className={s.iconAction} title="权限" onClick={() => setActivePanel("permission")}>
-                                        <ShieldCheck size={16} />
-                                    </button>
-                                    <button type="button" className={s.iconAction} title="分享" onClick={() => setActivePanel("share")}>
-                                        <Share2 size={16} />
-                                    </button>
-                                    <button type="button" className={s.iconAction} title="下载" onClick={() => void handleDownloadSelected()}>
-                                        <Download size={16} />
-                                    </button>
-                                    <button type="button" className={s.iconAction} title="AI" onClick={() => setActivePanel("ai")}>
+                                <div className={s.docActions} data-testid="portal-document-actions">
+                                    <button type="button" className={s.iconAction} title="AI 对话" aria-label="AI 对话" onClick={() => setActivePanel("ai")}>
                                         <Bot size={16} />
                                     </button>
-                                    <button type="button" className={s.iconAction} title="标签" onClick={() => setActivePanel("tags")}>
-                                        <Tags size={16} />
+                                    <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={() => setTagModalOpen(true)}>
+                                        <SquarePen size={16} />
+                                    </button>
+                                    <button type="button" className={s.iconAction} title="分享" aria-label="分享" onClick={() => setActivePanel("share")}>
+                                        <Share2 size={16} />
+                                    </button>
+                                    <button type="button" className={s.iconAction} title="下载" aria-label="下载" onClick={() => void handleDownloadSelected()}>
+                                        <Download size={16} />
+                                    </button>
+                                    <button type="button" className={s.iconAction} title="权限管理" aria-label="权限管理" onClick={() => setPermissionOpen(true)}>
+                                        <ShieldCheck size={16} />
+                                    </button>
+                                    <button type="button" className={s.iconAction} title="复制" aria-label="复制" onClick={() => void handleCopyFileEncoding()}>
+                                        <Copy size={16} />
                                     </button>
                                 </div>
                             </div>
                             <div className={s.divider} />
-                            <div className={s.summaryBar}>
+                            <button
+                                type="button"
+                                className={s.summaryBar}
+                                aria-label="查看文档摘要"
+                                aria-expanded={summaryExpanded}
+                                aria-controls="portal-summary-detail"
+                                onClick={() => {
+                                    setActivePanel(null);
+                                    setSummaryExpanded((expanded) => !expanded);
+                                }}
+                            >
                                 <div className={s.summaryTitle}>
                                     <FileText size={16} />
                                     文档摘要
                                 </div>
                                 <div className={s.summaryText}>{selectedFile.summary || "暂无摘要"}</div>
-                                <button type="button" className={s.summaryButton} disabled title="摘要为只读展示">
-                                    保存摘要
-                                </button>
                                 <ChevronDown size={14} />
-                            </div>
+                            </button>
+                            {summaryExpanded ? (
+                                <div id="portal-summary-detail" data-testid="portal-summary-detail" className={s.summaryDetail}>
+                                    {selectedFile.summary || "暂无摘要"}
+                                </div>
+                            ) : null}
                             <div className={s.previewHost}>
                                 {preview.loading ? (
                                     <div className={s.stateBox}>正在加载预览...</div>
@@ -1902,43 +1991,42 @@ export default function PortalKnowledgeWorkbench() {
                     )}
                 </section>
 
-                {renderDrawer()}
+                {selectedFile ? renderDrawer() : null}
 
-                <aside className={s.toolRail}>
-                    {toolbarItems.map((item) => {
-                        const Icon = item.icon;
-                        const isPanel = item.key !== "download" && item.key !== "smart" && item.key !== "version";
-                        const disabledByContext = !item.disabled && !activeSpace && item.key !== "features";
-                        return (
-                            <button
-                                type="button"
-                                key={item.key}
-                                className={`${s.toolbarButton} ${activePanel === item.key ? s.toolbarButtonActive : ""}`}
-                                title={item.title}
-                                aria-disabled={item.disabled || disabledByContext}
-                                disabled={disabledByContext}
-                                onClick={() => {
-                                    if (item.disabled) {
-                                        showUnavailable();
-                                        return;
-                                    }
-                                    if (item.action) {
-                                        item.action();
-                                        return;
-                                    }
-                                    if (isPanel) {
-                                        setActivePanel(item.key as PanelKey);
-                                    }
-                                }}
-                            >
-                                <Icon size={16} />
-                            </button>
-                        );
-                    })}
-                    <button type="button" className={s.toolbarButton} title="外部链接" onClick={showUnavailable}>
-                        <Link2 size={16} />
-                    </button>
-                </aside>
+                {selectedFile ? (
+                    <aside className={s.toolRail} data-testid="portal-tool-rail">
+                        {toolbarItems.map((item) => {
+                            const Icon = item.icon;
+                            const active = Boolean(item.panelKey && activePanel === item.panelKey);
+                            return (
+                                <button
+                                    type="button"
+                                    key={item.key}
+                                    className={`${s.toolbarButton} ${active ? s.toolbarButtonActive : ""}`}
+                                    title={item.title}
+                                    aria-label={item.title}
+                                    aria-pressed={active}
+                                    onClick={() => {
+                                        if (item.key === "toggle") {
+                                            setActivePanel((current) => current ? null : "properties");
+                                            return;
+                                        }
+                                        if (item.key === "permission") {
+                                            setActivePanel(null);
+                                            setPermissionOpen(true);
+                                            return;
+                                        }
+                                        if (item.panelKey) {
+                                            setActivePanel(item.panelKey);
+                                        }
+                                    }}
+                                >
+                                    <Icon size={16} />
+                                </button>
+                            );
+                        })}
+                    </aside>
+                ) : null}
             </main>
 
             {activeSpace && selectedFile ? (

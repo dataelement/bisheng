@@ -391,7 +391,7 @@
   align-items: center;
   gap: 7px;
   margin-top: 7px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .folderAction {
@@ -407,9 +407,35 @@
   cursor: pointer;
 }
 
+.folderAction:hover,
+.folderActionActive {
+  border-color: #2c76f4;
+  background: #eaf2ff;
+  color: #2c76f4;
+}
+
 .folderAction:disabled {
+  border-color: #dee2ec;
+  background: #fff;
   color: #aab4c2;
   cursor: not-allowed;
+}
+
+.actionMenu {
+  min-width: 132px;
+  border: 1px solid #e5edf7;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(31, 47, 70, 0.12);
+  padding: 6px;
+  color: #273142;
+}
+
+.actionMenuTitle {
+  padding: 4px 8px 6px;
+  color: #768499;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .breadcrumb {
@@ -457,8 +483,6 @@
 }
 
 .treeRowActive {
-  width: calc(100% - 32px);
-  margin-left: 16px;
   border-radius: 5px;
   color: #3662e3;
   background: #e6efff;
@@ -512,6 +536,13 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.treeFileTypeIcon {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
 }
 
 .fileName {
@@ -654,7 +685,8 @@
   display: flex;
   flex-direction: column;
   padding: 20px 14px 26px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .documentHeader {
@@ -721,6 +753,10 @@
   cursor: pointer;
 }
 
+.iconAction:hover {
+  background: #e3f0ff;
+}
+
 .iconAction:disabled {
   color: #aab4c2;
   cursor: not-allowed;
@@ -734,16 +770,25 @@
 }
 
 .summaryBar {
+  width: 100%;
   min-height: 62px;
   display: flex;
   align-items: center;
   gap: 7px;
   margin-top: 19px;
   padding: 12px 14px;
+  border: 0;
   border-radius: 5px;
   background: #f4f6f9;
   color: #545a60;
   flex: 0 0 auto;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.summaryBar:hover {
+  background: #eef4ff;
 }
 
 .summaryTitle {
@@ -765,22 +810,23 @@
   font-size: 14px;
 }
 
-.summaryButton {
-  height: 29px;
-  padding: 0 12px;
-  border: 0;
+.summaryDetail {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
   border-radius: 5px;
-  background: #3662e3;
-  color: #fff;
-  font-size: 13px;
-  opacity: 0.55;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  flex: 0 0 auto;
 }
 
 .previewHost {
   min-height: 0;
-  flex: 1;
+  flex: 0 0 auto;
   margin-top: 20px;
-  overflow: auto;
 }
 
 .previewCard {

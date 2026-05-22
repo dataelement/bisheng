@@ -1,5 +1,15 @@
 import request from "~/api/request";
-import { batchDeleteApi, batchDownloadApi, createFolderApi, deleteFolderApi, getSquareSpacesApi, renameFolderApi, VisibilityType } from "./knowledge";
+import {
+  FileType,
+  VisibilityType,
+  batchDeleteApi,
+  batchDownloadApi,
+  createFolderApi,
+  deleteFolderApi,
+  getSquareSpacesApi,
+  mapChild,
+  renameFolderApi,
+} from "./knowledge";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -185,5 +195,41 @@ describe("addFilesApi", () => {
     });
 
     await expect(addFilesApi("101", { file_path: ["/tmp/doc.txt"] })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("mapChild", () => {
+  it("maps summary directly when backend provides summary", () => {
+    const file = mapChild(
+      {
+        id: 1001,
+        file_name: "backend.md",
+        file_type: 1,
+        summary: "后端文档摘要",
+      },
+      "88",
+    );
+
+    expect(file).toMatchObject({
+      id: "1001",
+      name: "backend.md",
+      type: FileType.MD,
+      spaceId: "88",
+      summary: "后端文档摘要",
+    });
+  });
+
+  it("falls back to abstract as readonly summary", () => {
+    const file = mapChild(
+      {
+        id: 1002,
+        file_name: "database.pdf",
+        file_type: 1,
+        abstract: "数据库优化摘要",
+      },
+      "88",
+    );
+
+    expect(file.summary).toBe("数据库优化摘要");
   });
 });
