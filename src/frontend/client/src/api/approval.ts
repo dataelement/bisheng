@@ -22,6 +22,13 @@ export interface ApprovalTaskItem {
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
+  // task-level fields (when inside ApprovalInstanceDetail.tasks)
+  approver_user_id?: number;
+  approver_user_name?: string | null;
+  node_name?: string | null;
+  node_order?: number;
+  node_mode?: string;
+  comment?: string | null;
   create_time?: string;
   update_time?: string;
 }
