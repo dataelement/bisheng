@@ -2348,15 +2348,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     .group_by(KnowledgeFile.status)
                 )
 
+                in_progress_statuses = {
+                    KnowledgeFileStatus.PROCESSING.value,
+                    KnowledgeFileStatus.WAITING.value,
+                    KnowledgeFileStatus.REBUILDING.value,
+                }
                 async with get_async_db_session() as session:
                     rows = (await session.exec(stmt)).all()
                     total = sum(r[1] for r in rows)
                     success = sum(
                         r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value
                     )
+                    processing = sum(
+                        r[1] for r in rows if r[0] in in_progress_statuses
+                    )
                     folder_counts[folder.id] = {
                         "file_num": total,
                         "success_file_num": success,
+                        "processing_file_num": processing,
                     }
 
             folders = [f for f in res if f.file_type == FileType.DIR]
@@ -2378,7 +2387,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item = one.model_dump()
             if one.file_type == FileType.DIR:
                 counts = folder_counts.get(
-                    one.id, {"file_num": 0, "success_file_num": 0}
+                    one.id,
+                    {"file_num": 0, "success_file_num": 0, "processing_file_num": 0},
                 )
                 item.update(counts)
             else:

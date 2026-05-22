@@ -31,6 +31,13 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     if (file.approvalStatus) {
         return file.approvalStatus === "pending_review";
     }
+    // Folder rows have no `status`; treat as pending only when children are
+    // still in an in-progress state (PROCESSING / WAITING / REBUILDING).
+    // Terminal failures (FAILED / TIMEOUT / VIOLATION) must NOT keep the
+    // auto-refresh polling alive — e.g. 8 success + 1 failed is a stable state.
+    if (file.type === FileType.FOLDER) {
+        return file.processingFileNum != null && file.processingFileNum > 0;
+    }
     return Boolean(
         file.status && [
             FileStatus.PROCESSING,
