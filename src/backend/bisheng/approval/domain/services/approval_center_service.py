@@ -258,14 +258,17 @@ class ApprovalCenterService:
             if depts:
                 dept_name = depts[0].name
 
-        pending_task_uids = [t.approver_user_id for t in tasks if t.status == 'pending']
+        all_task_uids = list({t.approver_user_id for t in tasks})
+        task_user_name_map: dict[int, str] = {}
         current_approver_names: str | None = None
-        if pending_task_uids:
+        if all_task_uids:
             from bisheng.user.domain.models.user import UserDao
-            users = await UserDao.aget_user_by_ids(pending_task_uids)
-            names = [u.user_name for u in (users or [])]
-            if names:
-                current_approver_names = '、'.join(names)
+            task_users = await UserDao.aget_user_by_ids(all_task_uids)
+            task_user_name_map = {u.user_id: u.user_name for u in (task_users or [])}
+            pending_names = [task_user_name_map[t.approver_user_id]
+                             for t in tasks if t.status == 'pending' and t.approver_user_id in task_user_name_map]
+            if pending_names:
+                current_approver_names = '、'.join(pending_names)
 
         return {
             'instance_id': instance.id,
@@ -287,7 +290,10 @@ class ApprovalCenterService:
                 {
                     'task_id': task.id,
                     'approver_user_id': task.approver_user_id,
+                    'approver_user_name': task_user_name_map.get(task.approver_user_id),
                     'node_name': task.node_name,
+                    'node_order': task.node_order,
+                    'node_mode': task.node_mode,
                     'status': task.status,
                     'comment': task.comment,
                     'update_time': task.update_time,
