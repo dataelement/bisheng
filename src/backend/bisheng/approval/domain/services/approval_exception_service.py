@@ -372,23 +372,28 @@ class ApprovalExceptionService:
             raise ValueError(f'scenario not enabled: {instance.scenario_code}')
 
         route_rules = await ApprovalScenarioRepository.list_route_rules(instance.tenant_id, scenario.id)
+        from bisheng.common.errcode.approval import (
+            ApprovalRetryNoActiveFlowVersionError,
+            ApprovalRetryNoFlowNodesError,
+            ApprovalRetryNoFlowRouteError,
+        )
         route_rule = next(
             (row for row in route_rules if row.route_type == 'flow' and getattr(row, 'enabled', True)),
             None,
         )
         if route_rule is None or route_rule.flow_definition_id is None:
-            raise ValueError('当前场景没有已启用的审批流程分支，请先在审批管理中配置条件分支并绑定流程')
+            raise ApprovalRetryNoFlowRouteError()
 
         flow_version = await ApprovalScenarioRepository.get_active_flow_version(
             instance.tenant_id,
             route_rule.flow_definition_id,
         )
         if flow_version is None:
-            raise ValueError('审批流程暂无激活版本，请先在审批管理中保存流程节点')
+            raise ApprovalRetryNoActiveFlowVersionError()
 
         node_definitions = await ApprovalScenarioRepository.list_node_definitions(instance.tenant_id, flow_version.id)
         if not node_definitions:
-            raise ValueError('审批流程尚未配置节点，请先在审批管理中添加审批节点后再重试')
+            raise ApprovalRetryNoFlowNodesError()
         return route_rule, flow_version.id, node_definitions[0]
 
     @staticmethod

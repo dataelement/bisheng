@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
 from bisheng.approval.domain.services.approval_scenario_admin_service import ApprovalScenarioAdminService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import resp_200, resp_500
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.schemas.api import resp_200
 
 router = APIRouter(prefix='/approval/admin', tags=['approval'])
 
@@ -338,8 +339,8 @@ async def retry_exception(
             operator_user_id=login_user.user_id,
             approver_user_ids=req.approver_user_ids,
         )
-    except ValueError as exc:
-        return resp_500(500, str(exc))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
     return resp_200(result)
 
 
