@@ -173,6 +173,7 @@ type TFn = (key: string, opts?: Record<string, string>) => string;
 function conditionLabel(
   matchConfig: { field?: string; value?: string } | null | undefined,
   t: TFn,
+  roleNameMap: Record<string, string> = {},
 ): string {
   if (!matchConfig?.field) return '';
   const meta = CONDITION_FIELD_META[matchConfig.field];
@@ -187,7 +188,7 @@ function conditionLabel(
   const valLabel = staticMatch
     ? t(staticMatch.label, { defaultValue: staticMatch.value })
     : value.startsWith('role_')
-      ? `${t('approvalPage.systemRole', { defaultValue: '系统角色' })} #${value.slice(5)}`
+      ? (roleNameMap[value] ?? `${t('approvalPage.systemRole', { defaultValue: '系统角色' })} #${value.slice(5)}`)
       : value;
   return `${fieldLabel} = ${valLabel}`;
 }
@@ -343,15 +344,16 @@ function RouteDialog({
 
   const { t } = useTranslation("bs");
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
-  // For applicant_role: merge static fixed labels with dynamically loaded system roles
-  // Translate i18n keys to display text here so downstream components receive plain strings
-  const allRoleValues = (condField === 'applicant_role'
-    ? [...FIXED_ROLE_VALUES, ...systemRoles]
-    : (fieldMeta?.values ?? [])
-  ).map((v) => ({
-    value: v.value,
-    label: t(v.label, { defaultValue: v.value }),
-  }));
+  // For applicant_role: fixed entries use i18n keys → need t(); system roles have real names → no translation
+  const allRoleValues = condField === 'applicant_role'
+    ? [
+        ...FIXED_ROLE_VALUES.map((v) => ({ value: v.value, label: t(v.label, { defaultValue: v.value }) })),
+        ...systemRoles,  // label is already the display name, skip t()
+      ]
+    : (fieldMeta?.values ?? []).map((v) => ({
+        value: v.value,
+        label: t(v.label, { defaultValue: v.value }),
+      }));
   // Apply search filter for applicant_role (search against translated label)
   const effectiveValues = condField === 'applicant_role' && roleSearch
     ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
@@ -854,6 +856,16 @@ export default function ApprovalPage() {
   const [flows, setFlows] = useState<ApprovalFlowItem[]>([]);
   const [nodes, setNodes] = useState<ApprovalNodeItem[]>([]);
   const [exceptions, setExceptions] = useState<ApprovalExceptionItem[]>([]);
+  // role_id → role_name map for condition label display
+  const [pageRoleNameMap, setPageRoleNameMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    getRolesApi("").then((res: any) => {
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      const map: Record<string, string> = {};
+      list.forEach((r: any) => { if (r.id) map[`role_${r.id}`] = r.role_name || `role_${r.id}`; });
+      setPageRoleNameMap(map);
+    }).catch(() => {});
+  }, []);
 
   // ── selection ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"flow" | "exception">("flow");
@@ -1341,7 +1353,7 @@ export default function ApprovalPage() {
                         </div>
                       )}
                       {routes.map((route, idx) => {
-                        const matchLabel = conditionLabel(route.match_config, t);
+                        const matchLabel = conditionLabel(route.match_config, t, pageRoleNameMap);
                         const flowName = flows.find(
                           (f) => f.id === route.flow_definition_id,
                         )?.flow_name;

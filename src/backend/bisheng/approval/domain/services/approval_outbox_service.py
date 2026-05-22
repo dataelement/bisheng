@@ -23,6 +23,11 @@ class ApprovalOutboxService:
             outbox.status = ApprovalOutboxStatus.SUCCESS
             outbox.error_summary = None
             await self.instance_repository.update_outbox(outbox)
+            # Mark the instance as fully executed
+            instance = await self.instance_repository.get_instance(outbox.instance_id)
+            if instance is not None and instance.status not in ('executed', 'cancelled', 'rejected', 'withdrawn'):
+                instance.status = 'executed'
+                await self.instance_repository.update_instance(instance)
             return True
 
         outbox.status = ApprovalOutboxStatus.FAILED
