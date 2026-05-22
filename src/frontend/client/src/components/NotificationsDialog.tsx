@@ -797,6 +797,9 @@ export function NotificationsDialog({
                                 </span>
                             )}
                             {textPrefix}
+                            {targetSplitMatch && !canNavigateTarget && targetLabel && (
+                                <span className="font-medium">{targetLabel}</span>
+                            )}
                             {targetSplitMatch && canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"
