@@ -610,12 +610,13 @@ function NodeDialog({
       setName(initial.node_name ?? "");
       setMode(initial.node_mode ?? "or");
       const cfg = initial.approver_config as Record<string, unknown> | undefined;
-      const rawSources = (cfg?.sources as { type: string; user_ids?: number[]; label?: string }[] | undefined) ?? [];
+      const rawSources = (cfg?.sources as { type: string; user_ids?: number[]; user_names?: string[]; label?: string }[] | undefined) ?? [];
       setSources(
         rawSources.map((s) => ({
           type: s.type,
           label: getApproverLabel(s.type),
           userIds: s.user_ids,
+          userNames: s.user_names,
         })),
       );
     }
@@ -757,7 +758,7 @@ function NodeDialog({
                 approver_config: {
                   sources: sources.map((s) =>
                     s.type === "direct_user"
-                      ? { type: s.type, user_ids: s.userIds ?? [] }
+                      ? { type: s.type, user_ids: s.userIds ?? [], user_names: s.userNames ?? [] }
                       : { type: s.type },
                   ),
                 },
@@ -1563,18 +1564,32 @@ export default function ApprovalPage() {
                               </div>
                               {/* approver chips */}
                               <div className="mt-2 flex flex-wrap items-center gap-2 pl-9">
-                                {sources.map((src) => (
-                                  <span
-                                    key={src.type}
-                                    className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
-                                  >
-                                    <Users size={10} className="text-text-secondary" />
-                                    {(() => {
-                                      const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                      return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
-                                    })()}
-                                  </span>
-                                ))}
+                                {sources.map((src: any) => {
+                                  const userNames: string[] = src.user_names ?? src.userNames ?? [];
+                                  if (src.type === "direct_user" && userNames.length > 0) {
+                                    return userNames.map((name: string) => (
+                                      <span
+                                        key={`${src.type}-${name}`}
+                                        className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                      >
+                                        <Users size={10} className="text-text-secondary" />
+                                        {name}
+                                      </span>
+                                    ));
+                                  }
+                                  return (
+                                    <span
+                                      key={src.type}
+                                      className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                    >
+                                      <Users size={10} className="text-text-secondary" />
+                                      {(() => {
+                                        const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
+                                        return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
+                                      })()}
+                                    </span>
+                                  );
+                                })}
                                 <button
                                   type="button"
                                   onClick={() => setNodeDialog({ open: true, initial: node })}
