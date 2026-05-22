@@ -1190,6 +1190,23 @@ export default function ApprovalPage() {
     }
   };
 
+  const moveNode = async (index: number, direction: "up" | "down") => {
+    if (!selectedFlowId) return;
+    const swapIdx = direction === "up" ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= nodes.length) return;
+    const nodeA = nodes[index];
+    const nodeB = nodes[swapIdx];
+    try {
+      await Promise.all([
+        updateApprovalNodeApi(nodeA.id, { node_order: nodeB.node_order }),
+        updateApprovalNodeApi(nodeB.id, { node_order: nodeA.node_order }),
+      ]);
+      setNodes(await listApprovalNodesApi(selectedFlowId));
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSortFailed")) });
+    }
+  };
+
   const handleDeleteNode = (node: ApprovalNodeItem) => {
     bsConfirm({
       title: t("approvalPage.deleteNodeTitle"),
@@ -1564,10 +1581,10 @@ export default function ApprovalPage() {
                                   </div>
                                 </div>
                                 <div className="shrink-0 flex items-center gap-1.5">
-                                  <ActionBtn onClick={() => {}}>
+                                  <ActionBtn onClick={() => void moveNode(idx, "up")}>
                                     <ChevronUp size={14} />
                                   </ActionBtn>
-                                  <ActionBtn onClick={() => {}}>
+                                  <ActionBtn onClick={() => void moveNode(idx, "down")}>
                                     <ChevronDown size={14} />
                                   </ActionBtn>
                                   <select
