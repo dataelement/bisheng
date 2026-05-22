@@ -10,9 +10,11 @@ import {
     SpaceRole,
     SpaceSortType,
     VisibilityType,
+    addFilesApi,
     batchDeleteApi,
     batchDownloadApi,
     batchRetryApi,
+    createFolderApi,
     createSpaceApi,
     deleteSpaceApi,
     getCreateSpaceOptionsApi,
@@ -21,12 +23,16 @@ import {
     getFilePreviewApi,
     getGroupedSpacesApi,
     getJoinedSpacesApi,
+    getSimilarCandidatesApi,
     getMineSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
+    linkAsNewVersionApi,
+    listKnowledgeFolders,
     pinSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
+    uploadFileToServerApi,
 } from "~/api/knowledge";
 
 const mockShowToast = jest.fn();
@@ -34,6 +40,7 @@ const mockConfirm = jest.fn();
 const mockUseKnowledgeSpaceActionPermissions = jest.fn();
 const mockCheckPermission = jest.fn();
 const mockClipboardWriteText = jest.fn();
+const mockHandleUploadFile = jest.fn();
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({
@@ -87,6 +94,15 @@ jest.mock("../SpaceDetail/EditTagsModal", () => ({
 
 jest.mock("../SpaceDetail/AiChat/KnowledgeAiPanel", () => ({
     KnowledgeAiPanel: () => <div data-testid="knowledge-ai-panel" />,
+}));
+
+jest.mock("~/pages/Subscription/AiChat/AiAssistantPanel", () => ({
+    AiAssistantPanel: ({ fileChat, onClose }: any) => (
+        <div data-testid="ai-assistant-panel">
+            文件AI:{fileChat?.spaceId}:{fileChat?.fileId}
+            <button type="button" onClick={onClose}>关闭AI组件</button>
+        </div>
+    ),
 }));
 
 jest.mock("../SpaceDetail/KnowledgeSpaceShareDialog", () => ({
@@ -162,7 +178,7 @@ jest.mock("../hooks/useFileUpload", () => ({
         uploadingFiles: [],
         duplicateFiles: [],
         handleCreateFolder: jest.fn(),
-        handleUploadFile: jest.fn(),
+        handleUploadFile: mockHandleUploadFile,
         handleCancelCreateFolder: jest.fn(),
         handleRenameFile: jest.fn(),
         handleDuplicateSkip: jest.fn(),
@@ -215,6 +231,8 @@ jest.mock("~/api/knowledge", () => ({
     getGroupedSpacesApi: jest.fn(),
     getCreateSpaceOptionsApi: jest.fn(),
     createSpaceApi: jest.fn(),
+    createFolderApi: jest.fn(),
+    listKnowledgeFolders: jest.fn(),
     getMineSpacesApi: jest.fn(),
     getJoinedSpacesApi: jest.fn(),
     getDepartmentSpacesApi: jest.fn(),
@@ -225,6 +243,10 @@ jest.mock("~/api/knowledge", () => ({
     pinSpaceApi: jest.fn(),
     getSpaceChildrenApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
+    uploadFileToServerApi: jest.fn(),
+    addFilesApi: jest.fn(),
+    getSimilarCandidatesApi: jest.fn(),
+    linkAsNewVersionApi: jest.fn(),
     batchDownloadApi: jest.fn(),
     batchDeleteApi: jest.fn(),
     batchRetryApi: jest.fn(),
@@ -333,6 +355,14 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(batchDownloadApi).mockResolvedValue("/download.zip");
         jest.mocked(batchDeleteApi).mockResolvedValue(undefined as any);
         jest.mocked(batchRetryApi).mockResolvedValue(undefined as any);
+        jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
+        jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
+        jest.mocked(addFilesApi).mockResolvedValue([] as any);
+        jest.mocked(createFolderApi).mockResolvedValue(makeFile("folder-1", "上传文件夹", {
+            type: FileType.FOLDER,
+        }) as any);
+        jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
+        jest.mocked(linkAsNewVersionApi).mockResolvedValue({ document_id: 1, new_version_no: 2 } as any);
         mockCheckPermission.mockResolvedValue({ allowed: true });
     });
 
@@ -917,6 +947,8 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         const file = makeFile("201", "后端开发.md", {
             fileEncoding: "RPT-PP-00000001",
+            size: 2048,
+            updatedAt: "2026-05-20T12:30:00",
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
@@ -947,7 +979,15 @@ describe("PortalKnowledgeWorkbench", () => {
         ]);
 
         fireEvent.click(within(actions).getByRole("button", { name: "AI 对话" }));
-        expect(screen.getByTestId("knowledge-ai-panel")).toBeInTheDocument();
+        const aiDialog = await screen.findByTestId("portal-ai-dialog");
+        expect(aiDialog).toHaveTextContent("后端开发.md");
+        expect(aiDialog).toHaveTextContent("全部知识库/个人知识库/我的技术文档/后端开发.md");
+        expect(aiDialog).toHaveTextContent("2.0 KB");
+        expect(within(aiDialog).getByTestId("ai-assistant-panel")).toHaveTextContent("文件AI:personal-1:201");
+        expect(screen.queryByTestId("portal-info-drawer")).not.toBeInTheDocument();
+
+        fireEvent.click(within(aiDialog).getByRole("button", { name: "关闭AI弹窗" }));
+        expect(screen.queryByTestId("portal-ai-dialog")).not.toBeInTheDocument();
 
         fireEvent.click(within(actions).getByRole("button", { name: "编辑标签" }));
         expect(screen.getByTestId("edit-tags-modal")).toBeInTheDocument();
@@ -1176,6 +1216,29 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(previewHostRule).not.toMatch(/overflow-y\s*:\s*auto/);
     });
 
+    test("keeps upload review table inside a wide dialog instead of overflowing the modal", () => {
+        const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
+        const reviewContentRule = css.match(/\.uploadReviewContent\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const reviewInnerRule = css.match(/\.uploadReviewInner\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const reviewTableRule = css.match(/\.uploadReviewTable\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+
+        expect(reviewContentRule).toMatch(/max-width\s*:\s*min\(1280px,\s*calc\(100vw - 96px\)\)\s*!important/);
+        expect(reviewContentRule).toMatch(/overflow\s*:\s*hidden/);
+        expect(reviewInnerRule).toMatch(/max-width\s*:\s*100%/);
+        expect(reviewInnerRule).toMatch(/overflow\s*:\s*hidden/);
+        expect(reviewTableRule).toMatch(/width\s*:\s*100%/);
+        expect(reviewTableRule).toMatch(/overflow\s*:\s*auto/);
+    });
+
+    test("uses a large AI dialog that overrides the default dialog max width", () => {
+        const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
+        const aiDialogContentRule = css.match(/\.aiDialogContent\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+
+        expect(aiDialogContentRule).toMatch(/width\s*:\s*min\(1360px,\s*calc\(100vw - 120px\)\)\s*!important/);
+        expect(aiDialogContentRule).toMatch(/max-width\s*:\s*min\(1360px,\s*calc\(100vw - 120px\)\)\s*!important/);
+        expect(aiDialogContentRule).toMatch(/height\s*:\s*min\(920px,\s*calc\(100dvh - 64px\)\)\s*!important/);
+    });
+
     test("renders Lanhu file action buttons in the required order", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
@@ -1206,6 +1269,278 @@ describe("PortalKnowledgeWorkbench", () => {
             "筛选",
             "批量操作",
         ]);
+    });
+
+    test("opens upload dialog from portal upload action and shows selected files without file category", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "上传" }));
+
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+        expect(within(dialog).getByText("上传文件")).toBeInTheDocument();
+        expect(within(dialog).queryByText("文件分类")).not.toBeInTheDocument();
+        expect(within(dialog).getByLabelText("目标知识库")).toHaveValue("设备部");
+        expect(within(dialog).getByText("根目录")).toBeInTheDocument();
+        expect(mockHandleUploadFile).not.toHaveBeenCalled();
+
+        const file = new File(["pdf"], "测试文档.pdf", { type: "application/pdf" });
+        fireEvent.change(within(dialog).getByLabelText("选择文件"), {
+            target: { files: [file] },
+        });
+
+        expect(within(dialog).getByText("已选择的文件 (1)")).toBeInTheDocument();
+        expect(within(dialog).getByText("测试文档.pdf")).toBeInTheDocument();
+        expect(within(dialog).getByRole("button", { name: "移除测试文档.pdf" })).toBeInTheDocument();
+    });
+
+    test("selects a local folder in the upload dialog and keeps only root-level files", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "上传" }));
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+        const rootFile = new File(["root"], "根层文档.pdf", { type: "application/pdf" });
+        const nestedFile = new File(["nested"], "子目录文档.pdf", { type: "application/pdf" });
+        Object.defineProperty(rootFile, "webkitRelativePath", { value: "研发资料/根层文档.pdf" });
+        Object.defineProperty(nestedFile, "webkitRelativePath", { value: "研发资料/子目录/子目录文档.pdf" });
+
+        fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
+            target: { files: [rootFile, nestedFile] },
+        });
+
+        expect(within(dialog).getByText("将创建文件夹：研发资料")).toBeInTheDocument();
+        expect(within(dialog).getByText("已选择的文件 (1)")).toBeInTheDocument();
+        expect(within(dialog).getByText("根层文档.pdf")).toBeInTheDocument();
+        expect(within(dialog).queryByText("子目录文档.pdf")).not.toBeInTheDocument();
+        expect(within(dialog).getByText("仅上传所选文件夹根目录下的支持文件，子目录文件不会上传。")).toBeInTheDocument();
+    });
+
+    test("defaults upload target to current folder and supports selecting a loaded child folder", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(({ parent_id }: any) => Promise.resolve(
+            parent_id === "101"
+                ? { data: [], total: 0 }
+                : { data: [folder], total: 1 },
+        ) as any);
+        jest.mocked(listKnowledgeFolders).mockImplementation(({ parent_id }: any) => Promise.resolve({
+            items: parent_id === 101
+                ? [{ id: 102, file_name: "子目录", file_type: 0 }]
+                : [{ id: 101, file_name: "技术文档", file_type: 0 }],
+            total: 1,
+        }) as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        fireEvent.click(within(folderRow).getByRole("button", { name: "展开技术文档" }));
+        fireEvent.click(screen.getByRole("button", { name: "上传" }));
+
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+        expect(within(dialog).getByTestId("selected-upload-folder")).toHaveTextContent("技术文档");
+
+        fireEvent.click(within(dialog).getByRole("button", { name: "展开上传目录技术文档" }));
+        const childButton = await within(dialog).findByRole("button", { name: "选择上传目录子目录" });
+        fireEvent.click(childButton);
+
+        expect(listKnowledgeFolders).toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "personal-1",
+            parent_id: 101,
+        }));
+        expect(within(dialog).getByTestId("selected-upload-folder")).toHaveTextContent("子目录");
+    });
+
+    test("uploads selected files on next step and links selected version recommendations on import", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const registeredFile = makeFile("501", "测试文档.pdf", {
+            type: FileType.PDF,
+            size: 2048,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/测试文档.pdf" } as any);
+        jest.mocked(addFilesApi).mockResolvedValue([registeredFile] as any);
+        jest.mocked(getSimilarCandidatesApi).mockResolvedValue([
+            {
+                target_document_id: 9001,
+                title: "既有文档",
+                current_primary_version_no: 1,
+                similarity: 0.9,
+            },
+        ] as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "上传" }));
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+        const file = new File(["pdf"], "测试文档.pdf", { type: "application/pdf" });
+        fireEvent.change(within(dialog).getByLabelText("选择文件"), {
+            target: { files: [file] },
+        });
+        fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
+
+        const reviewDialog = await screen.findByTestId("portal-upload-review-dialog");
+        expect(uploadFileToServerApi).toHaveBeenCalledWith("personal-1", file);
+        expect(addFilesApi).toHaveBeenCalledWith("personal-1", {
+            file_path: ["/tmp/测试文档.pdf"],
+            parent_id: null,
+        });
+        expect(getSimilarCandidatesApi).toHaveBeenCalledWith(501);
+        expect(within(reviewDialog).getByText("待入库确认")).toBeInTheDocument();
+        expect(within(reviewDialog).getByText("测试文档.pdf")).toBeInTheDocument();
+
+        fireEvent.change(await within(reviewDialog).findByLabelText("测试文档.pdf版本管理"), {
+            target: { value: "9001" },
+        });
+        fireEvent.click(within(reviewDialog).getByRole("button", { name: "开始导入 (1)" }));
+
+        await waitFor(() => {
+            expect(linkAsNewVersionApi).toHaveBeenCalledWith({
+                knowledge_file_id: 501,
+                target_document_id: 9001,
+            });
+        });
+    });
+
+    test("creates a destination folder for folder upload before entering review", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const createdFolder = makeFile("777", "研发资料", {
+            type: FileType.FOLDER,
+        });
+        const registeredFile = makeFile("778", "根层文档.pdf", {
+            type: FileType.PDF,
+            parentId: "777",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
+        jest.mocked(createFolderApi).mockResolvedValue(createdFolder as any);
+        jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/根层文档.pdf" } as any);
+        jest.mocked(addFilesApi).mockResolvedValue([registeredFile] as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "上传" }));
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+        const rootFile = new File(["root"], "根层文档.pdf", { type: "application/pdf" });
+        Object.defineProperty(rootFile, "webkitRelativePath", { value: "研发资料/根层文档.pdf" });
+
+        fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
+            target: { files: [rootFile] },
+        });
+        fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
+
+        const reviewDialog = await screen.findByTestId("portal-upload-review-dialog");
+        expect(createFolderApi).toHaveBeenCalledWith("personal-1", {
+            name: "研发资料",
+            parent_id: null,
+        });
+        expect(uploadFileToServerApi).toHaveBeenCalledWith("personal-1", rootFile, "根层文档.pdf");
+        expect(addFilesApi).toHaveBeenCalledWith("personal-1", {
+            file_path: ["/tmp/根层文档.pdf"],
+            parent_id: 777,
+        });
+        expect(getSimilarCandidatesApi).toHaveBeenCalledWith(778);
+        expect(within(reviewDialog).getByText("根层文档.pdf")).toBeInTheDocument();
+        expect(within(reviewDialog).getAllByText("研发资料").length).toBeGreaterThan(0);
+    });
+
+    test("blocks folder upload when the target directory already has the same folder name", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(listKnowledgeFolders).mockResolvedValue({
+            items: [{ id: 900, file_name: "研发资料", file_type: 0 }],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "上传" }));
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+        const rootFile = new File(["root"], "根层文档.pdf", { type: "application/pdf" });
+        Object.defineProperty(rootFile, "webkitRelativePath", { value: "研发资料/根层文档.pdf" });
+
+        fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
+            target: { files: [rootFile] },
+        });
+        fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+                message: "该位置已存在同名文件夹「研发资料」",
+            }));
+        });
+        expect(createFolderApi).not.toHaveBeenCalled();
+        expect(uploadFileToServerApi).not.toHaveBeenCalled();
+        expect(screen.queryByTestId("portal-upload-review-dialog")).not.toBeInTheDocument();
     });
 
     test("shows unavailable toast for web link and online document placeholders", async () => {

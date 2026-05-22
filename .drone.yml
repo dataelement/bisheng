@@ -90,6 +90,61 @@ steps:
       # 推送镜像
       - 'docker push $DOCKER_REPO:$VERSION'
 
+
+  # =========================================
+  # backend 镜像构建
+  # =========================================
+  - name: build_backend
+
+    image: docker:24.0.6
+
+    pull: if-not-exists
+
+    privileged: true
+
+    volumes:
+      - name: socket
+        path: /var/run/docker.sock
+
+    environment:
+
+      http_proxy:
+        from_secret: PROXY
+
+      https_proxy:
+        from_secret: PROXY
+
+      no_proxy: 192.168.106.8
+
+      DOCKER_REGISTRY: http://192.168.106.8:6082
+
+      DOCKER_REPO: 192.168.106.8:6082/dataelement/bisheng-backend
+
+      DOCKER_USER:
+        from_secret: NEXUS_USER
+
+      DOCKER_PASSWORD:
+        from_secret: NEXUS_PASSWORD
+
+    commands:
+
+      - 'VERSION=2.5.0-sg'
+
+      - 'echo "======= build backend ======="'
+
+      - 'echo "当前版本: $VERSION"'
+
+      # 登录 docker 仓库
+      - 'echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin $DOCKER_REGISTRY'
+
+      - 'cd src/backend'
+
+      # 构建 backend 镜像
+      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION .'
+
+      # 推送镜像
+      - 'docker push $DOCKER_REPO:$VERSION'
+
   # =========================================
   # backend 部署（源码映射）
   # =========================================

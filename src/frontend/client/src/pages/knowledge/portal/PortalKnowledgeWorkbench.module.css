@@ -79,7 +79,12 @@
 .pagerButton,
 .primaryButton,
 .secondaryButton,
-.dangerlessButton {
+.dangerlessButton,
+.uploadDropzone,
+.uploadFolderExpandButton,
+.uploadFolderSelectButton,
+.uploadRemoveButton,
+.aiDialogClose {
   border: 0;
   font: inherit;
 }
@@ -961,6 +966,109 @@
   padding: 14px;
 }
 
+.aiDialogContent {
+  width: min(1360px, calc(100vw - 120px)) !important;
+  height: min(920px, calc(100dvh - 64px)) !important;
+  max-width: min(1360px, calc(100vw - 120px)) !important;
+  max-height: min(920px, calc(100dvh - 64px)) !important;
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.aiDialog {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.aiDialogHeader {
+  min-height: 86px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 28px;
+  border-bottom: 1px solid #edf1f7;
+  text-align: left;
+}
+
+.aiFileIcon {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: #2c76f4;
+  background: #edf5ff;
+}
+
+.aiFileMeta {
+  min-width: 0;
+  flex: 1;
+}
+
+.aiFileTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2937;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+}
+
+.aiFileFacts {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.aiFileFacts span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiDialogClose {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  color: #6b7280;
+  background: transparent;
+  cursor: pointer;
+}
+
+.aiDialogClose:hover {
+  color: #273142;
+  background: #f2f6fb;
+}
+
+.aiDialogBody {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
 .detailList {
   display: grid;
   gap: 12px;
@@ -1084,6 +1192,425 @@
   font-size: 13px;
 }
 
+.uploadDialogContent {
+  width: min(760px, calc(100vw - 48px));
+  max-width: 760px;
+  max-height: calc(100dvh - 80px);
+}
+
+.uploadReviewContent {
+  width: min(1280px, calc(100vw - 96px)) !important;
+  max-width: min(1280px, calc(100vw - 96px)) !important;
+  max-height: calc(100dvh - 100px);
+  overflow: hidden;
+}
+
+.uploadDialogInner,
+.uploadReviewInner {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  min-height: 0;
+  max-height: calc(100dvh - 120px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.uploadStepBody {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 2px 2px;
+}
+
+.uploadSection {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.uploadLabel {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploadDropzone {
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed #cfd8e6;
+  border-radius: 7px;
+  background: #fbfdff;
+  color: #64748b;
+  cursor: default;
+}
+
+.uploadDropzone:hover {
+  border-color: #2c76f4;
+  background: #f5f9ff;
+  color: #2c76f4;
+}
+
+.uploadDropzone span {
+  color: #475569;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.uploadDropzone small {
+  color: #768499;
+  font-size: 13px;
+}
+
+.uploadPickActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.uploadPickButton {
+  min-width: 92px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d8e2f0;
+  border-radius: 5px;
+  background: #fff;
+  color: #2c76f4;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.uploadPickButton:hover {
+  border-color: #2c76f4;
+  background: #eef5ff;
+}
+
+.uploadNativeInput {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.uploadField {
+  display: grid;
+  gap: 8px;
+}
+
+.uploadField > span {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploadReadonlyInput {
+  height: 36px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 0 12px;
+  background: #f8fafc;
+  color: #273142;
+  font-size: 14px;
+}
+
+.uploadFolderPicker {
+  display: grid;
+  gap: 8px;
+}
+
+.uploadFolderSelected {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 0 12px;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+}
+
+.uploadFolderTree {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #e6edf7;
+  border-radius: 5px;
+  padding: 5px;
+  background: #fbfdff;
+}
+
+.uploadFolderRow {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.uploadFolderExpandButton,
+.uploadFolderExpandPlaceholder {
+  width: 22px;
+  height: 24px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uploadFolderExpandButton {
+  border-radius: 4px;
+  background: transparent;
+  color: #545a60;
+  cursor: pointer;
+}
+
+.uploadFolderExpandButton:hover {
+  color: #2c76f4;
+  background: #eef4ff;
+}
+
+.uploadFolderSelectButton {
+  min-width: 0;
+  flex: 1;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 4px;
+  padding: 0 7px;
+  background: transparent;
+  color: #273142;
+  cursor: pointer;
+  text-align: left;
+}
+
+.uploadFolderSelectButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadFolderSelectButton:hover,
+.uploadFolderSelectButtonActive {
+  color: #2c76f4;
+  background: #eaf2ff;
+}
+
+.uploadFolderLoading,
+.uploadFolderEmpty {
+  padding: 6px 10px;
+  color: #768499;
+  font-size: 12px;
+}
+
+.uploadHint {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.uploadSelectedFiles {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f7;
+}
+
+.uploadFolderNotice {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #d8e6ff;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #f5f9ff;
+}
+
+.uploadFolderNotice strong {
+  color: #273142;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.uploadFolderNotice span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.uploadSelectedFile {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e1e7f0;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #f8fafc;
+}
+
+.uploadFileMeta {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.uploadFileMeta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploadFileMeta small {
+  color: #768499;
+  font-size: 12px;
+}
+
+.uploadRemoveButton {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.uploadRemoveButton:hover {
+  color: #ef4444;
+  background: #fff1f2;
+}
+
+.uploadReviewToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 14px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.uploadReviewToolbar span {
+  margin-left: auto;
+}
+
+.uploadReviewSearch {
+  width: 250px;
+  height: 36px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 0 12px;
+  outline: none;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+}
+
+.uploadReviewTable {
+  width: 100%;
+  min-height: 0;
+  max-height: min(420px, calc(100dvh - 300px));
+  overflow: auto;
+  border: 1px solid #e1e7f0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.uploadReviewTableHead,
+.uploadReviewRow {
+  width: 100%;
+  min-width: 900px;
+  display: grid;
+  grid-template-columns: 34px minmax(260px, 1.35fr) minmax(150px, 0.7fr) minmax(210px, 0.85fr) minmax(240px, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.uploadReviewTableHead {
+  min-height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e1e7f0;
+  background: #f8fafc;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploadReviewRow {
+  min-height: 64px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.uploadReviewRow:last-child {
+  border-bottom: 0;
+}
+
+.uploadReviewTitle {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.uploadReviewTitle small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.uploadReviewTitle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploadReviewPath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.uploadReviewSelect {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 0 10px;
+  outline: none;
+  background: #fff;
+  color: #273142;
+  font-size: 13px;
+}
+
+.uploadReviewEmpty {
+  padding: 26px;
+  color: #768499;
+  text-align: center;
+  font-size: 14px;
+}
+
 @media (max-width: 1280px) {
   .spaceSidebar {
     width: 240px;
@@ -1097,5 +1624,25 @@
 
   .docActions {
     gap: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .aiDialogContent {
+    width: calc(100vw - 24px) !important;
+    height: calc(100dvh - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+    border-radius: 8px;
+  }
+
+  .aiDialogHeader {
+    min-height: 78px;
+    padding: 14px 16px;
+  }
+
+  .aiFileFacts {
+    gap: 10px;
+    flex-wrap: wrap;
   }
 }

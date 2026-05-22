@@ -52,20 +52,27 @@ import {
     SpaceRole,
     SpaceSortType,
     VisibilityType,
+    addFilesApi,
     batchDeleteApi,
     batchDownloadApi,
     batchRetryApi,
+    createFolderApi,
     createSpaceApi,
     deleteSpaceApi,
     getFileDownloadApi,
     getFilePreviewApi,
     getCreateSpaceOptionsApi,
     getGroupedSpacesApi,
+    getSimilarCandidatesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
+    linkAsNewVersionApi,
+    listKnowledgeFolders,
     fileStatusToNumber,
     pinSpaceApi,
     searchSpaceChildrenApi,
+    uploadFileToServerApi,
+    type SimilarCandidateEntry,
     unsubscribeSpaceApi,
     updateSpaceApi,
 } from "~/api/knowledge";
@@ -93,18 +100,27 @@ import LegacyFileIcon from "~/components/ui/icon/File";
 import FilePreview from "../FilePreview";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { EditTagsModal } from "../SpaceDetail/EditTagsModal";
-import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import { KnowledgeSpaceShareDialog } from "../SpaceDetail/KnowledgeSpaceShareDialog";
+import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useFileUpload } from "../hooks/useFileUpload";
-import { formatTime, triggerUrlDownload } from "../knowledgeUtils";
+import {
+    ALLOWED_EXTENSIONS,
+    DEFAULT_MAX_FILE_SIZE_MB,
+    MAX_FOLDER_UPLOAD_COUNT,
+    filterFolderUploadFiles,
+    formatTime,
+    getRootFolderName,
+    isHiddenName,
+    triggerUrlDownload,
+} from "../knowledgeUtils";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 type SpaceGroupKey = "public" | "department" | "team" | "personal";
-type PanelKey = "properties" | "time" | "source" | "usage" | "share" | "ai";
+type PanelKey = "properties" | "time" | "source" | "usage" | "share";
 type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission";
 
 interface SpaceGroup {
@@ -130,6 +146,36 @@ interface PortalFileTreeNode {
     loading: boolean;
     page: number;
     total: number;
+}
+
+type PortalUploadStep = "select" | "review";
+
+interface PortalUploadFileItem {
+    id: string;
+    file: File;
+    source: "file" | "folder";
+}
+
+interface PortalUploadFolderNode {
+    id: string;
+    name: string;
+    children: PortalUploadFolderNode[];
+    expanded: boolean;
+    loaded: boolean;
+    loading: boolean;
+}
+
+interface PortalUploadReviewRow {
+    file: KnowledgeFile;
+    selected: boolean;
+    recommendedFolderId: string | null;
+    recommendedFolderName: string;
+    storageFolderId: string | null;
+    storageFolderName: string;
+    candidates: SimilarCandidateEntry[];
+    candidatesLoading: boolean;
+    candidateError: boolean;
+    selectedTargetDocumentId: number | null;
 }
 
 const EMPTY_GROUPED_SPACES: GroupedKnowledgeSpaces = {
@@ -301,6 +347,39 @@ function updateTreeNode(
     });
 }
 
+function createUploadFolderNode(item: { id: number | string; file_name?: string; name?: string }): PortalUploadFolderNode {
+    return {
+        id: String(item.id),
+        name: String(item.file_name ?? item.name ?? ""),
+        children: [],
+        expanded: false,
+        loaded: false,
+        loading: false,
+    };
+}
+
+function updateUploadFolderNode(
+    nodes: PortalUploadFolderNode[],
+    folderId: string,
+    updater: (node: PortalUploadFolderNode) => PortalUploadFolderNode,
+): PortalUploadFolderNode[] {
+    return nodes.map((node) => {
+        if (node.id === folderId) return updater(node);
+        if (!node.children.length) return node;
+        return {
+            ...node,
+            children: updateUploadFolderNode(node.children, folderId, updater),
+        };
+    });
+}
+
+function flattenUploadFolders(nodes: PortalUploadFolderNode[]): Array<{ id: string; name: string }> {
+    return nodes.flatMap((node) => [
+        { id: node.id, name: node.name },
+        ...flattenUploadFolders(node.children),
+    ]);
+}
+
 function folderCountText(file: KnowledgeFile) {
     if (file.successFileNum === undefined || file.fileNum === undefined) return "";
     return `(${file.successFileNum}/${file.fileNum})`;
@@ -331,6 +410,7 @@ export default function PortalKnowledgeWorkbench() {
     const confirm = useConfirm();
     const queryClient = useQueryClient();
     const uploadInputRef = useRef<HTMLInputElement>(null);
+    const uploadFolderInputRef = useRef<HTMLInputElement>(null);
     const groupRefs = useRef<Record<SpaceGroupKey, HTMLDivElement | null>>({
         public: null,
         department: null,
@@ -349,6 +429,7 @@ export default function PortalKnowledgeWorkbench() {
     const [searchText, setSearchText] = useState("");
     const [folderDraft, setFolderDraft] = useState("新建文件夹");
     const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
+    const [aiDialogOpen, setAiDialogOpen] = useState(false);
     const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
@@ -374,6 +455,17 @@ export default function PortalKnowledgeWorkbench() {
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
+    const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+    const [uploadStep, setUploadStep] = useState<PortalUploadStep>("select");
+    const [uploadFiles, setUploadFiles] = useState<PortalUploadFileItem[]>([]);
+    const [uploadLocalFolderName, setUploadLocalFolderName] = useState<string | null>(null);
+    const [uploadFolderId, setUploadFolderId] = useState<string | null>(null);
+    const [uploadFolderName, setUploadFolderName] = useState("根目录");
+    const [uploadFolderNodes, setUploadFolderNodes] = useState<PortalUploadFolderNode[]>([]);
+    const [uploadFolderLoading, setUploadFolderLoading] = useState(false);
+    const [uploadSubmitting, setUploadSubmitting] = useState(false);
+    const [uploadImporting, setUploadImporting] = useState(false);
+    const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [preview, setPreview] = useState<PreviewState>({
         loading: false,
         fileUrl: "",
@@ -754,10 +846,15 @@ export default function PortalKnowledgeWorkbench() {
     const selectedDeletable = selectedFiles.length > 0 && selectedFiles.every((file) => deleteEntryIds.has(file.id));
     const retryableSelectedFiles = selectedFiles.filter(isRetryable);
     const canBatchRetry = Boolean(isActiveSpaceAdmin && retryableSelectedFiles.length > 0);
+    const uploadTargetSpace = activeSpace ?? selectableSpaces[0] ?? null;
+    const isUploadTargetAdmin = uploadTargetSpace?.role === SpaceRole.CREATOR || uploadTargetSpace?.role === SpaceRole.ADMIN;
+    const canUploadInPortal = Boolean(uploadTargetSpace && (isUploadTargetAdmin || canUploadFile));
+    const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && (isActiveSpaceAdmin || canCreateFolder));
 
     useEffect(() => {
         setSelectedFile(null);
         setActivePanel(null);
+        setAiDialogOpen(false);
         setSummaryExpanded(false);
         setSearchText("");
         setSearchMode(false);
@@ -785,6 +882,7 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         setSummaryExpanded(false);
+        setAiDialogOpen(false);
     }, [selectedFile?.id]);
 
     useEffect(() => {
@@ -995,6 +1093,7 @@ export default function PortalKnowledgeWorkbench() {
             if (isFolder(file)) {
                 setSelectedFile(null);
                 setActivePanel(null);
+                setAiDialogOpen(false);
                 return;
             }
             setSelectedFile(file);
@@ -1274,6 +1373,375 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
+    const uploadFolderOptions = useMemo(
+        () => {
+            const folders = flattenUploadFolders(uploadFolderNodes);
+            const options: Array<{ id: string | null; name: string }> = [{ id: null, name: "根目录" }];
+            const seen = new Set([""]);
+            const appendOption = (id: string | null, name: string) => {
+                const key = id ?? "";
+                if (seen.has(key)) return;
+                seen.add(key);
+                options.push({ id, name });
+            };
+            if (uploadFolderId !== null) {
+                appendOption(uploadFolderId, uploadFolderName);
+            }
+            uploadReviewRows.forEach((row) => {
+                if (row.recommendedFolderId !== null) {
+                    appendOption(row.recommendedFolderId, row.recommendedFolderName);
+                }
+                if (row.storageFolderId !== null) {
+                    appendOption(row.storageFolderId, row.storageFolderName);
+                }
+            });
+            folders.forEach((folder) => appendOption(folder.id, folder.name));
+            return options;
+        },
+        [uploadFolderId, uploadFolderName, uploadFolderNodes, uploadReviewRows],
+    );
+
+    const resetUploadDialog = useCallback(() => {
+        setUploadDialogOpen(false);
+        setUploadStep("select");
+        setUploadFiles([]);
+        setUploadLocalFolderName(null);
+        setUploadFolderId(null);
+        setUploadFolderName("根目录");
+        setUploadFolderNodes([]);
+        setUploadFolderLoading(false);
+        setUploadSubmitting(false);
+        setUploadImporting(false);
+        setUploadReviewRows([]);
+        if (uploadInputRef.current) {
+            uploadInputRef.current.value = "";
+        }
+        if (uploadFolderInputRef.current) {
+            uploadFolderInputRef.current.value = "";
+        }
+    }, []);
+
+    const handleOpenUploadDialog = useCallback(() => {
+        if (!uploadTargetSpace || !canUploadInPortal) return;
+        if (!activeSpace) {
+            setActiveSpace(uploadTargetSpace);
+        }
+        const currentFolderName = currentFolderId
+            ? currentPath[currentPath.length - 1]?.name || currentFolderNode?.file.name || "根目录"
+            : "根目录";
+        setUploadStep("select");
+        setUploadFiles([]);
+        setUploadLocalFolderName(null);
+        setUploadReviewRows([]);
+        setUploadFolderId(currentFolderId ?? null);
+        setUploadFolderName(currentFolderName);
+        setUploadDialogOpen(true);
+    }, [activeSpace, canUploadInPortal, currentFolderId, currentFolderNode?.file.name, currentPath, uploadTargetSpace]);
+
+    useEffect(() => {
+        if (!uploadDialogOpen || !activeSpace) return;
+        let cancelled = false;
+        setUploadFolderLoading(true);
+        listKnowledgeFolders({
+            space_id: activeSpace.id,
+            parent_id: null,
+            file_status: statusFilterNumbers,
+        })
+            .then(({ items }) => {
+                if (cancelled) return;
+                setUploadFolderNodes(items.map(createUploadFolderNode));
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setUploadFolderNodes([]);
+                showToast({ message: "目录加载失败", severity: NotificationSeverity.ERROR });
+            })
+            .finally(() => {
+                if (!cancelled) setUploadFolderLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSpace, showToast, statusFilterNumbers, uploadDialogOpen]);
+
+    const handleAddUploadFiles = useCallback((files?: FileList | File[]) => {
+        const nextFiles = Array.from(files ?? []);
+        if (!nextFiles.length) return;
+        setUploadLocalFolderName(null);
+        setUploadFiles((prev) => [
+            ...prev.filter((item) => item.source === "file"),
+            ...nextFiles.map((file) => ({
+                id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+                file,
+                source: "file" as const,
+            })),
+        ]);
+        setUploadStep("select");
+        setUploadReviewRows([]);
+    }, []);
+
+    const handleAddUploadFolder = useCallback((files?: FileList | File[]) => {
+        const allFiles = Array.from(files ?? []);
+        if (!allFiles.length) return;
+
+        const rootNames = Array.from(new Set(
+            allFiles
+                .map((file) => getRootFolderName(file.webkitRelativePath || ""))
+                .filter(Boolean),
+        ));
+        const rootName = rootNames[0] || "";
+        if (!rootName) {
+            showToast({ message: "请选择一个有效文件夹", severity: NotificationSeverity.WARNING });
+            return;
+        }
+        if (isHiddenName(rootName)) {
+            showToast({ message: "不支持上传隐藏文件夹", severity: NotificationSeverity.WARNING });
+            return;
+        }
+        if (allFiles.length > MAX_FOLDER_UPLOAD_COUNT) {
+            showToast({
+                message: `文件夹上传最多支持 ${MAX_FOLDER_UPLOAD_COUNT} 个文件`,
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
+        if (rootNames.length > 1) {
+            showToast({ message: "一次仅支持上传一个文件夹，已保留第一个文件夹", severity: NotificationSeverity.INFO });
+        }
+
+        const filesInRoot = allFiles.filter((file) => getRootFolderName(file.webkitRelativePath || "") === rootName);
+        const validFiles = filterFolderUploadFiles(filesInRoot, {
+            allowedExtensions: ALLOWED_EXTENSIONS,
+            maxSizeMB: DEFAULT_MAX_FILE_SIZE_MB,
+        });
+        if (!validFiles.length) {
+            showToast({ message: "文件夹根目录下没有可上传的支持文件", severity: NotificationSeverity.WARNING });
+            return;
+        }
+
+        setUploadLocalFolderName(rootName);
+        setUploadFiles(validFiles.map((file) => ({
+            id: `${rootName}-${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+            file,
+            source: "folder" as const,
+        })));
+        setUploadStep("select");
+        setUploadReviewRows([]);
+    }, [showToast]);
+
+    const handleRemoveUploadFile = useCallback((fileId: string) => {
+        setUploadFiles((prev) => {
+            const next = prev.filter((item) => item.id !== fileId);
+            if (!next.length) {
+                setUploadLocalFolderName(null);
+            }
+            return next;
+        });
+        setUploadReviewRows([]);
+    }, []);
+
+    const handleSelectUploadFolder = useCallback((folderId: string | null, folderName: string) => {
+        setUploadFolderId(folderId);
+        setUploadFolderName(folderName);
+    }, []);
+
+    const handleToggleUploadFolder = useCallback(async (node: PortalUploadFolderNode) => {
+        const spaceId = activeSpace?.id;
+        if (!spaceId) return;
+        if (node.expanded) {
+            setUploadFolderNodes((prev) => updateUploadFolderNode(prev, node.id, (item) => ({
+                ...item,
+                expanded: false,
+            })));
+            return;
+        }
+        if (node.loaded) {
+            setUploadFolderNodes((prev) => updateUploadFolderNode(prev, node.id, (item) => ({
+                ...item,
+                expanded: true,
+            })));
+            return;
+        }
+        setUploadFolderNodes((prev) => updateUploadFolderNode(prev, node.id, (item) => ({
+            ...item,
+            expanded: true,
+            loading: true,
+        })));
+        const parentId = Number(node.id);
+        try {
+            const { items } = await listKnowledgeFolders({
+                space_id: spaceId,
+                parent_id: Number.isFinite(parentId) ? parentId : node.id,
+                file_status: statusFilterNumbers,
+            });
+            setUploadFolderNodes((prev) => updateUploadFolderNode(prev, node.id, (item) => ({
+                ...item,
+                children: items.map(createUploadFolderNode),
+                expanded: true,
+                loaded: true,
+                loading: false,
+            })));
+        } catch {
+            setUploadFolderNodes((prev) => updateUploadFolderNode(prev, node.id, (item) => ({
+                ...item,
+                expanded: false,
+                loading: false,
+            })));
+            showToast({ message: "目录加载失败", severity: NotificationSeverity.ERROR });
+        }
+    }, [activeSpace?.id, showToast, statusFilterNumbers]);
+
+    const loadUploadReviewCandidates = useCallback((rows: PortalUploadReviewRow[]) => {
+        rows.forEach((row) => {
+            const fileId = Number(row.file.id);
+            if (!Number.isFinite(fileId)) return;
+            void getSimilarCandidatesApi(fileId)
+                .then((candidates) => {
+                    setUploadReviewRows((prev) => prev.map((item) => item.file.id === row.file.id ? {
+                        ...item,
+                        candidates,
+                        candidatesLoading: false,
+                        candidateError: false,
+                    } : item));
+                })
+                .catch(() => {
+                    setUploadReviewRows((prev) => prev.map((item) => item.file.id === row.file.id ? {
+                        ...item,
+                        candidates: [],
+                        candidatesLoading: false,
+                        candidateError: true,
+                    } : item));
+                    showToast({ message: `${row.file.name} 版本推荐加载失败`, severity: NotificationSeverity.ERROR });
+                });
+        });
+    }, [showToast]);
+
+    const handleUploadNext = useCallback(async () => {
+        if (uploadReviewRows.length) {
+            setUploadStep("review");
+            return;
+        }
+        if (!activeSpace) return;
+        if (!uploadFiles.length) {
+            showToast({ message: "请先选择文件", severity: NotificationSeverity.INFO });
+            return;
+        }
+        setUploadSubmitting(true);
+        try {
+            if (uploadLocalFolderName) {
+                const targetParentId = uploadFolderId === null ? null : Number(uploadFolderId);
+                const normalizedParentId = uploadFolderId === null
+                    ? null
+                    : Number.isFinite(targetParentId)
+                        ? targetParentId
+                        : uploadFolderId;
+                const { items } = await listKnowledgeFolders({
+                    space_id: activeSpace.id,
+                    parent_id: normalizedParentId,
+                });
+                if (items.some((item) => item.file_name === uploadLocalFolderName)) {
+                    showToast({
+                        message: `该位置已存在同名文件夹「${uploadLocalFolderName}」`,
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+
+                const createdFolder = await createFolderApi(activeSpace.id, {
+                    name: uploadLocalFolderName,
+                    parent_id: uploadFolderId,
+                });
+                const createdFolderId = Number(createdFolder.id);
+                if (!Number.isFinite(createdFolderId)) {
+                    throw new Error("创建文件夹失败");
+                }
+
+                const uploadResults = await Promise.all(
+                    uploadFiles.map((item) => uploadFileToServerApi(activeSpace.id, item.file, item.file.name)),
+                );
+                const filePaths = uploadResults.map((item) => item.file_path);
+                const registeredFiles = await addFilesApi(activeSpace.id, {
+                    file_path: filePaths,
+                    parent_id: createdFolderId,
+                });
+                const createdFolderOptionId = String(createdFolder.id);
+                const rows: PortalUploadReviewRow[] = registeredFiles.map((file) => ({
+                    file,
+                    selected: true,
+                    recommendedFolderId: createdFolderOptionId,
+                    recommendedFolderName: createdFolder.name,
+                    storageFolderId: createdFolderOptionId,
+                    storageFolderName: createdFolder.name,
+                    candidates: [],
+                    candidatesLoading: true,
+                    candidateError: false,
+                    selectedTargetDocumentId: null,
+                }));
+                setUploadReviewRows(rows);
+                setUploadStep("review");
+                loadUploadReviewCandidates(rows);
+                return;
+            }
+
+            const uploadResults = await Promise.all(
+                uploadFiles.map((item) => uploadFileToServerApi(activeSpace.id, item.file)),
+            );
+            const filePaths = uploadResults.map((item) => item.file_path);
+            const parentId = uploadFolderId === null ? null : Number(uploadFolderId);
+            const registeredFiles = await addFilesApi(activeSpace.id, {
+                file_path: filePaths,
+                parent_id: parentId !== null && Number.isFinite(parentId) ? parentId : null,
+            });
+            const rows: PortalUploadReviewRow[] = registeredFiles.map((file) => ({
+                file,
+                selected: true,
+                recommendedFolderId: uploadFolderId,
+                recommendedFolderName: uploadFolderName,
+                storageFolderId: uploadFolderId,
+                storageFolderName: uploadFolderName,
+                candidates: [],
+                candidatesLoading: true,
+                candidateError: false,
+                selectedTargetDocumentId: null,
+            }));
+            setUploadReviewRows(rows);
+            setUploadStep("review");
+            loadUploadReviewCandidates(rows);
+        } catch (error) {
+            const message = error instanceof Error && error.message ? error.message : "上传失败";
+            showToast({ message, severity: NotificationSeverity.ERROR });
+        } finally {
+            setUploadSubmitting(false);
+        }
+    }, [activeSpace, loadUploadReviewCandidates, showToast, statusFilterNumbers, uploadFiles, uploadFolderId, uploadFolderName, uploadLocalFolderName, uploadReviewRows.length]);
+
+    const handleStartUploadImport = useCallback(async () => {
+        const rows = uploadReviewRows.filter((row) => row.selected);
+        if (!rows.length) {
+            showToast({ message: "请至少选择一个文件", severity: NotificationSeverity.INFO });
+            return;
+        }
+        setUploadImporting(true);
+        try {
+            for (const row of rows) {
+                if (!row.selectedTargetDocumentId) continue;
+                const fileId = Number(row.file.id);
+                if (!Number.isFinite(fileId)) continue;
+                await linkAsNewVersionApi({
+                    knowledge_file_id: fileId,
+                    target_document_id: row.selectedTargetDocumentId,
+                });
+            }
+            await reloadFiles();
+            resetUploadDialog();
+            showToast({ message: "导入成功", severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: "版本关联失败", severity: NotificationSeverity.ERROR });
+        } finally {
+            setUploadImporting(false);
+        }
+    }, [reloadFiles, resetUploadDialog, showToast, uploadReviewRows]);
+
     const documentPath = useMemo(() => {
         const names = [
             "全部知识库",
@@ -1284,6 +1752,307 @@ export default function PortalKnowledgeWorkbench() {
         return names.join("/");
     }, [activeGroup?.title, activeSpace?.name, selectedFile?.name, selectedFile?.path]);
 
+    const renderUploadFolderNode = (node: PortalUploadFolderNode, depth = 0): ReactNode => (
+        <div key={node.id}>
+            <div className={s.uploadFolderRow} style={{ paddingLeft: `${8 + depth * 16}px` }}>
+                <button
+                    type="button"
+                    className={s.uploadFolderExpandButton}
+                    aria-label={`${node.expanded ? "收起" : "展开"}上传目录${node.name}`}
+                    onClick={() => void handleToggleUploadFolder(node)}
+                >
+                    {node.expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
+                <button
+                    type="button"
+                    className={`${s.uploadFolderSelectButton} ${uploadFolderId === node.id ? s.uploadFolderSelectButtonActive : ""}`}
+                    aria-label={`选择上传目录${node.name}`}
+                    onClick={() => handleSelectUploadFolder(node.id, node.name)}
+                >
+                    <Folder size={14} />
+                    <span>{node.name}</span>
+                </button>
+            </div>
+            {node.expanded && node.loading ? (
+                <div className={s.uploadFolderLoading} style={{ paddingLeft: `${30 + (depth + 1) * 16}px` }}>
+                    加载中...
+                </div>
+            ) : null}
+            {node.expanded ? node.children.map((child) => renderUploadFolderNode(child, depth + 1)) : null}
+        </div>
+    );
+
+    const renderUploadDialog = () => {
+        const selectedReviewCount = uploadReviewRows.filter((row) => row.selected).length;
+        return (
+            <Dialog
+                open={uploadDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        resetUploadDialog();
+                    } else {
+                        setUploadDialogOpen(true);
+                    }
+                }}
+            >
+                {uploadStep === "select" ? (
+                    <DialogContent className={s.uploadDialogContent} onPointerDownOutside={(event) => event.preventDefault()}>
+                        <div data-testid="portal-upload-dialog" className={s.uploadDialogInner}>
+                            <DialogHeader>
+                                <DialogTitle>上传文件</DialogTitle>
+                            </DialogHeader>
+                            <div className={s.uploadStepBody}>
+                            <div className={s.uploadSection}>
+                                <div className={s.uploadLabel}>选择文件</div>
+                                <div
+                                    className={s.uploadDropzone}
+                                    onDragOver={(event) => {
+                                        event.preventDefault();
+                                    }}
+                                    onDrop={(event) => {
+                                        event.preventDefault();
+                                        handleAddUploadFiles(event.dataTransfer.files);
+                                    }}
+                                >
+                                    <Upload size={34} />
+                                    <span>点击选择文件或拖拽文件到此处</span>
+                                    <small>支持多个文件同时上传</small>
+                                    <div className={s.uploadPickActions}>
+                                        <button
+                                            type="button"
+                                            className={s.uploadPickButton}
+                                            onClick={() => uploadInputRef.current?.click()}
+                                        >
+                                            选择文件
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={s.uploadPickButton}
+                                            onClick={() => uploadFolderInputRef.current?.click()}
+                                        >
+                                            选择文件夹
+                                        </button>
+                                    </div>
+                                </div>
+                                <input
+                                    ref={uploadInputRef}
+                                    aria-label="选择文件"
+                                    className={s.uploadNativeInput}
+                                    type="file"
+                                    multiple
+                                    onChange={(event) => {
+                                        handleAddUploadFiles(event.currentTarget.files || undefined);
+                                        event.currentTarget.value = "";
+                                    }}
+                                />
+                                <input
+                                    ref={uploadFolderInputRef}
+                                    aria-label="选择文件夹"
+                                    className={s.uploadNativeInput}
+                                    type="file"
+                                    multiple
+                                    onChange={(event) => {
+                                        handleAddUploadFolder(event.currentTarget.files || undefined);
+                                        event.currentTarget.value = "";
+                                    }}
+                                    {...({ webkitdirectory: "", directory: "" } as any)}
+                                />
+                            </div>
+
+                            <div className={s.uploadSection}>
+                                <div className={s.uploadLabel}>上传位置</div>
+                                <label className={s.uploadField}>
+                                    <span>目标知识库</span>
+                                    <input aria-label="目标知识库" className={s.uploadReadonlyInput} value={activeSpace?.name || ""} readOnly />
+                                </label>
+                                <div className={s.uploadField}>
+                                    <span>上传目标目录</span>
+                                    <div className={s.uploadFolderPicker}>
+                                        <div className={s.uploadFolderSelected} data-testid="selected-upload-folder">
+                                            {uploadFolderName}
+                                        </div>
+                                        <div className={s.uploadFolderTree}>
+                                            <div className={s.uploadFolderRow}>
+                                                <span className={s.uploadFolderExpandPlaceholder} />
+                                                <button
+                                                    type="button"
+                                                    className={`${s.uploadFolderSelectButton} ${uploadFolderId === null ? s.uploadFolderSelectButtonActive : ""}`}
+                                                    aria-label="选择上传目录根目录"
+                                                    onClick={() => handleSelectUploadFolder(null, "根目录")}
+                                                >
+                                                    <Folder size={14} />
+                                                    <span>选择根目录</span>
+                                                </button>
+                                            </div>
+                                            {uploadFolderLoading ? (
+                                                <div className={s.uploadFolderLoading}>目录加载中...</div>
+                                            ) : uploadFolderNodes.length ? (
+                                                uploadFolderNodes.map((node) => renderUploadFolderNode(node))
+                                            ) : (
+                                                <div className={s.uploadFolderEmpty}>暂无子目录</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className={s.uploadHint}>
+                                    文件将上传到所选知识空间目录，下一步会进入待入库确认。
+                                </div>
+                            </div>
+
+                            {uploadFiles.length ? (
+                                <div className={s.uploadSelectedFiles}>
+                                    <div className={s.uploadLabel}>已选择的文件 ({uploadFiles.length})</div>
+                                    {uploadLocalFolderName ? (
+                                        <div className={s.uploadFolderNotice}>
+                                            <strong>将创建文件夹：{uploadLocalFolderName}</strong>
+                                            <span>仅上传所选文件夹根目录下的支持文件，子目录文件不会上传。</span>
+                                        </div>
+                                    ) : null}
+                                    {uploadFiles.map((item) => (
+                                        <div key={item.id} className={s.uploadSelectedFile}>
+                                            <FileText size={16} />
+                                            <div className={s.uploadFileMeta}>
+                                                <span>{item.file.name}</span>
+                                                <small>{formatFileSize(item.file.size)}</small>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className={s.uploadRemoveButton}
+                                                aria-label={`移除${item.file.name}`}
+                                                onClick={() => handleRemoveUploadFile(item.id)}
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" className="h-8" onClick={resetUploadDialog}>
+                                    取消
+                                </Button>
+                                <Button className="h-8" disabled={!uploadFiles.length || uploadSubmitting} onClick={() => void handleUploadNext()}>
+                                    {uploadSubmitting ? "上传中..." : "下一步"}
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    </DialogContent>
+                ) : (
+                    <DialogContent className={s.uploadReviewContent} onPointerDownOutside={(event) => event.preventDefault()}>
+                        <div data-testid="portal-upload-review-dialog" className={s.uploadReviewInner}>
+                            <DialogHeader>
+                                <DialogTitle>待入库确认</DialogTitle>
+                            </DialogHeader>
+                            <div className={s.uploadReviewToolbar}>
+                            <input className={s.uploadReviewSearch} placeholder="搜索文档标题..." />
+                            <button
+                                type="button"
+                                className={s.secondaryButton}
+                                onClick={() => setUploadReviewRows((prev) => prev.map((row) => ({ ...row, selected: false })))}
+                            >
+                                取消全选
+                            </button>
+                            <span>已勾选 {selectedReviewCount} / {uploadReviewRows.length} 个文档</span>
+                            </div>
+                            <div className={s.uploadReviewTable}>
+                            <div className={s.uploadReviewTableHead}>
+                                <input
+                                    type="checkbox"
+                                    aria-label="选择全部待入库文件"
+                                    checked={uploadReviewRows.length > 0 && selectedReviewCount === uploadReviewRows.length}
+                                    onChange={(event) => {
+                                        const checked = event.currentTarget.checked;
+                                        setUploadReviewRows((prev) => prev.map((row) => ({ ...row, selected: checked })));
+                                    }}
+                                />
+                                <span>标题</span>
+                                <span>推荐存储路径</span>
+                                <span>存储路径</span>
+                                <span>版本管理</span>
+                            </div>
+                            {uploadReviewRows.length ? uploadReviewRows.map((row) => (
+                                <div key={row.file.id} className={s.uploadReviewRow}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label={`选择${row.file.name}`}
+                                        checked={row.selected}
+                                        onChange={(event) => {
+                                            const checked = event.currentTarget.checked;
+                                            setUploadReviewRows((prev) => prev.map((item) => item.file.id === row.file.id ? {
+                                                ...item,
+                                                selected: checked,
+                                            } : item));
+                                        }}
+                                    />
+                                    <div className={s.uploadReviewTitle}>
+                                        <small>{row.file.fileEncoding || "-"}</small>
+                                        <span>{row.file.name}</span>
+                                    </div>
+                                    <span className={s.uploadReviewPath}>{row.recommendedFolderName}</span>
+                                    <select
+                                        className={s.uploadReviewSelect}
+                                        aria-label={`${row.file.name}存储路径`}
+                                        value={row.storageFolderId ?? ""}
+                                        onChange={(event) => {
+                                            const selectedValue = event.currentTarget.value;
+                                            const nextId = selectedValue || null;
+                                            const nextOption = uploadFolderOptions.find((option) => (option.id ?? "") === selectedValue);
+                                            setUploadReviewRows((prev) => prev.map((item) => item.file.id === row.file.id ? {
+                                                ...item,
+                                                storageFolderId: nextId,
+                                                storageFolderName: nextOption?.name || "根目录",
+                                            } : item));
+                                        }}
+                                    >
+                                        {uploadFolderOptions.map((option) => (
+                                            <option key={option.id ?? "root"} value={option.id ?? ""}>
+                                                {option.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        className={s.uploadReviewSelect}
+                                        aria-label={`${row.file.name}版本管理`}
+                                        value={row.selectedTargetDocumentId ?? ""}
+                                        onChange={(event) => {
+                                            const selectedValue = event.currentTarget.value;
+                                            const value = Number(selectedValue);
+                                            setUploadReviewRows((prev) => prev.map((item) => item.file.id === row.file.id ? {
+                                                ...item,
+                                                selectedTargetDocumentId: Number.isFinite(value) && selectedValue ? value : null,
+                                            } : item));
+                                        }}
+                                    >
+                                        <option value="">
+                                            {row.candidatesLoading ? "加载中..." : row.candidateError ? "推荐加载失败" : "不关联新版本"}
+                                        </option>
+                                        {row.candidates.map((candidate) => (
+                                            <option key={candidate.target_document_id} value={candidate.target_document_id}>
+                                                {candidate.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )) : (
+                                <div className={s.uploadReviewEmpty}>暂无待入库文件</div>
+                            )}
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" className="h-8" disabled={uploadImporting} onClick={() => setUploadStep("select")}>
+                                    返回
+                                </Button>
+                                <Button className="h-8" disabled={selectedReviewCount === 0 || uploadImporting} onClick={() => void handleStartUploadImport()}>
+                                    {uploadImporting ? "导入中..." : `开始导入 (${selectedReviewCount})`}
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    </DialogContent>
+                )}
+            </Dialog>
+        );
+    };
+
     const renderDrawer = () => {
         if (!activePanel) return null;
         const panelTitleMap: Record<PanelKey, string> = {
@@ -1292,7 +2061,6 @@ export default function PortalKnowledgeWorkbench() {
             source: "来源",
             usage: "使用",
             share: "分享",
-            ai: "AI 助手",
         };
         const placeholderTextMap: Partial<Record<PanelKey, string>> = {
             time: "文件时间线暂未开放",
@@ -1362,17 +2130,66 @@ export default function PortalKnowledgeWorkbench() {
                         </div>
                     ) : null}
 
-                    {activePanel === "ai" && activeSpace ? (
-                        <KnowledgeAiPanel
-                            spaceId={activeSpace.id}
-                            folderId={undefined}
-                            contextLabel="知识空间"
-                            onClose={() => setActivePanel(null)}
-                        />
-                    ) : null}
-
                 </div>
             </aside>
+        );
+    };
+
+    const renderAiDialog = () => {
+        if (!activeSpace || !selectedFile) return null;
+        const updatedText = selectedFile.updatedAt ? formatTime(selectedFile.updatedAt) : "";
+        const fileSizeText = formatFileSize(selectedFile.size);
+
+        return (
+            <Dialog
+                open={aiDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open) setAiDialogOpen(false);
+                }}
+            >
+                <DialogContent
+                    close={false}
+                    className={s.aiDialogContent}
+                    onPointerDownOutside={(event) => event.preventDefault()}
+                >
+                    <div data-testid="portal-ai-dialog" className={s.aiDialog}>
+                        <DialogHeader className={s.aiDialogHeader}>
+                            <div className={s.aiFileIcon}>
+                                <FileText size={22} />
+                            </div>
+                            <div className={s.aiFileMeta}>
+                                <DialogTitle className={s.aiFileTitle}>{selectedFile.name}</DialogTitle>
+                                <div className={s.aiFileFacts}>
+                                    <span>{documentPath}</span>
+                                    {updatedText ? <span>{updatedText}</span> : null}
+                                    {fileSizeText !== "-" ? <span>{fileSizeText}</span> : null}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                className={s.aiDialogClose}
+                                aria-label="关闭AI弹窗"
+                                onClick={() => setAiDialogOpen(false)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </DialogHeader>
+                        <div className={s.aiDialogBody}>
+                            <AiAssistantPanel
+                                features={{
+                                    tools: false,
+                                    modelSelect: true,
+                                    knowledgeBase: false,
+                                    fileUpload: false,
+                                }}
+                                onClose={() => setAiDialogOpen(false)}
+                                noBorder
+                                fileChat={{ spaceId: activeSpace.id, fileId: selectedFile.id }}
+                            />
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         );
     };
 
@@ -1759,9 +2576,9 @@ export default function PortalKnowledgeWorkbench() {
                         <button
                             type="button"
                             className={s.folderAction}
-                            onClick={() => uploadInputRef.current?.click()}
-                            disabled={!activeSpace || !canUploadFile}
-                            title={canUploadFile ? "上传" : "无上传权限"}
+                            onClick={handleOpenUploadDialog}
+                            disabled={!canUploadInPortal}
+                            title={canUploadInPortal ? "上传" : "无上传权限"}
                             aria-label="上传"
                         >
                             <Upload size={14} />
@@ -1788,8 +2605,8 @@ export default function PortalKnowledgeWorkbench() {
                             type="button"
                             className={s.folderAction}
                             onClick={() => fileUpload.handleCreateFolder()}
-                            disabled={!activeSpace || searchMode || !canCreateFolder}
-                            title={canCreateFolder ? "新建文件夹" : "无创建权限"}
+                            disabled={!canCreateFolderInPortal}
+                            title={canCreateFolderInPortal ? "新建文件夹" : "无创建权限"}
                             aria-label="新建文件夹"
                         >
                             <FolderPlus size={14} />
@@ -1847,16 +2664,6 @@ export default function PortalKnowledgeWorkbench() {
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
-                    <input
-                        ref={uploadInputRef}
-                        type="file"
-                        multiple
-                        hidden
-                        onChange={(event) => {
-                            void fileUpload.handleUploadFile(event.currentTarget.files || undefined);
-                            event.currentTarget.value = "";
-                        }}
-                    />
                 </div>
 
                 <div className={s.fileList}>
@@ -1911,7 +2718,16 @@ export default function PortalKnowledgeWorkbench() {
                                     <div className={s.docPath}>{documentPath}</div>
                                 </div>
                                 <div className={s.docActions} data-testid="portal-document-actions">
-                                    <button type="button" className={s.iconAction} title="AI 对话" aria-label="AI 对话" onClick={() => setActivePanel("ai")}>
+                                    <button
+                                        type="button"
+                                        className={s.iconAction}
+                                        title="AI 对话"
+                                        aria-label="AI 对话"
+                                        onClick={() => {
+                                            setActivePanel(null);
+                                            setAiDialogOpen(true);
+                                        }}
+                                    >
                                         <Bot size={16} />
                                     </button>
                                     <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={() => setTagModalOpen(true)}>
@@ -2056,6 +2872,8 @@ export default function PortalKnowledgeWorkbench() {
                 />
             ) : null}
 
+            {renderAiDialog()}
+
             {spacePermissionDialogSpace ? (
                 <KnowledgeSpaceShareDialog
                     open={spacePermissionOpen}
@@ -2087,6 +2905,8 @@ export default function PortalKnowledgeWorkbench() {
                     if (editingSpace) handleOpenSpaceMembers(editingSpace);
                 }}
             />
+
+            {renderUploadDialog()}
 
             <Dialog
                 open={fileUpload.duplicateFiles.length > 0}
