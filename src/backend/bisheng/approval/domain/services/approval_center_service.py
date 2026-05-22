@@ -218,6 +218,14 @@ class ApprovalCenterService:
         dept_ids = [r.applicant_department_id for r in rows if r.applicant_department_id]
         approver_names_map, dept_name_map = await cls._enrich_with_approver_and_dept(instance_ids, dept_ids)
 
+        # Batch-check which menu_access instances have had their grant revoked
+        from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
+        menu_executed_ids = [
+            r.id for r in rows
+            if r.scenario_code == 'menu_access_request' and r.status == 'executed'
+        ]
+        revoked_instance_ids = await UserMenuAccessRepository.get_revoked_instance_ids(menu_executed_ids)
+
         data = [
             {
                 'instance_id': row.id,
@@ -225,6 +233,7 @@ class ApprovalCenterService:
                 'scenario_name': row.scenario_name,
                 'business_name': row.business_name,
                 'status': row.status,
+                'grant_revoked': row.id in revoked_instance_ids,
                 'applicant_user_name': row.applicant_user_name,
                 'applicant_department_id': row.applicant_department_id,
                 'applicant_department_name': dept_name_map.get(row.applicant_department_id) if row.applicant_department_id else None,

@@ -40,6 +40,7 @@ export interface ApprovalInstanceItem {
   scenario_name?: string;
   business_name?: string;
   status?: string;
+  grant_revoked?: boolean;
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;

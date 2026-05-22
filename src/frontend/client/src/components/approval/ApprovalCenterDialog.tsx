@@ -370,7 +370,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                             onClick={() => id && openRequest(id)}>
                             <div className="flex items-start justify-between gap-2">
                               <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
-                              <StatusBadge status={item.status} localize={localize} />
+                              <div className="flex shrink-0 items-center gap-1">
+                                {item.grant_revoked && (
+                                  <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
+                                    {localize("com_approval_grant_revoked")}
+                                  </span>
+                                )}
+                                <StatusBadge status={item.status} localize={localize} />
+                              </div>
                             </div>
                             {(item.current_node_name || item.current_approver_names) && (
                               <div className="mt-1.5 flex flex-wrap gap-x-3 text-[12px] text-[#86909c]">

@@ -1920,6 +1920,7 @@
   "com_approval_status_pending": "审批中",
   "com_approval_status_approved": "已通过",
   "com_approval_status_rejected": "已拒绝",
+  "com_approval_grant_revoked": "授权已撤回",
   "com_approval_status_withdrawn": "已撤回",
   "com_approval_status_execute_failed": "执行失败",
   "com_approval_status_label": "状态：",
