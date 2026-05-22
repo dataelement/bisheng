@@ -377,18 +377,18 @@ class ApprovalExceptionService:
             None,
         )
         if route_rule is None or route_rule.flow_definition_id is None:
-            raise ValueError(f'flow route not found for scenario: {instance.scenario_code}')
+            raise ValueError('当前场景没有已启用的审批流程分支，请先在审批管理中配置条件分支并绑定流程')
 
         flow_version = await ApprovalScenarioRepository.get_active_flow_version(
             instance.tenant_id,
             route_rule.flow_definition_id,
         )
         if flow_version is None:
-            raise ValueError(f'active flow version not found for scenario: {instance.scenario_code}')
+            raise ValueError('审批流程暂无激活版本，请先在审批管理中保存流程节点')
 
         node_definitions = await ApprovalScenarioRepository.list_node_definitions(instance.tenant_id, flow_version.id)
         if not node_definitions:
-            raise ValueError(f'flow nodes not found for flow version: {flow_version.id}')
+            raise ValueError('审批流程尚未配置节点，请先在审批管理中添加审批节点后再重试')
         return route_rule, flow_version.id, node_definitions[0]
 
     @staticmethod
