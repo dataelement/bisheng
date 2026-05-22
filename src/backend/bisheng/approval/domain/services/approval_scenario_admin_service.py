@@ -330,5 +330,16 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def list_open_exceptions(cls, *, tenant_id: int):
+        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
         rows = await ApprovalQueryRepository.list_open_exceptions(tenant_id)
-        return [row.model_dump() for row in rows]
+        result = []
+        for row in rows:
+            item = row.model_dump()
+            instance = await ApprovalInstanceRepository.get_instance(row.instance_id)
+            if instance:
+                item['business_name'] = instance.business_name
+                item['scenario_code'] = instance.scenario_code
+                item['scenario_name'] = instance.scenario_name
+                item['applicant_user_name'] = instance.applicant_user_name
+            result.append(item)
+        return result

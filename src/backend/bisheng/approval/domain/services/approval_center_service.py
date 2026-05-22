@@ -352,6 +352,16 @@ class ApprovalCenterService:
             operator_name=operator_user_name,
             object_name=instance.business_name,
         )
+        # Notify approvers who had tasks on this instance
+        task_approver_ids = list({t.approver_user_id for t in tasks if t.approver_user_id != operator_user_id})
+        if task_approver_ids:
+            await cls._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=task_approver_ids,
+                action_code='approval_instance_withdrawn',
+                business_name=instance.business_name,
+                instance_id=instance.id,
+            )
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
@@ -633,6 +643,13 @@ class ApprovalCenterService:
                 operator_name=operator_user_name,
                 object_name=instance.business_name,
             )
+            await self.__class__._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=[instance.applicant_user_id],
+                action_code='approval_task_rejected',
+                business_name=instance.business_name,
+                instance_id=instance.id,
+            )
             return
 
         task.status = ApprovalTaskStatus.APPROVED
@@ -695,6 +712,44 @@ class ApprovalCenterService:
                 )
             )
             self.__class__._dispatch_outbox(outbox.id)
+
+    @staticmethod
+    async def _send_approval_notify(
+        *,
+        sender: int,
+        receiver_user_ids: list[int],
+        action_code: str,
+        business_name: str,
+        instance_id: int,
+    ) -> None:
+        if not receiver_user_ids:
+            return
+        try:
+            from bisheng.core.database import get_async_db_session
+            from bisheng.message.api.dependencies import get_message_service as _get_message_service
+            async with get_async_db_session() as session:
+                message_service = await _get_message_service(session)
+                content = [
+                    {'type': 'system_text', 'content': action_code},
+                    {
+                        'type': 'business_url',
+                        'content': f'--{business_name}',
+                        'metadata': {
+                            'business_type': 'approval_instance_id',
+                            'data': {'approval_instance_id': str(instance_id)},
+                        },
+                    },
+                ]
+                await message_service.send_generic_notify(
+                    sender=sender,
+                    receiver_user_ids=receiver_user_ids,
+                    content_item_list=content,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'failed to send approval notify: action_code=%s instance_id=%s', action_code, instance_id
+            )
 
     @staticmethod
     def _dispatch_outbox(outbox_id: int) -> None:

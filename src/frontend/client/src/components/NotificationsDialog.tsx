@@ -52,6 +52,13 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     approved_department_knowledge_space_upload: "com_notifications_action_approved_department_knowledge_space_upload",
     rejected_department_knowledge_space_upload: "com_notifications_action_rejected_department_knowledge_space_upload",
     sensitive_rejected_department_knowledge_space_upload: "com_notifications_action_sensitive_rejected_department_knowledge_space_upload",
+    // approval center notifications
+    request_menu_access: "com_notifications_action_request_menu_access",
+    approval_task_rejected: "com_notifications_action_approval_task_rejected",
+    approval_instance_withdrawn: "com_notifications_action_approval_instance_withdrawn",
+    approval_exception_cancelled: "com_notifications_action_approval_exception_cancelled",
+    approval_exception_route_missing: "com_notifications_action_approval_exception_route_missing",
+    approval_exception_approver_empty: "com_notifications_action_approval_exception_approver_empty",
 };
 
 export function NotificationsDialog({
@@ -790,6 +797,9 @@ export function NotificationsDialog({
                                 </span>
                             )}
                             {textPrefix}
+                            {targetSplitMatch && !canNavigateTarget && targetLabel && (
+                                <span className="font-medium">{targetLabel}</span>
+                            )}
                             {targetSplitMatch && canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"

@@ -275,11 +275,61 @@ class ApprovalGate:
                 },
             )
         )
+        # Notify tenant admins so they can handle the exception
+        await self._notify_admins_of_exception(
+            tenant_id=req.tenant_id,
+            applicant_user_id=req.applicant_user_id,
+            exception_type=exception_type,
+            business_name=instance.business_name,
+            instance_id=instance.id,
+        )
         return ApprovalGateResult(
             decision=ApprovalGateDecision.EXCEPTION,
             instance_id=instance.id,
             exception_type=exception_type,
         )
+
+    @staticmethod
+    async def _notify_admins_of_exception(
+        *,
+        tenant_id: int,
+        applicant_user_id: int,
+        exception_type: str,
+        business_name: str,
+        instance_id: int,
+    ) -> None:
+        try:
+            from bisheng.database.constants import AdminRole
+            from bisheng.user.domain.models.user_role import UserRoleDao
+            from bisheng.core.database import get_async_db_session
+            from bisheng.message.api.dependencies import get_message_service as _get_message_service
+            admin_rows = await UserRoleDao.aget_roles_user([AdminRole])
+            admin_ids = [int(r.user_id) for r in admin_rows if r.user_id != applicant_user_id]
+            if not admin_ids:
+                return
+            async with get_async_db_session() as session:
+                message_service = await _get_message_service(session)
+                content = [
+                    {'type': 'system_text', 'content': f'approval_exception_{exception_type}'},
+                    {
+                        'type': 'business_url',
+                        'content': f'--{business_name}',
+                        'metadata': {
+                            'business_type': 'approval_instance_id',
+                            'data': {'approval_instance_id': str(instance_id)},
+                        },
+                    },
+                ]
+                await message_service.send_generic_notify(
+                    sender=applicant_user_id,
+                    receiver_user_ids=admin_ids,
+                    content_item_list=content,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'failed to notify admin of approval exception: instance_id=%s', instance_id
+            )
 
     async def _match_first_route(self, route_rules: list[Any], req: ApprovalGateRequest) -> Any | None:
         """Evaluate route conditions top-to-bottom; return the first matching enabled route.

@@ -28,6 +28,7 @@ import {
   listApprovalScenarioPresetsApi,
   listApprovalScenariosApi,
   reorderApprovalRoutesApi,
+  cancelApprovalExceptionApi,
   retryApprovalExceptionApi,
   updateApprovalFlowApi,
   updateApprovalNodeApi,
@@ -1173,6 +1174,26 @@ export default function ApprovalPage() {
     }
   };
 
+  const [cancelDialogItem, setCancelDialogItem] = useState<ApprovalExceptionItem | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+
+  const handleCancelException = async () => {
+    if (!cancelDialogItem) return;
+    if (!cancelReason.trim()) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: t("approvalPage.cancelReasonRequired") });
+      return;
+    }
+    try {
+      await cancelApprovalExceptionApi(cancelDialogItem.id, cancelReason.trim());
+      toast({ title: t("approvalPage.hint"), variant: "success", description: t("approvalPage.genericOperateSuccess") });
+      setCancelDialogItem(null);
+      setCancelReason("");
+      await loadPage();
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericOperateFailed")) });
+    }
+  };
+
   // ── render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col bg-background-main-content">
@@ -1583,17 +1604,24 @@ export default function ApprovalPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-medium text-text-primary">
-                        {item.exception_type === "route_missing"
-                          ? t("approvalPage.exceptionTypeMissing")
-                          : item.exception_type === "approver_empty"
-                            ? t("approvalPage.exceptionTypeEmpty")
-                            : item.exception_type === "execute_failed"
-                              ? t("approvalPage.exceptionTypeFailed")
-                              : item.exception_type}{" "}
-                        <span className="ml-1 text-xs text-text-secondary">
-                          #{item.id}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={[
+                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                          item.exception_type === "execute_failed"
+                            ? "bg-red-100 text-red-700"
+                            : item.exception_type === "approver_empty"
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-yellow-100 text-yellow-700",
+                        ].join(" ")}>
+                          {item.exception_type === "route_missing"
+                            ? t("approvalPage.exceptionTypeMissing")
+                            : item.exception_type === "approver_empty"
+                              ? t("approvalPage.exceptionTypeEmpty")
+                              : item.exception_type === "execute_failed"
+                                ? t("approvalPage.exceptionTypeFailed")
+                                : item.exception_type}
                         </span>
+                        <span className="text-xs text-text-secondary">#{item.id}</span>
                       </div>
                       <div className="mt-1 text-xs text-text-secondary">
                         {t("approvalPage.exceptionInstanceInfo", {
@@ -1604,21 +1632,33 @@ export default function ApprovalPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <ActionBtn
-                        variant="outline"
-                        onClick={() => void handleRetryException(item)}
-                      >
-                        {t("approvalPage.retryAction")}
-                      </ActionBtn>
+                      {/* route_missing / approver_empty: retry to re-match route or assign approver */}
+                      {item.exception_type !== "execute_failed" && (
+                        <ActionBtn variant="outline" onClick={() => void handleRetryException(item)}>
+                          {t("approvalPage.retryAction")}
+                        </ActionBtn>
+                      )}
+                      {/* execute_failed: retry handler */}
+                      {item.exception_type === "execute_failed" && (
+                        <>
+                          <ActionBtn variant="outline" onClick={() => void handleRetryException(item)}>
+                            {t("approvalPage.retryAction")}
+                          </ActionBtn>
+                          <ActionBtn
+                            variant="outline"
+                            onClick={() => void handleRetryException(item, { action: "mark_manually_completed" })}
+                          >
+                            {t("approvalPage.markManuallyCompletedAction")}
+                          </ActionBtn>
+                        </>
+                      )}
+                      {/* approver_empty: assign approvers / skip node */}
                       {item.exception_type === "approver_empty" && (
                         <>
                           <input
                             value={exceptionApproverInputs[item.id] ?? ""}
                             onChange={(e) =>
-                              setExceptionApproverInputs((c) => ({
-                                ...c,
-                                [item.id]: e.target.value,
-                              }))
+                              setExceptionApproverInputs((c) => ({ ...c, [item.id]: e.target.value }))
                             }
                             placeholder={t("approvalPage.inputApproverIds")}
                             className="h-8 rounded-lg border border-border-subtle bg-white px-3 text-xs text-text-primary outline-none"
@@ -1631,37 +1671,75 @@ export default function ApprovalPage() {
                                 .map((s) => Number(s.trim()))
                                 .filter((n) => n > 0);
                               if (!ids.length) {
-                                toast({
-                                  title: t("approvalPage.hint"),
-                                  variant: "error",
-                                  description: t("approvalPage.invalidUserId"),
-                                });
+                                toast({ title: t("approvalPage.hint"), variant: "error", description: t("approvalPage.invalidUserId") });
                                 return;
                               }
-                              await handleRetryException(item, {
-                                action: "assign_approvers",
-                                approver_user_ids: ids,
-                              });
+                              await handleRetryException(item, { action: "assign_approvers", approver_user_ids: ids });
                             }}
                           >
                             {t("approvalPage.assignApproversAction")}
                           </ActionBtn>
                           <ActionBtn
                             variant="outline"
-                            onClick={() =>
-                              void handleRetryException(item, { action: "skip_node" })
-                            }
+                            onClick={() => void handleRetryException(item, { action: "skip_node" })}
                           >
                             {t("approvalPage.skipNodeAction")}
                           </ActionBtn>
                         </>
                       )}
+                      {/* cancel: all exception types */}
+                      <ActionBtn
+                        variant="outline"
+                        className="border-red-300 text-red-600 hover:bg-red-50"
+                        onClick={() => { setCancelDialogItem(item); setCancelReason(""); }}
+                      >
+                        {t("approvalPage.cancelExceptionAction")}
+                      </ActionBtn>
                     </div>
                   </div>
+                  {/* Business info row */}
+                  {(item.business_name || item.scenario_name || item.applicant_user_name) && (
+                    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-text-secondary">
+                      {item.business_name && (
+                        <span>
+                          <span className="text-text-tertiary">{t("approvalPage.exceptionBusiness")}：</span>
+                          <span className="font-medium text-text-primary">{item.business_name}</span>
+                        </span>
+                      )}
+                      {item.scenario_name && (
+                        <span>
+                          <span className="text-text-tertiary">{t("approvalPage.exceptionScenario")}：</span>
+                          {item.scenario_name}
+                        </span>
+                      )}
+                      {item.applicant_user_name && (
+                        <span>
+                          <span className="text-text-tertiary">{t("approvalPage.exceptionApplicant")}：</span>
+                          {item.applicant_user_name}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {/* Detail key-value */}
                   {item.detail && Object.keys(item.detail).length > 0 && (
-                    <pre className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-text-secondary overflow-x-auto">
-                      {JSON.stringify(item.detail, null, 2)}
-                    </pre>
+                    <div className="mt-3 rounded-lg border border-border-subtle bg-gray-50 divide-y divide-border-subtle">
+                      {Object.entries(item.detail)
+                        .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                        .map(([k, v]) => (
+                          <div key={k} className="flex items-start gap-3 px-3 py-2 text-xs">
+                            <span className="w-36 shrink-0 text-text-tertiary">
+                              {t(`approvalPage.exceptionDetailKey_${k}` as any, { defaultValue: k })}
+                            </span>
+                            <span className="break-all text-text-primary">{String(v)}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  {/* error_summary for execute_failed */}
+                  {item.exception_type === "execute_failed" && item.error_summary && (
+                    <div className="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 break-all">
+                      {item.error_summary}
+                    </div>
                   )}
                 </div>
               ))}
@@ -1738,6 +1816,43 @@ export default function ApprovalPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Cancel Exception Dialog ──────────────────────────────────────────── */}
+      {cancelDialogItem && (
+        <Dialog open onOpenChange={(open) => { if (!open) { setCancelDialogItem(null); setCancelReason(""); } }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("approvalPage.cancelExceptionTitle")}</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 space-y-3">
+              <p className="text-sm text-text-secondary">{t("approvalPage.cancelExceptionHint")}</p>
+              <textarea
+                rows={3}
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder={t("approvalPage.cancelReasonPlaceholder") as string}
+                className="w-full resize-none rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+              />
+            </div>
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => { setCancelDialogItem(null); setCancelReason(""); }}
+                className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
+              >
+                {t("approvalPage.cancelBtn")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCancelException()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
+              >
+                {t("approvalPage.confirmCancelException")}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

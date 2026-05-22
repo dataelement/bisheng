@@ -190,6 +190,9 @@ _UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
     'approval.instance.resubmit',
     'approval.menu_access.revoke_grant',
     'approval.exception.retry',
+    'approval.exception.skip_node',
+    'approval.exception.assign_approver',
+    'approval.exception.cancel',
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
