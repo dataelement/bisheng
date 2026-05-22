@@ -43,7 +43,7 @@ export function VersionManagementDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="flex w-full max-w-[720px] flex-col gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none [&>button]:hidden"
+                className="flex w-full max-w-[720px] max-h-[85vh] flex-col gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none [&>button]:hidden"
             >
                 <DialogHeader className="relative shrink-0 border-b border-[#EBECF0] px-6 py-4 text-left">
                     <DialogTitle className="text-[16px] font-semibold text-[#1d2129]">

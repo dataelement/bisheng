@@ -1739,6 +1739,8 @@ export interface PendingSimilarFileEntry {
     file_name: string;
     file_code?: string | null;
     candidate_count: number;
+    current_primary_version_no?: number | null;
+    primary_uploader_name?: string | null;
 }
 
 /**

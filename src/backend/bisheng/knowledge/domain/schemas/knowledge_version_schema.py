@@ -80,6 +80,8 @@ class PendingSimilarFileEntry(BaseModel):
     file_name: str
     file_code: Optional[str] = None  # knowledgefile.file_encoding
     candidate_count: int  # how many similar candidates currently >= threshold
+    current_primary_version_no: int = 1
+    primary_uploader_name: Optional[str] = None
 
 
 class DismissSimilarResponse(BaseModel):

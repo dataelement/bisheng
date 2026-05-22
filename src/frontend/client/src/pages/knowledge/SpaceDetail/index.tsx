@@ -228,8 +228,10 @@ export function KnowledgeSpaceContent({
 
     // SimHash scan runs asynchronously on the backend after a file's parse finishes,
     // so files can transition has_similar=false → true outside our polling cadence
-    // for pending-similar. Watch the has_similar id set on the visible file list;
-    // any change refreshes the top-right "处理相似文档" count.
+    // for pending-similar. Watch the has_similar id set on the visible file list AND
+    // the total file count — the latter catches cross-folder deletions (e.g.
+    // deleting a folder whose children carry similar marks) where the visible
+    // displayFiles slice doesn't see the cascaded removals.
     const similarFileIdsKey = displayFiles
         .filter((f) => f.has_similar && !f.is_multi_version)
         .map((f) => f.id)
@@ -238,7 +240,7 @@ export function KnowledgeSpaceContent({
     useEffect(() => {
         if (!versionManagementEnabled || spaceIdNum <= 0) return;
         queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
-    }, [similarFileIdsKey, versionManagementEnabled, spaceIdNum, queryClient]);
+    }, [similarFileIdsKey, total, versionManagementEnabled, spaceIdNum, queryClient]);
 
     // Invalidate pending-similar and trigger file list refresh after any version action
     const handleVersionAction = () => {
