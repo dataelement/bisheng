@@ -29,6 +29,14 @@ class ApprovalInstanceRepository:
             return await session.get(ApprovalInstance, instance_id)
 
     @classmethod
+    async def get_instances_by_ids(cls, instance_ids: list[int]) -> list[ApprovalInstance]:
+        if not instance_ids:
+            return []
+        statement = select(ApprovalInstance).where(ApprovalInstance.id.in_(instance_ids))
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def update_instance(cls, row: ApprovalInstance) -> ApprovalInstance:
         async with get_async_db_session() as session:
             saved = await session.get(ApprovalInstance, row.id)

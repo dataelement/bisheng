@@ -127,8 +127,9 @@ class KnowledgeLLMConfig(BaseModel):
                                                   description="Documentation Knowledge Base Extraction Header Model'sID")
     qa_similar_model_id: Optional[int] = Field(None, description="QAThe Knowledge Base Similarity Question Model'sID")
     abstract_enabled: bool = Field(default=True, description='Whether to generate file summaries after parsing')
-    auto_tag_enabled: bool = Field(default=False, description='Whether to generate file tags after upload parsing')
+    auto_tag_enabled: bool = Field(default=True, description='Whether to generate file tags after upload parsing')
     abstract_prompt: Optional[str] = Field(None, description='Summary Prompt')
+    auto_tag_prompt: Optional[str] = Field(None, description='Auto-tag system prompt; falls back to the built-in default when empty')
 
 
 class AssistantLLMItem(BaseModel):

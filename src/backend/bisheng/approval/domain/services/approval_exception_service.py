@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from bisheng.approval.domain.models.approval_instance import (
@@ -16,6 +17,8 @@ from bisheng.approval.domain.repositories.approval_scenario_repository import Ap
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
 from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
 from bisheng.database.models.audit_log import AuditLogDao
+
+logger = logging.getLogger(__name__)
 
 
 class ApprovalExceptionService:
@@ -38,18 +41,15 @@ class ApprovalExceptionService:
         if action == 'skip_node':
             await service.skip_node(exception_id=exception_id, resolved_by_user_id=operator_user_id)
             await service._write_audit_log(
+                action='approval.exception.skip_node',
                 tenant_id=instance.tenant_id,
                 operator_user_id=operator_user_id,
                 operator_tenant_id=instance.tenant_id,
-                target_id=str(instance.id),
-                metadata={'exception_id': exception_id, 'exception_type': exception.exception_type, 'action': action},
+                exception_id=exception_id,
+                instance_id=instance.id,
+                exception_type=exception.exception_type,
             )
-            return {
-                'exception_id': exception_id,
-                'instance_id': instance.id,
-                'status': 'resolved',
-                'exception_type': exception.exception_type,
-            }
+            return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
         if action == 'assign_approvers':
             if not approver_user_ids:
@@ -60,23 +60,32 @@ class ApprovalExceptionService:
                 resolved_by_user_id=operator_user_id,
             )
             await service._write_audit_log(
+                action='approval.exception.assign_approver',
                 tenant_id=instance.tenant_id,
                 operator_user_id=operator_user_id,
                 operator_tenant_id=instance.tenant_id,
-                target_id=str(instance.id),
-                metadata={
-                    'exception_id': exception_id,
-                    'exception_type': exception.exception_type,
-                    'action': action,
-                    'approver_user_ids': approver_user_ids,
-                },
+                exception_id=exception_id,
+                instance_id=instance.id,
+                exception_type=exception.exception_type,
+                extra={'approver_user_ids': approver_user_ids},
             )
-            return {
-                'exception_id': exception_id,
-                'instance_id': instance.id,
-                'status': 'resolved',
-                'exception_type': exception.exception_type,
-            }
+            return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
+
+        if action == 'mark_manually_completed':
+            await service.mark_manually_completed(
+                exception_id=exception_id,
+                resolved_by_user_id=operator_user_id,
+            )
+            await service._write_audit_log(
+                action='approval.exception.retry',
+                tenant_id=instance.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=instance.tenant_id,
+                exception_id=exception_id,
+                instance_id=instance.id,
+                exception_type=exception.exception_type,
+            )
+            return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
         if action != 'retry':
             raise ValueError(f'unsupported exception action: {action}')
@@ -87,19 +96,19 @@ class ApprovalExceptionService:
                 resolved_by_user_id=operator_user_id,
                 scenario_code=instance.scenario_code,
             )
-            if retried:
-                await service._write_audit_log(
-                    tenant_id=instance.tenant_id,
-                    operator_user_id=operator_user_id,
-                    operator_tenant_id=instance.tenant_id,
-                    target_id=str(instance.id),
-                    metadata={'exception_id': exception_id, 'exception_type': exception.exception_type},
-                )
+            await service._write_audit_log(
+                action='approval.exception.retry',
+                tenant_id=instance.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=instance.tenant_id,
+                exception_id=exception_id,
+                instance_id=instance.id,
+                exception_type=exception.exception_type,
+            )
             return {
                 'exception_id': exception_id,
                 'instance_id': instance.id,
                 'status': 'resolved' if retried else 'open',
-                'exception_type': exception.exception_type,
             }
 
         route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
@@ -129,19 +138,72 @@ class ApprovalExceptionService:
             raise ValueError(f'unsupported exception type: {exception.exception_type}')
 
         await service._write_audit_log(
+            action='approval.exception.retry',
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
             operator_tenant_id=instance.tenant_id,
-            target_id=str(instance.id),
-            metadata={'exception_id': exception_id, 'exception_type': exception.exception_type},
+            exception_id=exception_id,
+            instance_id=instance.id,
+            exception_type=exception.exception_type,
         )
+        return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
-        return {
-            'exception_id': exception_id,
-            'instance_id': instance.id,
-            'status': 'resolved',
-            'exception_type': exception.exception_type,
-        }
+    @classmethod
+    async def cancel_exception_api(
+        cls,
+        *,
+        exception_id: int,
+        operator_user_id: int,
+        reason: str,
+    ):
+        if not reason or not reason.strip():
+            raise ValueError('cancel reason is required')
+        service = cls(instance_repository=ApprovalInstanceRepository)
+        exception = await service._get_exception(exception_id)
+        instance = await service._get_instance(exception.instance_id)
+
+        # Cancel all pending tasks
+        tasks = await service.instance_repository.list_tasks(instance.id)
+        for task in tasks:
+            if task.status == ApprovalTaskStatus.PENDING:
+                task.status = ApprovalTaskStatus.CANCELLED
+                await service.instance_repository.update_task(task)
+
+        instance.status = ApprovalInstanceStatus.CANCELLED
+        instance.reason = reason.strip()
+        await service.instance_repository.update_instance(instance)
+        await service.instance_repository.create_action_log(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action='cancelled',
+                operator_user_id=operator_user_id,
+                detail={'reason': reason.strip(), 'exception_id': exception_id},
+            )
+        )
+        exception.status = 'resolved'
+        exception.resolved_by_user_id = operator_user_id
+        exception.resolved_action = 'cancel'
+        await service.instance_repository.update_exception(exception)
+        await service._write_audit_log(
+            action='approval.exception.cancel',
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            exception_id=exception_id,
+            instance_id=instance.id,
+            exception_type=exception.exception_type,
+            reason=reason.strip(),
+        )
+        # Notify applicant
+        await cls._notify_user(
+            sender=operator_user_id,
+            receiver_user_id=instance.applicant_user_id,
+            action_code='approval_exception_cancelled',
+            business_name=instance.business_name,
+            instance_id=instance.id,
+        )
+        return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'cancelled'}
 
     async def assign_flow(
         self,
@@ -179,12 +241,20 @@ class ApprovalExceptionService:
         await self.instance_repository.update_instance(instance)
         await self._resolve_exception(exception, resolved_by_user_id, 'assign_approvers')
 
+    @staticmethod
+    def _dispatch_outbox(outbox_id: int) -> None:
+        try:
+            from bisheng.worker.approval.tasks import execute_approval_outbox
+            execute_approval_outbox.delay(outbox_id)
+        except Exception:
+            logger.exception('failed to dispatch approval outbox task: outbox_id=%s', outbox_id)
+
     async def skip_node(self, *, exception_id: int, resolved_by_user_id: int) -> None:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
         instance.status = ApprovalInstanceStatus.APPROVED
         await self.instance_repository.update_instance(instance)
-        await self.instance_repository.create_outbox(
+        outbox = await self.instance_repository.create_outbox(
             ApprovalOutbox(
                 tenant_id=instance.tenant_id,
                 instance_id=instance.id,
@@ -193,6 +263,7 @@ class ApprovalExceptionService:
                 payload_snapshot=instance.payload_snapshot,
             )
         )
+        self._dispatch_outbox(outbox.id)
         await self._resolve_exception(exception, resolved_by_user_id, 'skip_node')
 
     async def retry_execute_failed(
@@ -257,6 +328,15 @@ class ApprovalExceptionService:
                     status=ApprovalTaskStatus.PENDING,
                 )
             )
+
+    async def mark_manually_completed(self, *, exception_id: int, resolved_by_user_id: int) -> None:
+        exception = await self._get_exception(exception_id)
+        instance = await self._get_instance(exception.instance_id)
+        if exception.exception_type != 'execute_failed':
+            raise ValueError('mark_manually_completed only applies to execute_failed exceptions')
+        instance.status = ApprovalInstanceStatus.EXECUTED
+        await self.instance_repository.update_instance(instance)
+        await self._resolve_exception(exception, resolved_by_user_id, 'mark_manually_completed')
 
     async def _resolve_exception(self, exception, resolved_by_user_id: int, resolved_action: str) -> None:
         exception.status = 'resolved'
@@ -328,21 +408,62 @@ class ApprovalExceptionService:
     async def _build_handler(self, scenario_code: str) -> Any:
         return await build_runtime_handler(scenario_code)
 
-    async def _write_audit_log(
-        self,
+    @staticmethod
+    async def _notify_user(
         *,
+        sender: int,
+        receiver_user_id: int,
+        action_code: str,
+        business_name: str,
+        instance_id: int,
+    ) -> None:
+        try:
+            from bisheng.core.database import get_async_db_session
+            from bisheng.message.api.dependencies import get_message_service as _get_message_service
+            async with get_async_db_session() as session:
+                message_service = await _get_message_service(session)
+                content = [
+                    {'type': 'system_text', 'content': action_code},
+                    {
+                        'type': 'business_url',
+                        'content': f'--{business_name}',
+                        'metadata': {
+                            'business_type': 'approval_instance_id',
+                            'data': {'approval_instance_id': str(instance_id)},
+                        },
+                    },
+                ]
+                await message_service.send_generic_notify(
+                    sender=sender,
+                    receiver_user_ids=[receiver_user_id],
+                    content_item_list=content,
+                )
+        except Exception:
+            logger.exception('failed to send approval notification: action_code=%s', action_code)
+
+    @staticmethod
+    async def _write_audit_log(
+        *,
+        action: str,
         tenant_id: int,
         operator_user_id: int,
         operator_tenant_id: int,
-        target_id: str,
-        metadata: dict | None = None,
+        exception_id: int,
+        instance_id: int,
+        exception_type: str,
+        reason: str | None = None,
+        extra: dict | None = None,
     ) -> None:
+        metadata = {'instance_id': instance_id, 'exception_type': exception_type}
+        if extra:
+            metadata.update(extra)
         await AuditLogDao.ainsert_v2(
             tenant_id=tenant_id,
             operator_id=operator_user_id,
             operator_tenant_id=operator_tenant_id,
-            action='approval.exception.retry',
-            target_type='approval_instance',
-            target_id=target_id,
+            action=action,
+            target_type='approval_exception',
+            target_id=str(exception_id),
+            reason=reason,
             metadata=metadata,
         )

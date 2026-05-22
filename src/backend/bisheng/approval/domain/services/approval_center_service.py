@@ -19,12 +19,15 @@ from bisheng.common.errcode.approval import (
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.models.approval_instance import ApprovalActionLog
+from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import ApprovalGrantNotRevokableError
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.services.auth import LoginUser
@@ -46,21 +49,39 @@ class ApprovalCenterService:
     @classmethod
     async def list_my_tasks(cls, *, tenant_id: int, approver_user_id: int):
         tasks = await ApprovalQueryRepository.list_tasks_by_approver(tenant_id, approver_user_id)
+        if not tasks:
+            return {'data': [], 'total': 0}
+
+        instance_ids = list({t.instance_id for t in tasks})
+        instances = await ApprovalInstanceRepository.get_instances_by_ids(instance_ids)
+        instance_map = {inst.id: inst for inst in instances}
+
+        dept_ids = [inst.applicant_department_id for inst in instances if inst.applicant_department_id]
+        dept_name_map: dict[int, str] = {}
+        if dept_ids:
+            from bisheng.database.models.department import DepartmentDao
+            depts = await DepartmentDao.aget_by_ids(list(set(dept_ids)))
+            dept_name_map = {d.id: d.name for d in depts}
+
         data = []
         for task in tasks:
-            instance = await ApprovalInstanceRepository.get_instance(task.instance_id)
-            data.append(
-                {
-                    'task_id': task.id,
-                    'instance_id': task.instance_id,
-                    'scenario_code': instance.scenario_code if instance else None,
-                    'business_name': instance.business_name if instance else task.node_name,
-                    'status': task.status,
-                    'applicant_user_name': instance.applicant_user_name if instance else None,
-                    'create_time': task.create_time,
-                    'update_time': task.update_time,
-                }
-            )
+            inst = instance_map.get(task.instance_id)
+            dept_name = dept_name_map.get(inst.applicant_department_id) if inst and inst.applicant_department_id else None
+            data.append({
+                'task_id': task.id,
+                'instance_id': task.instance_id,
+                'scenario_code': inst.scenario_code if inst else None,
+                'scenario_name': inst.scenario_name if inst else None,
+                'business_name': inst.business_name if inst else task.node_name,
+                'status': task.status,
+                'instance_status': inst.status if inst else None,
+                'current_node_name': task.node_name,
+                'applicant_user_name': inst.applicant_user_name if inst else None,
+                'applicant_department_id': inst.applicant_department_id if inst else None,
+                'applicant_department_name': dept_name,
+                'create_time': task.create_time,
+                'update_time': task.update_time,
+            })
         return {'data': data, 'total': len(data)}
 
     @classmethod
@@ -75,18 +96,45 @@ class ApprovalCenterService:
             raise ApprovalRequestPermissionDeniedError()
         if not login_user.is_admin() and task.approver_user_id != login_user.user_id and instance.applicant_user_id != login_user.user_id:
             raise ApprovalRequestPermissionDeniedError()
+
+        dept_name: str | None = None
+        if instance.applicant_department_id:
+            from bisheng.database.models.department import DepartmentDao
+            depts = await DepartmentDao.aget_by_ids([instance.applicant_department_id])
+            if depts:
+                dept_name = depts[0].name
+
+        action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
+
         return {
             'task_id': task.id,
             'instance_id': task.instance_id,
             'scenario_code': instance.scenario_code,
+            'scenario_name': instance.scenario_name,
             'business_name': instance.business_name,
             'status': task.status,
+            'instance_status': instance.status,
+            'current_node_name': task.node_name,
             'comment': task.comment,
             'detail_snapshot': instance.detail_snapshot,
             'payload_snapshot': instance.payload_snapshot,
             'applicant_user_name': instance.applicant_user_name,
-            'create_time': task.create_time,
+            'applicant_department_id': instance.applicant_department_id,
+            'applicant_department_name': dept_name,
+            'reason': instance.reason,
+            'create_time': instance.create_time,
             'update_time': task.update_time,
+            'action_logs': [
+                {
+                    'id': log.id,
+                    'action': log.action,
+                    'operator_user_id': log.operator_user_id,
+                    'operator_user_name': log.operator_user_name,
+                    'detail': log.detail,
+                    'create_time': log.create_time,
+                }
+                for log in action_logs
+            ],
         }
 
     @classmethod
@@ -122,15 +170,66 @@ class ApprovalCenterService:
         }
 
     @classmethod
+    async def _enrich_with_approver_and_dept(
+        cls,
+        instance_ids: list[int],
+        dept_ids: list[int],
+    ) -> tuple[dict[int, str], dict[int, str]]:
+        """Returns (approver_names_map, dept_name_map).
+
+        approver_names_map: {instance_id -> comma-separated approver names}
+        dept_name_map: {dept_id -> dept name}
+        """
+        from bisheng.user.domain.models.user import UserDao
+        from bisheng.database.models.department import DepartmentDao
+
+        pending_tasks = await ApprovalQueryRepository.list_pending_tasks_for_instances(instance_ids)
+        inst_approver_map: dict[int, list[int]] = {}
+        for task in pending_tasks:
+            inst_approver_map.setdefault(task.instance_id, []).append(task.approver_user_id)
+
+        all_approver_ids = list({uid for ids in inst_approver_map.values() for uid in ids})
+        user_name_map: dict[int, str] = {}
+        if all_approver_ids:
+            users = await UserDao.aget_user_by_ids(all_approver_ids)
+            user_name_map = {u.user_id: u.user_name for u in (users or [])}
+
+        approver_names_map: dict[int, str] = {}
+        for inst_id, uids in inst_approver_map.items():
+            names = [user_name_map[uid] for uid in uids if uid in user_name_map]
+            if names:
+                approver_names_map[inst_id] = '、'.join(names)
+
+        dept_name_map: dict[int, str] = {}
+        unique_dept_ids = [d for d in set(dept_ids) if d]
+        if unique_dept_ids:
+            depts = await DepartmentDao.aget_by_ids(unique_dept_ids)
+            dept_name_map = {d.id: d.name for d in depts}
+
+        return approver_names_map, dept_name_map
+
+    @classmethod
     async def list_my_requests(cls, *, tenant_id: int, applicant_user_id: int):
         rows = await ApprovalQueryRepository.list_instances_by_applicant(tenant_id, applicant_user_id)
+        if not rows:
+            return {'data': [], 'total': 0}
+
+        instance_ids = [r.id for r in rows]
+        dept_ids = [r.applicant_department_id for r in rows if r.applicant_department_id]
+        approver_names_map, dept_name_map = await cls._enrich_with_approver_and_dept(instance_ids, dept_ids)
+
         data = [
             {
                 'instance_id': row.id,
                 'scenario_code': row.scenario_code,
+                'scenario_name': row.scenario_name,
                 'business_name': row.business_name,
                 'status': row.status,
                 'applicant_user_name': row.applicant_user_name,
+                'applicant_department_id': row.applicant_department_id,
+                'applicant_department_name': dept_name_map.get(row.applicant_department_id) if row.applicant_department_id else None,
+                'current_node_name': row.current_node_name,
+                'current_approver_names': approver_names_map.get(row.id),
                 'create_time': row.create_time,
                 'update_time': row.update_time,
             }
@@ -151,15 +250,37 @@ class ApprovalCenterService:
             if instance.applicant_user_id != login_user.user_id and not visible_task_owner:
                 raise ApprovalRequestPermissionDeniedError()
         action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
+        # Enrich with department name and current approver names
+        dept_name: str | None = None
+        if instance.applicant_department_id:
+            from bisheng.database.models.department import DepartmentDao
+            depts = await DepartmentDao.aget_by_ids([instance.applicant_department_id])
+            if depts:
+                dept_name = depts[0].name
+
+        pending_task_uids = [t.approver_user_id for t in tasks if t.status == 'pending']
+        current_approver_names: str | None = None
+        if pending_task_uids:
+            from bisheng.user.domain.models.user import UserDao
+            users = await UserDao.aget_user_by_ids(pending_task_uids)
+            names = [u.user_name for u in (users or [])]
+            if names:
+                current_approver_names = '、'.join(names)
+
         return {
             'instance_id': instance.id,
             'scenario_code': instance.scenario_code,
+            'scenario_name': instance.scenario_name,
             'business_name': instance.business_name,
             'status': instance.status,
             'reason': instance.reason,
             'payload_snapshot': instance.payload_snapshot,
             'detail_snapshot': instance.detail_snapshot,
             'applicant_user_name': instance.applicant_user_name,
+            'applicant_department_id': instance.applicant_department_id,
+            'applicant_department_name': dept_name,
+            'current_node_name': instance.current_node_name,
+            'current_approver_names': current_approver_names,
             'create_time': instance.create_time,
             'update_time': instance.update_time,
             'tasks': [
@@ -229,7 +350,18 @@ class ApprovalCenterService:
             reason=reason,
             metadata={'scenario_code': instance.scenario_code},
             operator_name=operator_user_name,
+            object_name=instance.business_name,
         )
+        # Notify approvers who had tasks on this instance
+        task_approver_ids = list({t.approver_user_id for t in tasks if t.approver_user_id != operator_user_id})
+        if task_approver_ids:
+            await cls._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=task_approver_ids,
+                action_code='approval_instance_withdrawn',
+                business_name=instance.business_name,
+                instance_id=instance.id,
+            )
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
@@ -314,11 +446,47 @@ class ApprovalCenterService:
             reason=reason,
             metadata={'scenario_code': new_instance.scenario_code, 'original_instance_id': instance_id},
             operator_name=operator_user_name,
+            object_name=new_instance.business_name,
         )
         return await cls.get_instance_detail(
             instance_id=new_instance.id,
             login_user=_SystemLoginUser(operator_user_id, tenant_id=new_instance.tenant_id),
         )
+
+    @classmethod
+    async def _send_menu_access_approval_messages(
+        cls,
+        *,
+        applicant_user_id: int,
+        applicant_user_name: str,
+        instance_id: int,
+        task_ids: list[int],
+        menu_name: str,
+        tenant_id: int,
+    ) -> None:
+        approver_user_ids: list[int] = []
+        seen: set[int] = set()
+        for task_id in task_ids:
+            task = await ApprovalInstanceRepository.get_task(task_id)
+            if task and task.approver_user_id not in seen:
+                seen.add(task.approver_user_id)
+                approver_user_ids.append(task.approver_user_id)
+        if not approver_user_ids:
+            return
+        from bisheng.core.database import get_async_db_session
+        from bisheng.message.api.dependencies import get_message_service as _get_message_service
+        async with get_async_db_session() as session:
+            message_service = await _get_message_service(session)
+            await message_service.send_generic_approval(
+                applicant_user_id=applicant_user_id,
+                applicant_user_name=applicant_user_name,
+                action_code='request_menu_access',
+                business_type='approval_instance_id',
+                business_id=str(instance_id),
+                business_name=menu_name,
+                button_action_code='request_menu_access',
+                receiver_user_ids=approver_user_ids,
+            )
 
     @classmethod
     async def apply_menu_access_request(
@@ -338,6 +506,9 @@ class ApprovalCenterService:
             has_menu_access=menu_key in set(web_menu),
         )
 
+        primary_dept = await UserDepartmentDao.aget_user_primary_department(login_user.user_id)
+        applicant_department_id = primary_dept.department_id if primary_dept else None
+
         registry = ApprovalRegistry.with_default_presets()
         registry.register_handler('menu_access_request', MenuAccessApprovalHandler())
         gate = ApprovalGate(registry=registry)
@@ -351,6 +522,7 @@ class ApprovalCenterService:
                 business_name=menu_name,
                 applicant_user_id=login_user.user_id,
                 applicant_user_name=login_user.user_name,
+                applicant_department_id=applicant_department_id,
                 reason=reason,
                 payload_snapshot={
                     'menu_key': menu_key,
@@ -360,6 +532,17 @@ class ApprovalCenterService:
                 },
             )
         )
+
+        if result.decision == ApprovalGateDecision.PENDING and result.task_ids:
+            await cls._send_menu_access_approval_messages(
+                applicant_user_id=login_user.user_id,
+                applicant_user_name=login_user.user_name,
+                instance_id=result.instance_id,
+                task_ids=result.task_ids,
+                menu_name=menu_name,
+                tenant_id=login_user.tenant_id,
+            )
+
         return result.model_dump()
 
     @classmethod
@@ -396,6 +579,7 @@ class ApprovalCenterService:
                 'menu_key': menu_key,
                 'applicant_user_id': instance.applicant_user_id,
             },
+            object_name=instance.business_name,
         )
         return {'revoked_keys': [row.menu_key for row in rows], 'instance_id': instance_id}
 
@@ -457,6 +641,14 @@ class ApprovalCenterService:
                 reason=comment,
                 metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
                 operator_name=operator_user_name,
+                object_name=instance.business_name,
+            )
+            await self.__class__._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=[instance.applicant_user_id],
+                action_code='approval_task_rejected',
+                business_name=instance.business_name,
+                instance_id=instance.id,
             )
             return
 
@@ -483,6 +675,7 @@ class ApprovalCenterService:
             reason=comment,
             metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
             operator_name=operator_user_name,
+            object_name=instance.business_name,
         )
 
         if task.node_mode == 'or':
@@ -493,7 +686,7 @@ class ApprovalCenterService:
                     await self.instance_repository.update_task(sibling)
             instance.status = ApprovalInstanceStatus.APPROVED
             await self.instance_repository.update_instance(instance)
-            await self.instance_repository.create_outbox(
+            outbox = await self.instance_repository.create_outbox(
                 ApprovalOutbox(
                     tenant_id=instance.tenant_id,
                     instance_id=instance.id,
@@ -502,13 +695,14 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
+            self.__class__._dispatch_outbox(outbox.id)
             return
 
         all_same_node_approved = all(one.status == ApprovalTaskStatus.APPROVED for one in same_node_tasks)
         if all_same_node_approved:
             instance.status = ApprovalInstanceStatus.APPROVED
             await self.instance_repository.update_instance(instance)
-            await self.instance_repository.create_outbox(
+            outbox = await self.instance_repository.create_outbox(
                 ApprovalOutbox(
                     tenant_id=instance.tenant_id,
                     instance_id=instance.id,
@@ -517,6 +711,50 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
+            self.__class__._dispatch_outbox(outbox.id)
+
+    @staticmethod
+    async def _send_approval_notify(
+        *,
+        sender: int,
+        receiver_user_ids: list[int],
+        action_code: str,
+        business_name: str,
+        instance_id: int,
+    ) -> None:
+        if not receiver_user_ids:
+            return
+        try:
+            from bisheng.core.database import get_async_db_session
+            from bisheng.message.api.dependencies import get_message_service as _get_message_service
+            async with get_async_db_session() as session:
+                message_service = await _get_message_service(session)
+                content = [
+                    {'type': 'system_text', 'content': action_code},
+                    {
+                        'type': 'business_url',
+                        'content': f'--{business_name}',
+                        'metadata': {
+                            'business_type': 'approval_instance_id',
+                            'data': {'approval_instance_id': str(instance_id)},
+                        },
+                    },
+                ]
+                await message_service.send_generic_notify(
+                    sender=sender,
+                    receiver_user_ids=receiver_user_ids,
+                    content_item_list=content,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'failed to send approval notify: action_code=%s instance_id=%s', action_code, instance_id
+            )
+
+    @staticmethod
+    def _dispatch_outbox(outbox_id: int) -> None:
+        from bisheng.worker.approval.tasks import execute_approval_outbox
+        execute_approval_outbox.delay(outbox_id)
 
     @classmethod
     async def _write_audit_log(
@@ -530,15 +768,18 @@ class ApprovalCenterService:
         reason: str | None,
         metadata: dict | None = None,
         operator_name: str | None = None,
+        object_name: str | None = None,
+        target_type: str = 'approval_instance',
     ) -> None:
         await AuditLogDao.ainsert_v2(
             tenant_id=tenant_id,
             operator_id=operator_user_id,
             operator_tenant_id=operator_tenant_id,
             action=action,
-            target_type='approval_instance',
+            target_type=target_type,
             target_id=target_id,
             reason=reason,
             metadata=metadata,
             operator_name=operator_name,
+            object_name=object_name,
         )

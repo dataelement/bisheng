@@ -13,11 +13,20 @@ import {
     renameFileApi,
     deleteFileApi,
     retryDuplicateFilesApi,
+    listKnowledgeFolders,
     type UploadFileResponse,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
-import { getFileTypeFromName, isKnowledgeItemPending, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
+import {
+    filterFolderUploadFiles,
+    getFileTypeFromName,
+    getRootFolderName,
+    isHiddenName,
+    isKnowledgeItemPending,
+    MAX_FOLDER_DEPTH,
+    MAX_FOLDER_UPLOAD_COUNT,
+} from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
 
@@ -128,6 +137,8 @@ export function useFileUpload({
     const { showToast } = useToastContext();
     const activeSpaceIdRef = useRef<string | null>(activeSpace?.id ? String(activeSpace.id) : null);
     activeSpaceIdRef.current = activeSpace?.id ? String(activeSpace.id) : null;
+    /** Guard against re-entry of handleUploadFolder while one batch is in flight. */
+    const folderUploadInFlightRef = useRef(false);
 
     useEffect(() => {
         setUploadingFiles([]);
@@ -286,6 +297,151 @@ export function useFileUpload({
         setDuplicateFiles([]);
     }, []);
 
+    // ─── Folder upload (pick a local folder; one-level only) ─────────────
+    /**
+     * Upload a single picked folder. The browser populates
+     * `File.webkitRelativePath` like "Docs/a.pdf" (root file) or
+     * "Docs/Sub/b.pdf" (nested). We:
+     *   1. Reject the whole batch if the picked folder is hidden,
+     *      has a name already used at the current location, or the raw
+     *      file count exceeds MAX_FOLDER_UPLOAD_COUNT.
+     *   2. Silently filter to root-level + supported + size-ok files.
+     *   3. Create one folder on the backend and register the kept files
+     *      under it, reusing the existing upload + register pipeline.
+     */
+    const handleUploadFolder = useCallback(
+        async (
+            fileList: FileList | File[],
+            options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+        ) => {
+            if (!activeSpace || !fileList || fileList.length === 0) return;
+            // Re-entry guard. Ignore a second call while the first is still
+            // running (a stray double-fire from the input would otherwise
+            // upload every file twice and trigger spurious dup warnings).
+            if (folderUploadInFlightRef.current) return;
+            folderUploadInFlightRef.current = true;
+            try {
+            const allFiles = Array.from(fileList);
+
+            const rootName = getRootFolderName(allFiles[0]?.webkitRelativePath || "");
+            if (!rootName) return;
+
+            // Hidden folder (e.g. `.git`) — silently reject the whole batch.
+            if (isHiddenName(rootName)) return;
+
+            // Raw count cap. Counts every file the user picked, including ones
+            // that would later be filtered out — matches what the user sees.
+            if (allFiles.length > MAX_FOLDER_UPLOAD_COUNT) {
+                showToast({
+                    message: localize("com_knowledge.folder_upload_exceed_limit", { 0: MAX_FOLDER_UPLOAD_COUNT }),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
+
+            // Reject if the picked folder name is already used at the current
+            // location. Use the same listing API the left tree uses so admin
+            // and member roles see the same set.
+            try {
+                const { items } = await listKnowledgeFolders({
+                    space_id: activeSpace.id,
+                    parent_id: currentFolderId ? Number(currentFolderId) : null,
+                });
+                if (items.some((f) => f.file_name === rootName)) {
+                    showToast({
+                        message: localize("com_knowledge.folder_already_exists", { 0: rootName }),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+            } catch {
+                // Pre-check failed — fall through; backend will surface dup error
+                // via createFolderApi if it really collides.
+            }
+
+            const validFiles = filterFolderUploadFiles(allFiles, options);
+            if (validFiles.length === 0) return;
+
+            // Create the destination folder first so we have a parent_id to
+            // register the uploaded files against.
+            let folder: KnowledgeFile;
+            try {
+                folder = await createFolderApi(activeSpace.id, {
+                    name: rootName,
+                    parent_id: currentFolderId || null,
+                });
+            } catch {
+                showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                return;
+            }
+
+            // Show the new folder in the current listing immediately.
+            setFiles((prev) => [folder, ...prev]);
+            setTotal((prev) => prev + 1);
+            dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+
+            // Upload each file to object storage (sequential, mirrors existing
+            // single-file upload — keeps load predictable for 1k batches).
+            const uploadedPaths: string[] = [];
+            const failures: { name: string; reason: string }[] = [];
+            for (const file of validFiles) {
+                try {
+                    // Pass `file.name` explicitly to strip the folder prefix
+                    // Chromium would otherwise put in the multipart filename.
+                    const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file, file.name);
+                    uploadedPaths.push(res.file_path);
+                } catch (err) {
+                    failures.push({
+                        name: file.name,
+                        reason: resolveUploadErrorReason(err),
+                    });
+                }
+            }
+            if (failures.length > 0) {
+                const lines = failures.map(({ name, reason }) =>
+                    reason
+                        ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
+                        : localize("com_knowledge.file_upload_failed", { 0: name })
+                );
+                const everyReasonMissing = failures.every((f) => !f.reason);
+                const message = everyReasonMissing
+                    ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
+                    : lines.join("\n");
+                showToast({ message, severity: NotificationSeverity.ERROR });
+            }
+
+            if (uploadedPaths.length === 0) {
+                // Folder created but every file upload failed — list refresh
+                // ensures the empty folder shows up with the correct counts.
+                await loadFiles(currentPage);
+                return;
+            }
+
+            // Register files under the new folder. Duplicates inside this new
+            // folder shouldn't be possible (a fresh folder is empty), but the
+            // backend may still flag global duplicates by md5; reuse the
+            // existing duplicate-overwrite flow.
+            try {
+                const registeredFiles = await addFilesApi(activeSpace.id, {
+                    file_path: uploadedPaths,
+                    parent_id: Number(folder.id),
+                });
+                const dupes = extractDuplicateFileEntries(registeredFiles);
+                if (dupes.length > 0) {
+                    setDuplicateFiles(dupes);
+                }
+            } catch {
+                // Swallow — the refresh below will reflect whatever made it in.
+            }
+
+            await loadFiles(currentPage);
+            } finally {
+                folderUploadInFlightRef.current = false;
+            }
+        },
+        [activeSpace, currentFolderId, currentPage, loadFiles, localize, setFiles, setTotal, showToast],
+    );
+
     // ─── Folder creation ─────────────────────────────────────────────────
     const handleCreateFolder = useCallback(() => {
         if (currentPath.length >= MAX_FOLDER_DEPTH) {
@@ -419,6 +575,7 @@ export function useFileUpload({
         creatingFolder,
         duplicateFiles,
         handleUploadFile,
+        handleUploadFolder,
         handleCreateFolder,
         handleCancelCreateFolder,
         handleRenameFile,

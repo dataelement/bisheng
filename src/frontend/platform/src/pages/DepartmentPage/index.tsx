@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Loader2 } from "lucide-react"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { locationContext } from "@/contexts/locationContext"
@@ -19,6 +20,10 @@ export default function DepartmentPage() {
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const canMountTenant = multiTenantEnabled && !!user?.is_global_super
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
+  // Start in loading state so the first paint shows the spinner instead of
+  // an empty tree while /api/v1/departments/tree is still in flight — that
+  // call can take many seconds at scale (tens of thousands of departments).
+  const [loadingTree, setLoadingTree] = useState(true)
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -38,20 +43,25 @@ export default function DepartmentPage() {
   }, [])
 
   const loadTree = useCallback((removedDeptId?: string) => {
-    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
-      if (res) {
-        setTree(res)
-        if (removedDeptId && selectedDeptId === removedDeptId) {
-          selectFallbackDepartment(res)
-          return
+    setLoadingTree(true)
+    captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
+      .then((res) => {
+        if (res) {
+          setTree(res)
+          if (removedDeptId && selectedDeptId === removedDeptId) {
+            selectFallbackDepartment(res)
+            return
+          }
+          // Auto-select first root if nothing selected
+          if (!selectedDeptId && res.length > 0) {
+            setSelectedDeptId(res[0].dept_id)
+            setSelectedDept(res[0])
+          }
         }
-        // Auto-select first root if nothing selected
-        if (!selectedDeptId && res.length > 0) {
-          setSelectedDeptId(res[0].dept_id)
-          setSelectedDept(res[0])
-        }
-      }
-    })
+      })
+      .finally(() => {
+        setLoadingTree(false)
+      })
   }, [selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
@@ -156,14 +166,20 @@ export default function DepartmentPage() {
       {/* Left tree panel */}
       <div className="flex w-[280px] min-w-[240px] flex-col border-r bg-background p-4">
         <h2 className="mb-4 text-lg font-semibold">{t("bs:department.tree")}</h2>
-        <DepartmentTree
-          data={tree}
-          selectedDeptId={selectedDeptId}
-          onSelect={handleSelect}
-          onCreateChild={handleCreateClick}
-          scrollRequest={treeScrollRequest}
-          onScrollRequestHandled={handleTreeScrollHandled}
-        />
+        {loadingTree ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <DepartmentTree
+            data={tree}
+            selectedDeptId={selectedDeptId}
+            onSelect={handleSelect}
+            onCreateChild={handleCreateClick}
+            scrollRequest={treeScrollRequest}
+            onScrollRequestHandled={handleTreeScrollHandled}
+          />
+        )}
         <button
           className="mt-4 w-full rounded-md border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-primary hover:text-primary"
           onClick={() => handleCreateClick()}

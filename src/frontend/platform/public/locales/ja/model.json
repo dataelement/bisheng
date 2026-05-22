@@ -67,7 +67,7 @@
     "lingsiTaskModel": "$t(bs:linsight)タスク実行モデル",
     "executionMode": "実行モード",
     "sourceTracingModelTooltip": "知識ベース（ワークベンチの知識スペースを含む）のQ&Aトレーサビリティに使用します。LLMが回答から自動的にキーワードを抽出し、ユーザーが回答の可能性のあるソース段落を素早く特定できるようにします。ここで設定されていない場合は、jieba分詞を使用して回答からキーワードを出力します。",
-    "documentSummaryModel": "ドキュメント知識ベース要約モデル",
+    "documentSummaryModel": "ドキュメント要約/タグ生成モデル",
     "documentSummaryModelTooltip": "ドキュメント内容をタイトルとして要約し、タイトルとチャンクを組み合わせてベクトルライブラリに保存します。設定しない場合、ドキュメントを要約しません。",
     "summaryGeneration": "要約生成",
     "autoTagGeneration": "自動タグ生成",

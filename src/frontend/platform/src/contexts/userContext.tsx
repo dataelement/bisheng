@@ -197,7 +197,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
             const pathName = location.pathname.replace(BASE_URL, '');
 
-            // Jump to the route based on permissions 
+            // Jump to the route based on permissions
             if (pathName === '/admin') {
                 const MENU_ROUTE_MAP = [
                     { key: 'board', path: '/dashboard' },
@@ -206,12 +206,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     { key: 'model', path: '/model/management' },
                     { key: 'evaluation', path: '/evaluation' },
                     { key: 'mark_task', path: '/label' }, // 与角色菜单 third_id 一致
+                    // admin/workstation are entry-level keys, not content menus;
+                    // excluded intentionally — fallback handles the no-match case.
                 ];
                 const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
                 if (target) {
                     history.pushState(null, '', BASE_URL + target.path);
                 } else {
-                    history.pushState(null, '', BASE_URL + '/label');
+                    // No accessible content menu. If approval mode is on, land on the
+                    // first approvable menu so the user sees an apply button.
+                    // Otherwise fall back to the generic placeholder.
+                    const APPROVABLE_ORDER = ['board', 'build', 'knowledge', 'model', 'evaluation', 'mark_task', 'log'];
+                    const firstApprovable = res.menu_approval_mode
+                        ? APPROVABLE_ORDER[0]
+                        : null;
+                    const fallback = firstApprovable
+                        ? `/menu-pending?menu=${firstApprovable}`
+                        : '/menu-pending';
+                    history.pushState(null, '', BASE_URL + fallback);
                 }
             } else {
                 // 403

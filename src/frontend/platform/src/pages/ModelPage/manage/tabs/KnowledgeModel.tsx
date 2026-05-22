@@ -52,7 +52,13 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 };
 
 
-const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
+// Default system prompt for knowledge-space auto tagging. Mirrors the
+// server-side `DEFAULT_AUTO_TAG_SYSTEM_PROMPT` so the textarea opens
+// with a sensible starting value when the tenant has not customised it.
+export const defaultAutoTagPrompt = `你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。
+输出格要求严格遵循 JSON 格式： {"tags": ["标签名"]}。`;
+
+const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) => {
     const { t } = useTranslation('model')
     const [open, setOpen] = useState(false)
     const modifyNotSavedRef = useRef(false)
@@ -87,7 +93,7 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
                 <DialogTitle>{t('model.editPrompt')}</DialogTitle>
             </DialogHeader>
             <div>
-                <Label className="bisheng-label">{t('model.docKnowledgeAbstractPrompt')}</Label>
+                <Label className="bisheng-label">{label || t('model.docKnowledgeAbstractPrompt')}</Label>
                 <Textarea
                     value={textValue}
                     onChange={(e) => {
@@ -122,8 +128,9 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         extractModelId: null,
         qaSimilarModelId: null,
         abstractEnabled: true,
-        autoTagEnabled: false,
-        abstractPrompt: ''
+        autoTagEnabled: true,
+        abstractPrompt: '',
+        autoTagPrompt: ''
     });
     // 最后保存的配置
     const lastSaveFormDataRef = useRef(null)
@@ -141,6 +148,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             abstract_enabled,
             auto_tag_enabled,
             abstract_prompt,
+            auto_tag_prompt,
         } = config
         setForm({
             embeddingModelId: embedding_model_id,
@@ -148,10 +156,15 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             extractModelId: extract_title_model_id,
             qaSimilarModelId: qa_similar_model_id,
             abstractEnabled: abstract_enabled ?? true,
-            autoTagEnabled: auto_tag_enabled ?? false,
-            abstractPrompt: abstract_prompt ?? defalutPrompt
+            autoTagEnabled: auto_tag_enabled ?? true,
+            abstractPrompt: abstract_prompt ?? defalutPrompt,
+            autoTagPrompt: auto_tag_prompt ?? defaultAutoTagPrompt,
         })
-        lastSaveFormDataRef.current = { ...config, abstract_prompt: abstract_prompt || defalutPrompt }
+        lastSaveFormDataRef.current = {
+            ...config,
+            abstract_prompt: abstract_prompt || defalutPrompt,
+            auto_tag_prompt: auto_tag_prompt || defaultAutoTagPrompt,
+        }
     }, [config]);
 
     // Clear inherited flag on first user edit — the in-memory form no
@@ -173,6 +186,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             abstractEnabled,
             autoTagEnabled,
             abstractPrompt,
+            autoTagPrompt,
         } = form
         const errors = []
         if (!embeddingModelId) {
@@ -193,7 +207,8 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             source_model_id: sourceModelId,
             abstract_enabled: abstractEnabled,
             auto_tag_enabled: autoTagEnabled,
-            abstract_prompt: abstractPrompt
+            abstract_prompt: abstractPrompt,
+            auto_tag_prompt: autoTagPrompt
         }
         setSaveLoad(true)
         await captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig(data).then(res => {
@@ -203,11 +218,15 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         setSaveLoad(false)
     };
 
-    const handleSavePrompt = (prompt) => {
+    // Persist a single prompt edit (abstract or auto-tag) without going
+    // through the main save flow, mirroring the existing per-prompt save
+    // semantics. Caller passes the patch keyed by the backend field name.
+    const handleSavePrompt = (patch: { abstract_prompt?: string; auto_tag_prompt?: string }) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig({
             ...lastSaveFormDataRef.current,
-            abstract_prompt: prompt ?? form.abstractPrompt
+            ...patch,
         }).then(res => {
+            lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...patch }
             message({ variant: 'success', description: t('model.promptSaved') })
         }))
     }
@@ -250,17 +269,49 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             <div className="rounded-md border p-4 space-y-4">
                 <div className="flex items-center justify-between gap-6">
                     <Label className="bisheng-label mb-0">{t('model.summaryGeneration', '摘要生成')}</Label>
-                    <Switch
-                        checked={form.abstractEnabled}
-                        onCheckedChange={(val) => setFormAndClearInherited({ ...form, abstractEnabled: val })}
-                    />
+                    <div className="flex items-center gap-2">
+                        <PromptDialog
+                            value={form.abstractPrompt}
+                            label={t('model.docKnowledgeAbstractPrompt')}
+                            onChange={value => setFormAndClearInherited({ ...form, abstractPrompt: value })}
+                            onSave={(prompt) => handleSavePrompt({ abstract_prompt: prompt ?? form.abstractPrompt })}
+                            onRestore={() => setFormAndClearInherited({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
+                        >
+                            <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side="top">
+                                <Button variant="link" size="sm" className="h-auto px-0">
+                                    <Settings size={14} className="mr-1" />
+                                    {t('model.editPromptButton')}
+                                </Button>
+                            </Tip>
+                        </PromptDialog>
+                        <Switch
+                            checked={form.abstractEnabled}
+                            onCheckedChange={(val) => setFormAndClearInherited({ ...form, abstractEnabled: val })}
+                        />
+                    </div>
                 </div>
                 <div className="flex items-center justify-between gap-6">
                     <Label className="bisheng-label mb-0">{t('model.autoTagGeneration', '自动标签生成')}</Label>
-                    <Switch
-                        checked={form.autoTagEnabled}
-                        onCheckedChange={(val) => setFormAndClearInherited({ ...form, autoTagEnabled: val })}
-                    />
+                    <div className="flex items-center gap-2">
+                        <PromptDialog
+                            value={form.autoTagPrompt}
+                            label={t('model.autoTagPrompt', '自动标签提示词')}
+                            onChange={value => setFormAndClearInherited({ ...form, autoTagPrompt: value })}
+                            onSave={(prompt) => handleSavePrompt({ auto_tag_prompt: prompt ?? form.autoTagPrompt })}
+                            onRestore={() => setFormAndClearInherited({ ...form, autoTagPrompt: lastSaveFormDataRef.current.auto_tag_prompt })}
+                        >
+                            <Tip content={t('model.autoTagPromptTooltip', '编辑用于自动标签分类的系统提示词')} side="top">
+                                <Button variant="link" size="sm" className="h-auto px-0">
+                                    <Settings size={14} className="mr-1" />
+                                    {t('model.editPromptButton')}
+                                </Button>
+                            </Tip>
+                        </PromptDialog>
+                        <Switch
+                            checked={form.autoTagEnabled}
+                            onCheckedChange={(val) => setFormAndClearInherited({ ...form, autoTagEnabled: val })}
+                        />
+                    </div>
                 </div>
             </div>
             <ModelSelect
@@ -271,18 +322,6 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 options={llmOptions}
                 onChange={(val) => setFormAndClearInherited({ ...form, qaSimilarModelId: val })}
             />
-            <div className="absolute top-44 -right-28">
-                <PromptDialog
-                    value={form.abstractPrompt}
-                    onChange={value => setFormAndClearInherited({ ...form, abstractPrompt: value })}
-                    onSave={handleSavePrompt}
-                    onRestore={() => setFormAndClearInherited({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
-                >
-                    <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side={"top"}>
-                        <Button variant="link"><Settings size={14} className="mr-1" /> {t('model.editPromptButton')}</Button>
-                    </Tip>
-                </PromptDialog>
-            </div>
             <div className="mt-10 text-center space-x-6">
                 <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
                 <Button

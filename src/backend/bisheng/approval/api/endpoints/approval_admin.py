@@ -313,6 +313,10 @@ async def list_exceptions(login_user: UserPayload = Depends(UserPayload.get_logi
     return resp_200(await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=login_user.tenant_id))
 
 
+class CancelExceptionReq(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 @router.post('/exceptions/{exception_id}/retry')
 async def retry_exception(
     exception_id: int,
@@ -326,5 +330,21 @@ async def retry_exception(
             action=req.action,
             operator_user_id=login_user.user_id,
             approver_user_ids=req.approver_user_ids,
+        )
+    )
+
+
+@router.post('/exceptions/{exception_id}/cancel')
+async def cancel_exception(
+    exception_id: int,
+    req: CancelExceptionReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalExceptionService.cancel_exception_api(
+            exception_id=exception_id,
+            operator_user_id=login_user.user_id,
+            reason=req.reason,
         )
     )

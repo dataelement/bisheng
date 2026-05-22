@@ -47,6 +47,12 @@ export interface ApprovalExceptionItem {
   status?: string;
   create_time?: string;
   detail?: Record<string, any>;
+  error_summary?: string | null;
+  // enriched from instance
+  business_name?: string | null;
+  scenario_name?: string | null;
+  scenario_code?: string | null;
+  applicant_user_name?: string | null;
 }
 
 export async function listApprovalScenarioPresetsApi(): Promise<ApprovalScenarioPreset[]> {
@@ -202,4 +208,19 @@ export async function retryApprovalExceptionApi(
     action: payload.action ?? "retry",
     approver_user_ids: payload.approver_user_ids ?? [],
   });
+}
+
+export async function cancelApprovalExceptionApi(
+  exceptionId: number,
+  reason: string,
+): Promise<Record<string, any>> {
+  return await axios.post(`/api/v1/approval/admin/exceptions/${exceptionId}/cancel`, { reason });
+}
+
+export async function applyMenuAccessApi(data: {
+  menu_key: string;
+  menu_name: string;
+  reason?: string;
+}): Promise<Record<string, any>> {
+  return await axios.post(`/api/v1/approval/menu-access/apply`, data);
 }
