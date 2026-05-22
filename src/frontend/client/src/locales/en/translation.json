@@ -1685,6 +1685,7 @@
       "section_current_file": "Current file",
       "current_file_recommend_pill": "{{count}} recommendations",
       "section_recommendations_subtitle": "Once selected, the current file becomes a new version of the chosen document.",
+      "section_recommendations_subtitle_merge": "Once selected, the chosen file becomes the primary version of the current document.",
       "section_search_subtitle": "Search documents in this knowledge space by keyword; select a result to link as a new version.",
       "search_button": "Search",
       "section_dismiss": "Skip linking",

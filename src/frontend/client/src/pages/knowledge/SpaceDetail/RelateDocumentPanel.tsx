@@ -232,7 +232,7 @@ export function RelateDocumentPanel({
                         {localize("com_knowledge.version.section_recommendations")}
                     </h3>
                     <p className="mb-3 text-[12px] text-[#86909c]">
-                        {localize("com_knowledge.version.section_recommendations_subtitle")}
+                        {localize("com_knowledge.version.section_recommendations_subtitle_merge")}
                     </p>
                     {candidatesLoading ? (
                         <div className="flex h-16 items-center justify-center border border-[#EBECF0] bg-[#FAFAFA] rounded-[6px]">

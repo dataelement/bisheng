@@ -1612,6 +1612,7 @@
       "section_current_file": "当前文件",
       "current_file_recommend_pill": "{{count}}个推荐文档",
       "section_recommendations_subtitle": "选择后,当前文件将作为该文档的新版本。",
+      "section_recommendations_subtitle_merge": "选择后，选择的文件将作为当前文档的主版本。",
       "section_search_subtitle": "输入关键词查找当前知识空间内已有逻辑文档,选中后可关联为新版本。",
       "search_button": "搜索",
       "section_dismiss": "不关联推荐文档",

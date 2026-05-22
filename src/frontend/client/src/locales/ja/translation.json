@@ -1608,6 +1608,7 @@
       "section_current_file": "現在のファイル",
       "current_file_recommend_pill": "{{count}} 件の推奨",
       "section_recommendations_subtitle": "選択すると、現在のファイルが該当ドキュメントの新バージョンになります。",
+      "section_recommendations_subtitle_merge": "選択すると、選択したファイルが現在のドキュメントの主バージョンになります。",
       "section_search_subtitle": "キーワードで現在のナレッジ空間のドキュメントを検索し、選択して新バージョンとして関連付けます。",
       "search_button": "検索",
       "section_dismiss": "関連付けをスキップ",
