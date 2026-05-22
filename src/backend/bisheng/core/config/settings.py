@@ -400,6 +400,10 @@ class CofcoForwardingConf(BaseModel):
     bisheng_inbox_url: str = Field(default="", description="BiSheng client base URL for textcard callback")
     enable_duplicate_check: int = Field(default=0)
     duplicate_check_interval: int = Field(default=1800)
+    user_sources: list[str] = Field(
+        default_factory=lambda: ["cofco_eplus", "wecom"],
+        description="Accepted User.source values whose external_id is the E+ employee ID",
+    )
 
 
 class InAppMessageForwardingConf(BaseModel):

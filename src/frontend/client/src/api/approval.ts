@@ -100,11 +100,28 @@ export interface ApprovalRequestItem {
   update_time?: string;
 }
 
+export class ApprovalApiError extends Error {
+  statusCode: number;
+  statusMessage: string;
+  constructor(statusCode: number, statusMessage: string) {
+    super(statusMessage);
+    this.statusCode = statusCode;
+    this.statusMessage = statusMessage;
+  }
+}
+
 function unwrapPayload<T>(response: ApiResponse<T> | T): T {
-  return ((response as ApiResponse<T>)?.data ?? response) as T;
+  const apiResp = response as ApiResponse<T>;
+  if (apiResp?.status_code != null && apiResp.status_code !== 200) {
+    throw new ApprovalApiError(apiResp.status_code, apiResp.status_message || String(apiResp.status_code));
+  }
+  return (apiResp?.data ?? response) as T;
 }
 
 function unwrapPaged<T>(response: any): { data: T[]; total: number } {
+  if (response?.status_code != null && response.status_code !== 200) {
+    throw new ApprovalApiError(response.status_code, response.status_message || String(response.status_code));
+  }
   const payload = response?.data ?? response ?? {};
   return {
     data: Array.isArray(payload?.data) ? payload.data : [],

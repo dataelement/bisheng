@@ -194,6 +194,7 @@ export interface KnowledgeFile {
     version_no?: number;          // primary version number; absent for folders / legacy files
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
+    user_name?: string;           // mapped from user_name — original uploader of this file
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -586,6 +587,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
         is_multi_version: Boolean(raw?.is_multi_version),
         has_similar: Boolean(raw?.has_similar),
+        user_name: raw?.user_name ?? undefined,
     };
 }
 
@@ -1739,6 +1741,8 @@ export interface PendingSimilarFileEntry {
     file_name: string;
     file_code?: string | null;
     candidate_count: number;
+    current_primary_version_no?: number | null;
+    primary_uploader_name?: string | null;
 }
 
 /**

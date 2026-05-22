@@ -597,6 +597,9 @@ function NodeDialog({
   const [userPickerOpen, setUserPickerOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
   const [userList, setUserList] = useState<{ user_id: number; user_name: string }[]>([]);
+  const [userPage, setUserPage] = useState(1);
+  const [userHasMore, setUserHasMore] = useState(false);
+  const [userLoading, setUserLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
 
@@ -610,32 +613,58 @@ function NodeDialog({
       setName(initial.node_name ?? "");
       setMode(initial.node_mode ?? "or");
       const cfg = initial.approver_config as Record<string, unknown> | undefined;
-      const rawSources = (cfg?.sources as { type: string; user_ids?: number[]; label?: string }[] | undefined) ?? [];
+      const rawSources = (cfg?.sources as { type: string; user_ids?: number[]; user_names?: string[]; label?: string }[] | undefined) ?? [];
       setSources(
         rawSources.map((s) => ({
           type: s.type,
           label: getApproverLabel(s.type),
           userIds: s.user_ids,
+          userNames: s.user_names,
         })),
       );
     }
   }, [open]);
 
+  const PAGE_SIZE = 50;
+
+  const loadUsers = (page: number, search: string, append: boolean) => {
+    setUserLoading(true);
+    getUsersApi({ name: search, page, pageSize: PAGE_SIZE, simple: true }).then((res) => {
+      const data: { user_id: number; user_name: string }[] = res.data ?? [];
+      setUserList((prev) => append ? [...prev, ...data] : data);
+      setUserHasMore(data.length >= PAGE_SIZE);
+    }).catch(() => {
+      if (!append) setUserList([]);
+    }).finally(() => setUserLoading(false));
+  };
+
   useEffect(() => {
     if (!userPickerOpen) return;
     const timer = setTimeout(() => {
-      getUsersApi({ name: userSearch, page: 1, pageSize: 50, simple: true }).then((res) => {
-        setUserList(res.data ?? []);
-      }).catch(() => setUserList([]));
+      setUserPage(1);
+      loadUsers(1, userSearch, false);
     }, 300);
     return () => clearTimeout(timer);
   }, [userPickerOpen, userSearch]);
+
+  const handleUserListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!userHasMore || userLoading) return;
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+      const nextPage = userPage + 1;
+      setUserPage(nextPage);
+      loadUsers(nextPage, userSearch, true);
+    }
+  };
 
   const openUserPicker = () => {
     const existing = sources.find((s) => s.type === "direct_user");
     setSelectedUserIds(existing?.userIds ?? []);
     setSelectedUserNames(existing?.userNames ?? []);
     setUserSearch("");
+    setUserPage(1);
+    setUserHasMore(false);
+    setUserList([]);
     setUserPickerOpen(true);
   };
 
@@ -757,7 +786,7 @@ function NodeDialog({
                 approver_config: {
                   sources: sources.map((s) =>
                     s.type === "direct_user"
-                      ? { type: s.type, user_ids: s.userIds ?? [] }
+                      ? { type: s.type, user_ids: s.userIds ?? [], user_names: s.userNames ?? [] }
                       : { type: s.type },
                   ),
                 },
@@ -785,8 +814,11 @@ function NodeDialog({
             placeholder={t("approvalPage.searchUser")}
             className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
           />
-          <div className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
-            {userList.length === 0 && (
+          <div
+            className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle"
+            onScroll={handleUserListScroll}
+          >
+            {userList.length === 0 && !userLoading && (
               <div className="py-4 text-center text-xs text-text-secondary">暂无用户</div>
             )}
             {userList.map((u) => {
@@ -814,6 +846,9 @@ function NodeDialog({
                 </label>
               );
             })}
+            {userLoading && (
+              <div className="py-2 text-center text-xs text-text-secondary">加载中…</div>
+            )}
           </div>
           {selectedUserIds.length > 0 && (
             <div className="text-xs text-text-secondary">
@@ -1563,18 +1598,32 @@ export default function ApprovalPage() {
                               </div>
                               {/* approver chips */}
                               <div className="mt-2 flex flex-wrap items-center gap-2 pl-9">
-                                {sources.map((src) => (
-                                  <span
-                                    key={src.type}
-                                    className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
-                                  >
-                                    <Users size={10} className="text-text-secondary" />
-                                    {(() => {
-                                      const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                      return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
-                                    })()}
-                                  </span>
-                                ))}
+                                {sources.map((src: any) => {
+                                  const userNames: string[] = src.user_names ?? src.userNames ?? [];
+                                  if (src.type === "direct_user" && userNames.length > 0) {
+                                    return userNames.map((name: string) => (
+                                      <span
+                                        key={`${src.type}-${name}`}
+                                        className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                      >
+                                        <Users size={10} className="text-text-secondary" />
+                                        {name}
+                                      </span>
+                                    ));
+                                  }
+                                  return (
+                                    <span
+                                      key={src.type}
+                                      className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                    >
+                                      <Users size={10} className="text-text-secondary" />
+                                      {(() => {
+                                        const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
+                                        return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
+                                      })()}
+                                    </span>
+                                  );
+                                })}
                                 <button
                                   type="button"
                                   onClick={() => setNodeDialog({ open: true, initial: node })}
@@ -1633,6 +1682,12 @@ export default function ApprovalPage() {
                                 ? t("approvalPage.exceptionTypeFailed")
                                 : item.exception_type}
                         </span>
+                        {/* resolved status badge */}
+                        {item.status === "resolved" && (
+                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                            {t("approvalPage.exceptionStatusResolved")}
+                          </span>
+                        )}
                         <span className="text-xs text-text-secondary">#{item.id}</span>
                       </div>
                       <div className="mt-1 text-xs text-text-secondary">
@@ -1645,13 +1700,13 @@ export default function ApprovalPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {/* route_missing / approver_empty: retry to re-match route or assign approver */}
-                      {item.exception_type !== "execute_failed" && (
+                      {item.status === "open" && item.exception_type !== "execute_failed" && (
                         <ActionBtn variant="outline" onClick={() => void handleRetryException(item)}>
                           {t("approvalPage.retryAction")}
                         </ActionBtn>
                       )}
                       {/* execute_failed: retry handler */}
-                      {item.exception_type === "execute_failed" && (
+                      {item.status === "open" && item.exception_type === "execute_failed" && (
                         <>
                           <ActionBtn variant="outline" onClick={() => void handleRetryException(item)}>
                             {t("approvalPage.retryAction")}
@@ -1665,7 +1720,7 @@ export default function ApprovalPage() {
                         </>
                       )}
                       {/* approver_empty: assign approvers / skip node */}
-                      {item.exception_type === "approver_empty" && (
+                      {item.status === "open" && item.exception_type === "approver_empty" && (
                         <>
                           <input
                             value={exceptionApproverInputs[item.id] ?? ""}
@@ -1699,14 +1754,16 @@ export default function ApprovalPage() {
                           </ActionBtn>
                         </>
                       )}
-                      {/* cancel: all exception types */}
-                      <ActionBtn
-                        variant="outline"
-                        className="border-red-300 text-red-600 hover:bg-red-50"
-                        onClick={() => { setCancelDialogItem(item); setCancelReason(""); }}
-                      >
-                        {t("approvalPage.cancelExceptionAction")}
-                      </ActionBtn>
+                      {/* cancel: open exceptions only */}
+                      {item.status === "open" && (
+                        <ActionBtn
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={() => { setCancelDialogItem(item); setCancelReason(""); }}
+                        >
+                          {t("approvalPage.cancelExceptionAction")}
+                        </ActionBtn>
+                      )}
                     </div>
                   </div>
                   {/* Business info row */}

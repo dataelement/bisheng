@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
-import { applyMenuAccessApi } from '~/api/approval';
+import { ApprovalApiError, applyMenuAccessApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -70,10 +70,14 @@ export default function MenuUnavailablePage() {
         message: localize('com_menu_unavailable_apply_success'),
         severity: NotificationSeverity.SUCCESS,
       });
-    } catch {
+    } catch (err) {
+      const errMsg = err instanceof ApprovalApiError
+        ? (localize(`api_errors.${err.statusCode}` as any, { defaultValue: '' }) as string
+            || localize('com_menu_unavailable_apply_failed'))
+        : localize('com_menu_unavailable_apply_failed');
       showToast({
-        message: localize('com_menu_unavailable_apply_failed'),
-        severity: NotificationSeverity.INFO,
+        message: errMsg,
+        severity: NotificationSeverity.ERROR,
       });
     } finally {
       setSubmitting(false);

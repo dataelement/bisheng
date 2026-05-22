@@ -45,7 +45,6 @@ class ApprovalQueryRepository:
     async def list_open_exceptions(cls, tenant_id: int) -> list[ApprovalException]:
         statement = select(ApprovalException).where(
             ApprovalException.tenant_id == tenant_id,
-            ApprovalException.status == 'open',
         ).order_by(ApprovalException.id.desc())
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())

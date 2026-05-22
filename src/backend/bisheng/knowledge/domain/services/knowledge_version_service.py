@@ -386,12 +386,24 @@ class KnowledgeVersionService:
 
         out: list[PendingSimilarFileEntry] = []
         for kf in pending:
-            # Use the read API to count current candidates above threshold
-            candidates = await self.get_similar_candidates_for_file(kf.id, limit=100)
+            v = await self.version_repo.find_by_knowledge_file_id(kf.id)
+            # Skip files whose logical document is already multi-version: the user
+            # has already processed similarity (by merging another doc into this
+            # chain). A multi-version doc is no longer an "independent document"
+            # that needs the link-or-dismiss decision.
+            if v is not None:
+                chain = await self.version_repo.find_by_document_id(v.document_id)
+                if len(chain) >= 2:
+                    continue
+            # Cap candidate_count at the same limit the right-panel uses (default 3)
+            # so the left-side count never exceeds what the user can actually act on.
+            candidates = await self.get_similar_candidates_for_file(kf.id)
             out.append(PendingSimilarFileEntry(
                 knowledge_file_id=kf.id, file_name=kf.file_name,
                 file_code=getattr(kf, "file_encoding", None),
                 candidate_count=len(candidates),
+                current_primary_version_no=v.version_no if v else 1,
+                primary_uploader_name=kf.user_name,
             ))
         return out
 

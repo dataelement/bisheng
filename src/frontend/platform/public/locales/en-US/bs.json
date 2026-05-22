@@ -2411,6 +2411,7 @@
     "confirmCancelException": "Confirm Cancel",
     "cancelBtn": "Close",
     "markManuallyCompletedAction": "Mark as Manually Completed",
+    "exceptionStatusResolved": "Resolved",
     "flowPreview": "Preview Flow",
     "genericCreateFailed": "Create failed",
     "genericDeleteFailed": "Delete failed",
