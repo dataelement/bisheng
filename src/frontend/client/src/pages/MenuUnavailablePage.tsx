@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
-import { ApprovalApiError, applyMenuAccessApi } from '~/api/approval';
+import { ApprovalApiError, applyMenuAccessApi, checkMenuAccessPendingApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -54,6 +54,15 @@ export default function MenuUnavailablePage() {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [applied, setApplied] = useState(false);
+
+  // On mount, check if there is already a pending application so that after a
+  // page refresh the button correctly shows "申请中" instead of "申请权限".
+  useEffect(() => {
+    if (!canApply || !pluginId) return;
+    checkMenuAccessPendingApi(pluginId)
+      .then((res) => { if (res.has_pending) setApplied(true); })
+      .catch(() => { /* ignore — fall back to default unapplied state */ });
+  }, [canApply, pluginId]);
 
   const handleSubmit = async () => {
     if (!canApply || !pluginId || submitting) return;

@@ -202,6 +202,13 @@ export async function resubmitApprovalInstanceApi(
   return unwrapPayload(response);
 }
 
+export async function checkMenuAccessPendingApi(menuKey: string): Promise<{ has_pending: boolean; instance_id: number | null; status: string | null }> {
+  const response = await request.get<ApiResponse<{ has_pending: boolean; instance_id: number | null; status: string | null }>>(
+    `/api/v1/approval/menu-access/pending-check?menu_key=${encodeURIComponent(menuKey)}`,
+  );
+  return unwrapPayload(response);
+}
+
 export async function applyMenuAccessApi(data: {
   menu_key: string;
   menu_name: string;
