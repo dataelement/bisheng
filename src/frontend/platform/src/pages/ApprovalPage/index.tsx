@@ -597,6 +597,9 @@ function NodeDialog({
   const [userPickerOpen, setUserPickerOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
   const [userList, setUserList] = useState<{ user_id: number; user_name: string }[]>([]);
+  const [userPage, setUserPage] = useState(1);
+  const [userHasMore, setUserHasMore] = useState(false);
+  const [userLoading, setUserLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
 
@@ -622,21 +625,46 @@ function NodeDialog({
     }
   }, [open]);
 
+  const PAGE_SIZE = 50;
+
+  const loadUsers = (page: number, search: string, append: boolean) => {
+    setUserLoading(true);
+    getUsersApi({ name: search, page, pageSize: PAGE_SIZE, simple: true }).then((res) => {
+      const data: { user_id: number; user_name: string }[] = res.data ?? [];
+      setUserList((prev) => append ? [...prev, ...data] : data);
+      setUserHasMore(data.length >= PAGE_SIZE);
+    }).catch(() => {
+      if (!append) setUserList([]);
+    }).finally(() => setUserLoading(false));
+  };
+
   useEffect(() => {
     if (!userPickerOpen) return;
     const timer = setTimeout(() => {
-      getUsersApi({ name: userSearch, page: 1, pageSize: 50, simple: true }).then((res) => {
-        setUserList(res.data ?? []);
-      }).catch(() => setUserList([]));
+      setUserPage(1);
+      loadUsers(1, userSearch, false);
     }, 300);
     return () => clearTimeout(timer);
   }, [userPickerOpen, userSearch]);
+
+  const handleUserListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!userHasMore || userLoading) return;
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+      const nextPage = userPage + 1;
+      setUserPage(nextPage);
+      loadUsers(nextPage, userSearch, true);
+    }
+  };
 
   const openUserPicker = () => {
     const existing = sources.find((s) => s.type === "direct_user");
     setSelectedUserIds(existing?.userIds ?? []);
     setSelectedUserNames(existing?.userNames ?? []);
     setUserSearch("");
+    setUserPage(1);
+    setUserHasMore(false);
+    setUserList([]);
     setUserPickerOpen(true);
   };
 
@@ -786,8 +814,11 @@ function NodeDialog({
             placeholder={t("approvalPage.searchUser")}
             className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
           />
-          <div className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
-            {userList.length === 0 && (
+          <div
+            className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle"
+            onScroll={handleUserListScroll}
+          >
+            {userList.length === 0 && !userLoading && (
               <div className="py-4 text-center text-xs text-text-secondary">暂无用户</div>
             )}
             {userList.map((u) => {
@@ -815,6 +846,9 @@ function NodeDialog({
                 </label>
               );
             })}
+            {userLoading && (
+              <div className="py-2 text-center text-xs text-text-secondary">加载中…</div>
+            )}
           </div>
           {selectedUserIds.length > 0 && (
             <div className="text-xs text-text-secondary">
