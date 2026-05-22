@@ -121,6 +121,69 @@ def _get_success_space_file_rows(page: int, page_size: int):
             return session.exec(statement).all()
 
 
+def _get_success_space_file_rows_by_space_id(space_id: int, page: int, page_size: int):
+    statement = (
+        select(KnowledgeFile, Knowledge)
+        .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+        .where(
+            Knowledge.id == space_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+        )
+        .order_by(KnowledgeFile.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+
+def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
+    if not file_ids:
+        return []
+    statement = (
+        select(KnowledgeFile, Knowledge)
+        .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+        .where(KnowledgeFile.id.in_(file_ids))
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+
+def _build_knowledge_space_content_records(rows, user_map: dict, *, sync_run_id: str = None):
+    if not rows:
+        return [], user_map
+    user_ids = {
+        int(file_record.user_id)
+        for file_record, _ in rows
+        if file_record.user_id and int(file_record.user_id) not in user_map
+    }
+    user_map = get_user_from_ids_with_cache(list(user_ids), user_map)
+    records = []
+    for file_record, space in rows:
+        uploader = user_map.get(int(file_record.user_id or 0))
+        records.append(
+            KnowledgeSpaceContentStat.build_file_record(
+                file_record=file_record,
+                space=space,
+                uploader=uploader,
+                sync_run_id=sync_run_id,
+            )
+        )
+    return records, user_map
+
+
+def _is_file_content_stat_visible(file_record: KnowledgeFile, space: Knowledge) -> bool:
+    return (
+        space.type == KnowledgeTypeEnum.SPACE.value
+        and file_record.file_type == FileType.FILE.value
+        and file_record.status == KnowledgeFileStatus.SUCCESS.value
+    )
+
+
 @bisheng_celery.task()
 def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str = None):
     trace_id_var.set(f"sync_mid_knowledge_space_content_stat_task_{generate_uuid()}")
@@ -138,44 +201,7 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
         if not rows:
             break
 
-        user_ids = {
-            int(file_record.user_id)
-            for file_record, _ in rows
-            if file_record.user_id and int(file_record.user_id) not in user_map
-        }
-        user_map = get_user_from_ids_with_cache(list(user_ids), user_map)
-
-        records = []
-        for file_record, space in rows:
-            uploader_user_id = int(file_record.user_id or 0)
-            uploader = user_map.get(uploader_user_id)
-            uploader_name = file_record.user_name or (uploader.user_name if uploader else str(uploader_user_id or ""))
-            uploader_departments = [
-                UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                for dept in getattr(uploader, "departments", []) or []
-            ] if uploader else []
-
-            records.append(KnowledgeSpaceContentRecord(
-                es_id=f"file_{file_record.id}",
-                record_type="file",
-                sync_run_id=sync_run_id,
-                user_id=uploader_user_id,
-                user_name=uploader_name,
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in uploader.groups] if uploader else [],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in uploader.roles] if uploader else [],
-                user_department_infos=uploader_departments,
-                timestamp=int((file_record.create_time or datetime.now()).timestamp()),
-                space_id=int(space.id),
-                space_name=space.name,
-                file_id=int(file_record.id),
-                file_name=file_record.file_name,
-                file_type=int(file_record.file_type),
-                uploader_user_id=uploader_user_id,
-                uploader_user_name=uploader_name,
-                uploader_department_infos=uploader_departments,
-            ))
+        records, user_map = _build_knowledge_space_content_records(rows, user_map, sync_run_id=sync_run_id)
 
         mid_table.insert_records_sync(records)
         synced_count += len(records)
@@ -187,6 +213,86 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
         synced_count,
         deleted_count,
     )
+
+
+@bisheng_celery.task()
+def sync_pending_knowledge_space_content_stat():
+    trace_id_var.set(f"sync_pending_knowledge_space_content_stat_task_{generate_uuid()}")
+    KnowledgeSpaceContentStat.clear_scheduled_sync()
+    if not KnowledgeSpaceContentStat.acquire_lock_sync():
+        KnowledgeSpaceContentStat._schedule_pending_sync(
+            countdown=KnowledgeSpaceContentStat.SCHEDULE_DELAY_SECONDS
+        )
+        return
+
+    try:
+        mid_table = KnowledgeSpaceContentStat()
+        user_map = {}
+
+        file_ids = KnowledgeSpaceContentStat.pop_pending_file_ids_sync(
+            KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+        )
+        if file_ids:
+            rows = _get_knowledge_space_content_rows_by_file_ids(file_ids)
+            row_by_file_id = {int(file_record.id): (file_record, space) for file_record, space in rows}
+            visible_rows = []
+            stale_file_ids = []
+            for file_id in file_ids:
+                row = row_by_file_id.get(int(file_id))
+                if not row:
+                    stale_file_ids.append(file_id)
+                    continue
+                file_record, space = row
+                if _is_file_content_stat_visible(file_record, space):
+                    visible_rows.append(row)
+                else:
+                    stale_file_ids.append(file_id)
+
+            records, user_map = _build_knowledge_space_content_records(visible_rows, user_map)
+            if records:
+                mid_table.insert_records_sync(records)
+            if stale_file_ids:
+                mid_table.delete_file_records_sync(stale_file_ids)
+
+            logger.info(
+                "Synced pending knowledge space content file stats. upserted={}, deleted={}",
+                len(records),
+                len(stale_file_ids),
+            )
+
+        space_rename_ids = KnowledgeSpaceContentStat.pop_pending_space_rename_ids_sync()
+        for space_id in space_rename_ids:
+            page, page_size = 1, 500
+            space_synced_count = 0
+            while True:
+                rows = _get_success_space_file_rows_by_space_id(space_id, page, page_size)
+                page += 1
+                if not rows:
+                    break
+                records, user_map = _build_knowledge_space_content_records(rows, user_map)
+                if records:
+                    mid_table.insert_records_sync(records)
+                    space_synced_count += len(records)
+            logger.info(
+                "Synced pending knowledge space rename content stats. space_id={}, upserted={}",
+                space_id,
+                space_synced_count,
+            )
+
+        space_delete_ids = KnowledgeSpaceContentStat.pop_pending_space_delete_ids_sync()
+        if space_delete_ids:
+            deleted_count = mid_table.delete_space_file_records_sync(space_delete_ids)
+            logger.info(
+                "Deleted pending knowledge space content stats. space_ids={}, deleted={}",
+                space_delete_ids,
+                deleted_count,
+            )
+    except Exception:
+        logger.exception("Failed to sync pending knowledge space content stats.")
+    finally:
+        KnowledgeSpaceContentStat.release_lock_sync()
+        if KnowledgeSpaceContentStat.has_pending_sync():
+            KnowledgeSpaceContentStat.schedule_pending_sync_now()
 
 
 @bisheng_celery.task()

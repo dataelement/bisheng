@@ -1,4 +1,7 @@
-from types import SimpleNamespace
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -22,6 +25,95 @@ class _FakeSyncIndexClient:
     def delete_by_query(self, **kwargs):
         self.deleted_queries.append(kwargs)
         return {"deleted": 3}
+
+
+class _FakeRedisSetClient:
+    def __init__(self):
+        self.sets = {}
+        self.nx_keys = set()
+        self.deleted_keys = []
+        self.connection = self
+
+    def cluster_nodes(self, _key):
+        return None
+
+    def sadd(self, key, *values):
+        target = self.sets.setdefault(key, set())
+        before = len(target)
+        target.update(str(value) for value in values)
+        return len(target) - before
+
+    def spop(self, key, count=None):
+        target = self.sets.setdefault(key, set())
+        if count is None:
+            if not target:
+                return None
+            value = next(iter(target))
+            target.remove(value)
+            return value.encode()
+        popped = set()
+        for value in list(target)[:count]:
+            target.remove(value)
+            popped.add(value.encode())
+        return popped
+
+    def scard(self, key):
+        return len(self.sets.get(key, set()))
+
+    def setNx(self, key, _value, expiration=3600):
+        if key in self.nx_keys:
+            return False
+        self.nx_keys.add(key)
+        return True
+
+    def delete(self, key):
+        self.deleted_keys.append(key)
+        self.nx_keys.discard(key)
+        self.sets.pop(key, None)
+        return 1
+
+
+class _FakeCeleryTask:
+    def __init__(self):
+        self.apply_async_calls = []
+
+    def apply_async(self, **kwargs):
+        self.apply_async_calls.append(kwargs)
+
+
+_MISSING = object()
+
+
+def _import_worker_mid_table():
+    class _DummyTask:
+        def __init__(self, fn):
+            self.run = fn
+
+        def __call__(self, *args, **kwargs):
+            return self.run(*args, **kwargs)
+
+        def apply_async(self, **_kwargs):
+            return None
+
+    class _DummyCelery:
+        @staticmethod
+        def task(*_args, **_kwargs):
+            return lambda fn: _DummyTask(fn)
+
+    previous_worker_main = sys.modules.get("bisheng.worker.main", _MISSING)
+    try:
+        sys.modules["bisheng.worker.main"] = SimpleNamespace(bisheng_celery=_DummyCelery())
+        module_path = Path(__file__).parents[1] / "bisheng" / "worker" / "telemetry" / "mid_table.py"
+        spec = importlib.util.spec_from_file_location("test_pending_mid_table_under_test", module_path)
+        worker_module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(worker_module)
+        return worker_module
+    finally:
+        if previous_worker_main is _MISSING:
+            sys.modules.pop("bisheng.worker.main", None)
+        else:
+            sys.modules["bisheng.worker.main"] = previous_worker_main
 
 
 @pytest.mark.asyncio
@@ -80,3 +172,225 @@ def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monk
     assert call["refresh"] is True
     assert call["body"]["query"]["bool"]["filter"] == [{"term": {"record_type": "file"}}]
     assert call["body"]["query"]["bool"]["must_not"] == [{"term": {"sync_run_id": "run-1"}}]
+
+
+def test_knowledge_space_content_enqueue_file_stat_sync_dedupes_schedule(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    fake_redis = _FakeRedisSetClient()
+    fake_task = _FakeCeleryTask()
+    fake_worker_package = ModuleType("bisheng.worker")
+    fake_worker_package.__path__ = []
+    fake_telemetry_package = ModuleType("bisheng.worker.telemetry")
+    fake_telemetry_package.__path__ = []
+    fake_worker_module = ModuleType("bisheng.worker.telemetry.mid_table")
+    fake_worker_module.sync_pending_knowledge_space_content_stat = fake_task
+
+    monkeypatch.setattr(module, "get_redis_client_sync", lambda: fake_redis, raising=False)
+    monkeypatch.setitem(sys.modules, "bisheng.worker", fake_worker_package)
+    monkeypatch.setitem(sys.modules, "bisheng.worker.telemetry", fake_telemetry_package)
+    monkeypatch.setitem(sys.modules, "bisheng.worker.telemetry.mid_table", fake_worker_module)
+
+    module.KnowledgeSpaceContentStat.enqueue_file_stat_sync([11, "11", 12, None])
+    module.KnowledgeSpaceContentStat.enqueue_file_stat_sync([12])
+
+    assert fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] == {"11", "12"}
+    assert fake_task.apply_async_calls == [{"countdown": 5}]
+
+
+def test_knowledge_space_content_pop_pending_file_ids_caps_batch_size(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    fake_redis = _FakeRedisSetClient()
+    fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] = {
+        str(idx) for idx in range(600)
+    }
+    monkeypatch.setattr(module, "get_redis_client_sync", lambda: fake_redis, raising=False)
+
+    file_ids = module.KnowledgeSpaceContentStat.pop_pending_file_ids_sync()
+
+    assert len(file_ids) == 500
+    assert len(fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY]) == 100
+
+
+def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+
+    success_file = SimpleNamespace(
+        id=21,
+        user_id=7,
+        user_name="上传人",
+        create_time=None,
+        knowledge_id=3,
+        file_name="成功.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+    waiting_file = SimpleNamespace(
+        id=22,
+        user_id=7,
+        user_name="上传人",
+        create_time=None,
+        knowledge_id=3,
+        file_name="等待.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.WAITING.value,
+    )
+    space = SimpleNamespace(id=3, name="空间", type=3)
+    upserted = []
+    deleted = []
+
+    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
+    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
+    monkeypatch.setattr(
+        stat_cls,
+        "pop_pending_file_ids_sync",
+        lambda batch_size=500: [21, 22, 404],
+        raising=False,
+    )
+    monkeypatch.setattr(stat_cls, "pop_pending_space_rename_ids_sync", lambda: [], raising=False)
+    monkeypatch.setattr(stat_cls, "pop_pending_space_delete_ids_sync", lambda: [], raising=False)
+    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
+    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
+    monkeypatch.setattr(stat_cls, "delete_file_records_sync", lambda self, file_ids: deleted.extend(file_ids), raising=False)
+    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient())
+    monkeypatch.setattr(
+        worker_module,
+        "_get_knowledge_space_content_rows_by_file_ids",
+        lambda file_ids: [(success_file, space), (waiting_file, space)],
+        raising=False,
+    )
+    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda user_ids, user_map: user_map)
+
+    worker_module.sync_pending_knowledge_space_content_stat.run()
+
+    assert [record.es_id for record in upserted] == ["file_21"]
+    assert deleted == [22, 404]
+
+
+def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_delete(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+
+    file_record = SimpleNamespace(
+        id=31,
+        user_id=8,
+        user_name="上传人",
+        create_time=None,
+        knowledge_id=5,
+        file_name="文件.pdf",
+        file_type=1,
+        status=2,
+    )
+    renamed_space = SimpleNamespace(id=5, name="新空间", type=3)
+    upserted = []
+    deleted_spaces = []
+
+    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
+    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "pop_pending_file_ids_sync", lambda batch_size=500: [], raising=False)
+    monkeypatch.setattr(stat_cls, "pop_pending_space_rename_ids_sync", lambda: [5], raising=False)
+    monkeypatch.setattr(stat_cls, "pop_pending_space_delete_ids_sync", lambda: [6], raising=False)
+    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
+    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
+    monkeypatch.setattr(
+        stat_cls,
+        "delete_space_file_records_sync",
+        lambda self, space_ids: deleted_spaces.extend(space_ids),
+        raising=False,
+    )
+    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient())
+    monkeypatch.setattr(
+        worker_module,
+        "_get_success_space_file_rows_by_space_id",
+        lambda space_id, page, page_size: [(file_record, renamed_space)] if page == 1 else [],
+        raising=False,
+    )
+    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda user_ids, user_map: user_map)
+
+    worker_module.sync_pending_knowledge_space_content_stat.run()
+
+    assert [(record.es_id, record.space_name) for record in upserted] == [("file_31", "新空间")]
+    assert deleted_spaces == [6]
+
+
+def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
+    from bisheng.api.services import knowledge_imp
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+
+    space = SimpleNamespace(id=3, type=KnowledgeTypeEnum.SPACE.value)
+    file_record = SimpleNamespace(
+        id=41,
+        user_id=7,
+        updater_id=7,
+        knowledge_id=3,
+        file_name="成功.pdf",
+        file_type=FileType.FILE.value,
+        object_name="source/成功.pdf",
+        parse_type=None,
+        status=KnowledgeFileStatus.PROCESSING.value,
+        remark="",
+        simhash=None,
+        similar_status=0,
+    )
+    updated_statuses = []
+    enqueued = []
+    telemetry_events = []
+
+    class _FakePipeline:
+        def __init__(self, **_kwargs):
+            pass
+
+        def run(self):
+            return SimpleNamespace(documents=[])
+
+    monkeypatch.setattr(knowledge_imp.KnowledgeDao, "query_by_id", staticmethod(lambda _knowledge_id: space))
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeRag,
+        "init_knowledge_milvus_vectorstore_sync",
+        staticmethod(lambda *_args, **_kwargs: object()),
+    )
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeRag,
+        "init_knowledge_es_vectorstore_sync",
+        staticmethod(lambda *_args, **_kwargs: object()),
+    )
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeUtils,
+        "ensure_milvus_schema_ready",
+        staticmethod(lambda **kwargs: kwargs["vector_client"]),
+    )
+    monkeypatch.setattr(knowledge_imp, "KnowledgeFilePipeline", _FakePipeline)
+    monkeypatch.setattr(
+        knowledge_imp.settings,
+        "get_knowledge",
+        lambda: SimpleNamespace(version_management=None),
+    )
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeFileDao,
+        "update",
+        staticmethod(lambda db_file: updated_statuses.append(db_file.status)),
+    )
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeSpaceContentStat,
+        "enqueue_file_stat_sync",
+        staticmethod(lambda file_ids: enqueued.extend(file_ids)),
+    )
+    monkeypatch.setattr(
+        knowledge_imp.telemetry_service,
+        "log_event_sync",
+        lambda **kwargs: telemetry_events.append(kwargs),
+    )
+
+    knowledge_imp.addEmbedding(3, [file_record])
+
+    assert updated_statuses == [KnowledgeFileStatus.SUCCESS.value]
+    assert enqueued == [41]
+    assert telemetry_events[0]["event_data"].status == "success"

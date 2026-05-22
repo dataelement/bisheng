@@ -42,7 +42,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalSpaceInfoItemResp,
     SpaceSubscriptionStatusEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 
 
 def _install_schema_stubs() -> None:
@@ -75,6 +75,19 @@ def _install_schema_stubs() -> None:
         schemas_module.ExcelRule = _DummySchema
         schemas_module.WSModel = _DummyWSModel
         sys.modules['bisheng.api.v1.schemas'] = schemas_module
+
+    if 'bisheng.api.v1.schema' not in sys.modules:
+        schema_pkg = ModuleType('bisheng.api.v1.schema')
+        schema_pkg.__path__ = []
+        sys.modules['bisheng.api.v1.schema'] = schema_pkg
+    if 'bisheng.api.v1.schema.chat_schema' not in sys.modules:
+        chat_schema_module = ModuleType('bisheng.api.v1.schema.chat_schema')
+
+        class _DummyUseKnowledgeBaseParam(BaseModel):
+            id: int | None = None
+
+        chat_schema_module.UseKnowledgeBaseParam = _DummyUseKnowledgeBaseParam
+        sys.modules['bisheng.api.v1.schema.chat_schema'] = chat_schema_module
 
     if 'bisheng.api.services' not in sys.modules:
         services_module = ModuleType('bisheng.api.services')
@@ -204,6 +217,18 @@ def _install_schema_stubs() -> None:
         llm_domain_module.LLMService = _DummyLLMService
         sys.modules['bisheng.llm.domain'] = llm_domain_module
 
+    workstation_services_pkg = ModuleType('bisheng.workstation.domain.services')
+    workstation_services_pkg.__path__ = []
+    workstation_service_module = ModuleType('bisheng.workstation.domain.services.workstation_service')
+
+    class _DummyWorkStationService:
+        pass
+
+    workstation_service_module.WorkStationService = _DummyWorkStationService
+    workstation_services_pkg.WorkStationService = _DummyWorkStationService
+    sys.modules['bisheng.workstation.domain.services'] = workstation_services_pkg
+    sys.modules['bisheng.workstation.domain.services.workstation_service'] = workstation_service_module
+
     if 'bisheng.worker' not in sys.modules:
         worker_module = ModuleType('bisheng.worker')
         worker_module.__path__ = []
@@ -222,13 +247,13 @@ def _install_schema_stubs() -> None:
         worker_knowledge_module.__path__ = []
         sys.modules['bisheng.worker.knowledge'] = worker_knowledge_module
 
+    class _DummyFileWorkerTask:
+        @staticmethod
+        def delay(*args, **kwargs):
+            return None
+
     if 'bisheng.worker.knowledge.file_worker' not in sys.modules:
         file_worker_module = ModuleType('bisheng.worker.knowledge.file_worker')
-
-        class _DummyFileWorkerTask:
-            @staticmethod
-            def delay(*args, **kwargs):
-                return None
 
         def _dummy_copy_normal(*args, **kwargs):
             return None
@@ -238,6 +263,12 @@ def _install_schema_stubs() -> None:
         file_worker_module.copy_normal = _dummy_copy_normal
         sys.modules['bisheng.worker.knowledge.file_worker'] = file_worker_module
         sys.modules['bisheng.worker.knowledge'].file_worker = file_worker_module
+
+    if 'bisheng.worker.knowledge.rebuild_knowledge_worker' not in sys.modules:
+        rebuild_worker_module = ModuleType('bisheng.worker.knowledge.rebuild_knowledge_worker')
+        rebuild_worker_module.rebuild_knowledge_file_chunk = _DummyFileWorkerTask()
+        sys.modules['bisheng.worker.knowledge.rebuild_knowledge_worker'] = rebuild_worker_module
+        sys.modules['bisheng.worker.knowledge'].rebuild_knowledge_worker = rebuild_worker_module
 
 
 def _load_service_class():
@@ -2229,6 +2260,46 @@ class TestDeleteSpace:
         mock_delete.assert_awaited_once_with(knowledge_id=1)
         mock_cleanup.assert_awaited_once_with([('folder', 201), ('knowledge_file', 202), ('knowledge_space', 1)])
 
+    @pytest.mark.asyncio
+    async def test_delete_space_enqueues_content_stat_cleanup(self, service):
+        space = _make_space(space_id=1, user_id=999)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_list_space_child_resources', new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.to_thread',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_delete_knowledge',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.clean_space_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_delete_knowledge_space',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.telemetry_delete_knowledge',
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_space_delete_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            await service.delete_space(1)
+
+        mock_enqueue.assert_awaited_once_with(1)
+
 
 class TestSpaceListings:
 
@@ -2640,12 +2711,16 @@ class TestManagePermissionBoundaries:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
             return_value=updated_space,
-        ):
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_space_rename_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
             await service.update_knowledge_space(1, name='Renamed Space')
 
         mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'edit_space')
         mock_require_write.assert_not_awaited()
         mock_require_manage.assert_not_awaited()
+        mock_enqueue.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
     async def test_update_space_rejects_duplicate_name_in_same_scope(self, service):
@@ -2810,6 +2885,38 @@ class TestSpaceOwnershipValidation:
                 await service.batch_delete(1, [41], [])
 
         mock_delete_batch.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_batch_delete_enqueues_direct_file_stat_cleanup(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=42, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch.object(
+            service, '_require_read_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_get_file_for_action', new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            await service.batch_delete(1, [42], [])
+
+        mock_enqueue.assert_awaited_once_with([42])
 
     @pytest.mark.asyncio
     async def test_batch_download_rejects_cross_space_file_ids(self, service):
@@ -3478,6 +3585,37 @@ class TestTupleLifecycle:
         mock_delete_tuples.assert_awaited_once_with('knowledge_file', '82')
 
     @pytest.mark.asyncio
+    async def test_delete_file_enqueues_content_stat_cleanup(self, service):
+        file_record = _make_file(file_id=82, knowledge_id=1)
+
+        with patch.object(
+            service, '_get_file_for_action', new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=_make_space(space_id=1),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ), patch.object(
+            service, 'update_folder_update_time', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            await service.delete_file(82)
+
+        mock_enqueue.assert_awaited_once_with([82])
+
+    @pytest.mark.asyncio
     async def test_delete_folder_cleans_descendant_resource_tuples(self, service):
         folder = _make_file(file_id=91, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
         child_folder = _make_file(file_id=92, knowledge_id=1, file_type=FileType.DIR.value, file_name='nested')
@@ -3510,6 +3648,42 @@ class TestTupleLifecycle:
             ('folder', '92'),
             ('knowledge_file', '93'),
         ]
+
+    @pytest.mark.asyncio
+    async def test_delete_folder_enqueues_descendant_file_stat_cleanup(self, service):
+        folder = _make_file(file_id=91, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
+        child_file = _make_file(file_id=93, knowledge_id=1, file_type=FileType.FILE.value, file_name='doc.txt')
+
+        with patch.object(
+            service, '_get_folder_for_action', new_callable=AsyncMock,
+            return_value=folder,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=_make_space(space_id=1),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_children_by_prefix',
+            new_callable=AsyncMock,
+            return_value=[child_file],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ), patch.object(
+            service, 'update_folder_update_time', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            await service.delete_folder(1, 91)
+
+        mock_enqueue.assert_awaited_once_with([93])
 
     @pytest.mark.asyncio
     async def test_delete_folder_uses_delete_folder_permission(self, service):
@@ -3635,6 +3809,42 @@ class TestTupleLifecycle:
             await service.delete_file(99)
 
         mock_require_permission_id.assert_awaited_once_with('knowledge_file', 99, 'delete_file', space_id=1)
+
+    @pytest.mark.asyncio
+    async def test_rename_file_enqueues_content_stat_refresh(self, service):
+        file_record = _make_file(file_id=100, knowledge_id=1, file_name='old.txt')
+        updated_file = _make_file(file_id=100, knowledge_id=1, file_name='new.txt')
+        updated_file.status = 2
+
+        with patch.object(
+            service, '_get_file_for_action', new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=_make_space(space_id=1),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_file_by_name',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update',
+            new_callable=AsyncMock,
+            return_value=updated_file,
+        ), patch.object(
+            service, 'update_folder_update_time', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            await service.rename_file(100, 'new.txt')
+
+        mock_enqueue.assert_awaited_once_with([100])
 
     @pytest.mark.asyncio
     async def test_get_file_preview_uses_knowledge_file_can_read(self, service):
@@ -4224,6 +4434,40 @@ class TestTupleLifecycle:
             await service.retry_space_files(1, {'file_objs': [{'id': 124}]})
 
         mock_require_resource_permission.assert_awaited_once_with('can_edit', 'knowledge_file', 124)
+
+    @pytest.mark.asyncio
+    async def test_batch_retry_failed_files_enqueues_waiting_file_stats(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=126, knowledge_id=1)
+        file_record.status = KnowledgeFileStatus.FAILED.value
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch.object(
+            service, '_require_read_permission', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+            new_callable=AsyncMock,
+            return_value=[file_record],
+        ), patch.object(
+            service, '_require_resource_permission', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aupdate_file_status',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, 'update_folder_update_time', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async',
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            await service.batch_retry_failed_files(1, [126])
+
+        mock_enqueue.assert_awaited_once_with([126])
 
 
 class TestFineGrainedPermissionRuntime:

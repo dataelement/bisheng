@@ -58,6 +58,7 @@ from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import K
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.utils import is_pdf_damaged
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
     convert_doc_to_docx,
     convert_ppt_to_pdf, convert_ppt_to_pptx,
@@ -357,6 +358,8 @@ def addEmbedding(
                 f"process_file_end file_id={db_file.id} file_name={db_file.file_name}"
             )
             KnowledgeFileDao.update(db_file)
+            if db_file.status == KnowledgeFileStatus.SUCCESS.value:
+                KnowledgeSpaceContentStat.enqueue_file_stat_sync([db_file.id])
             telemetry_service.log_event_sync(user_id=db_file.user_id,
                                              event_type=BaseTelemetryTypeEnum.FILE_PARSE,
                                              trace_id=trace_id_var.get(),

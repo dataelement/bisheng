@@ -130,6 +130,7 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
     KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
@@ -3321,6 +3322,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+        await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
 
         # Drop the private auto-tag library bound to this space (if any) so
         # we never leave orphan rows in knowledge_space_tag_library.
@@ -3385,8 +3387,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         old_auth_type = space.auth_type
+        name_changed = name is not None and name != space.name
 
-        if name is not None and name != space.name:
+        if name_changed:
             scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
             if scope is None:
                 raise SpaceInvalidScopeOwnerError(msg='Knowledge space scope does not exist')
@@ -3450,6 +3453,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.auto_tag_library_id = resolved_library_id
 
         space = await KnowledgeDao.async_update_space(space)
+        if name_changed:
+            await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         new_auth_type = space.auth_type
 
         # When switching to PRIVATE, remove all non-creator members
@@ -4615,6 +4620,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
+        if file_ids:
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(file_ids)
 
         # Prune channel ➜ knowledge-folder sync bindings that target the deleted
         # folders so the Celery sync worker stops referencing a tombstone.
@@ -4901,6 +4908,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         file_record.file_name = new_name
         updated_file = await KnowledgeFileDao.async_update(file_record)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
@@ -4948,6 +4956,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(space, "delete_file")
 
         await KnowledgeFileDao.adelete_batch([file_id])
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
         delete_knowledge_file_celery.delay(
             file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True
         )
@@ -5111,6 +5120,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tmp, file_level_path = await self.process_retry_files(
             db_files, id2input, self.login_user
         )
+        if tmp:
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async([one.id for one in tmp])
 
         for folder_path in file_level_path:
             await self.update_folder_update_time(folder_path)
@@ -5169,6 +5180,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await KnowledgeFileDao.aupdate_file_status(
                 all_file_ids, KnowledgeFileStatus.WAITING, "batch_retry_failed_files"
             )
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(all_file_ids)
             await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         for one in all_file_level_path:
             if one:
@@ -5204,6 +5216,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 direct_files.append(file_record)
             direct_file_ids = [file.id for file in direct_files]
             await KnowledgeFileDao.adelete_batch(direct_file_ids)
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(direct_file_ids)
             delete_knowledge_file_celery.delay(
                 file_ids=direct_file_ids, knowledge_id=knowledge.id, clear_minio=True
             )

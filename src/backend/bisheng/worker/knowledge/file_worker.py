@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus
@@ -165,6 +166,8 @@ def copy_normal(
         else:
             knowledge_new.status = one.status
         KnowledgeFileDao.update(knowledge_new)
+        if knowledge_new.status == KnowledgeFileStatus.SUCCESS.value:
+            KnowledgeSpaceContentStat.enqueue_file_stat_sync([knowledge_new.id])
     except Exception as e:
         logger.exception(e)
         logger.error("source={} new={} e={}", one.id, knowledge_new.id, e)
