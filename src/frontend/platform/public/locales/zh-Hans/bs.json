@@ -2361,6 +2361,7 @@
     "confirmCancelException": "确认取消",
     "cancelBtn": "关闭",
     "markManuallyCompletedAction": "标记已人工完成",
+    "exceptionStatusResolved": "已处理",
     "flowPreview": "流程预览",
     "genericCreateFailed": "创建失败",
     "genericDeleteFailed": "删除失败",

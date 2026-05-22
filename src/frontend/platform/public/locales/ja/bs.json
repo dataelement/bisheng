@@ -2361,6 +2361,7 @@
     "confirmCancelException": "取消確認",
     "cancelBtn": "閉じる",
     "markManuallyCompletedAction": "手動完了としてマーク",
+    "exceptionStatusResolved": "処理済み",
     "flowPreview": "フロープレビュー",
     "genericCreateFailed": "作成失敗",
     "genericDeleteFailed": "削除失敗",

@@ -1682,6 +1682,12 @@ export default function ApprovalPage() {
                                 ? t("approvalPage.exceptionTypeFailed")
                                 : item.exception_type}
                         </span>
+                        {/* resolved status badge */}
+                        {item.status === "resolved" && (
+                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                            {t("approvalPage.exceptionStatusResolved")}
+                          </span>
+                        )}
                         <span className="text-xs text-text-secondary">#{item.id}</span>
                       </div>
                       <div className="mt-1 text-xs text-text-secondary">
@@ -1694,13 +1700,13 @@ export default function ApprovalPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {/* route_missing / approver_empty: retry to re-match route or assign approver */}
-                      {item.exception_type !== "execute_failed" && (
+                      {item.status === "open" && item.exception_type !== "execute_failed" && (
                         <ActionBtn variant="outline" onClick={() => void handleRetryException(item)}>
                           {t("approvalPage.retryAction")}
                         </ActionBtn>
                       )}
                       {/* execute_failed: retry handler */}
-                      {item.exception_type === "execute_failed" && (
+                      {item.status === "open" && item.exception_type === "execute_failed" && (
                         <>
                           <ActionBtn variant="outline" onClick={() => void handleRetryException(item)}>
                             {t("approvalPage.retryAction")}
@@ -1714,7 +1720,7 @@ export default function ApprovalPage() {
                         </>
                       )}
                       {/* approver_empty: assign approvers / skip node */}
-                      {item.exception_type === "approver_empty" && (
+                      {item.status === "open" && item.exception_type === "approver_empty" && (
                         <>
                           <input
                             value={exceptionApproverInputs[item.id] ?? ""}
@@ -1748,14 +1754,16 @@ export default function ApprovalPage() {
                           </ActionBtn>
                         </>
                       )}
-                      {/* cancel: all exception types */}
-                      <ActionBtn
-                        variant="outline"
-                        className="border-red-300 text-red-600 hover:bg-red-50"
-                        onClick={() => { setCancelDialogItem(item); setCancelReason(""); }}
-                      >
-                        {t("approvalPage.cancelExceptionAction")}
-                      </ActionBtn>
+                      {/* cancel: open exceptions only */}
+                      {item.status === "open" && (
+                        <ActionBtn
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={() => { setCancelDialogItem(item); setCancelReason(""); }}
+                        >
+                          {t("approvalPage.cancelExceptionAction")}
+                        </ActionBtn>
+                      )}
                     </div>
                   </div>
                   {/* Business info row */}
