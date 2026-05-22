@@ -372,7 +372,10 @@ class ApprovalExceptionService:
             raise ValueError(f'scenario not enabled: {instance.scenario_code}')
 
         route_rules = await ApprovalScenarioRepository.list_route_rules(instance.tenant_id, scenario.id)
-        route_rule = next((row for row in route_rules if row.route_type == 'flow'), None)
+        route_rule = next(
+            (row for row in route_rules if row.route_type == 'flow' and getattr(row, 'enabled', True)),
+            None,
+        )
         if route_rule is None or route_rule.flow_definition_id is None:
             raise ValueError(f'flow route not found for scenario: {instance.scenario_code}')
 
