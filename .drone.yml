@@ -73,7 +73,7 @@ steps:
 
     commands:
 
-      - 'VERSION=$(echo $DRONE_COMMIT_SHA | cut -c1-8)'
+      - 'VERSION=2.5.0-sg'
 
       - 'echo "======= build frontend ======="'
 
@@ -85,12 +85,10 @@ steps:
       - 'cd src/frontend'
 
       # 构建 frontend 镜像
-      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION -t $DOCKER_REPO:latest .'
+      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION .'
 
       # 推送镜像
       - 'docker push $DOCKER_REPO:$VERSION'
-
-      - 'docker push $DOCKER_REPO:latest'
 
   # =========================================
   # backend 部署（源码映射）
