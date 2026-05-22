@@ -12,11 +12,21 @@ const PopoverAnchor = PopoverPrimitive.Anchor
 
 const PopoverClose = PopoverPrimitive.Close
 
+type PopoverContentProps = React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
+    /**
+     * Custom container for the Radix Portal that wraps the content.
+     * Pass a DOM node inside a parent Dialog when this popover is nested in one
+     * — otherwise the default body portal lives outside the Dialog's
+     * react-remove-scroll subtree and wheel events are dropped.
+     */
+    portalContainer?: HTMLElement | null
+}
+
 const PopoverContent = React.forwardRef<
     React.ElementRef<typeof PopoverPrimitive.Content>,
-    React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = "center", sideOffset = 4, collisionPadding = 8, ...props }, ref) => (
-    <PopoverPrimitive.Portal>
+    PopoverContentProps
+>(({ className, align = "center", sideOffset = 4, collisionPadding = 8, portalContainer, ...props }, ref) => (
+    <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
         <PopoverPrimitive.Content
             ref={ref}
             align={align}
