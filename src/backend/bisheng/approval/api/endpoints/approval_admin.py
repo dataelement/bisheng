@@ -239,6 +239,13 @@ async def update_node(
     )
 
 
+@router.delete('/nodes/{node_definition_id}')
+async def delete_node(node_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    await ApprovalScenarioAdminService.delete_node(tenant_id=login_user.tenant_id, node_definition_id=node_definition_id)
+    return resp_200({'deleted': node_definition_id})
+
+
 @router.delete('/scenarios/{scenario_id}')
 async def delete_scenario(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     _ensure_admin(login_user)
