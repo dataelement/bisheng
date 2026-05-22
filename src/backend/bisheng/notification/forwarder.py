@@ -27,8 +27,9 @@ def resolve_eplus_recipient(target_user_id: int) -> Tuple[Optional[str], str]:
     user = UserDao.get_user(target_user_id)
     if not user:
         return None, "user_not_found"
-    if user.source != "cofco_eplus":
-        return None, f"source={user.source}_not_eplus"
+    conf = settings.get_cofco_forwarding_conf()
+    if user.source not in conf.user_sources:
+        return None, f"source={user.source}_not_in_allowed_sources"
     if not user.external_id:
         return None, "external_id_empty"
     return user.external_id, ""
