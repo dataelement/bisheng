@@ -2025,6 +2025,7 @@
   "com_approval_status_cancelled": "Cancelled",
   "com_approval_status_skipped": "Skipped",
   "com_approval_flow_section": "Approval Flow",
+  "com_approval_node_not_started": "Not reached",
   "com_approval_tab_completed": "Completed",
   "com_approval_badge_approved": "Approved",
   "com_approval_badge_rejected": "Rejected",

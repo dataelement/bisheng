@@ -601,43 +601,59 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               <TimelineStep key={log.id ?? `s${i}`} action={log.action} operatorName={log.operator_user_name}
                 createTime={log.create_time} detail={log.detail} localize={localize} isLast={false} />
             ))}
-          {/* all task nodes ordered by node_order */}
-          {[...(detail.tasks || [])].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0)).map((task, i, arr) => {
-            const s = String(task.status || "").toLowerCase();
-            const dotColor = s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
-              (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
-            const statusText = s === "approved" ? localize("com_approval_status_approved") :
-              s === "rejected" ? localize("com_approval_status_rejected") :
-              s === "pending" ? localize("com_approval_status_pending") :
-              s === "skipped" ? localize("com_approval_status_skipped") :
-              localize("com_approval_status_cancelled");
-            const isLast = i === arr.length - 1 && !(detail.action_logs || []).some(
+          {/* all flow nodes — use flow_nodes as skeleton; fall back to tasks */}
+          {(() => {
+            const nodes = detail.flow_nodes && detail.flow_nodes.length > 0
+              ? [...detail.flow_nodes].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0))
+              : [...(detail.tasks || [])].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0));
+            const hasTrailingLogs = (detail.action_logs || []).some(
               (l) => l.action !== "submitted" && l.action !== "resubmitted"
             );
-            return (
-              <div key={task.task_id ?? i} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotColor)} />
-                  {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
-                </div>
-                <div className={cn("min-w-0", isLast ? "pb-1" : "pb-4")}>
-                  <div className="text-[14px] font-medium text-[#1d2129]">
-                    {task.node_name || localize("com_approval_step_submitted")}
+            return nodes.map((node: any, i) => {
+              // Find the matching task for this node (if it exists)
+              const matchedTask = (detail.tasks || []).find(
+                (t) => t.node_order === node.node_order || t.node_name === node.node_name
+              );
+              const s = String(matchedTask?.status || (node.task_id ? node.status : "not_started")).toLowerCase();
+              const isNotStarted = !matchedTask && !node.task_id;
+              const dotColor = isNotStarted ? "bg-[#e5e6eb]" :
+                s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
+                (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
+              const statusLabel = isNotStarted ? localize("com_approval_node_not_started") :
+                s === "approved" ? localize("com_approval_status_approved") :
+                s === "rejected" ? localize("com_approval_status_rejected") :
+                s === "pending" ? localize("com_approval_status_pending") :
+                s === "skipped" ? localize("com_approval_status_skipped") :
+                localize("com_approval_status_cancelled");
+              const isLast = i === nodes.length - 1 && !hasTrailingLogs;
+              const approverName = matchedTask?.approver_user_name;
+              const comment = matchedTask?.comment;
+              const updateTime = matchedTask?.update_time;
+              return (
+                <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotColor)} />
+                    {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
                   </div>
-                  <div className="mt-0.5 text-[12px] text-[#86909c]">
-                    {task.approver_user_name && <span>{task.approver_user_name} · </span>}
-                    {statusText}
+                  <div className={cn("min-w-0", isLast ? "pb-1" : "pb-4")}>
+                    <div className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
+                      {node.node_name || "--"}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-[#86909c]">
+                      {approverName && <span>{approverName} · </span>}
+                      {statusLabel}
+                    </div>
+                    {comment && (
+                      <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>
+                    )}
+                    {updateTime && !isNotStarted && s !== "pending" && (
+                      <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(updateTime)}</div>
+                    )}
                   </div>
-                  {task.comment && (
-                    <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{task.comment}</div>
-                  )}
-                  {task.update_time && s !== "pending" && (
-                    <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(task.update_time)}</div>
-                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
           {/* other action logs (withdrawn, cancelled, etc.) */}
           {(detail.action_logs || [])
             .filter((l) => l.action !== "submitted" && l.action !== "resubmitted")

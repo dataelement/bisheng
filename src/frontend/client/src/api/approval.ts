@@ -64,6 +64,13 @@ export interface ApprovalTaskDetail extends ApprovalTaskItem {
   }>;
 }
 
+export interface ApprovalFlowNode {
+  node_code?: string;
+  node_name?: string;
+  node_order?: number;
+  node_mode?: string;
+}
+
 export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   reason?: string | null;
   granted_keys?: string[];
@@ -71,6 +78,7 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   payload_snapshot?: Record<string, any>;
   detail_snapshot?: Record<string, any>;
   tasks?: ApprovalTaskItem[];
+  flow_nodes?: ApprovalFlowNode[];
   action_logs?: Array<{
     id?: number;
     action?: string;

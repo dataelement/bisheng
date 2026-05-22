@@ -1948,6 +1948,7 @@
   "com_approval_status_cancelled": "キャンセル",
   "com_approval_status_skipped": "スキップ",
   "com_approval_flow_section": "審査フロー",
+  "com_approval_node_not_started": "未到達",
   "com_approval_tab_completed": "完了",
   "com_approval_badge_approved": "承認完了",
   "com_approval_badge_rejected": "却下",

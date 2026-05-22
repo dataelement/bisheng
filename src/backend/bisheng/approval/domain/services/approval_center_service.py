@@ -270,6 +270,24 @@ class ApprovalCenterService:
             if pending_names:
                 current_approver_names = '、'.join(pending_names)
 
+        # Fetch full flow node definitions so the frontend can show all nodes,
+        # not just tasks that have already been created.
+        flow_nodes: list = []
+        if instance.flow_version_id:
+            from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            flow_nodes = [
+                {
+                    'node_code': nd.node_code,
+                    'node_name': nd.node_name,
+                    'node_order': nd.node_order,
+                    'node_mode': nd.node_mode,
+                }
+                for nd in node_defs
+            ]
+
         return {
             'instance_id': instance.id,
             'scenario_code': instance.scenario_code,
@@ -300,6 +318,7 @@ class ApprovalCenterService:
                 }
                 for task in tasks
             ],
+            'flow_nodes': flow_nodes,
             'action_logs': [
                 {
                     'id': log.id,

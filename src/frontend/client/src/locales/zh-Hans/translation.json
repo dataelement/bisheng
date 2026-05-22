@@ -1954,6 +1954,7 @@
   "com_approval_status_cancelled": "已取消",
   "com_approval_status_skipped": "已跳过",
   "com_approval_flow_section": "审批流程",
+  "com_approval_node_not_started": "未到达",
   "com_approval_tab_completed": "已完成",
   "com_approval_badge_approved": "审批完成",
   "com_approval_badge_rejected": "审批拒绝",
