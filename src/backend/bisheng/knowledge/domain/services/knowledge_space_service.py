@@ -87,7 +87,7 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
     KnowledgeSpaceSubscribeScenarioHandler,
@@ -3676,6 +3676,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "status": "subscribed",
                     "space_id": space_id,
                 }
+            if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
+                await self._send_space_approval_notification(
+                    space=space,
+                    instance_id=gate_result.instance_id,
+                    task_ids=gate_result.task_ids,
+                )
         elif previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
 
@@ -3705,6 +3711,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
         )
         return ApprovalGate(registry=registry)
+
+    async def _send_space_approval_notification(
+        self,
+        *,
+        space: Knowledge,
+        instance_id: int,
+        task_ids: list[int],
+    ) -> None:
+        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+        approver_user_ids: list[int] = []
+        seen: set[int] = set()
+        for task_id in task_ids:
+            task = await ApprovalInstanceRepository.get_task(task_id)
+            if task and task.approver_user_id not in seen:
+                seen.add(task.approver_user_id)
+                approver_user_ids.append(task.approver_user_id)
+        if not approver_user_ids:
+            return
+        await self.message_service.send_generic_approval(
+            applicant_user_id=self.login_user.user_id,
+            applicant_user_name=self.login_user.user_name,
+            action_code="request_knowledge_space",
+            business_type="approval_instance_id",
+            business_id=str(instance_id),
+            business_name=space.name,
+            button_action_code="request_knowledge_space",
+            receiver_user_ids=approver_user_ids,
+        )
 
     async def _send_subscription_notification(self, space: Knowledge):
         if space.auth_type != AuthTypeEnum.APPROVAL or not self.message_service:
