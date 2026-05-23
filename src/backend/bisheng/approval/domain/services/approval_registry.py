@@ -42,6 +42,24 @@ class ApprovalRegistry:
                 approver_source_types=['direct_user', 'department_admin', 'knowledge_space_owner', 'knowledge_space_manager'],
             )
         )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code='knowledge_space_create_request',
+                scenario_name='知识空间创建审批',
+                handler_key='knowledge_space_create_request',
+                condition_fields=['applicant_role', 'space_level'],
+                approver_source_types=['department_admin'],
+            )
+        )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code='knowledge_space_file_publish_request',
+                scenario_name='知识空间文件发布审批',
+                handler_key='knowledge_space_file_publish_request',
+                condition_fields=['applicant_role', 'source_space_level', 'target_space_level'],
+                approver_source_types=['department_admin'],
+            )
+        )
         return registry
 
     def register_preset(self, preset: ApprovalScenarioPreset) -> None:

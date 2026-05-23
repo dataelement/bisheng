@@ -5,6 +5,12 @@ from typing import Any
 from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import KnowledgeSpaceSubscribeScenarioHandler
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
+from bisheng.approval.domain.services.shougang_approval_handler import (
+    FILE_PUBLISH_SCENARIO,
+    KNOWLEDGE_SPACE_CREATE_SCENARIO,
+    KnowledgeSpaceCreateApprovalHandler,
+    KnowledgeSpaceFilePublishApprovalHandler,
+)
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, SpaceChannelMemberDao
 from bisheng.common.repositories.implementations.space_channel_member_repository_impl import SpaceChannelMemberRepositoryImpl
 from bisheng.core.database import get_async_db_session
@@ -23,6 +29,10 @@ async def build_runtime_handler(scenario_code: str) -> Any:
             update_member=SpaceChannelMemberDao.update,
             sync_permissions=KnowledgeSpaceService.sync_direct_space_user_permissions,
         )
+    if scenario_code == KNOWLEDGE_SPACE_CREATE_SCENARIO:
+        return KnowledgeSpaceCreateApprovalHandler()
+    if scenario_code == FILE_PUBLISH_SCENARIO:
+        return KnowledgeSpaceFilePublishApprovalHandler()
     raise KeyError(f'handler not registered for scenario_code={scenario_code}')
 
 

@@ -683,3 +683,58 @@ class KnowledgeVersionService:
                 primary_upload_time=getattr(c, "create_time", None),
             ))
         return out
+
+    async def get_similar_candidates_for_file_in_space(
+        self,
+        knowledge_file_id: int,
+        target_knowledge_id: int,
+        *,
+        limit: int = 10,
+    ) -> list:
+        """Return similar primary documents from a target knowledge space."""
+        from bisheng.common.utils.simhash_utils import similarity as _similarity
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
+
+        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+        if kf is None or not kf.simhash:
+            return []
+
+        conf = await bisheng_settings.async_get_knowledge()
+        vmc = getattr(conf, "version_management", None)
+        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
+
+        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
+        self_doc_id = self_v.document_id if self_v else None
+        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
+            knowledge_id=target_knowledge_id,
+            exclude_file_id=knowledge_file_id,
+        )
+
+        scored: list[tuple[float, KnowledgeFile]] = []
+        for candidate in candidates:
+            if not candidate.simhash:
+                continue
+            sim = _similarity(kf.simhash, candidate.simhash)
+            if sim >= threshold:
+                scored.append((sim, candidate))
+        scored.sort(key=lambda item: item[0], reverse=True)
+
+        out: list[SimilarCandidateEntry] = []
+        for sim, candidate in scored[:limit]:
+            version = await self.version_repo.find_by_knowledge_file_id(candidate.id)
+            if version is None:
+                continue
+            if self_doc_id is not None and version.document_id == self_doc_id:
+                continue
+            out.append(
+                SimilarCandidateEntry(
+                    target_document_id=version.document_id,
+                    title=candidate.file_name,
+                    doc_code=getattr(candidate, "file_encoding", None),
+                    current_primary_version_no=version.version_no,
+                    similarity=sim,
+                    primary_uploader_name=getattr(candidate, "user_name", None),
+                    primary_upload_time=getattr(candidate, "create_time", None),
+                )
+            )
+        return out

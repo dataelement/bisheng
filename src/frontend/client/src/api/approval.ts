@@ -1,5 +1,14 @@
 import request from "./request";
-import { FileStatus, FileType, type KnowledgeFile } from "./knowledge";
+import {
+  FileStatus,
+  FileType,
+  type KnowledgeFile,
+  type KnowledgeSpace,
+  type SearchableDocumentEntry,
+  type SimilarCandidateEntry,
+  SpaceLevel,
+  VisibilityType,
+} from "./knowledge";
 
 interface ApiResponse<T> {
   status_code: number;
@@ -227,6 +236,114 @@ export async function revokeMenuAccessGrantApi(
 ): Promise<Record<string, any>> {
   const response = await request.post<ApiResponse<Record<string, any>>>(
     `/api/v1/approval/menu-access/${instanceId}/revoke-grant`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export interface ShougangKnowledgeSpaceCreateApprovalPayload {
+  name: string;
+  description?: string;
+  icon?: string | null;
+  auth_type?: VisibilityType;
+  is_released?: boolean;
+  space_level?: SpaceLevel;
+  department_id?: number;
+  user_group_id?: number;
+  auto_tag_enabled?: boolean;
+  auto_tag_library_id?: number | null;
+  auto_tag_custom_tags?: string[] | null;
+  reason?: string;
+}
+
+export interface ShougangApprovalSubmitResult {
+  decision: string;
+  created: boolean;
+  instance_id?: number | null;
+  task_ids?: number[];
+  space?: KnowledgeSpace;
+}
+
+export interface ShougangFilePublishTargetSpace {
+  id: number | string;
+  name: string;
+  space_level?: SpaceLevel;
+  owner_name?: string | null;
+}
+
+export async function validateShougangKnowledgeSpaceCreateApprovalApi(
+  data: Omit<ShougangKnowledgeSpaceCreateApprovalPayload, "reason">,
+): Promise<{ approval_required: boolean }> {
+  const response = await request.post<ApiResponse<{ approval_required: boolean }>>(
+    "/api/v1/approval/shougang/knowledge-space-create/validate",
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function submitShougangKnowledgeSpaceCreateApprovalApi(
+  data: ShougangKnowledgeSpaceCreateApprovalPayload,
+): Promise<ShougangApprovalSubmitResult> {
+  const response = await request.post<ApiResponse<ShougangApprovalSubmitResult>>(
+    "/api/v1/approval/shougang/knowledge-space-create/submit",
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function getShougangFilePublishTargetSpacesApi(): Promise<{
+  data: ShougangFilePublishTargetSpace[];
+  total: number;
+}> {
+  const response = await request.get<ApiResponse<{ data: ShougangFilePublishTargetSpace[]; total: number }>>(
+    "/api/v1/approval/shougang/file-publish/target-spaces",
+  );
+  return unwrapPaged<ShougangFilePublishTargetSpace>(response);
+}
+
+export async function getShougangFilePublishSimilarCandidatesApi(
+  sourceFileId: string | number,
+  targetSpaceId: string | number,
+): Promise<{ data: SimilarCandidateEntry[]; total: number }> {
+  const response = await request.get<ApiResponse<{ data: SimilarCandidateEntry[]; total: number }>>(
+    "/api/v1/approval/shougang/file-publish/similar-candidates",
+    {
+      params: {
+        source_file_id: sourceFileId,
+        target_space_id: targetSpaceId,
+      },
+    },
+  );
+  return unwrapPaged<SimilarCandidateEntry>(response);
+}
+
+export async function searchShougangFilePublishDocumentsApi(
+  sourceFileId: string | number,
+  targetSpaceId: string | number,
+  keyword: string,
+): Promise<{ data: SearchableDocumentEntry[]; total: number }> {
+  const response = await request.get<ApiResponse<{ data: SearchableDocumentEntry[]; total: number }>>(
+    "/api/v1/approval/shougang/file-publish/document-search",
+    {
+      params: {
+        source_file_id: sourceFileId,
+        target_space_id: targetSpaceId,
+        keyword,
+      },
+    },
+  );
+  return unwrapPaged<SearchableDocumentEntry>(response);
+}
+
+export async function submitShougangFilePublishApprovalApi(data: {
+  source_space_id: string | number;
+  source_file_id: string | number;
+  target_space_id: string | number;
+  target_document_id?: number | null;
+  reason?: string;
+}): Promise<ShougangApprovalSubmitResult> {
+  const response = await request.post<ApiResponse<ShougangApprovalSubmitResult>>(
+    "/api/v1/approval/shougang/file-publish/submit",
     data,
   );
   return unwrapPayload(response);

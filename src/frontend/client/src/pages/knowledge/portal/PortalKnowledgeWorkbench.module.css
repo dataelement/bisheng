@@ -592,6 +592,32 @@
   background: #fff2f0;
 }
 
+.treeMoreButton {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #768499;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.treeRow:hover .treeMoreButton,
+.treeMoreButton:focus,
+.treeMoreButton[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.treeMoreButton:hover {
+  color: #3662e3;
+  background: #eaf2ff;
+}
+
 .selectionCount {
   color: #3662e3;
   font-size: 12px;
@@ -1609,6 +1635,67 @@
   color: #768499;
   text-align: center;
   font-size: 14px;
+}
+
+.publishDialog {
+  width: min(720px, calc(100vw - 48px));
+  max-width: min(720px, calc(100vw - 48px));
+}
+
+.publishBody {
+  display: grid;
+  gap: 14px;
+  padding: 4px 0;
+}
+
+.publishField {
+  display: grid;
+  gap: 6px;
+}
+
+.publishField label {
+  color: #273142;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.publishReadonly,
+.publishField select,
+.publishField textarea,
+.publishSearchRow input {
+  width: 100%;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+}
+
+.publishReadonly {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #f8fafc;
+}
+
+.publishField select,
+.publishSearchRow input {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.publishField textarea {
+  resize: vertical;
+  min-height: 82px;
+  padding: 10px;
+}
+
+.publishSearchRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
 }
 
 @media (max-width: 1280px) {

@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "fs";
 import path from "path";
 import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
+import {
+    getShougangFilePublishSimilarCandidatesApi,
+    getShougangFilePublishTargetSpacesApi,
+    searchShougangFilePublishDocumentsApi,
+    submitShougangFilePublishApprovalApi,
+    submitShougangKnowledgeSpaceCreateApprovalApi,
+} from "~/api/approval";
 import {
     FileStatus,
     FileType,
@@ -111,6 +118,18 @@ jest.mock("../SpaceDetail/KnowledgeSpaceShareDialog", () => ({
     ),
 }));
 
+jest.mock("~/components/approval/ApprovalCenterDialog", () => ({
+    ApprovalCenterDialog: ({ open, target }: any) => (
+        open ? <div data-testid="approval-center-dialog">审批中心:{target?.tab}</div> : null
+    ),
+}));
+
+jest.mock("~/components/NotificationsDialog", () => ({
+    NotificationsDialog: ({ open }: any) => (
+        open ? <div data-testid="notifications-dialog">消息</div> : null
+    ),
+}));
+
 jest.mock("~/components/ui/icon/File", () => ({
     __esModule: true,
     default: ({ type, className }: any) => (
@@ -189,6 +208,14 @@ jest.mock("../hooks/useFileUpload", () => ({
 jest.mock("~/api/permission", () => ({
     checkPermission: (...args: any[]) => mockCheckPermission(...args),
     canOpenPermissionDialog: jest.fn(),
+}));
+
+jest.mock("~/api/approval", () => ({
+    submitShougangKnowledgeSpaceCreateApprovalApi: jest.fn(),
+    getShougangFilePublishTargetSpacesApi: jest.fn(),
+    getShougangFilePublishSimilarCandidatesApi: jest.fn(),
+    searchShougangFilePublishDocumentsApi: jest.fn(),
+    submitShougangFilePublishApprovalApi: jest.fn(),
 }));
 
 jest.mock("~/api/knowledge", () => ({
@@ -363,6 +390,24 @@ describe("PortalKnowledgeWorkbench", () => {
         }) as any);
         jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
         jest.mocked(linkAsNewVersionApi).mockResolvedValue({ document_id: 1, new_version_no: 2 } as any);
+        jest.mocked(submitShougangKnowledgeSpaceCreateApprovalApi).mockResolvedValue({
+            decision: "pending",
+            created: false,
+            instance_id: 901,
+            task_ids: [902],
+        } as any);
+        jest.mocked(getShougangFilePublishTargetSpacesApi).mockResolvedValue({
+            data: [{ id: "public-target", name: "公共发布库", space_level: SpaceLevel.PUBLIC }],
+            total: 1,
+        } as any);
+        jest.mocked(getShougangFilePublishSimilarCandidatesApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(searchShougangFilePublishDocumentsApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(submitShougangFilePublishApprovalApi).mockResolvedValue({
+            decision: "pending",
+            created: false,
+            instance_id: 903,
+            task_ids: [904],
+        } as any);
         mockCheckPermission.mockResolvedValue({ allowed: true });
     });
 
@@ -528,14 +573,13 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.TEAM}`);
     });
 
-    test("creates a knowledge space with the selected group level", async () => {
+    test("submits create knowledge space approval with the selected group level", async () => {
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
             teamSpaces: [],
             personalSpaces: [],
         } as any);
-        jest.mocked(createSpaceApi).mockResolvedValue(makeSpace("new-team", "新空间") as any);
 
         renderWorkbench();
 
@@ -543,7 +587,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
 
         await waitFor(() => {
-            expect(createSpaceApi).toHaveBeenCalledWith({
+            expect(submitShougangKnowledgeSpaceCreateApprovalApi).toHaveBeenCalledWith({
                 name: "新空间",
                 description: "说明",
                 auth_type: VisibilityType.APPROVAL,
@@ -555,6 +599,8 @@ describe("PortalKnowledgeWorkbench", () => {
                 auto_tag_library_id: null,
             });
         });
+        expect(createSpaceApi).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "已提交申请" }));
     });
 
     test("shows create row under a permitted group and opens drawer with that group level", async () => {
@@ -822,6 +868,84 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getAllByText("解析中").length).toBeGreaterThan(0);
         expect(within(noStatusRow).queryByText("成功")).not.toBeInTheDocument();
         expect(within(noStatusRow).queryByText("0/0")).not.toBeInTheDocument();
+    });
+
+    test("shows publish action for a successful team space file and submits approval", async () => {
+        const teamSpace = makeSpace("team-1", "团队空间01", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.TEAM,
+        });
+        const file = makeFile("301", "制度.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.SUCCESS,
+            spaceId: "team-1",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-301");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "发布" }));
+
+        expect(await screen.findByText("发布文件")).toBeInTheDocument();
+        await waitFor(() => {
+            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalled();
+        });
+        await waitFor(() => {
+            expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled();
+        });
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+
+        await waitFor(() => {
+            expect(submitShougangFilePublishApprovalApi).toHaveBeenCalledWith({
+                source_space_id: "team-1",
+                source_file_id: "301",
+                target_space_id: "public-target",
+                target_document_id: null,
+                reason: undefined,
+            });
+        });
+    });
+
+    test("opens approval center and notifications from portal shell messages", async () => {
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+
+        renderWorkbench();
+
+        act(() => {
+            window.dispatchEvent(new MessageEvent("message", {
+                data: { type: "shougang-portal:open-approval-tasks" },
+            }));
+        });
+        expect(await screen.findByTestId("approval-center-dialog")).toHaveTextContent("审批中心:my_tasks");
+
+        act(() => {
+            window.dispatchEvent(new MessageEvent("message", {
+                data: { type: "shougang-portal:open-approval-requests" },
+            }));
+        });
+        expect(await screen.findByTestId("approval-center-dialog")).toHaveTextContent("审批中心:my_requests");
+
+        act(() => {
+            window.dispatchEvent(new MessageEvent("message", {
+                data: { type: "shougang-portal:open-notifications" },
+            }));
+        });
+        expect(await screen.findByTestId("notifications-dialog")).toBeInTheDocument();
     });
 
     test("uses existing Bisheng file type icons in the portal file tree", async () => {
@@ -1237,6 +1361,15 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(aiDialogContentRule).toMatch(/width\s*:\s*min\(1360px,\s*calc\(100vw - 120px\)\)\s*!important/);
         expect(aiDialogContentRule).toMatch(/max-width\s*:\s*min\(1360px,\s*calc\(100vw - 120px\)\)\s*!important/);
         expect(aiDialogContentRule).toMatch(/height\s*:\s*min\(920px,\s*calc\(100dvh - 64px\)\)\s*!important/);
+    });
+
+    test("keeps the portal workbench entrypoint below the maintenance size limit", () => {
+        const source = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8");
+        const nonEmptyLineCount = source
+            .split("\n")
+            .filter((line) => line.trim().length > 0).length;
+
+        expect(nonEmptyLineCount).toBeLessThanOrEqual(1200);
     });
 
     test("renders Lanhu file action buttons in the required order", async () => {

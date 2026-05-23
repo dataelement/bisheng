@@ -1942,6 +1942,68 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(knowledge.id)
         return True, auto_tag_library_id
 
+    async def validate_knowledge_space_create(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        icon: Optional[str] = None,
+        auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
+        is_released: bool = False,
+        space_level: KnowledgeSpaceLevelEnum | str | None = KnowledgeSpaceLevelEnum.PERSONAL,
+        department_id: Optional[int] = None,
+        user_group_id: Optional[int] = None,
+        auto_tag_enabled: bool = False,
+        auto_tag_library_id: Optional[int] = None,
+        auto_tag_custom_tags: Optional[List[str]] = None,
+        share_to_children: Optional[bool] = None,
+        skip_user_limit: bool = False,
+    ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
+        if not skip_user_limit:
+            count = await KnowledgeDao.async_count_spaces_by_user(
+                self.login_user.user_id,
+                exclude_department_spaces=True,
+            )
+            if count >= _MAX_SPACE_PER_USER:
+                raise SpaceLimitError()
+
+        workbench_llm = await LLMService.get_workbench_llm()
+        if not workbench_llm or not workbench_llm.embedding_model:
+            raise WorkbenchEmbeddingError()
+
+        level, owner_type, owner_id = await self._resolve_space_scope_on_create(
+            space_level=space_level,
+            department_id=department_id,
+            user_group_id=user_group_id,
+        )
+        await self._ensure_space_name_unique_in_scope(
+            name=name,
+            level=level,
+            owner_type=owner_type,
+            owner_id=owner_id,
+        )
+
+        if await self._is_auto_tag_feature_visible():
+            auto_tag_touched = (
+                auto_tag_enabled
+                or auto_tag_library_id is not None
+                or auto_tag_custom_tags is not None
+            )
+            if auto_tag_touched:
+                if auto_tag_custom_tags is not None:
+                    normalized = KnowledgeSpaceTagLibraryService.normalize_tags(
+                        auto_tag_custom_tags
+                    )
+                    if not normalized:
+                        raise KnowledgeSpaceTagLibraryInvalidError(
+                            message="开启自动标签时必须提供至少一个自定义标签"
+                        )
+                else:
+                    await KnowledgeSpaceTagLibraryService.validate_bindable_library(
+                        auto_tag_library_id
+                    )
+
+        return level, owner_type, owner_id
+
     async def create_knowledge_space(
         self,
         name: str,

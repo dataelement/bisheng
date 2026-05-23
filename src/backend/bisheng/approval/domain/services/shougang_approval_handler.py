@@ -1,0 +1,309 @@
+from __future__ import annotations
+
+import asyncio
+from types import SimpleNamespace
+from typing import Any
+
+from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import (
+    KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+)
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+KNOWLEDGE_SPACE_CREATE_SCENARIO = 'knowledge_space_create_request'
+FILE_PUBLISH_SCENARIO = 'knowledge_space_file_publish_request'
+
+
+class _RuntimeLoginUser:
+    def __init__(self, *, user_id: int, user_name: str, tenant_id: int, elevated: bool = False) -> None:
+        self.user_id = int(user_id)
+        self.user_name = user_name
+        self.tenant_id = int(tenant_id)
+        self._elevated = elevated
+
+    def is_admin(self) -> bool:
+        return self._elevated
+
+
+def _runtime_request() -> Any:
+    return SimpleNamespace(headers={}, client=SimpleNamespace(host='approval-runtime'))
+
+
+async def _resolve_approvers(node_config: dict, req) -> list[int]:
+    sources = node_config.get('sources') or []
+    if sources:
+        return await resolve_approvers_from_sources(sources, req)
+    approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
+    return [int(one) for one in approver_ids]
+
+
+def _approval_instance_id_from_metadata(metadata: Any) -> int | None:
+    if isinstance(metadata, dict):
+        approval_meta = metadata.get('shougang_approval') or metadata.get('shougang_portal_publish')
+        if isinstance(approval_meta, dict) and approval_meta.get('approval_instance_id') is not None:
+            return int(approval_meta['approval_instance_id'])
+        if metadata.get('approval_instance_id') is not None:
+            return int(metadata['approval_instance_id'])
+    if isinstance(metadata, list):
+        for item in metadata:
+            instance_id = _approval_instance_id_from_metadata(item)
+            if instance_id is not None:
+                return instance_id
+    return None
+
+
+def _metadata_with_approval_instance(metadata: Any, instance_id: int) -> list[dict]:
+    items = list(metadata or []) if isinstance(metadata, list) else []
+    return [
+        *items,
+        {'shougang_approval': {'approval_instance_id': int(instance_id)}},
+    ]
+
+
+class KnowledgeSpaceCreateApprovalHandler:
+    scenario_code = KNOWLEDGE_SPACE_CREATE_SCENARIO
+
+    async def validate(self, req, login_user) -> None:
+        return None
+
+    async def build_title(self, req) -> str:
+        return f"新建知识库：{req.payload_snapshot.get('create_params', {}).get('name') or req.business_name}"
+
+    async def build_detail(self, req) -> dict:
+        params = req.payload_snapshot.get('create_params') or {}
+        return {
+            'type': 'knowledge_space_create',
+            'name': params.get('name'),
+            'space_level': params.get('space_level'),
+            'department_id': params.get('department_id'),
+            'user_group_id': params.get('user_group_id'),
+            'auth_type': params.get('auth_type'),
+            'is_released': params.get('is_released'),
+            'reason': req.reason,
+            'applicant_user_id': req.applicant_user_id,
+            'applicant_user_name': req.applicant_user_name,
+        }
+
+    async def build_business_link(self, req) -> dict:
+        return {'scenario_code': self.scenario_code}
+
+    async def resolve_approvers(self, node_config: dict, req) -> list[int]:
+        return await _resolve_approvers(node_config, req)
+
+    async def _find_created_space(self, instance_id: int, applicant_user_id: int):
+        spaces = await KnowledgeDao.async_get_spaces_by_user(applicant_user_id)
+        for space in spaces:
+            if _approval_instance_id_from_metadata(space.metadata_fields) == int(instance_id):
+                return space
+        return None
+
+    async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+        applicant_user_id = int(payload_snapshot['applicant_user_id'])
+        existing_space = await self._find_created_space(instance_id, applicant_user_id)
+        if existing_space:
+            return {'space_id': int(existing_space.id), 'space_name': existing_space.name, 'idempotent': True}
+
+        params = payload_snapshot.get('create_params') or {}
+        login_user = _RuntimeLoginUser(
+            user_id=applicant_user_id,
+            user_name=str(payload_snapshot.get('applicant_user_name') or ''),
+            tenant_id=int(payload_snapshot['tenant_id']),
+            elevated=True,
+        )
+        service = KnowledgeSpaceService(request=_runtime_request(), login_user=login_user)
+        await service.validate_knowledge_space_create(**params)
+        space = await service.create_knowledge_space(**params)
+        space.metadata_fields = _metadata_with_approval_instance(space.metadata_fields, instance_id)
+        space = await KnowledgeDao.async_update_space(space)
+        return {'space_id': int(space.id), 'space_name': space.name}
+
+    async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        return None
+
+    async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        return None
+
+
+class KnowledgeSpaceFilePublishApprovalHandler:
+    scenario_code = FILE_PUBLISH_SCENARIO
+
+    async def validate(self, req, login_user) -> None:
+        return None
+
+    async def build_title(self, req) -> str:
+        source_name = req.payload_snapshot.get('source_file_name') or req.business_name
+        target_name = req.payload_snapshot.get('target_space_name') or ''
+        return f"发布文件：{source_name} → {target_name}".rstrip()
+
+    async def build_detail(self, req) -> dict:
+        return {
+            'type': 'knowledge_space_file_publish',
+            'source_space_id': req.payload_snapshot.get('source_space_id'),
+            'source_space_name': req.payload_snapshot.get('source_space_name'),
+            'source_file_id': req.payload_snapshot.get('source_file_id'),
+            'source_file_name': req.payload_snapshot.get('source_file_name'),
+            'target_space_id': req.payload_snapshot.get('target_space_id'),
+            'target_space_name': req.payload_snapshot.get('target_space_name'),
+            'target_document_id': req.payload_snapshot.get('target_document_id'),
+            'target_document_title': req.payload_snapshot.get('target_document_title'),
+            'reason': req.reason,
+            'applicant_user_id': req.applicant_user_id,
+            'applicant_user_name': req.applicant_user_name,
+        }
+
+    async def build_business_link(self, req) -> dict:
+        return {
+            'source_file_id': req.payload_snapshot.get('source_file_id'),
+            'target_space_id': req.payload_snapshot.get('target_space_id'),
+        }
+
+    async def resolve_approvers(self, node_config: dict, req) -> list[int]:
+        return await _resolve_approvers(node_config, req)
+
+    def _copy_file(
+        self,
+        source_file: KnowledgeFile,
+        source_space,
+        target_space,
+        user_id: int,
+        instance_id: int,
+    ) -> KnowledgeFile | None:
+        from bisheng.worker.knowledge import file_worker
+
+        extra_user_metadata = {
+            'shougang_portal_publish': {
+                'approval_instance_id': int(instance_id),
+                'source_space_id': source_space.id,
+                'source_file_id': source_file.id,
+            }
+        }
+        return file_worker.copy_normal(
+            source_file,
+            source_space,
+            target_space,
+            user_id,
+            extra_user_metadata=extra_user_metadata,
+        )
+
+    async def _find_copied_file(self, instance_id: int, target_space_id: int) -> KnowledgeFile | None:
+        files = await KnowledgeFileDao.aget_file_by_filters(target_space_id)
+        for file in files:
+            if _approval_instance_id_from_metadata(file.user_metadata) == int(instance_id):
+                return file
+        return None
+
+    async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+        source_space_id = int(payload_snapshot['source_space_id'])
+        source_file_id = int(payload_snapshot['source_file_id'])
+        target_space_id = int(payload_snapshot['target_space_id'])
+        target_document_id = payload_snapshot.get('target_document_id')
+
+        existing_file = await self._find_copied_file(instance_id, target_space_id)
+        if existing_file:
+            version_result = None
+            if target_document_id:
+                version_result = await _link_file_as_version(
+                    login_user=_RuntimeLoginUser(
+                        user_id=int(payload_snapshot['applicant_user_id']),
+                        user_name=str(payload_snapshot.get('applicant_user_name') or ''),
+                        tenant_id=int(payload_snapshot['tenant_id']),
+                        elevated=True,
+                    ),
+                    knowledge_file_id=int(existing_file.id),
+                    target_document_id=int(target_document_id),
+                )
+            return {
+                'file_id': int(existing_file.id),
+                'target_space_id': target_space_id,
+                'version': version_result,
+                'idempotent': True,
+            }
+
+        source_space = await KnowledgeDao.aquery_by_id(source_space_id)
+        target_space = await KnowledgeDao.aquery_by_id(target_space_id)
+        source_file = await KnowledgeFileDao.query_by_id(source_file_id)
+        if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
+            raise ValueError('source space not found')
+        if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
+            raise ValueError('target space not found')
+        if not source_file or source_file.knowledge_id != source_space_id:
+            raise ValueError('source file not found')
+        if source_file.status != KnowledgeFileStatus.SUCCESS.value:
+            raise ValueError('source file is not parsed successfully')
+
+        copied_file = await asyncio.to_thread(
+            self._copy_file,
+            source_file,
+            source_space,
+            target_space,
+            int(payload_snapshot['applicant_user_id']),
+            instance_id,
+        )
+        if not copied_file or not copied_file.id:
+            raise ValueError('copy file failed')
+
+        login_user = _RuntimeLoginUser(
+            user_id=int(payload_snapshot['applicant_user_id']),
+            user_name=str(payload_snapshot.get('applicant_user_name') or ''),
+            tenant_id=int(payload_snapshot['tenant_id']),
+            elevated=True,
+        )
+        space_service = KnowledgeSpaceService(request=_runtime_request(), login_user=login_user)
+        await space_service._initialize_child_resource_permissions(
+            'knowledge_file',
+            int(copied_file.id),
+            'knowledge_space',
+            target_space_id,
+        )
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
+
+        version_result = None
+        if target_document_id:
+            version_result = await _link_file_as_version(
+                login_user=login_user,
+                knowledge_file_id=int(copied_file.id),
+                target_document_id=int(target_document_id),
+            )
+        return {
+            'file_id': int(copied_file.id),
+            'target_space_id': target_space_id,
+            'version': version_result,
+        }
+
+    async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        return None
+
+    async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        return None
+
+
+async def _link_file_as_version(*, login_user: _RuntimeLoginUser, knowledge_file_id: int, target_document_id: int) -> dict:
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
+
+    async with get_async_db_session() as session:
+        service = KnowledgeVersionService(
+            request=_runtime_request(),
+            login_user=login_user,
+            doc_repo=KnowledgeDocumentRepositoryImpl(session),
+            version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
+            knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
+        )
+        result = await service.link_file_to_document(knowledge_file_id, target_document_id)
+        return result.model_dump()

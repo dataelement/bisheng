@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
+
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
+    AssociableDocumentEntry,
+    SimilarCandidateEntry,
+)
+
+
+class ShougangKnowledgeSpaceCreateBase(BaseModel):
+    name: str = Field(..., max_length=200)
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC
+    is_released: bool = False
+    space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
+    department_id: Optional[int] = None
+    user_group_id: Optional[int] = None
+    auto_tag_enabled: bool = False
+    auto_tag_library_id: Optional[int] = None
+    auto_tag_custom_tags: Optional[list[str]] = None
+
+
+class ShougangKnowledgeSpaceCreateValidateReq(ShougangKnowledgeSpaceCreateBase):
+    pass
+
+
+class ShougangKnowledgeSpaceCreateSubmitReq(ShougangKnowledgeSpaceCreateBase):
+    reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ShougangKnowledgeSpaceCreateValidateResp(BaseModel):
+    approval_required: bool
+
+
+class ShougangApprovalSubmitResp(BaseModel):
+    decision: str
+    created: bool = False
+    instance_id: Optional[int] = None
+    task_ids: list[int] = Field(default_factory=list)
+    space: Optional[dict[str, Any]] = None
+
+
+class ShougangFilePublishTargetSpace(BaseModel):
+    id: int
+    name: str
+    space_level: KnowledgeSpaceLevelEnum
+    owner_name: Optional[str] = None
+
+
+class ShougangFilePublishTargetSpacesResp(BaseModel):
+    data: list[ShougangFilePublishTargetSpace] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangFilePublishSimilarCandidatesResp(BaseModel):
+    data: list[SimilarCandidateEntry] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangFilePublishDocumentSearchResp(BaseModel):
+    data: list[AssociableDocumentEntry] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangFilePublishSubmitReq(BaseModel):
+    source_space_id: int = Field(..., gt=0)
+    source_file_id: int = Field(..., gt=0)
+    target_space_id: int = Field(..., gt=0)
+    target_document_id: Optional[int] = Field(default=None, gt=0)
+    reason: Optional[str] = Field(default=None, max_length=2000)
