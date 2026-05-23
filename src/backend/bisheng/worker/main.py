@@ -1,4 +1,3 @@
-import asyncio
 import threading
 import time
 from typing import List
@@ -69,19 +68,13 @@ async def _init_worker_openfga() -> None:
         logger.warning("Celery worker OpenFGA context initialization failed: {}", e)
 
 
-def _init_worker_openfga_sync() -> None:
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_init_worker_openfga())
-    finally:
-        loop.close()
-
-
 @celeryd_after_setup.connect
 def on_worker_init(*args, **kwargs):
     global _WORKER_START
     """Worker initialization signal handler."""
-    _init_worker_openfga_sync()
+    from bisheng.worker._asyncio_utils import get_worker_loop, run_async_task
+    get_worker_loop()  # start the persistent loop thread before any task arrives
+    run_async_task(_init_worker_openfga)
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():
