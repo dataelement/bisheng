@@ -1982,6 +1982,7 @@
   "com_approval_my_approval": "承認管理",
   "com_approval_my_approval_desc": "承認が必要なビジネス申請を処理します",
   "com_approval_my_requests_desc": "自分が提出した申請を確認します",
+  "com_approval_menu_access_title": "{{menuName}}メニューへのアクセスを申請",
   "com_approval_task_filter_pending": "未処理",
   "com_approval_task_filter_processed": "処理済み",
   "com_approval_task_badge_pending": "未処理",

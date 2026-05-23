@@ -120,6 +120,18 @@ function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
   );
 }
 
+function formatTitle(
+  scenarioCode: string | undefined,
+  businessName: string | undefined | null,
+  localize: ReturnType<typeof useLocalize>,
+): string {
+  if (!businessName) return "--";
+  if (scenarioCode === "menu_access_request") {
+    return localize("com_approval_menu_access_title" as any, { menuName: businessName, defaultValue: `申请访问${businessName}菜单` }) as string;
+  }
+  return businessName;
+}
+
 const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
 
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
@@ -287,8 +299,15 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const runWithdraw = async () => {
     if (!selectedInstanceId) return;
     setActionLoading(true);
-    try { await withdrawApprovalInstanceApi(selectedInstanceId, {}); await loadRequests(selectedInstanceId); toast(true); }
-    catch { toast(false); } finally { setActionLoading(false); }
+    try {
+      await withdrawApprovalInstanceApi(selectedInstanceId, {});
+      toast(true);
+      const resp = await listMyApprovalRequestsApi();
+      setRequestItems(resp.data);
+      setRequestsFilter("completed");
+      setLoadingDetail(true);
+      setRequestDetail(await getApprovalInstanceDetailApi(selectedInstanceId));
+    } catch { toast(false); } finally { setActionLoading(false); setLoadingDetail(false); }
   };
   const runResubmit = async () => {
     if (!selectedInstanceId) return;
@@ -389,7 +408,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               selectedTaskId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
                             onClick={() => id && openTask(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
                             </div>
                             {item.current_node_name && (
@@ -412,7 +431,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               selectedInstanceId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
                             onClick={() => id && openRequest(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
@@ -555,7 +574,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={detail.business_name} status={detail.status} instanceStatus={detail.instance_status}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status}
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
@@ -625,7 +644,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={detail.business_name} status={detail.status} serialNo={serialNo}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} serialNo={serialNo}
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>

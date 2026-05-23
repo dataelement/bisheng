@@ -1988,6 +1988,7 @@
   "com_approval_my_approval": "我的审批",
   "com_approval_my_approval_desc": "处理需要我审批的业务申请",
   "com_approval_my_requests_desc": "查看我发起的审批申请",
+  "com_approval_menu_access_title": "申请访问{{menuName}}菜单",
   "com_approval_task_filter_pending": "待我处理",
   "com_approval_task_filter_processed": "已处理",
   "com_approval_task_badge_pending": "待处理",
