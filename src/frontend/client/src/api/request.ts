@@ -116,13 +116,33 @@ const translateApiErrorMessage = (data: any) => {
 
 customAxios.interceptors.response.use(
   (response) => {
-    if (response.data.status_code === 403) {
-      // Allow business code to handle 403 when skip403Redirect is set
-      if (!response.config.skip403Redirect) {
-        localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
-        location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
-      }
+    // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
+    // explicitly opts out via skip403Redirect.
+    if (response.data.status_code === 403 && !response.config.skip403Redirect) {
+      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+      location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
       return response
+    }
+
+    // Unified business-error pipeline for callers that opted out of the 403
+    // redirect: translate the api_errors.<code> i18n key, toast it, and reject
+    // the promise so the caller's onError / .catch fires. Old call sites that
+    // rely on silent failure (no skip403Redirect) keep the previous behavior.
+    if (
+      response.config.skip403Redirect
+      && response.data
+      && response.data.status_code !== 200
+    ) {
+      const message = translateApiErrorMessage(response.data);
+      const display = message || response.data.status_message || "";
+      if (display) {
+        window.showToast?.({ message: display, status: 'error' });
+      }
+      const err: any = new Error(display || `request failed (${response.data.status_code})`);
+      err.status_code = response.data.status_code;
+      err.status_message = response.data.status_message;
+      err.response = response;
+      return Promise.reject(err);
     }
 
     if (response.config.showError && response.data && response.data.status_code !== 200) {

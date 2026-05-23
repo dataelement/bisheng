@@ -49,11 +49,15 @@ class KnowledgeVersionService:
         self.knowledge_file_repo = knowledge_file_repo
 
     async def _require_version_management_enabled(self) -> None:
-        """Raise 403 if the feature switch is off."""
+        """Raise the business-code error if the feature switch is off so the
+        client can surface the product-specified Chinese toast instead of being
+        bounced to /c/new?error=11403 by the global 403 redirect."""
+        from bisheng.common.errcode.knowledge_space import VersionManagementDisabledError
+
         conf = await bisheng_settings.async_get_knowledge()
         vmc = getattr(conf, "version_management", None)
         if vmc is None or not vmc.enabled:
-            raise HTTPException(status_code=403, detail="version management is disabled")
+            raise VersionManagementDisabledError()
 
     async def list_versions_for_file(self, knowledge_file_id: int):
         """Return the entire version chain that contains the given physical file."""
@@ -154,11 +158,16 @@ class KnowledgeVersionService:
 
         await self._require_version_management_enabled()
 
+        from bisheng.common.errcode.knowledge_space import (
+            VersionLinkFileNotReadyError,
+            VersionLinkTargetUnavailableError,
+        )
+
         current_kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
         if current_kf is None:
             raise HTTPException(status_code=404, detail="current file not found")
         if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
-            raise HTTPException(status_code=412, detail="current file must be successfully parsed")
+            raise VersionLinkFileNotReadyError()
 
         # Disallow moving the primary version of a multi-version document: doing so
         # would orphan the source document by stealing its current primary. The
@@ -177,7 +186,7 @@ class KnowledgeVersionService:
 
         target_doc = await self.doc_repo.find_by_id(target_document_id)
         if target_doc is None:
-            raise HTTPException(status_code=404, detail="target document not found")
+            raise VersionLinkTargetUnavailableError()
         if target_doc.knowledge_id != current_kf.knowledge_id:
             raise HTTPException(status_code=409, detail="target document belongs to a different space")
 
