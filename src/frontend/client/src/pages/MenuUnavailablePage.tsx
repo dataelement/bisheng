@@ -55,13 +55,18 @@ export default function MenuUnavailablePage() {
   const [submitting, setSubmitting] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  // On mount, check if there is already a pending application so that after a
-  // page refresh the button correctly shows "申请中" instead of "申请权限".
+  // When the target plugin changes: immediately clear stale "已申请" state, then
+  // verify whether there is already a pending application for the new plugin.
+  // Cleanup cancels any in-flight request so a slow response for a previous
+  // plugin cannot overwrite the result for the current one.
   useEffect(() => {
+    setApplied(false);
     if (!canApply || !pluginId) return;
+    let cancelled = false;
     checkMenuAccessPendingApi(pluginId)
-      .then((res) => { if (res.has_pending) setApplied(true); })
-      .catch(() => { /* ignore — fall back to default unapplied state */ });
+      .then((res) => { if (!cancelled) setApplied(res.has_pending); })
+      .catch(() => { /* ignore — fall back to unapplied state */ });
+    return () => { cancelled = true; };
   }, [canApply, pluginId]);
 
   const handleSubmit = async () => {

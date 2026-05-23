@@ -79,3 +79,8 @@ class ApprovalRetryNoActiveFlowVersionError(BaseErrorCode):
 class ApprovalRetryNoFlowNodesError(BaseErrorCode):
     Code: int = 18115
     Msg: str = 'The approval flow has no nodes configured'
+
+
+class ApprovalFlowNotFoundError(BaseErrorCode):
+    Code: int = 18116
+    Msg: str = 'Approval flow not found'

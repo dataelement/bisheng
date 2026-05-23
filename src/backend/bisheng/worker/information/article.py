@@ -1,4 +1,4 @@
-import asyncio
+from bisheng.worker._asyncio_utils import run_async_task
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -376,7 +376,7 @@ def _sync_new_articles_to_knowledge_spaces(
     article_service.refresh_index_sync()
 
     # Dispatch all pending configs on a single event loop.
-    asyncio.run(_dispatch_all(pending))
+    run_async_task(lambda: _dispatch_all(pending))
 
 
 async def _dispatch_all(

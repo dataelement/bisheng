@@ -301,7 +301,7 @@ def process_shapes(config: ConversionConfig, current_shapes, slide_id: int) -> L
                 pic = process_picture(config, shape, slide_id)
                 if pic:
                     results.append(pic)
-            except AttributeError as e:
+            except Exception as e:
                 logger.warning(f'Failed to process picture, skipped: {e}')
         elif shape.shape_type == MSO_SHAPE_TYPE.TABLE:
             table = process_table(config, shape, slide_id)

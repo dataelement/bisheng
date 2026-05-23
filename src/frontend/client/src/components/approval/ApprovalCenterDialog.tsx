@@ -183,7 +183,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
-      const nextId = preferredId ?? getId(resp.data[0], "task");
+      // Auto-select from the currently active sub-filter so the right panel
+      // always shows an item that is visible in the left list.
+      const visibleItems = preferredId
+        ? resp.data
+        : taskFilter === "pending_me"
+          ? resp.data.filter((t) => t.status === "pending")
+          : resp.data.filter((t) => t.status !== "pending");
+      const nextId = preferredId ?? getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
       if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
       else setTaskDetail(null);
@@ -195,7 +202,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
-      const nextId = preferredId ?? getId(resp.data[0], "instance");
+      // Auto-select from the currently active sub-filter so the right panel
+      // always shows an item that is visible in the left list.
+      const visibleItems = preferredId
+        ? resp.data
+        : requestsFilter === "in_progress"
+          ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
+          : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+      const nextId = preferredId ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
       else setRequestDetail(null);
@@ -562,7 +576,10 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  // menu_key is an internal identifier — not meaningful to end users.
+  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
+    ([k, v]) => k !== "menu_key" && v !== undefined && v !== null && v !== "",
+  );
 
   return (
     <div className="space-y-5">

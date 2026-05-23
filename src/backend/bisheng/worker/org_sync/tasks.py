@@ -7,10 +7,10 @@ Tenant context: propagated via Celery headers (INV-8), automatically restored
 by the before_task signal in bisheng.worker.tenant_context.
 """
 
-import asyncio
 import logging
 from datetime import datetime
 
+from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
@@ -19,13 +19,7 @@ logger = logging.getLogger(__name__)
 @bisheng_celery.task(acks_late=True, time_limit=1800, soft_time_limit=1500)
 def execute_org_sync(config_id: int, trigger_type: str, trigger_user: int = None):
     """Execute org sync for a given config. Runs in knowledge_celery queue."""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_execute_org_sync_async(
-            config_id, trigger_type, trigger_user,
-        ))
-    finally:
-        loop.close()
+    run_async_task(lambda: _execute_org_sync_async(config_id, trigger_type, trigger_user))
 
 
 async def _execute_org_sync_async(
@@ -47,11 +41,7 @@ def check_org_sync_schedules():
 
     Runs every 60s. Uses croniter to evaluate cron expressions.
     """
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_check_schedules_async())
-    finally:
-        loop.close()
+    run_async_task(_check_schedules_async)
 
 
 async def _check_schedules_async():

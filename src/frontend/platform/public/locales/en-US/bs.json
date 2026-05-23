@@ -1890,6 +1890,7 @@
     "18113": "No enabled flow route for this scenario. Please configure a branch and bind a flow first.",
     "18114": "No active flow version found. Please save flow nodes in the approval management page first.",
     "18115": "The approval flow has no nodes configured. Please add nodes before retrying.",
+    "18116": "Approval flow not found",
     "19000": "Permission denied",
     "19001": "Permission check failed",
     "19002": "Authorization service unavailable",
