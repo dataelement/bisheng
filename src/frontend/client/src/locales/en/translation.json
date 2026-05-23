@@ -1346,7 +1346,7 @@
     "18103": "Reason is required for rejection or cancellation",
     "18104": "Approval scenario handler not registered",
     "18105": "Approval scenario already exists",
-    "18106": "This feature is not available for application",
+    "18106": "This approval scenario is not open, please contact your administrator",
     "18107": "No matching condition branch",
     "18108": "No approvers resolved",
     "18109": "A duplicate pending approval exists",
