@@ -222,11 +222,10 @@ class KnowledgeVersionService:
         # Capture the current file's original document (it will be deleted after relink)
         original_chain = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
 
-        # Demote old primary
+        # Snapshot the old primary; we'll demote it AFTER the new primary is
+        # in place so an interruption never leaves the chain without any
+        # primary at all (the worst case here is two primaries, recoverable).
         old_primary = await self.version_repo.find_primary(target_document_id)
-        if old_primary is not None:
-            old_primary.is_primary = False
-            await self.version_repo.update(old_primary)
 
         # Create new version (auto-primary)
         next_no = await self.version_repo.next_version_no(target_document_id)
@@ -240,6 +239,11 @@ class KnowledgeVersionService:
 
         # Point target doc's primary_version_id at the new version
         await self.doc_repo.update_primary_version_id(target_document_id, saved.id)
+
+        # Demote the old primary now — chain is already healthy with the new one.
+        if old_primary is not None and old_primary.id != saved.id:
+            old_primary.is_primary = False
+            await self.version_repo.update(old_primary)
 
         # Delete current file's ORIGINAL independent document + V1 row (use the captured id;
         # it may now be ambiguous with the freshly-created row we just inserted).
@@ -282,13 +286,18 @@ class KnowledgeVersionService:
             raise HTTPException(status_code=412, detail="target version not parsed successfully")
 
         if not target_version.is_primary:
+            # Promote the new primary BEFORE demoting the old one so that any
+            # interruption in the middle leaves the chain with two primaries
+            # (recoverable, still visible in the list) instead of the rare
+            # "no primary at all" state that hides every file from the UI but
+            # keeps them in the dup checker.
             old_primary = await self.version_repo.find_primary(target_version.document_id)
-            if old_primary is not None and old_primary.id != target_version.id:
-                old_primary.is_primary = False
-                await self.version_repo.update(old_primary)
             target_version.is_primary = True
             await self.version_repo.update(target_version)
             await self.doc_repo.update_primary_version_id(target_version.document_id, target_version.id)
+            if old_primary is not None and old_primary.id != target_version.id:
+                old_primary.is_primary = False
+                await self.version_repo.update(old_primary)
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
             self.login_user, self.request,
@@ -652,10 +661,10 @@ class KnowledgeVersionService:
         if source_kf.md5 and any(kf.md5 == source_kf.md5 for kf in existing_kfs if kf.md5):
             raise HTTPException(status_code=409, detail="duplicate content already in current chain")
 
+        # Promote-before-demote: an interruption mid-flow leaves the chain
+        # with two primaries (recoverable) instead of none (which would hide
+        # every file from the UI while still blocking dup uploads).
         old_primary = await self.version_repo.find_primary(target_doc_id)
-        if old_primary is not None:
-            old_primary.is_primary = False
-            await self.version_repo.update(old_primary)
 
         next_no = await self.version_repo.next_version_no(target_doc_id)
         new_version = KnowledgeDocumentVersion(
@@ -667,6 +676,10 @@ class KnowledgeVersionService:
         saved = await self.version_repo.save(new_version)
 
         await self.doc_repo.update_primary_version_id(target_doc_id, saved.id)
+
+        if old_primary is not None and old_primary.id != saved.id:
+            old_primary.is_primary = False
+            await self.version_repo.update(old_primary)
 
         if source_version.id != saved.id:
             await self.version_repo.delete(source_version.id)
