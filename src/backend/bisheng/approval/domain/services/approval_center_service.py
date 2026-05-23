@@ -732,7 +732,13 @@ class ApprovalCenterService:
             self.__class__._dispatch_outbox(outbox.id)
             return
 
-        all_same_node_approved = all(one.status == ApprovalTaskStatus.APPROVED for one in same_node_tasks)
+        # same_node_tasks was fetched before the current task was updated, so the
+        # current task's object still carries its old PENDING status. Treat it as
+        # APPROVED by checking its id explicitly.
+        all_same_node_approved = all(
+            t.id == task.id or t.status == ApprovalTaskStatus.APPROVED
+            for t in same_node_tasks
+        )
         if all_same_node_approved:
             instance.status = ApprovalInstanceStatus.APPROVED
             await self.instance_repository.update_instance(instance)
