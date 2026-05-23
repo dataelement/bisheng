@@ -167,6 +167,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [decisionComment, setDecisionComment] = useState("");
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -272,7 +273,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
-    setSelectedTaskId(id); setLoadingDetail(true);
+    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment("");
     try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
   };
   const openRequest = async (id: number) => {
@@ -283,7 +284,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const runTaskDecision = async (action: "approve" | "reject") => {
     if (!selectedTaskId) return;
     setActionLoading(true);
-    try { await decideApprovalTaskApi(selectedTaskId, { action }); await loadTasks(selectedTaskId); toast(true); }
+    const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
+    try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = async () => {
@@ -457,7 +459,17 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
               {/* Fixed footer buttons */}
               {(isTaskPending || isInstancePending || canResubmit || canRevoke) && (
-                <div className="flex items-center justify-end gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                  {isTaskPending && (
+                    <textarea
+                      value={decisionComment}
+                      onChange={(e) => setDecisionComment(e.target.value)}
+                      placeholder={localize("com_approval_decision_comment_placeholder")}
+                      rows={2}
+                      className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+                    />
+                  )}
+                  <div className="flex items-center justify-end gap-3">
                   <button type="button"
                     className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
                     onClick={() => onOpenChange(false)}>
@@ -498,6 +510,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       {localize("com_approval_action_revoke_grant")}
                     </button>
                   )}
+                  </div>
                 </div>
               )}
             </div>

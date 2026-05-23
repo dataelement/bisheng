@@ -1936,6 +1936,7 @@
   "com_approval_progress_section": "审批进度",
   "com_approval_action_approve": "通过",
   "com_approval_action_reject": "拒绝",
+  "com_approval_decision_comment_placeholder": "请填写审批意见（可选，默认同意/驳回）",
   "com_approval_action_withdraw": "撤回申请",
   "com_approval_action_revoke_grant": "撤销授权",
   "com_approval_loading": "加载中…",

@@ -2007,6 +2007,7 @@
   "com_approval_progress_section": "Approval Progress",
   "com_approval_action_approve": "Approve",
   "com_approval_action_reject": "Reject",
+  "com_approval_decision_comment_placeholder": "Enter approval comment (optional; defaults to Approve / Reject)",
   "com_approval_action_withdraw": "Withdraw",
   "com_approval_action_revoke_grant": "Revoke Grant",
   "com_approval_loading": "Loading…",
