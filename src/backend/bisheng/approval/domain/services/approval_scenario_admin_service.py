@@ -273,6 +273,13 @@ class ApprovalScenarioAdminService:
         await ApprovalScenarioRepository.bulk_update_route_sort_order(ordered_route_ids)
 
     @classmethod
+    async def delete_node(cls, *, tenant_id: int, node_definition_id: int) -> None:
+        row = await ApprovalScenarioRepository.get_node_definition(node_definition_id)
+        if row is None or row.tenant_id != tenant_id:
+            raise ValueError(f'node not found: {node_definition_id}')
+        await ApprovalScenarioRepository.delete_node_definition(node_definition_id)
+
+    @classmethod
     async def delete_flow(cls, *, tenant_id: int, flow_definition_id: int) -> None:
         row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
         if row is None or row.tenant_id != tenant_id:
