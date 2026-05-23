@@ -15,17 +15,21 @@ def test_resolve_returns_none_when_user_missing(UserDao):
     assert reason == "user_not_found"
 
 
+@patch("bisheng.notification.forwarder.settings")
 @patch("bisheng.notification.forwarder.UserDao")
-def test_resolve_returns_none_when_source_not_eplus(UserDao):
+def test_resolve_returns_none_when_source_not_in_allowed(UserDao, mock_settings):
+    mock_settings.get_cofco_forwarding_conf.return_value.user_sources = ["cofco_eplus", "wecom"]
     user = MagicMock(source="local", external_id="X1")
     UserDao.get_user.return_value = user
     rid, reason = resolve_eplus_recipient(123)
     assert rid is None
-    assert "not_eplus" in reason
+    assert "not_in_allowed_sources" in reason
 
 
+@patch("bisheng.notification.forwarder.settings")
 @patch("bisheng.notification.forwarder.UserDao")
-def test_resolve_returns_none_when_external_id_empty(UserDao):
+def test_resolve_returns_none_when_external_id_empty(UserDao, mock_settings):
+    mock_settings.get_cofco_forwarding_conf.return_value.user_sources = ["cofco_eplus", "wecom"]
     user = MagicMock(source="cofco_eplus", external_id="")
     UserDao.get_user.return_value = user
     rid, reason = resolve_eplus_recipient(123)
@@ -33,12 +37,26 @@ def test_resolve_returns_none_when_external_id_empty(UserDao):
     assert reason == "external_id_empty"
 
 
+@patch("bisheng.notification.forwarder.settings")
 @patch("bisheng.notification.forwarder.UserDao")
-def test_resolve_returns_external_id(UserDao):
+def test_resolve_returns_external_id_for_cofco_eplus(UserDao, mock_settings):
+    mock_settings.get_cofco_forwarding_conf.return_value.user_sources = ["cofco_eplus", "wecom"]
     user = MagicMock(source="cofco_eplus", external_id="EMP001")
     UserDao.get_user.return_value = user
     rid, reason = resolve_eplus_recipient(123)
     assert rid == "EMP001"
+    assert reason == ""
+
+
+@patch("bisheng.notification.forwarder.settings")
+@patch("bisheng.notification.forwarder.UserDao")
+def test_resolve_returns_external_id_for_wecom_source(UserDao, mock_settings):
+    """The real production case: cofco customer's users have source='wecom'."""
+    mock_settings.get_cofco_forwarding_conf.return_value.user_sources = ["cofco_eplus", "wecom"]
+    user = MagicMock(source="wecom", external_id="EMP002")
+    UserDao.get_user.return_value = user
+    rid, reason = resolve_eplus_recipient(123)
+    assert rid == "EMP002"
     assert reason == ""
 
 

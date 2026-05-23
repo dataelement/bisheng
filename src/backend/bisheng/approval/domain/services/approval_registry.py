@@ -30,7 +30,7 @@ class ApprovalRegistry:
                 scenario_name='频道订阅审批',
                 handler_key='channel_subscribe_request',
                 condition_fields=['applicant_role'],
-                approver_source_types=['direct_user', 'department_admin'],
+                approver_source_types=['direct_user', 'department_admin', 'channel_owner', 'channel_manager'],
             )
         )
         registry.register_preset(
@@ -38,9 +38,8 @@ class ApprovalRegistry:
                 scenario_code='knowledge_space_subscribe_request',
                 scenario_name='知识空间加入审批',
                 handler_key='knowledge_space_subscribe_request',
-                # space_type: public / department / team (from payload_snapshot)
-                condition_fields=['applicant_role', 'space_type'],
-                approver_source_types=['direct_user', 'department_admin'],
+                condition_fields=['applicant_role'],
+                approver_source_types=['direct_user', 'department_admin', 'knowledge_space_owner', 'knowledge_space_manager'],
             )
         )
         return registry

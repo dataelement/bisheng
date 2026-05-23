@@ -22,6 +22,13 @@ export interface ApprovalTaskItem {
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
+  // task-level fields (when inside ApprovalInstanceDetail.tasks)
+  approver_user_id?: number;
+  approver_user_name?: string | null;
+  node_name?: string | null;
+  node_order?: number;
+  node_mode?: string;
+  comment?: string | null;
   create_time?: string;
   update_time?: string;
 }
@@ -33,6 +40,7 @@ export interface ApprovalInstanceItem {
   scenario_name?: string;
   business_name?: string;
   status?: string;
+  grant_revoked?: boolean;
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
@@ -57,6 +65,13 @@ export interface ApprovalTaskDetail extends ApprovalTaskItem {
   }>;
 }
 
+export interface ApprovalFlowNode {
+  node_code?: string;
+  node_name?: string;
+  node_order?: number;
+  node_mode?: string;
+}
+
 export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   reason?: string | null;
   granted_keys?: string[];
@@ -64,6 +79,7 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   payload_snapshot?: Record<string, any>;
   detail_snapshot?: Record<string, any>;
   tasks?: ApprovalTaskItem[];
+  flow_nodes?: ApprovalFlowNode[];
   action_logs?: Array<{
     id?: number;
     action?: string;
@@ -100,11 +116,28 @@ export interface ApprovalRequestItem {
   update_time?: string;
 }
 
+export class ApprovalApiError extends Error {
+  statusCode: number;
+  statusMessage: string;
+  constructor(statusCode: number, statusMessage: string) {
+    super(statusMessage);
+    this.statusCode = statusCode;
+    this.statusMessage = statusMessage;
+  }
+}
+
 function unwrapPayload<T>(response: ApiResponse<T> | T): T {
-  return ((response as ApiResponse<T>)?.data ?? response) as T;
+  const apiResp = response as ApiResponse<T>;
+  if (apiResp?.status_code != null && apiResp.status_code !== 200) {
+    throw new ApprovalApiError(apiResp.status_code, apiResp.status_message || String(apiResp.status_code));
+  }
+  return (apiResp?.data ?? response) as T;
 }
 
 function unwrapPaged<T>(response: any): { data: T[]; total: number } {
+  if (response?.status_code != null && response.status_code !== 200) {
+    throw new ApprovalApiError(response.status_code, response.status_message || String(response.status_code));
+  }
   const payload = response?.data ?? response ?? {};
   return {
     data: Array.isArray(payload?.data) ? payload.data : [],
@@ -165,6 +198,13 @@ export async function resubmitApprovalInstanceApi(
   const response = await request.post<ApiResponse<ApprovalInstanceDetail>>(
     `/api/v1/approval/instances/${instanceId}/resubmit`,
     data,
+  );
+  return unwrapPayload(response);
+}
+
+export async function checkMenuAccessPendingApi(menuKey: string): Promise<{ has_pending: boolean; instance_id: number | null; status: string | null }> {
+  const response = await request.get<ApiResponse<{ has_pending: boolean; instance_id: number | null; status: string | null }>>(
+    `/api/v1/approval/menu-access/pending-check?menu_key=${encodeURIComponent(menuKey)}`,
   );
   return unwrapPayload(response);
 }

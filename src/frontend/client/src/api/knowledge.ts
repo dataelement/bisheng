@@ -285,6 +285,8 @@ export interface KnowledgeFile {
     successFileNum?: number;
     /** Total number of files (folders only) */
     fileNum?: number;
+    /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
+    processingFileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
     fileSource?: string;
     /** Path of the existing duplicate file (when status is DUPLICATE) */
@@ -298,6 +300,7 @@ export interface KnowledgeFile {
     version_no?: number;          // primary version number; absent for folders / legacy files
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
+    user_name?: string;           // mapped from user_name — original uploader of this file
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -403,6 +406,7 @@ interface RawKnowledgeFile {
     thumbnails?: string | null;
     success_file_num?: number;
     file_num?: number;
+    processing_file_num?: number;
     tags?: Array<{ id: number; name: string }>;
 }
 
@@ -693,6 +697,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
+        processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
         approvalRequestId: raw?.approval_request_id !== undefined ? Number(raw.approval_request_id) : undefined,
@@ -704,6 +709,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
         is_multi_version: Boolean(raw?.is_multi_version),
         has_similar: Boolean(raw?.has_similar),
+        user_name: raw?.user_name ?? undefined,
     };
 }
 
@@ -782,6 +788,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw.success_file_num,
         fileNum: raw.file_num,
+        processingFileNum: raw.processing_file_num,
     };
 }
 
@@ -2018,6 +2025,8 @@ export interface PendingSimilarFileEntry {
     file_name: string;
     file_code?: string | null;
     candidate_count: number;
+    current_primary_version_no?: number | null;
+    primary_uploader_name?: string | null;
 }
 
 /**

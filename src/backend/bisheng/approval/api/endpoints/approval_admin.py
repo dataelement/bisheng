@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
 from bisheng.approval.domain.services.approval_scenario_admin_service import ApprovalScenarioAdminService
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 
 router = APIRouter(prefix='/approval/admin', tags=['approval'])
@@ -204,7 +205,12 @@ async def update_flow(
 @router.get('/flows/{flow_definition_id}/nodes')
 async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id))
+    try:
+        data = await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
+    except ValueError:
+        from bisheng.common.errcode.approval import ApprovalFlowNotFoundError
+        return ApprovalFlowNotFoundError.return_resp()
+    return resp_200(data)
 
 
 @router.post('/flows/{flow_definition_id}/nodes')
@@ -237,6 +243,13 @@ async def update_node(
             payload=req.model_dump(exclude_none=True),
         )
     )
+
+
+@router.delete('/nodes/{node_definition_id}')
+async def delete_node(node_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    _ensure_admin(login_user)
+    await ApprovalScenarioAdminService.delete_node(tenant_id=login_user.tenant_id, node_definition_id=node_definition_id)
+    return resp_200({'deleted': node_definition_id})
 
 
 @router.delete('/scenarios/{scenario_id}')
@@ -324,14 +337,16 @@ async def retry_exception(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     _ensure_admin(login_user)
-    return resp_200(
-        await ApprovalExceptionService.retry_exception_api(
+    try:
+        result = await ApprovalExceptionService.retry_exception_api(
             exception_id=exception_id,
             action=req.action,
             operator_user_id=login_user.user_id,
             approver_user_ids=req.approver_user_ids,
         )
-    )
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    return resp_200(result)
 
 
 @router.post('/exceptions/{exception_id}/cancel')

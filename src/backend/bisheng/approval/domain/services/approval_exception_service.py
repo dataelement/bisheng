@@ -372,20 +372,28 @@ class ApprovalExceptionService:
             raise ValueError(f'scenario not enabled: {instance.scenario_code}')
 
         route_rules = await ApprovalScenarioRepository.list_route_rules(instance.tenant_id, scenario.id)
-        route_rule = next((row for row in route_rules if row.route_type == 'flow'), None)
+        from bisheng.common.errcode.approval import (
+            ApprovalRetryNoActiveFlowVersionError,
+            ApprovalRetryNoFlowNodesError,
+            ApprovalRetryNoFlowRouteError,
+        )
+        route_rule = next(
+            (row for row in route_rules if row.route_type == 'flow' and getattr(row, 'enabled', True)),
+            None,
+        )
         if route_rule is None or route_rule.flow_definition_id is None:
-            raise ValueError(f'flow route not found for scenario: {instance.scenario_code}')
+            raise ApprovalRetryNoFlowRouteError()
 
         flow_version = await ApprovalScenarioRepository.get_active_flow_version(
             instance.tenant_id,
             route_rule.flow_definition_id,
         )
         if flow_version is None:
-            raise ValueError(f'active flow version not found for scenario: {instance.scenario_code}')
+            raise ApprovalRetryNoActiveFlowVersionError()
 
         node_definitions = await ApprovalScenarioRepository.list_node_definitions(instance.tenant_id, flow_version.id)
         if not node_definitions:
-            raise ValueError(f'flow nodes not found for flow version: {flow_version.id}')
+            raise ApprovalRetryNoFlowNodesError()
         return route_rule, flow_version.id, node_definitions[0]
 
     @staticmethod

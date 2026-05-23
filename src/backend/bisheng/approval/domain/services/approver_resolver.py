@@ -73,7 +73,10 @@ async def resolve_approvers_from_sources(sources: list[dict], req: Any) -> list[
             except Exception:
                 logger.exception('approver_resolver: failed to resolve tenant_admin')
 
-        elif source_type in ('knowledge_space_owner', 'knowledge_space_manager', 'space_admin', 'channel_admin'):
+        elif source_type in (
+            'knowledge_space_owner', 'knowledge_space_manager', 'space_admin',
+            'channel_admin', 'channel_owner', 'channel_manager',
+        ):
             # These must be resolved by the scenario handler itself.
             pass
 

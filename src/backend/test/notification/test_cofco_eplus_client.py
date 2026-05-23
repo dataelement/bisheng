@@ -79,9 +79,9 @@ async def test_send_textcard_request_shape(mock_settings):
     mock_response.json.return_value = {"code": "0"}
     captured = {}
 
-    async def fake_post(url, json=None, headers=None):
+    async def fake_post(url, content=None, headers=None):
         captured["url"] = url
-        captured["json"] = json
+        captured["content"] = content
         captured["headers"] = headers
         return mock_response
 
@@ -93,9 +93,14 @@ async def test_send_textcard_request_shape(mock_settings):
             textcard={"title": "t", "description": "d", "url": "u", "btntxt": "b"},
         )
 
+    import json
     assert captured["url"] == "http://10.28.64.30:8070/qwmsg-ui/v2/message/send"
-    assert captured["headers"] == {"appId": "bisheng", "secret": "secret123"}
-    body = captured["json"]
+    assert captured["headers"]["appId"] == "bisheng"
+    assert captured["headers"]["secret"] == "secret123"
+    assert captured["headers"].get("Content-Type") == "application/json"
+    assert captured["headers"].get("Accept") == "application/json"
+    assert "User-Agent" in captured["headers"]
+    body = json.loads(captured["content"].decode("utf-8"))
     assert body["touser"] == "U1|U2"
     assert body["msgtype"] == "textcard"
     assert body["agentid"] == 1

@@ -214,7 +214,7 @@ export function RelateDocumentPanel({
                         </TooltipContent>
                     </Tooltip>
                     <p className="text-[12px] text-[#86909c]">
-                        当前主版本 V{file.version_no ?? 1} · 上传人 {file.creator_name ?? "未知"}
+                        当前主版本 V{file.version_no ?? 1} · 上传人 {file.user_name ?? "未知"}
                     </p>
                 </div>
                 <span className="shrink-0 rounded bg-[#FFF3E8] px-2 py-0.5 text-[12px] text-[#F76F44] font-medium mt-1">
@@ -232,7 +232,7 @@ export function RelateDocumentPanel({
                         {localize("com_knowledge.version.section_recommendations")}
                     </h3>
                     <p className="mb-3 text-[12px] text-[#86909c]">
-                        {localize("com_knowledge.version.section_recommendations_subtitle")}
+                        {localize("com_knowledge.version.section_recommendations_subtitle_merge")}
                     </p>
                     {candidatesLoading ? (
                         <div className="flex h-16 items-center justify-center border border-[#EBECF0] bg-[#FAFAFA] rounded-[6px]">

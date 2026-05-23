@@ -8,6 +8,8 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalExceptionType,
     ApprovalInstance,
     ApprovalInstanceStatus,
+    ApprovalOutbox,
+    ApprovalOutboxStatus,
     ApprovalTask,
     ApprovalTaskStatus,
 )
@@ -129,13 +131,24 @@ class ApprovalGate:
                     applicant_user_id=req.applicant_user_id,
                     applicant_user_name=req.applicant_user_name,
                     applicant_department_id=req.applicant_department_id,
-                    status=ApprovalInstanceStatus.EXECUTED,
+                    status=ApprovalInstanceStatus.APPROVED,
                     reason=req.reason,
                     payload_snapshot=req.payload_snapshot,
                     detail_snapshot=detail_snapshot,
                     route_rule_id=getattr(matched_route, 'id', None),
                 )
             )
+            # PASS route still needs to execute the business handler via outbox
+            outbox = await self.instance_repository.create_outbox(
+                ApprovalOutbox(
+                    tenant_id=req.tenant_id,
+                    instance_id=instance.id,
+                    handler_key=req.scenario_code,
+                    status=ApprovalOutboxStatus.PENDING,
+                    payload_snapshot=req.payload_snapshot,
+                )
+            )
+            self._dispatch_outbox_task(outbox.id)
             return ApprovalGateResult(decision=ApprovalGateDecision.PASS, instance_id=instance.id)
 
         flow_version = await self.scenario_repository.get_active_flow_version(
@@ -288,6 +301,17 @@ class ApprovalGate:
             instance_id=instance.id,
             exception_type=exception_type,
         )
+
+    @staticmethod
+    def _dispatch_outbox_task(outbox_id: int) -> None:
+        try:
+            from bisheng.worker.approval.tasks import execute_approval_outbox
+            execute_approval_outbox.delay(outbox_id)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'failed to dispatch approval outbox task: outbox_id=%s', outbox_id
+            )
 
     @staticmethod
     async def _notify_admins_of_exception(

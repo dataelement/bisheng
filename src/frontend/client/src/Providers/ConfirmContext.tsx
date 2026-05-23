@@ -64,10 +64,10 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     </button>
 
                     <AlertDialogHeader className="relative pt-2">
-                        <div className="absolute left-0 top-0">
+                        <div className="absolute left-0 -top-3">
                             <AlertCircle className="h-6 w-6 text-red-500" />
                         </div>
-                        <AlertDialogTitle className="text-center text-xl font-medium">
+                        <AlertDialogTitle className="text-center text-xl font-medium pt-2">
                             {options.title || "提示"}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-center py-4 text-base text-slate-600">
