@@ -347,9 +347,37 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def get_repeat_file(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+        # Mirror the list-rendering rule: hide files that are no longer the
+        # primary version of any chain. Legacy files (no version row at all)
+        # still count as visible. Otherwise an orphaned non-primary leftover
+        # from a botched set_primary / link flow would invisibly block uploads
+        # of the same md5 because the UI says "nothing here" but the dup
+        # checker can still see it.
+        from bisheng.knowledge.domain.models.knowledge_document_version import (
+            KnowledgeDocumentVersion,
+        )
+        from sqlalchemy import exists
+
+        primary_version = (
+            select(KnowledgeDocumentVersion.id)
+            .where(KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id)
+            .where(KnowledgeDocumentVersion.is_primary == True)  # noqa: E712
+        )
+        any_version = (
+            select(KnowledgeDocumentVersion.id)
+            .where(KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id)
+        )
+
         sql = cls._apply_duplicate_filters(
             select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         )
+        sql = sql.where(
+            or_(
+                ~exists(any_version),       # legacy file outside the version system
+                exists(primary_version),    # current primary of its chain
+            )
+        )
+
         if md5_ and file_name:
             sql = sql.where(
                 or_(

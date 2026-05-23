@@ -42,7 +42,7 @@ class ApprovalInstanceRepository:
             saved = await session.get(ApprovalInstance, row.id)
             if saved is None:
                 raise ValueError(f'approval instance not found: {row.id}')
-            for key, value in row.model_dump(exclude_unset=False).items():
+            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -87,7 +87,7 @@ class ApprovalInstanceRepository:
             saved = await session.get(ApprovalTask, row.id)
             if saved is None:
                 raise ValueError(f'approval task not found: {row.id}')
-            for key, value in row.model_dump(exclude_unset=False).items():
+            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -122,7 +122,7 @@ class ApprovalInstanceRepository:
             saved = await session.get(ApprovalException, row.id)
             if saved is None:
                 raise ValueError(f'approval exception not found: {row.id}')
-            for key, value in row.model_dump(exclude_unset=False).items():
+            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -156,7 +156,7 @@ class ApprovalInstanceRepository:
             saved = await session.get(ApprovalOutbox, row.id)
             if saved is None:
                 raise ValueError(f'approval outbox not found: {row.id}')
-            for key, value in row.model_dump(exclude_unset=False).items():
+            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()

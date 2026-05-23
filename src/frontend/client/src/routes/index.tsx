@@ -64,6 +64,13 @@ function HomeEntryRedirect() {
   if (has('knowledge_space')) {
     return <Navigate to="/knowledge" replace />;
   }
+  // In approval mode, a new user may have workbench entry but no nav plugins yet.
+  // Send them to the default apply page so they can request access instead of seeing
+  // a dead-end generic message.
+  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
+  if (menuApprovalMode) {
+    return <Navigate to="/menu-unavailable?plugin=home" replace />;
+  }
   return <Navigate to="/menu-unavailable" replace />;
 }
 
@@ -162,12 +169,32 @@ export const router = createBrowserRouter([
               </MenuApprovalPluginGate>
             ),
           },
-          { path: 'channel', element: <Subscription /> },
+          { path: 'channel', element: (
+            <MenuApprovalPluginGate pluginId="subscription">
+              <Subscription />
+            </MenuApprovalPluginGate>
+          )},
           { path: 'channel/share/:channelId', element: <Subscription /> },
-          { path: 'channel/:channelId', element: <Subscription /> },
-          { path: 'knowledge', element: <Knowledge /> },
-          { path: 'knowledge/space/:spaceId', element: <Knowledge /> },
-          { path: 'knowledge/space/:spaceId/folder/:folderId', element: <Knowledge /> },
+          { path: 'channel/:channelId', element: (
+            <MenuApprovalPluginGate pluginId="subscription">
+              <Subscription />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge', element: (
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId', element: (
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId/folder/:folderId', element: (
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
           { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
           { path: 'shougang-portal-admin', element: <ShougangPortalAdmin /> },

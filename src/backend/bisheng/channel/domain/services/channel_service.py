@@ -76,7 +76,7 @@ from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
 
 if TYPE_CHECKING:
@@ -885,6 +885,8 @@ class ChannelService:
 
         if channel.visibility == ChannelVisibilityEnum.REVIEW:
             gate = self.approval_gate or self._build_channel_approval_gate()
+            from bisheng.database.models.department import UserDepartmentDao
+            primary_dept = await UserDepartmentDao.aget_user_primary_department(login_user.user_id)
             gate_result = await gate.request_or_pass(
                 ApprovalGateRequest(
                     tenant_id=login_user.tenant_id,
@@ -895,6 +897,7 @@ class ChannelService:
                     business_name=channel.name,
                     applicant_user_id=login_user.user_id,
                     applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+                    applicant_department_id=primary_dept.department_id if primary_dept else None,
                     payload_snapshot={
                         'channel_id': str(channel.id),
                         'channel_name': channel.name,
@@ -916,6 +919,13 @@ class ChannelService:
                         membership.status = MembershipStatusEnum.ACTIVE
                         await self.space_channel_member_repository.update(membership)
                 return SubscriptionStatusEnum.SUBSCRIBED
+            if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
+                await self._send_channel_approval_notification(
+                    channel=channel,
+                    login_user=login_user,
+                    instance_id=gate_result.instance_id,
+                    task_ids=gate_result.task_ids,
+                )
 
         return return_status
 
@@ -926,6 +936,35 @@ class ChannelService:
             ChannelSubscribeScenarioHandler(self.space_channel_member_repository),
         )
         return ApprovalGate(registry=registry)
+
+    async def _send_channel_approval_notification(
+        self,
+        *,
+        channel: Channel,
+        login_user: UserPayload,
+        instance_id: int,
+        task_ids: list[int],
+    ) -> None:
+        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+        approver_user_ids: list[int] = []
+        seen: set[int] = set()
+        for task_id in task_ids:
+            task = await ApprovalInstanceRepository.get_task(task_id)
+            if task and task.approver_user_id not in seen:
+                seen.add(task.approver_user_id)
+                approver_user_ids.append(task.approver_user_id)
+        if not approver_user_ids:
+            return
+        await self.message_service.send_generic_approval(
+            applicant_user_id=login_user.user_id,
+            applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+            action_code="request_channel",
+            business_type="approval_instance_id",
+            business_id=str(instance_id),
+            business_name=channel.name,
+            button_action_code="request_channel",
+            receiver_user_ids=approver_user_ids,
+        )
 
     async def _send_subscribe_approval_notification(
             self,

@@ -1216,7 +1216,7 @@ export function KnowledgeSpaceContent({
                         documentTitle={versionHistoryFile?.name}
                         canManage={isAdmin}
                         onPreview={(versionFileId) => handlePreviewFile(String(versionFileId))}
-                        onDownload={async (versionFileId) => {
+                        onDownload={async (versionFileId, fileName) => {
                             try {
                                 const downloadData = await getFileDownloadApi(
                                     String(space.id),
@@ -1230,7 +1230,7 @@ export function KnowledgeSpaceContent({
                                     });
                                     return;
                                 }
-                                triggerUrlDownload(downloadUrl);
+                                triggerUrlDownload(downloadUrl, fileName);
                             } catch {
                                 showToast({
                                     message: localize("com_knowledge.download_failed"),

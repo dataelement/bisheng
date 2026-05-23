@@ -419,6 +419,13 @@ class KnowledgeUtils(BaseService):
             file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.WAITING.value  # Parsing
+            # Content has been replaced (overwrite path) — the previous
+            # similar-document marker and simhash were computed against the
+            # old content and must be cleared so the new parse re-scans from
+            # scratch. Otherwise users see a "similar" tag on a file that has
+            # already been overwritten with different content.
+            file.similar_status = 0
+            file.simhash = None
             file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
             file.file_level_path = input_file["file_level_path"]

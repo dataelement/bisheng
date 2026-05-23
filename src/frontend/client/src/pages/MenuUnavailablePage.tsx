@@ -1,14 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
 import { ApprovalApiError, applyMenuAccessApi, checkMenuAccessPendingApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
 import { useAuthContext, useLocalize } from '~/hooks';
-import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { WorkbenchEmptyIllustration } from '~/components/workbench/WorkbenchEmptyIllustration';
-
-const DEFAULT_MESSAGE = '暂无使用过的应用，可以前往应用广场探索更多应用';
 
 const MENU_LABEL_KEYS: Record<string, string> = {
   home: 'com_nav_home',
@@ -25,10 +21,6 @@ const PLUGIN_DEFAULT_ROUTES: Record<string, string> = {
 };
 
 export default function MenuUnavailablePage() {
-  const bishengEnv = useRecoilValue(bishengConfState);
-  const configured = bishengEnv?.workbench_menu_unavailable_message;
-  const trimmed = configured?.trim();
-  const message = trimmed || DEFAULT_MESSAGE;
   const [searchParams] = useSearchParams();
   const { user } = useAuthContext();
   const navigate = useNavigate();
@@ -55,13 +47,18 @@ export default function MenuUnavailablePage() {
   const [submitting, setSubmitting] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  // On mount, check if there is already a pending application so that after a
-  // page refresh the button correctly shows "申请中" instead of "申请权限".
+  // When the target plugin changes: immediately clear stale "已申请" state, then
+  // verify whether there is already a pending application for the new plugin.
+  // Cleanup cancels any in-flight request so a slow response for a previous
+  // plugin cannot overwrite the result for the current one.
   useEffect(() => {
+    setApplied(false);
     if (!canApply || !pluginId) return;
+    let cancelled = false;
     checkMenuAccessPendingApi(pluginId)
-      .then((res) => { if (res.has_pending) setApplied(true); })
-      .catch(() => { /* ignore — fall back to default unapplied state */ });
+      .then((res) => { if (!cancelled) setApplied(res.has_pending); })
+      .catch(() => { /* ignore — fall back to unapplied state */ });
+    return () => { cancelled = true; };
   }, [canApply, pluginId]);
 
   const handleSubmit = async () => {
@@ -99,7 +96,7 @@ export default function MenuUnavailablePage() {
         <WorkbenchEmptyIllustration />
       </div>
       <p className="max-w-xl text-center text-sm leading-relaxed text-gray-500" role="status">
-        {canApply ? localize('com_menu_unavailable_no_permission') : message}
+        {localize('com_menu_unavailable_no_permission')}
       </p>
       {canApply && (
         <div className="mt-6 flex flex-col items-center gap-3">

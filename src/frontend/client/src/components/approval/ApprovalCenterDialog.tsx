@@ -120,14 +120,30 @@ function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
   );
 }
 
+function formatTitle(
+  scenarioCode: string | undefined,
+  businessName: string | undefined | null,
+  localize: ReturnType<typeof useLocalize>,
+): string {
+  if (!businessName) return "--";
+  if (scenarioCode === "menu_access_request") {
+    return localize("com_approval_menu_access_title" as any, { menuName: businessName, defaultValue: `申请访问${businessName}菜单` }) as string;
+  }
+  return businessName;
+}
+
+const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
+
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
   const map: Record<string, string> = {
-    menu_key:   localize("com_approval_field_menu_key" as any),
-    menu_name:  localize("com_approval_field_menu_name" as any),
-    reason:     localize("com_approval_field_reason" as any),
-    space_type: localize("com_approval_field_space_type" as any),
-    channel_id: localize("com_approval_field_channel_id" as any),
-    space_id:   localize("com_approval_field_space_id" as any),
+    menu_key:      localize("com_approval_field_menu_key" as any),
+    menu_name:     localize("com_approval_field_menu_name" as any),
+    reason:        localize("com_approval_field_reason" as any),
+    space_type:    localize("com_approval_field_space_type" as any),
+    space_name:    localize("com_approval_field_space_name" as any),
+    channel_id:    localize("com_approval_field_channel_id" as any),
+    channel_name:  localize("com_approval_field_channel_name" as any),
+    space_id:      localize("com_approval_field_space_id" as any),
   };
   return map[key] ?? key;
 }
@@ -162,16 +178,37 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [decisionComment, setDecisionComment] = useState("");
 
   const filteredTaskItems = useMemo(() => {
-    if (taskFilter === "pending_me") return taskItems.filter((t) => t.status === "pending");
-    return taskItems.filter((t) => t.status !== "pending");
-  }, [taskItems, taskFilter]);
+    const byStatus = taskFilter === "pending_me"
+      ? taskItems.filter((t) => t.status === "pending")
+      : taskItems.filter((t) => t.status !== "pending");
+    if (!searchQuery.trim()) return byStatus;
+    const q = searchQuery.toLowerCase();
+    return byStatus.filter((t) =>
+      (t.business_name ?? "").toLowerCase().includes(q) ||
+      (t.applicant_user_name ?? "").toLowerCase().includes(q) ||
+      (t.applicant_department_name ?? "").toLowerCase().includes(q) ||
+      (t.current_node_name ?? "").toLowerCase().includes(q),
+    );
+  }, [taskItems, taskFilter, searchQuery]);
 
   const filteredRequestItems = useMemo(() => {
-    if (requestsFilter === "in_progress") return requestItems.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""));
-    return requestItems.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
-  }, [requestItems, requestsFilter]);
+    const byStatus = requestsFilter === "in_progress"
+      ? requestItems.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
+      : requestItems.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+    if (!searchQuery.trim()) return byStatus;
+    const q = searchQuery.toLowerCase();
+    return byStatus.filter((i) =>
+      (i.business_name ?? "").toLowerCase().includes(q) ||
+      (i.applicant_user_name ?? "").toLowerCase().includes(q) ||
+      (i.applicant_department_name ?? "").toLowerCase().includes(q) ||
+      (i.current_node_name ?? "").toLowerCase().includes(q) ||
+      (i.current_approver_names ?? "").toLowerCase().includes(q),
+    );
+  }, [requestItems, requestsFilter, searchQuery]);
 
   const toast = (ok: boolean) => showToast({
     message: localize(ok ? "com_approval_toast_success" : "com_approval_toast_failed"),
@@ -183,7 +220,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
-      const nextId = preferredId ?? getId(resp.data[0], "task");
+      const allIds = new Set(resp.data.map((t) => getId(t, "task")));
+      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const visibleItems = taskFilter === "pending_me"
+        ? resp.data.filter((t) => t.status === "pending")
+        : resp.data.filter((t) => t.status !== "pending");
+      const nextId = validPreferred ?? getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
       if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
       else setTaskDetail(null);
@@ -195,7 +237,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
-      const nextId = preferredId ?? getId(resp.data[0], "instance");
+      const allIds = new Set(resp.data.map((i) => getId(i, "instance")));
+      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const visibleItems = requestsFilter === "in_progress"
+        ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
+        : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+      const nextId = validPreferred ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
       else setRequestDetail(null);
@@ -207,12 +254,13 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     setActiveTab(target?.tab ?? "my_tasks");
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
+    setSearchQuery("");
   }, [open, target?.instanceId, target?.tab, target?.taskId]);
 
   useEffect(() => {
     if (!open) return;
-    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? selectedTaskId);
-    else void loadRequests(target?.instanceId ?? selectedInstanceId);
+    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? null);
+    else void loadRequests(target?.instanceId ?? null);
   }, [open, activeTab]);
 
   // Auto-select first visible item when sub-filter changes
@@ -233,7 +281,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
-    setSelectedTaskId(id); setLoadingDetail(true);
+    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment("");
     try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
   };
   const openRequest = async (id: number) => {
@@ -244,14 +292,22 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const runTaskDecision = async (action: "approve" | "reject") => {
     if (!selectedTaskId) return;
     setActionLoading(true);
-    try { await decideApprovalTaskApi(selectedTaskId, { action }); await loadTasks(selectedTaskId); toast(true); }
+    const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
+    try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = async () => {
     if (!selectedInstanceId) return;
     setActionLoading(true);
-    try { await withdrawApprovalInstanceApi(selectedInstanceId, {}); await loadRequests(selectedInstanceId); toast(true); }
-    catch { toast(false); } finally { setActionLoading(false); }
+    try {
+      await withdrawApprovalInstanceApi(selectedInstanceId, {});
+      toast(true);
+      const resp = await listMyApprovalRequestsApi();
+      setRequestItems(resp.data);
+      setRequestsFilter("completed");
+      setLoadingDetail(true);
+      setRequestDetail(await getApprovalInstanceDetailApi(selectedInstanceId));
+    } catch { toast(false); } finally { setActionLoading(false); setLoadingDetail(false); }
   };
   const runResubmit = async () => {
     if (!selectedInstanceId) return;
@@ -297,14 +353,20 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                 <button key={tab} type="button"
                   className={cn("rounded-lg px-4 py-2 text-[14px] transition-colors",
                     activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
-                  onClick={() => setActiveTab(tab)}>
+                  onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
                   {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4]">
+            <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4] focus-within:border-[#165dff]">
               <span>⌕</span>
-              <span>{localize("com_approval_search_placeholder")}</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={localize("com_approval_search_placeholder")}
+                className="w-40 bg-transparent text-[#1d2129] placeholder:text-[#c9cdd4] outline-none"
+              />
             </div>
           </div>
 
@@ -346,7 +408,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               selectedTaskId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
                             onClick={() => id && openTask(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
                             </div>
                             {item.current_node_name && (
@@ -369,7 +431,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               selectedInstanceId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
                             onClick={() => id && openRequest(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
@@ -412,7 +474,17 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
               {/* Fixed footer buttons */}
               {(isTaskPending || isInstancePending || canResubmit || canRevoke) && (
-                <div className="flex items-center justify-end gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                  {isTaskPending && (
+                    <textarea
+                      value={decisionComment}
+                      onChange={(e) => setDecisionComment(e.target.value)}
+                      placeholder={localize("com_approval_decision_comment_placeholder")}
+                      rows={2}
+                      className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+                    />
+                  )}
+                  <div className="flex items-center justify-end gap-3">
                   <button type="button"
                     className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
                     onClick={() => onOpenChange(false)}>
@@ -453,6 +525,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       {localize("com_approval_action_revoke_grant")}
                     </button>
                   )}
+                  </div>
                 </div>
               )}
             </div>
@@ -494,12 +567,14 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.instance_status ?? detail.status}` as any, { defaultValue: detail.instance_status || detail.status || "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(
+    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
+  );
   const showContent = detailEntries.length > 0;
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={detail.business_name} status={detail.status} instanceStatus={detail.instance_status}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status}
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
@@ -551,6 +626,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
+  const isTerminal = ["executed", "rejected", "withdrawn", "cancelled"].includes(detail.status ?? "");
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"),      serialNo],
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
@@ -558,15 +634,17 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
     [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
-    [localize("com_approval_field_current_approver"),detail.current_approver_names || "--"],
+    ...(!isTerminal ? [[localize("com_approval_field_current_approver"), detail.current_approver_names || "--"] as [string, string]] : []),
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
+    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
+  );
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={detail.business_name} status={detail.status} serialNo={serialNo}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} serialNo={serialNo}
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
@@ -617,25 +695,28 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               (l) => l.action !== "submitted" && l.action !== "resubmitted"
             );
             return nodes.map((node: any, i) => {
-              // Find the matching task for this node (if it exists)
-              const matchedTask = (detail.tasks || []).find(
+              // Collect all tasks for this node (multi-approver nodes have multiple tasks)
+              const matchedTasks = (detail.tasks || []).filter(
                 (t) => t.node_order === node.node_order || t.node_name === node.node_name
               );
-              const s = String(matchedTask?.status || (node.task_id ? node.status : "not_started")).toLowerCase();
-              const isNotStarted = !matchedTask && !node.task_id;
+              const isNotStarted = matchedTasks.length === 0 && !node.task_id;
+              // Aggregate node status: rejected > approved > pending > others
+              const aggStatus = matchedTasks.length === 0
+                ? (node.task_id ? (node.status ?? "pending") : "not_started")
+                : matchedTasks.some((t) => t.status === "rejected") ? "rejected"
+                : matchedTasks.some((t) => t.status === "approved") ? "approved"
+                : matchedTasks.some((t) => t.status === "pending") ? "pending"
+                : (matchedTasks[0]?.status ?? "pending");
+              const s = aggStatus.toLowerCase();
               const dotColor = isNotStarted ? "bg-[#e5e6eb]" :
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
                 (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
-              const statusLabel = isNotStarted ? localize("com_approval_node_not_started") :
-                s === "approved" ? localize("com_approval_status_approved") :
-                s === "rejected" ? localize("com_approval_status_rejected") :
-                s === "pending" ? localize("com_approval_status_pending") :
-                s === "skipped" ? localize("com_approval_status_skipped") :
-                localize("com_approval_status_cancelled");
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
-              const approverName = matchedTask?.approver_user_name;
-              const comment = matchedTask?.comment;
-              const updateTime = matchedTask?.update_time;
+              // Comment from the task that decided the outcome, or the first with a comment
+              const decidingTask = matchedTasks.find((t) => t.status === "rejected" || t.status === "approved");
+              const comment = (decidingTask ?? matchedTasks[0])?.comment;
+              // Latest update_time among all matched tasks
+              const updateTime = matchedTasks.map((t) => t.update_time).filter(Boolean).sort().at(-1);
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
                   <div className="flex flex-col items-center">
@@ -646,10 +727,32 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                     <div className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
                       {node.node_name || "--"}
                     </div>
-                    <div className="mt-0.5 text-[12px] text-[#86909c]">
-                      {approverName && <span>{approverName} · </span>}
-                      {statusLabel}
-                    </div>
+                    {matchedTasks.length > 0 ? (
+                      matchedTasks.map((t) => {
+                        const ts = String(t.status || "").toLowerCase();
+                        const tLabel = ts === "approved" ? localize("com_approval_status_approved") :
+                          ts === "rejected" ? localize("com_approval_status_rejected") :
+                          ts === "pending" ? localize("com_approval_status_pending") :
+                          ts === "skipped" ? localize("com_approval_status_skipped") :
+                          ts === "cancelled" ? localize("com_approval_status_cancelled") :
+                          localize("com_approval_node_not_started");
+                        return (
+                          <div key={t.task_id ?? t.id} className="mt-0.5 text-[12px] text-[#86909c]">
+                            {t.approver_user_name && <span>{t.approver_user_name} · </span>}
+                            <span>{tLabel}</span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="mt-0.5 text-[12px] text-[#86909c]">{
+                        isNotStarted ? localize("com_approval_node_not_started") :
+                        s === "approved" ? localize("com_approval_status_approved") :
+                        s === "rejected" ? localize("com_approval_status_rejected") :
+                        s === "pending" ? localize("com_approval_status_pending") :
+                        s === "skipped" ? localize("com_approval_status_skipped") :
+                        localize("com_approval_status_cancelled")
+                      }</div>
+                    )}
                     {comment && (
                       <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>
                     )}
