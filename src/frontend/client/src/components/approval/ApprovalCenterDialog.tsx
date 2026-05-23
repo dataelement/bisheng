@@ -576,7 +576,10 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  // menu_key is an internal identifier — not meaningful to end users.
+  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
+    ([k, v]) => k !== "menu_key" && v !== undefined && v !== null && v !== "",
+  );
 
   return (
     <div className="space-y-5">

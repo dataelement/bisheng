@@ -1925,6 +1925,7 @@
   "com_approval_status_rejected": "已拒绝",
   "com_approval_grant_revoked": "授权已撤回",
   "com_approval_status_withdrawn": "已撤回",
+  "com_approval_status_executed": "审批完成",
   "com_approval_status_execute_failed": "执行失败",
   "com_approval_status_label": "状态：",
   "com_approval_detail_section": "申请详情",
