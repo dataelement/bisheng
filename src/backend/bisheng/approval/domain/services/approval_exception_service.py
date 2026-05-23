@@ -111,24 +111,15 @@ class ApprovalExceptionService:
                 'status': 'resolved' if retried else 'open',
             }
 
-        route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
-        handler = await service._build_handler(instance.scenario_code)
-        req = service._build_gate_request(instance)
-
-        approver_user_ids = await handler.resolve_approvers(getattr(node, 'approver_config', {}) or {}, req)
-        if not approver_user_ids:
-            raise ValueError(f'no approvers resolved for exception {exception_id}')
-
         if exception.exception_type == 'route_missing':
-            await service.assign_flow(
-                exception_id=exception_id,
-                flow_version_id=flow_version_id,
-                route_rule_id=route_rule.id,
-                node=node,
-                approver_user_ids=approver_user_ids,
-                resolved_by_user_id=operator_user_id,
-            )
+            await service._retry_route_missing(exception, instance, operator_user_id)
         elif exception.exception_type == 'approver_empty':
+            route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
+            handler = await service._build_handler(instance.scenario_code)
+            req = service._build_gate_request(instance)
+            approver_user_ids = await handler.resolve_approvers(getattr(node, 'approver_config', {}) or {}, req)
+            if not approver_user_ids:
+                raise ValueError(f'no approvers resolved for exception {exception_id}')
             await service.assign_approvers(
                 exception_id=exception_id,
                 approver_user_ids=approver_user_ids,
@@ -365,6 +356,79 @@ class ApprovalExceptionService:
         if instance is None:
             raise ValueError(f'instance not found: {instance_id}')
         return instance
+
+    async def _retry_route_missing(self, exception, instance, operator_user_id: int) -> None:
+        """Re-run the full gate route-matching logic for a route_missing exception.
+
+        Handles both 'pass' and 'flow' route types and respects match conditions,
+        so that the admin's newly configured route is picked up correctly.
+        """
+        from bisheng.approval.domain.models.approval_instance import ApprovalOutbox, ApprovalOutboxStatus
+        from bisheng.approval.domain.services.approval_gate import ApprovalGate
+        from bisheng.common.errcode.approval import (
+            ApprovalRetryNoActiveFlowVersionError,
+            ApprovalRetryNoFlowNodesError,
+            ApprovalRetryNoFlowRouteError,
+        )
+
+        scenario = await ApprovalScenarioRepository.get_scenario_by_code(instance.tenant_id, instance.scenario_code)
+        if scenario is None or not scenario.enabled:
+            raise ValueError(f'scenario not enabled: {instance.scenario_code}')
+
+        route_rules = await ApprovalScenarioRepository.list_route_rules(instance.tenant_id, scenario.id)
+        req = self._build_gate_request(instance)
+
+        # Re-run full condition matching (respects enabled flag and match_config)
+        _gate = ApprovalGate(registry=None)
+        matched_route = await _gate._match_first_route(route_rules, req)
+        if matched_route is None:
+            raise ApprovalRetryNoFlowRouteError()
+
+        if matched_route.route_type == 'pass':
+            # Direct-pass route: mark instance approved and dispatch business handler
+            instance.status = ApprovalInstanceStatus.APPROVED
+            instance.route_rule_id = matched_route.id
+            await self.instance_repository.update_instance(instance)
+            outbox = await self.instance_repository.create_outbox(
+                ApprovalOutbox(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    handler_key=instance.handler_key,
+                    status=ApprovalOutboxStatus.PENDING,
+                    payload_snapshot=instance.payload_snapshot,
+                )
+            )
+            ApprovalGate._dispatch_outbox_task(outbox.id)
+            await self._resolve_exception(exception, operator_user_id, 'assign_flow')
+            return
+
+        if matched_route.flow_definition_id is None:
+            raise ApprovalRetryNoFlowRouteError()
+
+        flow_version = await ApprovalScenarioRepository.get_active_flow_version(
+            instance.tenant_id, matched_route.flow_definition_id
+        )
+        if flow_version is None:
+            raise ApprovalRetryNoActiveFlowVersionError()
+
+        node_definitions = await ApprovalScenarioRepository.list_node_definitions(instance.tenant_id, flow_version.id)
+        if not node_definitions:
+            raise ApprovalRetryNoFlowNodesError()
+
+        handler = await self._build_handler(instance.scenario_code)
+        first_node = node_definitions[0]
+        approver_user_ids = await handler.resolve_approvers(first_node.approver_config or {}, req)
+        if not approver_user_ids:
+            raise ValueError(f'no approvers resolved for route_missing exception {exception.id}')
+
+        await self.assign_flow(
+            exception_id=exception.id,
+            flow_version_id=flow_version.id,
+            route_rule_id=matched_route.id,
+            node=first_node,
+            approver_user_ids=approver_user_ids,
+            resolved_by_user_id=operator_user_id,
+        )
 
     async def _resolve_retry_route(self, instance) -> tuple[ApprovalRouteRule, int, ApprovalNodeDefinition]:
         scenario = await ApprovalScenarioRepository.get_scenario_by_code(instance.tenant_id, instance.scenario_code)
