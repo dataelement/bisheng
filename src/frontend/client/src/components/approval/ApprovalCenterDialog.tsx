@@ -166,16 +166,36 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const filteredTaskItems = useMemo(() => {
-    if (taskFilter === "pending_me") return taskItems.filter((t) => t.status === "pending");
-    return taskItems.filter((t) => t.status !== "pending");
-  }, [taskItems, taskFilter]);
+    const byStatus = taskFilter === "pending_me"
+      ? taskItems.filter((t) => t.status === "pending")
+      : taskItems.filter((t) => t.status !== "pending");
+    if (!searchQuery.trim()) return byStatus;
+    const q = searchQuery.toLowerCase();
+    return byStatus.filter((t) =>
+      (t.business_name ?? "").toLowerCase().includes(q) ||
+      (t.applicant_user_name ?? "").toLowerCase().includes(q) ||
+      (t.applicant_department_name ?? "").toLowerCase().includes(q) ||
+      (t.current_node_name ?? "").toLowerCase().includes(q),
+    );
+  }, [taskItems, taskFilter, searchQuery]);
 
   const filteredRequestItems = useMemo(() => {
-    if (requestsFilter === "in_progress") return requestItems.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""));
-    return requestItems.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
-  }, [requestItems, requestsFilter]);
+    const byStatus = requestsFilter === "in_progress"
+      ? requestItems.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
+      : requestItems.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+    if (!searchQuery.trim()) return byStatus;
+    const q = searchQuery.toLowerCase();
+    return byStatus.filter((i) =>
+      (i.business_name ?? "").toLowerCase().includes(q) ||
+      (i.applicant_user_name ?? "").toLowerCase().includes(q) ||
+      (i.applicant_department_name ?? "").toLowerCase().includes(q) ||
+      (i.current_node_name ?? "").toLowerCase().includes(q) ||
+      (i.current_approver_names ?? "").toLowerCase().includes(q),
+    );
+  }, [requestItems, requestsFilter, searchQuery]);
 
   const toast = (ok: boolean) => showToast({
     message: localize(ok ? "com_approval_toast_success" : "com_approval_toast_failed"),
@@ -225,6 +245,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     setActiveTab(target?.tab ?? "my_tasks");
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
+    setSearchQuery("");
   }, [open, target?.instanceId, target?.tab, target?.taskId]);
 
   useEffect(() => {
@@ -315,14 +336,20 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                 <button key={tab} type="button"
                   className={cn("rounded-lg px-4 py-2 text-[14px] transition-colors",
                     activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
-                  onClick={() => setActiveTab(tab)}>
+                  onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
                   {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4]">
+            <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4] focus-within:border-[#165dff]">
               <span>⌕</span>
-              <span>{localize("com_approval_search_placeholder")}</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={localize("com_approval_search_placeholder")}
+                className="w-40 bg-transparent text-[#1d2129] placeholder:text-[#c9cdd4] outline-none"
+              />
             </div>
           </div>
 

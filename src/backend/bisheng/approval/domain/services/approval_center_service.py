@@ -718,7 +718,41 @@ class ApprovalCenterService:
                     sibling.status = ApprovalTaskStatus.SKIPPED
                     sibling.acted_at = datetime.utcnow()
                     await self.instance_repository.update_task(sibling)
+            await self._advance_after_node_approved(instance=instance, current_node_order=task.node_order)
+            return
+
+        # same_node_tasks was fetched before the current task was updated, so the
+        # current task's object still carries its old PENDING status. Treat it as
+        # APPROVED by checking its id explicitly.
+        all_same_node_approved = all(
+            t.id == task.id or t.status == ApprovalTaskStatus.APPROVED
+            for t in same_node_tasks
+        )
+        if all_same_node_approved:
+            await self._advance_after_node_approved(instance=instance, current_node_order=task.node_order)
+
+    async def _advance_after_node_approved(
+        self,
+        *,
+        instance: ApprovalInstance,
+        current_node_order: int,
+    ) -> None:
+        """After a node is fully approved, either advance to the next node or finalize the instance."""
+        next_node = None
+        if instance.flow_version_id:
+            from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            sorted_nodes = sorted(node_defs, key=lambda n: n.node_order)
+            next_node = next(
+                (n for n in sorted_nodes if n.node_order > current_node_order),
+                None,
+            )
+
+        if next_node is None:
             instance.status = ApprovalInstanceStatus.APPROVED
+            instance.current_node_name = None
             await self.instance_repository.update_instance(instance)
             outbox = await self.instance_repository.create_outbox(
                 ApprovalOutbox(
@@ -732,15 +766,19 @@ class ApprovalCenterService:
             self.__class__._dispatch_outbox(outbox.id)
             return
 
-        # same_node_tasks was fetched before the current task was updated, so the
-        # current task's object still carries its old PENDING status. Treat it as
-        # APPROVED by checking its id explicitly.
-        all_same_node_approved = all(
-            t.id == task.id or t.status == ApprovalTaskStatus.APPROVED
-            for t in same_node_tasks
-        )
-        if all_same_node_approved:
+        # Resolve approvers for the next node via the scenario handler
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+        from types import SimpleNamespace
+        try:
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+        except KeyError:
+            import logging
+            logging.getLogger(__name__).error(
+                'decide_task: unknown handler_key=%s, finalizing instance %s',
+                instance.handler_key, instance.id,
+            )
             instance.status = ApprovalInstanceStatus.APPROVED
+            instance.current_node_name = None
             await self.instance_repository.update_instance(instance)
             outbox = await self.instance_repository.create_outbox(
                 ApprovalOutbox(
@@ -752,6 +790,64 @@ class ApprovalCenterService:
                 )
             )
             self.__class__._dispatch_outbox(outbox.id)
+            return
+
+        req = SimpleNamespace(
+            tenant_id=instance.tenant_id,
+            applicant_user_id=instance.applicant_user_id,
+            applicant_user_name=instance.applicant_user_name,
+            applicant_department_id=instance.applicant_department_id,
+            payload_snapshot=instance.payload_snapshot or {},
+            business_resource_id=instance.business_resource_id,
+            business_resource_type=instance.business_resource_type,
+            business_key=instance.business_key,
+            business_name=instance.business_name,
+            reason=instance.reason,
+            scenario_code=instance.scenario_code,
+        )
+        approvers = await handler.resolve_approvers(next_node.approver_config or {}, req)
+
+        if not approvers:
+            from bisheng.approval.domain.models.approval_instance import (
+                ApprovalException,
+                ApprovalExceptionType,
+            )
+            instance.status = ApprovalInstanceStatus.EXCEPTION
+            instance.current_node_name = next_node.node_name
+            await self.instance_repository.update_instance(instance)
+            await self.instance_repository.create_exception(
+                ApprovalException(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+                    detail={
+                        'scenario_code': instance.scenario_code,
+                        'business_key': instance.business_key,
+                        'current_node_name': next_node.node_name,
+                        'node_order': next_node.node_order,
+                    },
+                )
+            )
+            return
+
+        for approver_user_id in approvers:
+            await self.instance_repository.create_task(
+                ApprovalTask(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    flow_version_id=instance.flow_version_id,
+                    node_code=next_node.node_code,
+                    node_name=next_node.node_name,
+                    node_order=next_node.node_order,
+                    approver_user_id=approver_user_id,
+                    approver_source_type='resolved',
+                    node_mode=next_node.node_mode,
+                    status=ApprovalTaskStatus.PENDING,
+                )
+            )
+
+        instance.current_node_name = next_node.node_name
+        await self.instance_repository.update_instance(instance)
 
     @staticmethod
     async def _send_approval_notify(
