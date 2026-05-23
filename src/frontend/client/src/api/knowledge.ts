@@ -1655,13 +1655,19 @@ export interface LinkAsNewVersionResponse {
 /**
  * Link an existing standalone file to a document as a new version.
  * POST /api/v1/knowledge/space/document/link
+ *
+ * `skip403Redirect` opts out of the global 403 redirect AND routes any non-200
+ * business code through the unified interceptor pipeline — it translates
+ * api_errors.<code>, toasts it, and rejects the promise so onError fires.
  */
 export async function linkAsNewVersionApi(
     payload: LinkAsNewVersionPayload
 ): Promise<LinkAsNewVersionResponse> {
     const res = await request.post(
         `/api/v1/knowledge/space/document/link`,
-        payload
+        payload,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
     ) as ApiResponse<LinkAsNewVersionResponse>;
     return res.data;
 }
@@ -1678,7 +1684,10 @@ export interface SetPrimaryResponse {
  */
 export async function setPrimaryVersionApi(version_id: number): Promise<SetPrimaryResponse> {
     const res = await request.post(
-        `/api/v1/knowledge/space/version/${version_id}/set-primary`
+        `/api/v1/knowledge/space/version/${version_id}/set-primary`,
+        undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
     ) as ApiResponse<SetPrimaryResponse>;
     return res.data;
 }
@@ -1688,7 +1697,11 @@ export async function setPrimaryVersionApi(version_id: number): Promise<SetPrima
  * DELETE /api/v1/knowledge/space/version/{version_id}
  */
 export async function deleteFileVersionApi(version_id: number): Promise<void> {
-    await request.delete(`/api/v1/knowledge/space/version/${version_id}`);
+    await request.delete(
+        `/api/v1/knowledge/space/version/${version_id}`,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
+    );
 }
 
 /** Document entry returned by the keyword-search endpoint used in the link dialog */
@@ -1814,7 +1827,9 @@ export async function mergeIntoCurrentApi(
 ): Promise<LinkAsNewVersionResponse> {
     const res = await request.post(
         `/api/v1/knowledge/space/version/merge`,
-        payload
+        payload,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
     ) as ApiResponse<LinkAsNewVersionResponse>;
     return res.data;
 }
@@ -1824,5 +1839,10 @@ export async function mergeIntoCurrentApi(
  * POST /api/v1/knowledge/space/file/{file_id}/dismiss-similar
  */
 export async function dismissSimilarApi(file_id: number): Promise<void> {
-    await request.post(`/api/v1/knowledge/space/file/${file_id}/dismiss-similar`);
+    await request.post(
+        `/api/v1/knowledge/space/file/${file_id}/dismiss-similar`,
+        undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
+    );
 }

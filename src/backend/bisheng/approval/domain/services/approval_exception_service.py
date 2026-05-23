@@ -33,6 +33,7 @@ class ApprovalExceptionService:
         action: str,
         operator_user_id: int,
         approver_user_ids: list[int] | None = None,
+        ip_address: str | None = None,
     ):
         service = cls(instance_repository=ApprovalInstanceRepository)
         exception = await service._get_exception(exception_id)
@@ -48,6 +49,7 @@ class ApprovalExceptionService:
                 exception_id=exception_id,
                 instance_id=instance.id,
                 exception_type=exception.exception_type,
+                ip_address=ip_address,
             )
             return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
@@ -68,6 +70,7 @@ class ApprovalExceptionService:
                 instance_id=instance.id,
                 exception_type=exception.exception_type,
                 extra={'approver_user_ids': approver_user_ids},
+                ip_address=ip_address,
             )
             return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
@@ -84,6 +87,7 @@ class ApprovalExceptionService:
                 exception_id=exception_id,
                 instance_id=instance.id,
                 exception_type=exception.exception_type,
+                ip_address=ip_address,
             )
             return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
@@ -104,6 +108,7 @@ class ApprovalExceptionService:
                 exception_id=exception_id,
                 instance_id=instance.id,
                 exception_type=exception.exception_type,
+                ip_address=ip_address,
             )
             return {
                 'exception_id': exception_id,
@@ -136,6 +141,7 @@ class ApprovalExceptionService:
             exception_id=exception_id,
             instance_id=instance.id,
             exception_type=exception.exception_type,
+            ip_address=ip_address,
         )
         return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
 
@@ -146,6 +152,7 @@ class ApprovalExceptionService:
         exception_id: int,
         operator_user_id: int,
         reason: str,
+        ip_address: str | None = None,
     ):
         if not reason or not reason.strip():
             raise ValueError('cancel reason is required')
@@ -185,6 +192,7 @@ class ApprovalExceptionService:
             instance_id=instance.id,
             exception_type=exception.exception_type,
             reason=reason.strip(),
+            ip_address=ip_address,
         )
         # Notify applicant
         await cls._notify_user(
@@ -525,6 +533,7 @@ class ApprovalExceptionService:
         exception_type: str,
         reason: str | None = None,
         extra: dict | None = None,
+        ip_address: str | None = None,
     ) -> None:
         metadata = {'instance_id': instance_id, 'exception_type': exception_type}
         if extra:
@@ -538,4 +547,5 @@ class ApprovalExceptionService:
             target_id=str(exception_id),
             reason=reason,
             metadata=metadata,
+            ip_address=ip_address,
         )

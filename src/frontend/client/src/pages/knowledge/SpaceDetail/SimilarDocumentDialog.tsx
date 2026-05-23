@@ -249,12 +249,9 @@ function RightPanel({
             });
             onLinked(response);
         },
-        onError: () => {
-            showToast({
-                message: localize("com_knowledge.version.toast_link_failure"),
-                status: "error",
-            });
-        },
+        // The unified request interceptor already toasts api_errors.<code>
+        // when skip403Redirect is set, so onError here can be a no-op.
+        onError: () => undefined,
     });
 
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {

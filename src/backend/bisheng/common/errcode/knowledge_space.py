@@ -90,3 +90,19 @@ class SpaceTenantMismatchError(BaseErrorCode):
 class SpaceTagExistsError(BaseErrorCode):
     Code: int = 18050
     Msg: str = 'Tag already exists in this space'
+
+
+# —— Version management
+class VersionManagementDisabledError(BaseErrorCode):
+    Code: int = 18060
+    Msg: str = 'Version management is disabled.'
+
+
+class VersionLinkFileNotReadyError(BaseErrorCode):
+    Code: int = 18061
+    Msg: str = 'File must finish parsing before version management.'
+
+
+class VersionLinkTargetUnavailableError(BaseErrorCode):
+    Code: int = 18062
+    Msg: str = 'Target document is unavailable.'
