@@ -1919,6 +1919,7 @@
   "com_approval_status_rejected": "却下",
   "com_approval_grant_revoked": "権限取消済み",
   "com_approval_status_withdrawn": "取り下げ済み",
+  "com_approval_status_exception": "処理異常",
   "com_approval_status_executed": "承認完了",
   "com_approval_status_execute_failed": "実行失敗",
   "com_approval_status_label": "ステータス：",
