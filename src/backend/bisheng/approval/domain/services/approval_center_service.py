@@ -148,6 +148,7 @@ class ApprovalCenterService:
         operator_tenant_id: int,
         operator_is_admin: bool = False,
         comment: str | None = None,
+        ip_address: str | None = None,
     ):
         service = cls(instance_repository=ApprovalInstanceRepository)
         await service.decide_task(
@@ -158,6 +159,7 @@ class ApprovalCenterService:
             operator_tenant_id=operator_tenant_id,
             operator_is_admin=operator_is_admin,
             comment=comment,
+            ip_address=ip_address,
         )
         task = await ApprovalInstanceRepository.get_task(task_id)
         instance = await ApprovalInstanceRepository.get_instance(task.instance_id) if task else None
@@ -349,6 +351,7 @@ class ApprovalCenterService:
         operator_user_id: int,
         operator_user_name: str | None = None,
         reason: str | None = None,
+        ip_address: str | None = None,
     ):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
@@ -385,6 +388,7 @@ class ApprovalCenterService:
             metadata={'scenario_code': instance.scenario_code},
             operator_name=operator_user_name,
             object_name=instance.business_name,
+            ip_address=ip_address,
         )
         # Notify approvers who had tasks on this instance
         task_approver_ids = list({t.approver_user_id for t in tasks if t.approver_user_id != operator_user_id})
@@ -409,6 +413,7 @@ class ApprovalCenterService:
         operator_user_id: int,
         operator_user_name: str | None = None,
         reason: str | None = None,
+        ip_address: str | None = None,
     ):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
@@ -481,6 +486,7 @@ class ApprovalCenterService:
             metadata={'scenario_code': new_instance.scenario_code, 'original_instance_id': instance_id},
             operator_name=operator_user_name,
             object_name=new_instance.business_name,
+            ip_address=ip_address,
         )
         return await cls.get_instance_detail(
             instance_id=new_instance.id,
@@ -586,6 +592,7 @@ class ApprovalCenterService:
         instance_id: int,
         operator_user_id: int,
         reason: str | None = None,
+        ip_address: str | None = None,
     ):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
@@ -614,6 +621,7 @@ class ApprovalCenterService:
                 'applicant_user_id': instance.applicant_user_id,
             },
             object_name=instance.business_name,
+            ip_address=ip_address,
         )
         return {'revoked_keys': [row.menu_key for row in rows], 'instance_id': instance_id}
 
@@ -627,6 +635,7 @@ class ApprovalCenterService:
         operator_tenant_id: int,
         operator_is_admin: bool = False,
         comment: str | None = None,
+        ip_address: str | None = None,
     ) -> None:
         task = await self.instance_repository.get_task(task_id)
         if task is None:
@@ -676,6 +685,7 @@ class ApprovalCenterService:
                 metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
                 operator_name=operator_user_name,
                 object_name=instance.business_name,
+                ip_address=ip_address,
             )
             await self.__class__._send_approval_notify(
                 sender=operator_user_id,
@@ -710,6 +720,7 @@ class ApprovalCenterService:
             metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
             operator_name=operator_user_name,
             object_name=instance.business_name,
+            ip_address=ip_address,
         )
 
         if task.node_mode == 'or':
@@ -921,6 +932,7 @@ class ApprovalCenterService:
         operator_name: str | None = None,
         object_name: str | None = None,
         target_type: str = 'approval_instance',
+        ip_address: str | None = None,
     ) -> None:
         await AuditLogDao.ainsert_v2(
             tenant_id=tenant_id,
@@ -933,4 +945,5 @@ class ApprovalCenterService:
             metadata=metadata,
             operator_name=operator_name,
             object_name=object_name,
+            ip_address=ip_address,
         )

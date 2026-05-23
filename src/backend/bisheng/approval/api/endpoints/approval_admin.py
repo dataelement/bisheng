@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
@@ -8,6 +8,7 @@ from bisheng.approval.domain.services.approval_scenario_admin_service import App
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/approval/admin', tags=['approval'])
 
@@ -337,6 +338,7 @@ class CancelExceptionReq(BaseModel):
 async def retry_exception(
     exception_id: int,
     req: ExceptionRetryReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     await _ensure_admin(login_user)
@@ -346,6 +348,7 @@ async def retry_exception(
             action=req.action,
             operator_user_id=login_user.user_id,
             approver_user_ids=req.approver_user_ids,
+            ip_address=get_request_ip(request),
         )
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
@@ -356,6 +359,7 @@ async def retry_exception(
 async def cancel_exception(
     exception_id: int,
     req: CancelExceptionReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     await _ensure_admin(login_user)
@@ -364,5 +368,6 @@ async def cancel_exception(
             exception_id=exception_id,
             operator_user_id=login_user.user_id,
             reason=req.reason,
+            ip_address=get_request_ip(request),
         )
     )

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/approval', tags=['approval'])
 
@@ -44,6 +45,7 @@ async def get_my_task_detail(task_id: int, login_user: UserPayload = Depends(Use
 async def decide_task(
     task_id: int,
     req: ApprovalTaskDecisionReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.decide_task_api(
@@ -54,6 +56,7 @@ async def decide_task(
         operator_tenant_id=login_user.tenant_id,
         operator_is_admin=login_user.is_admin(),
         comment=req.comment,
+        ip_address=get_request_ip(request),
     )
     return resp_200(data)
 
@@ -77,6 +80,7 @@ async def get_instance_detail(instance_id: int, login_user: UserPayload = Depend
 async def withdraw_instance(
     instance_id: int,
     req: ApprovalResubmitReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.withdraw_instance(
@@ -84,6 +88,7 @@ async def withdraw_instance(
         operator_user_id=login_user.user_id,
         operator_user_name=login_user.user_name,
         reason=req.reason,
+        ip_address=get_request_ip(request),
     )
     return resp_200(data)
 
@@ -92,12 +97,14 @@ async def withdraw_instance(
 async def resubmit_instance(
     instance_id: int,
     req: ApprovalResubmitReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.resubmit_instance(
         instance_id=instance_id,
         operator_user_id=login_user.user_id,
         reason=req.reason,
+        ip_address=get_request_ip(request),
     )
     return resp_200(data)
 
@@ -140,11 +147,13 @@ async def apply_menu_access(
 async def revoke_menu_grant(
     instance_id: int,
     req: ApprovalResubmitReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.revoke_menu_grant(
         instance_id=instance_id,
         operator_user_id=login_user.user_id,
         reason=req.reason,
+        ip_address=get_request_ip(request),
     )
     return resp_200(data)
