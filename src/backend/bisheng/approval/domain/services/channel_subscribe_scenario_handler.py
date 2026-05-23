@@ -21,10 +21,7 @@ class ChannelSubscribeScenarioHandler:
 
     async def build_detail(self, req) -> dict:
         return {
-            'channel_id': req.payload_snapshot.get('channel_id'),
             'channel_name': req.payload_snapshot.get('channel_name') or req.business_name,
-            'applicant_user_id': req.applicant_user_id,
-            'applicant_user_name': req.applicant_user_name,
         }
 
     async def build_business_link(self, req) -> dict:

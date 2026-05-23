@@ -23,10 +23,7 @@ class KnowledgeSpaceSubscribeScenarioHandler:
 
     async def build_detail(self, req) -> dict:
         return {
-            'space_id': req.payload_snapshot.get('space_id'),
             'space_name': req.payload_snapshot.get('space_name') or req.business_name,
-            'applicant_user_id': req.applicant_user_id,
-            'applicant_user_name': req.applicant_user_name,
         }
 
     async def build_business_link(self, req) -> dict:

@@ -120,14 +120,18 @@ function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
   );
 }
 
+const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
+
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
   const map: Record<string, string> = {
-    menu_key:   localize("com_approval_field_menu_key" as any),
-    menu_name:  localize("com_approval_field_menu_name" as any),
-    reason:     localize("com_approval_field_reason" as any),
-    space_type: localize("com_approval_field_space_type" as any),
-    channel_id: localize("com_approval_field_channel_id" as any),
-    space_id:   localize("com_approval_field_space_id" as any),
+    menu_key:      localize("com_approval_field_menu_key" as any),
+    menu_name:     localize("com_approval_field_menu_name" as any),
+    reason:        localize("com_approval_field_reason" as any),
+    space_type:    localize("com_approval_field_space_type" as any),
+    space_name:    localize("com_approval_field_space_name" as any),
+    channel_id:    localize("com_approval_field_channel_id" as any),
+    channel_name:  localize("com_approval_field_channel_name" as any),
+    space_id:      localize("com_approval_field_space_id" as any),
   };
   return map[key] ?? key;
 }
@@ -508,7 +512,9 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.instance_status ?? detail.status}` as any, { defaultValue: detail.instance_status || detail.status || "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(
+    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
+  );
   const showContent = detailEntries.length > 0;
 
   return (
@@ -576,9 +582,8 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
-  // menu_key is an internal identifier — not meaningful to end users.
   const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
-    ([k, v]) => k !== "menu_key" && v !== undefined && v !== null && v !== "",
+    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
   );
 
   return (
