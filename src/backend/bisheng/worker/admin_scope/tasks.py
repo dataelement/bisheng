@@ -17,9 +17,9 @@ The scheduled entry is registered by ``CeleryConf.validate`` in
 ``bisheng.core.config.settings``.
 """
 
-import asyncio
 import logging
 
+from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,7 @@ logger = logging.getLogger(__name__)
     name='bisheng.worker.admin_scope.tasks.admin_scope_cleanup',
 )
 def admin_scope_cleanup():
-    """Kickoff — hands control to the asyncio loop."""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_cleanup_async())
-    finally:
-        loop.close()
+    run_async_task(_cleanup_async)
 
 
 async def _cleanup_async() -> None:

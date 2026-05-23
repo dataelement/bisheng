@@ -19,9 +19,9 @@ The scheduled entry is registered by ``CeleryConf.validate`` in
 ``bisheng.core.config.settings``.
 """
 
-import asyncio
 import logging
 
+from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
@@ -31,12 +31,7 @@ BATCH_SIZE = 500
 
 @bisheng_celery.task(acks_late=True, time_limit=3600, soft_time_limit=3000)
 def reconcile_user_tenant_assignments():
-    """Kickoff — hands control to the asyncio loop."""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_reconcile_async())
-    finally:
-        loop.close()
+    run_async_task(_reconcile_async)
 
 
 async def _reconcile_async() -> None:
