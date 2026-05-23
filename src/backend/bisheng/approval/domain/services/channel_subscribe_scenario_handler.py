@@ -29,11 +29,55 @@ class ChannelSubscribeScenarioHandler:
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
         sources = node_config.get('sources') or []
-        if sources:
-            from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
-            return await resolve_approvers_from_sources(sources, req)
-        approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
-        return [int(one) for one in approver_ids]
+        if not sources:
+            approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
+            return [int(one) for one in approver_ids]
+
+        from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
+        from bisheng.common.models.space_channel_member import UserRoleEnum
+
+        channel_source_types = {'channel_admin', 'channel_owner', 'channel_manager'}
+        has_channel_source = any(s.get('type') in channel_source_types for s in sources)
+
+        channel_admin_ids: list[int] = []
+        if has_channel_source:
+            channel_id = req.payload_snapshot.get('channel_id') or req.business_resource_id
+            if channel_id:
+                try:
+                    creators = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id=str(channel_id), role=UserRoleEnum.CREATOR,
+                    )
+                    admins = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id=str(channel_id), role=UserRoleEnum.ADMIN,
+                    )
+                    seen_admin: set[int] = set()
+                    for m in creators + admins:
+                        if m.user_id not in seen_admin:
+                            seen_admin.add(m.user_id)
+                            channel_admin_ids.append(m.user_id)
+                except Exception:
+                    logger.exception('resolve_approvers: failed to load channel admins for channel_id=%s', channel_id)
+
+        seen: set[int] = set()
+        result: list[int] = []
+
+        for source in sources:
+            source_type = source.get('type', '')
+            if source_type in channel_source_types:
+                for uid in channel_admin_ids:
+                    if uid not in seen:
+                        seen.add(uid)
+                        result.append(uid)
+
+        generic_sources = [s for s in sources if s.get('type') not in channel_source_types]
+        if generic_sources:
+            generic_ids = await resolve_approvers_from_sources(generic_sources, req)
+            for uid in generic_ids:
+                if uid not in seen:
+                    seen.add(uid)
+                    result.append(uid)
+
+        return result
 
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         membership = await self._get_membership(payload_snapshot)
