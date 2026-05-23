@@ -885,6 +885,8 @@ class ChannelService:
 
         if channel.visibility == ChannelVisibilityEnum.REVIEW:
             gate = self.approval_gate or self._build_channel_approval_gate()
+            from bisheng.database.models.department import UserDepartmentDao
+            primary_dept = await UserDepartmentDao.aget_user_primary_department(login_user.user_id)
             gate_result = await gate.request_or_pass(
                 ApprovalGateRequest(
                     tenant_id=login_user.tenant_id,
@@ -895,6 +897,7 @@ class ChannelService:
                     business_name=channel.name,
                     applicant_user_id=login_user.user_id,
                     applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+                    applicant_department_id=primary_dept.department_id if primary_dept else None,
                     payload_snapshot={
                         'channel_id': str(channel.id),
                         'channel_name': channel.name,

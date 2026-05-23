@@ -37,7 +37,7 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -3642,6 +3642,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if space.auth_type == AuthTypeEnum.APPROVAL:
             gate = self.approval_gate or self._build_space_approval_gate()
+            primary_dept = await UserDepartmentDao.aget_user_primary_department(self.login_user.user_id)
             gate_result = await gate.request_or_pass(
                 ApprovalGateRequest(
                     tenant_id=self.login_user.tenant_id,
@@ -3652,6 +3653,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     business_name=space.name,
                     applicant_user_id=self.login_user.user_id,
                     applicant_user_name=self.login_user.user_name,
+                    applicant_department_id=primary_dept.department_id if primary_dept else None,
                     payload_snapshot={
                         "space_id": space.id,
                         "space_name": space.name,

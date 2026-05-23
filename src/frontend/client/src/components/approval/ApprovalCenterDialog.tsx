@@ -571,6 +571,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
+  const isTerminal = ["executed", "rejected", "withdrawn", "cancelled"].includes(detail.status ?? "");
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"),      serialNo],
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
@@ -578,7 +579,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
     [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
-    [localize("com_approval_field_current_approver"),detail.current_approver_names || "--"],
+    ...(!isTerminal ? [[localize("com_approval_field_current_approver"), detail.current_approver_names || "--"] as [string, string]] : []),
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
@@ -639,25 +640,28 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               (l) => l.action !== "submitted" && l.action !== "resubmitted"
             );
             return nodes.map((node: any, i) => {
-              // Find the matching task for this node (if it exists)
-              const matchedTask = (detail.tasks || []).find(
+              // Collect all tasks for this node (multi-approver nodes have multiple tasks)
+              const matchedTasks = (detail.tasks || []).filter(
                 (t) => t.node_order === node.node_order || t.node_name === node.node_name
               );
-              const s = String(matchedTask?.status || (node.task_id ? node.status : "not_started")).toLowerCase();
-              const isNotStarted = !matchedTask && !node.task_id;
+              const isNotStarted = matchedTasks.length === 0 && !node.task_id;
+              // Aggregate node status: rejected > approved > pending > others
+              const aggStatus = matchedTasks.length === 0
+                ? (node.task_id ? (node.status ?? "pending") : "not_started")
+                : matchedTasks.some((t) => t.status === "rejected") ? "rejected"
+                : matchedTasks.some((t) => t.status === "approved") ? "approved"
+                : matchedTasks.some((t) => t.status === "pending") ? "pending"
+                : (matchedTasks[0]?.status ?? "pending");
+              const s = aggStatus.toLowerCase();
               const dotColor = isNotStarted ? "bg-[#e5e6eb]" :
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
                 (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
-              const statusLabel = isNotStarted ? localize("com_approval_node_not_started") :
-                s === "approved" ? localize("com_approval_status_approved") :
-                s === "rejected" ? localize("com_approval_status_rejected") :
-                s === "pending" ? localize("com_approval_status_pending") :
-                s === "skipped" ? localize("com_approval_status_skipped") :
-                localize("com_approval_status_cancelled");
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
-              const approverName = matchedTask?.approver_user_name;
-              const comment = matchedTask?.comment;
-              const updateTime = matchedTask?.update_time;
+              // Comment from the task that decided the outcome, or the first with a comment
+              const decidingTask = matchedTasks.find((t) => t.status === "rejected" || t.status === "approved");
+              const comment = (decidingTask ?? matchedTasks[0])?.comment;
+              // Latest update_time among all matched tasks
+              const updateTime = matchedTasks.map((t) => t.update_time).filter(Boolean).sort().at(-1);
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
                   <div className="flex flex-col items-center">
@@ -668,10 +672,32 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                     <div className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
                       {node.node_name || "--"}
                     </div>
-                    <div className="mt-0.5 text-[12px] text-[#86909c]">
-                      {approverName && <span>{approverName} · </span>}
-                      {statusLabel}
-                    </div>
+                    {matchedTasks.length > 0 ? (
+                      matchedTasks.map((t) => {
+                        const ts = String(t.status || "").toLowerCase();
+                        const tLabel = ts === "approved" ? localize("com_approval_status_approved") :
+                          ts === "rejected" ? localize("com_approval_status_rejected") :
+                          ts === "pending" ? localize("com_approval_status_pending") :
+                          ts === "skipped" ? localize("com_approval_status_skipped") :
+                          ts === "cancelled" ? localize("com_approval_status_cancelled") :
+                          localize("com_approval_node_not_started");
+                        return (
+                          <div key={t.task_id ?? t.id} className="mt-0.5 text-[12px] text-[#86909c]">
+                            {t.approver_user_name && <span>{t.approver_user_name} · </span>}
+                            <span>{tLabel}</span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="mt-0.5 text-[12px] text-[#86909c]">{
+                        isNotStarted ? localize("com_approval_node_not_started") :
+                        s === "approved" ? localize("com_approval_status_approved") :
+                        s === "rejected" ? localize("com_approval_status_rejected") :
+                        s === "pending" ? localize("com_approval_status_pending") :
+                        s === "skipped" ? localize("com_approval_status_skipped") :
+                        localize("com_approval_status_cancelled")
+                      }</div>
+                    )}
                     {comment && (
                       <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>
                     )}
