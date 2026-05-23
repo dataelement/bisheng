@@ -205,7 +205,12 @@ async def update_flow(
 @router.get('/flows/{flow_definition_id}/nodes')
 async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id))
+    try:
+        data = await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
+    except ValueError:
+        from bisheng.common.errcode.approval import ApprovalFlowNotFoundError
+        return ApprovalFlowNotFoundError.return_resp()
+    return resp_200(data)
 
 
 @router.post('/flows/{flow_definition_id}/nodes')
