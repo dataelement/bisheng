@@ -110,6 +110,7 @@ async def get_knowledge_space_service(
         session: AsyncSession = Depends(get_db_session),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+        doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
 ) -> 'KnowledgeSpaceService':
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
@@ -117,6 +118,7 @@ async def get_knowledge_space_service(
     service = _SvcClass(request=request, login_user=login_user)
     service.message_service = message_service
     service.version_repo = version_repo
+    service.doc_repo = doc_repo
     return service
 
 

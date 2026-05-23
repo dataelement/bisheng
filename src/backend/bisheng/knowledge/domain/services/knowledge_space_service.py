@@ -116,6 +116,9 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
         KnowledgeDocumentVersionRepository,
     )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
+        KnowledgeDocumentRepository,
+    )
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
@@ -168,6 +171,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
         self.version_repo: Optional["KnowledgeDocumentVersionRepository"] = None
+        # Injected by DI factory alongside version_repo. Used by the version-link
+        # cascade during file deletion to clear the logical-document anchor
+        # whenever the whole chain (or its primary) gets removed.
+        self.doc_repo: Optional["KnowledgeDocumentRepository"] = None
 
     def _ensure_space_async_task_tenant_consistency(
         self, space: Knowledge, operation: str
@@ -2788,15 +2795,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("knowledge_file", child.id))
 
-        if file_ids:
+        expanded_file_ids = (
+            await self._cascade_version_links_on_delete(file_ids) if file_ids else []
+        )
+        if expanded_file_ids:
             delete_knowledge_file_celery.delay(
-                file_ids=file_ids, knowledge_id=folder.knowledge_id, clear_minio=True
+                file_ids=expanded_file_ids,
+                knowledge_id=folder.knowledge_id,
+                clear_minio=True,
             )
+            # Sibling files pulled in via primary-of-multi-version expansion
+            # also need their tuples cleaned up.
+            for sibling_id in set(expanded_file_ids) - set(file_ids):
+                resource_tuples_to_cleanup.append(("knowledge_file", sibling_id))
 
         await self.update_folder_update_time(folder.file_level_path)
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
-        await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
+        await KnowledgeFileDao.adelete_batch(expanded_file_ids + floder_ids)
 
         # Prune channel ➜ knowledge-folder sync bindings that target the deleted
         # folders so the Celery sync worker stops referencing a tombstone.
@@ -2945,15 +2961,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ]
             if not created_file_ids:
                 return
+            # Most rollback paths fire before the V1 doc/version rows are
+            # written, so the cascade is a defensive no-op here. Kept for the
+            # case where a partial create leaves stale chain rows.
+            expanded_ids = await self._cascade_version_links_on_delete(created_file_ids)
             try:
                 await self._cleanup_resource_tuples(
                     [
                         ("knowledge_file", created_file_id)
-                        for created_file_id in created_file_ids
+                        for created_file_id in expanded_ids
                     ]
                 )
             finally:
-                await KnowledgeFileDao.adelete_batch(created_file_ids)
+                await KnowledgeFileDao.adelete_batch(expanded_ids)
 
         try:
             for one in file_path:
@@ -3117,6 +3137,64 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_record.updater_name = self.login_user.user_name
         return await KnowledgeFileDao.async_update(file_record)
 
+    async def _cascade_version_links_on_delete(
+        self, file_ids: List[int]
+    ) -> List[int]:
+        """Resolve version-chain cleanup before hard-deleting KnowledgeFile rows.
+
+        Product spec (2026-05-23):
+          • non-primary version in a multi-version chain → drop only that row
+          • primary version OR sole V1 → drop the whole chain (every version,
+            every sibling file, and the document anchor)
+          • file with no version row (legacy / pre-version-mgmt) → untouched
+
+        Returns the union of input file_ids and any sibling file_ids picked up
+        via primary-of-multi-version expansion, so the caller can run the same
+        tuple / index / minio cleanup against them in one shot.
+
+        No-op (returns input as-is) when the repos are not injected — keeps the
+        flow safe for any code path that constructs the service without the
+        version DI wiring.
+        """
+        if not self.version_repo or not self.doc_repo or not file_ids:
+            return list(file_ids)
+
+        pending_per_doc: Dict[int, list] = {}
+        for fid in file_ids:
+            v = await self.version_repo.find_by_knowledge_file_id(fid)
+            if v is None:
+                continue
+            pending_per_doc.setdefault(v.document_id, []).append(v)
+
+        expanded: set[int] = set(file_ids)
+        versions_to_delete: List[int] = []
+        documents_to_delete: List[int] = []
+
+        for doc_id, pending_versions in pending_per_doc.items():
+            chain = await self.version_repo.find_by_document_id(doc_id)
+            pending_ids = {v.id for v in pending_versions}
+            primary_in_pending = any(v.is_primary for v in pending_versions)
+            all_in_chain_pending = len(chain) == len(pending_ids)
+
+            if primary_in_pending or all_in_chain_pending:
+                for v in chain:
+                    versions_to_delete.append(v.id)
+                    expanded.add(v.knowledge_file_id)
+                documents_to_delete.append(doc_id)
+            else:
+                for v in pending_versions:
+                    versions_to_delete.append(v.id)
+
+        for vid in versions_to_delete:
+            await self.version_repo.delete(vid)
+        for did in documents_to_delete:
+            # Clear the pointer before deleting the anchor — defensive against
+            # any future FK constraint that might be added to primary_version_id.
+            await self.doc_repo.update_primary_version_id(did, None)
+            await self.doc_repo.delete(did)
+
+        return list(expanded)
+
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
@@ -3129,11 +3207,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_file")
 
-        await KnowledgeFileDao.adelete_batch([file_id])
+        expanded_ids = await self._cascade_version_links_on_delete([file_id])
+        await KnowledgeFileDao.adelete_batch(expanded_ids)
         delete_knowledge_file_celery.delay(
-            file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True
+            file_ids=expanded_ids,
+            knowledge_id=file_record.knowledge_id,
+            clear_minio=True,
         )
-        await self._cleanup_resource_tuples([("knowledge_file", file_id)])
+        await self._cleanup_resource_tuples(
+            [("knowledge_file", fid) for fid in expanded_ids]
+        )
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(
             file_record.knowledge_id
@@ -3364,12 +3447,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 direct_files.append(file_record)
             direct_file_ids = [file.id for file in direct_files]
-            await KnowledgeFileDao.adelete_batch(direct_file_ids)
+            expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
+            await KnowledgeFileDao.adelete_batch(expanded_file_ids)
             delete_knowledge_file_celery.delay(
-                file_ids=direct_file_ids, knowledge_id=knowledge.id, clear_minio=True
+                file_ids=expanded_file_ids,
+                knowledge_id=knowledge.id,
+                clear_minio=True,
             )
             await self._cleanup_resource_tuples(
-                [("knowledge_file", file_id) for file_id in direct_file_ids]
+                [("knowledge_file", file_id) for file_id in expanded_file_ids]
             )
 
         # Prune channel ➜ knowledge-folder sync bindings for the top-level
