@@ -106,3 +106,13 @@ class VersionLinkFileNotReadyError(BaseErrorCode):
 class VersionLinkTargetUnavailableError(BaseErrorCode):
     Code: int = 18062
     Msg: str = 'Target document is unavailable.'
+
+
+class VersionLinkSourceMultiVersionError(BaseErrorCode):
+    Code: int = 18063
+    Msg: str = 'Source document already has multiple versions and cannot be linked to another document.'
+
+
+class VersionLinkSourceFileMissingError(BaseErrorCode):
+    Code: int = 18064
+    Msg: str = 'Source file no longer exists or has been deleted.'

@@ -1343,6 +1343,8 @@
     "18060": "Version management is disabled.",
     "18061": "File must finish parsing before version management.",
     "18062": "Target document is unavailable.",
+    "18063": "Source document already has multiple versions and cannot be linked to another document.",
+    "18064": "Source file no longer exists or has been deleted.",
     "18100": "Approval request not found",
     "18101": "No permission to view or process this approval",
     "18102": "Approval task already processed",
