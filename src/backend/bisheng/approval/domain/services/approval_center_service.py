@@ -718,7 +718,7 @@ class ApprovalCenterService:
                     sibling.status = ApprovalTaskStatus.SKIPPED
                     sibling.acted_at = datetime.utcnow()
                     await self.instance_repository.update_task(sibling)
-            await self._advance_after_node_approved(instance=instance, current_node_order=task.node_order)
+            await self._advance_after_node_approved(instance=instance, current_node_order=task.node_order, operator_user_id=operator_user_id)
             return
 
         # same_node_tasks was fetched before the current task was updated, so the
@@ -729,13 +729,14 @@ class ApprovalCenterService:
             for t in same_node_tasks
         )
         if all_same_node_approved:
-            await self._advance_after_node_approved(instance=instance, current_node_order=task.node_order)
+            await self._advance_after_node_approved(instance=instance, current_node_order=task.node_order, operator_user_id=operator_user_id)
 
     async def _advance_after_node_approved(
         self,
         *,
         instance: ApprovalInstance,
         current_node_order: int,
+        operator_user_id: int,
     ) -> None:
         """After a node is fully approved, either advance to the next node or finalize the instance."""
         next_node = None
@@ -764,6 +765,13 @@ class ApprovalCenterService:
                 )
             )
             self.__class__._dispatch_outbox(outbox.id)
+            await self.__class__._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=[instance.applicant_user_id],
+                action_code='approval_instance_approved',
+                business_name=instance.business_name or '',
+                instance_id=instance.id,
+            )
             return
 
         # Resolve approvers for the next node via the scenario handler
@@ -790,6 +798,13 @@ class ApprovalCenterService:
                 )
             )
             self.__class__._dispatch_outbox(outbox.id)
+            await self.__class__._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=[instance.applicant_user_id],
+                action_code='approval_instance_approved',
+                business_name=instance.business_name or '',
+                instance_id=instance.id,
+            )
             return
 
         req = SimpleNamespace(

@@ -387,6 +387,7 @@
   "com_notifications_action_generic_with_target": "通知を送信しました — {{target}}",
   "com_notifications_action_request_menu_access": "メニュー「{{target}}」へのアクセスを申請しました",
   "com_notifications_action_approval_task_rejected": "「{{target}}」の審査申請を却下しました",
+  "com_notifications_action_approval_instance_approved": "「{{target}}」の審査申請を承認しました",
   "com_notifications_action_approval_instance_withdrawn": "「{{target}}」の審査申請を取り下げました。対応不要です",
   "com_notifications_action_approval_exception_cancelled": "「{{target}}」の審査申請がキャンセルされました",
   "com_notifications_action_approval_exception_route_missing": "の審査申請でルート未マッチの例外が発生しました。対応が必要です:「{{target}}」",

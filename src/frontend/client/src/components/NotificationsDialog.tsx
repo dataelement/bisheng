@@ -55,6 +55,7 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     // approval center notifications
     request_menu_access: "com_notifications_action_request_menu_access",
     approval_task_rejected: "com_notifications_action_approval_task_rejected",
+    approval_instance_approved: "com_notifications_action_approval_instance_approved",
     approval_instance_withdrawn: "com_notifications_action_approval_instance_withdrawn",
     approval_exception_cancelled: "com_notifications_action_approval_exception_cancelled",
     approval_exception_route_missing: "com_notifications_action_approval_exception_route_missing",
@@ -129,7 +130,9 @@ export function NotificationsDialog({
         actionCode === "rejected_knowledge_space" ||
         actionCode === "approved_department_knowledge_space_upload" ||
         actionCode === "rejected_department_knowledge_space_upload" ||
-        actionCode === "sensitive_rejected_department_knowledge_space_upload";
+        actionCode === "sensitive_rejected_department_knowledge_space_upload" ||
+        actionCode === "approval_instance_approved" ||
+        actionCode === "approval_task_rejected";
 
     const scanAndScheduleNotifyAutoRead = () => {
         const root =
