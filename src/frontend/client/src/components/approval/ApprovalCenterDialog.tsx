@@ -208,14 +208,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
-      // Auto-select from the currently active sub-filter so the right panel
-      // always shows an item that is visible in the left list.
-      const visibleItems = preferredId
-        ? resp.data
-        : taskFilter === "pending_me"
-          ? resp.data.filter((t) => t.status === "pending")
-          : resp.data.filter((t) => t.status !== "pending");
-      const nextId = preferredId ?? getId(visibleItems[0], "task");
+      const allIds = new Set(resp.data.map((t) => getId(t, "task")));
+      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const visibleItems = taskFilter === "pending_me"
+        ? resp.data.filter((t) => t.status === "pending")
+        : resp.data.filter((t) => t.status !== "pending");
+      const nextId = validPreferred ?? getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
       if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
       else setTaskDetail(null);
@@ -227,14 +225,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
-      // Auto-select from the currently active sub-filter so the right panel
-      // always shows an item that is visible in the left list.
-      const visibleItems = preferredId
-        ? resp.data
-        : requestsFilter === "in_progress"
-          ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
-          : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
-      const nextId = preferredId ?? getId(visibleItems[0], "instance");
+      const allIds = new Set(resp.data.map((i) => getId(i, "instance")));
+      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const visibleItems = requestsFilter === "in_progress"
+        ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
+        : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+      const nextId = validPreferred ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
       else setRequestDetail(null);
@@ -251,8 +247,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   useEffect(() => {
     if (!open) return;
-    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? selectedTaskId);
-    else void loadRequests(target?.instanceId ?? selectedInstanceId);
+    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? null);
+    else void loadRequests(target?.instanceId ?? null);
   }, [open, activeTab]);
 
   // Auto-select first visible item when sub-filter changes
