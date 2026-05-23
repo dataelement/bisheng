@@ -45,6 +45,20 @@ import { useTranslation } from "react-i18next";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+function formatDateTime(isoStr?: string): string {
+  if (!isoStr) return "--";
+  try {
+    const d = new Date(isoStr);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return isoStr;
+  }
+}
+
+// Keys shown separately in the business-info row or purely internal — skip in detail table
+const HIDDEN_DETAIL_KEYS = new Set(["business_key", "scenario_code", "exception_type"]);
+
 function StatusBadge({ enabled }: { enabled?: boolean }) {
   return enabled ? (
     <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-green-50 text-green-600 border border-green-200">
@@ -465,7 +479,7 @@ function RouteDialog({
               <select
                 value={flowId}
                 onChange={(e) => setFlowId(e.target.value)}
-                className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+                className={`mt-1 block h-10 w-full rounded-lg border bg-background-primary px-3 text-sm text-text-primary outline-none ${!flowId ? "border-red-400" : "border-border-subtle"}`}
               >
                 <option value="">{t("approvalPage.selectFlow")}</option>
                 {flows.map((f) => (
@@ -474,6 +488,9 @@ function RouteDialog({
                   </option>
                 ))}
               </select>
+              {!flowId && (
+                <p className="mt-1 text-xs text-red-500">{t("approvalPage.flowRequiredHint")}</p>
+              )}
             </label>
           )}
         </div>
@@ -1302,7 +1319,7 @@ export default function ApprovalPage() {
             <button
               key={tab}
               type="button"
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { setActiveTab(tab); void loadPage(); }}
               className={`rounded-t px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? "border border-b-0 border-border-subtle bg-white text-primary"
@@ -1732,7 +1749,12 @@ export default function ApprovalPage() {
                                 ? t("approvalPage.exceptionTypeFailed")
                                 : item.exception_type}
                         </span>
-                        {/* resolved status badge */}
+                        {/* open / resolved status badge */}
+                        {item.status === "open" && (
+                          <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
+                            {t("approvalPage.exceptionStatusOpen")}
+                          </span>
+                        )}
                         {item.status === "resolved" && (
                           <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
                             {t("approvalPage.exceptionStatusResolved")}
@@ -1743,8 +1765,7 @@ export default function ApprovalPage() {
                       <div className="mt-1 text-xs text-text-secondary">
                         {t("approvalPage.exceptionInstanceInfo", {
                           id: item.instance_id ?? "--",
-                          status: item.status ?? "--",
-                          time: item.create_time ?? "--",
+                          time: formatDateTime(item.create_time),
                         })}
                       </div>
                     </div>
@@ -1840,11 +1861,13 @@ export default function ApprovalPage() {
                     </div>
                   )}
                   {/* Detail key-value */}
-                  {item.detail && Object.keys(item.detail).length > 0 && (
-                    <div className="mt-3 rounded-lg border border-border-subtle bg-gray-50 divide-y divide-border-subtle">
-                      {Object.entries(item.detail)
-                        .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                        .map(([k, v]) => (
+                  {item.detail && Object.keys(item.detail).length > 0 && (() => {
+                    const visibleEntries = Object.entries(item.detail).filter(
+                      ([k, v]) => !HIDDEN_DETAIL_KEYS.has(k) && v !== null && v !== undefined && v !== "",
+                    );
+                    return visibleEntries.length > 0 ? (
+                      <div className="mt-3 rounded-lg border border-border-subtle bg-gray-50 divide-y divide-border-subtle">
+                        {visibleEntries.map(([k, v]) => (
                           <div key={k} className="flex items-start gap-3 px-3 py-2 text-xs">
                             <span className="w-36 shrink-0 text-text-tertiary">
                               {t(`approvalPage.exceptionDetailKey_${k}` as any, { defaultValue: k })}
@@ -1852,8 +1875,9 @@ export default function ApprovalPage() {
                             <span className="break-all text-text-primary">{String(v)}</span>
                           </div>
                         ))}
-                    </div>
-                  )}
+                      </div>
+                    ) : null;
+                  })()}
                   {/* error_summary for execute_failed */}
                   {item.exception_type === "execute_failed" && item.error_summary && (
                     <div className="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 break-all">

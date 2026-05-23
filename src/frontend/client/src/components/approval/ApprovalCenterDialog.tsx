@@ -120,6 +120,18 @@ function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
   );
 }
 
+function formatTitle(
+  scenarioCode: string | undefined,
+  businessName: string | undefined | null,
+  localize: ReturnType<typeof useLocalize>,
+): string {
+  if (!businessName) return "--";
+  if (scenarioCode === "menu_access_request") {
+    return localize("com_approval_menu_access_title" as any, { menuName: businessName, defaultValue: `申请访问${businessName}菜单` }) as string;
+  }
+  return businessName;
+}
+
 const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
 
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
@@ -167,6 +179,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [decisionComment, setDecisionComment] = useState("");
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -207,14 +220,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
-      // Auto-select from the currently active sub-filter so the right panel
-      // always shows an item that is visible in the left list.
-      const visibleItems = preferredId
-        ? resp.data
-        : taskFilter === "pending_me"
-          ? resp.data.filter((t) => t.status === "pending")
-          : resp.data.filter((t) => t.status !== "pending");
-      const nextId = preferredId ?? getId(visibleItems[0], "task");
+      const allIds = new Set(resp.data.map((t) => getId(t, "task")));
+      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const visibleItems = taskFilter === "pending_me"
+        ? resp.data.filter((t) => t.status === "pending")
+        : resp.data.filter((t) => t.status !== "pending");
+      const nextId = validPreferred ?? getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
       if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
       else setTaskDetail(null);
@@ -226,14 +237,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
-      // Auto-select from the currently active sub-filter so the right panel
-      // always shows an item that is visible in the left list.
-      const visibleItems = preferredId
-        ? resp.data
-        : requestsFilter === "in_progress"
-          ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
-          : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
-      const nextId = preferredId ?? getId(visibleItems[0], "instance");
+      const allIds = new Set(resp.data.map((i) => getId(i, "instance")));
+      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const visibleItems = requestsFilter === "in_progress"
+        ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
+        : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+      const nextId = validPreferred ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
       else setRequestDetail(null);
@@ -250,8 +259,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   useEffect(() => {
     if (!open) return;
-    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? selectedTaskId);
-    else void loadRequests(target?.instanceId ?? selectedInstanceId);
+    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? null);
+    else void loadRequests(target?.instanceId ?? null);
   }, [open, activeTab]);
 
   // Auto-select first visible item when sub-filter changes
@@ -272,7 +281,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
-    setSelectedTaskId(id); setLoadingDetail(true);
+    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment("");
     try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
   };
   const openRequest = async (id: number) => {
@@ -283,14 +292,22 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const runTaskDecision = async (action: "approve" | "reject") => {
     if (!selectedTaskId) return;
     setActionLoading(true);
-    try { await decideApprovalTaskApi(selectedTaskId, { action }); await loadTasks(selectedTaskId); toast(true); }
+    const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
+    try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = async () => {
     if (!selectedInstanceId) return;
     setActionLoading(true);
-    try { await withdrawApprovalInstanceApi(selectedInstanceId, {}); await loadRequests(selectedInstanceId); toast(true); }
-    catch { toast(false); } finally { setActionLoading(false); }
+    try {
+      await withdrawApprovalInstanceApi(selectedInstanceId, {});
+      toast(true);
+      const resp = await listMyApprovalRequestsApi();
+      setRequestItems(resp.data);
+      setRequestsFilter("completed");
+      setLoadingDetail(true);
+      setRequestDetail(await getApprovalInstanceDetailApi(selectedInstanceId));
+    } catch { toast(false); } finally { setActionLoading(false); setLoadingDetail(false); }
   };
   const runResubmit = async () => {
     if (!selectedInstanceId) return;
@@ -391,7 +408,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               selectedTaskId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
                             onClick={() => id && openTask(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
                             </div>
                             {item.current_node_name && (
@@ -414,7 +431,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               selectedInstanceId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
                             onClick={() => id && openRequest(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{item.business_name || "--"}</span>
+                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
@@ -457,7 +474,17 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
               {/* Fixed footer buttons */}
               {(isTaskPending || isInstancePending || canResubmit || canRevoke) && (
-                <div className="flex items-center justify-end gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                  {isTaskPending && (
+                    <textarea
+                      value={decisionComment}
+                      onChange={(e) => setDecisionComment(e.target.value)}
+                      placeholder={localize("com_approval_decision_comment_placeholder")}
+                      rows={2}
+                      className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+                    />
+                  )}
+                  <div className="flex items-center justify-end gap-3">
                   <button type="button"
                     className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
                     onClick={() => onOpenChange(false)}>
@@ -498,6 +525,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       {localize("com_approval_action_revoke_grant")}
                     </button>
                   )}
+                  </div>
                 </div>
               )}
             </div>
@@ -546,7 +574,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={detail.business_name} status={detail.status} instanceStatus={detail.instance_status}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status}
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
@@ -616,7 +644,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={detail.business_name} status={detail.status} serialNo={serialNo}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} serialNo={serialNo}
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
