@@ -571,6 +571,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
+  const isTerminal = ["executed", "rejected", "withdrawn", "cancelled"].includes(detail.status ?? "");
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"),      serialNo],
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
@@ -578,7 +579,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
     [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
-    [localize("com_approval_field_current_approver"),detail.current_approver_names || "--"],
+    ...(!isTerminal ? [[localize("com_approval_field_current_approver"), detail.current_approver_names || "--"] as [string, string]] : []),
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
