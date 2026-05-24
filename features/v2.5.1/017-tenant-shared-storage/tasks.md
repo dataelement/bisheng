@@ -1196,3 +1196,37 @@ T36 (/e2e-test + ac-verification.md)  ← T35
 5. **跨 Feature 副作用（T08/T09）**：扩展 F011 `TenantMountService.mount_child` 签名（新增 `auto_distribute` 参数，默认 True 保持向后兼容）；F011 既有测试不受影响。
 6. **前端 Switch 默认值**：T21-T26 Switch 默认由后端 `Root.share_default_to_children` 决定，不在 UI 硬编码。
 7. **T25 详情页 Badge 范围收窄**：本 Feature 仅覆盖 2 个最主要列表（知识空间 + 助手）；其余 3 类在后续 PR 补齐，不在 F017 Q 序列；避免单任务 5 文件超标。
+
+---
+
+## 实际偏差记录
+
+### 2026-05-24 — v2.6.0-beta2：业务资源默认下发已撤销
+
+**背景**：QA 反馈 xing02（三级部门租户用户）在「我加入的空间」里看到 zx-2（Root 用户）创建的所有知识空间，但从未主动加入。根因即 D6 的「Root 创建资源默认共享给所有 Child」机制 —— xing02 通过 OpenFGA `tenant:{child}#shared_with` 元组拿到 viewer 权限，自动出现在列表里。
+
+**决策**：业务资源（knowledge_space / workflow / assistant / channel / tool）退出默认下发，回归 ReBAC owner 主动授权。F020 引入的 `llm_server` 共享保留不动（平台基础设施级共享是合理需求）；F022 系统模型配置、F036 工作台配置走的是行级继承，本就是独立机制，亦不动。
+
+**实现变更**（PR 在 `feat/2.6.0-beta2`，无独立 SDD feature）：
+
+| 维度 | F017 原设计 | v2.6.0-beta2 收窄后 |
+|------|------------|---------------------|
+| `SUPPORTED_SHAREABLE_TYPES` | 6 种（5 业务 + llm_server） | 仅 `llm_server`（新增 `LEGACY_SHAREABLE_TYPES` 包含 6 种，仅用于 disable / list / set_is_shared 等清理路径） |
+| 业务资源 `share_on_create` 调用 | 5 处 service 均调 | 全部删除 |
+| 5 类资源 request schema 的 `share_to_children` | 各 schema 有此字段 | 直接删字段（llm_server schema 保留） |
+| 显式分享 endpoint `PATCH /api/v1/resources/{type}/{id}/share`（D8） | 服务 5 种业务资源 | endpoint + 19501 / 19502 错误码已删除 |
+| 前端 `ShareToChildrenSwitch`（D4） | KS/Assistant 两个表单使用 | 两处使用删除 + 组件本身删除（LLM 路径不依赖此 wrapper） |
+| `Tenant.share_default_to_children` 字段 | Root=1，控制 5 业务资源默认下发 | 不再被读取；DDL 保留兼容，无 column drop |
+| 历史 FGA 元组 | 存量已下发 | Alembic `f041_revoke_business_resource_share` + `scripts/revoke_business_resource_share.py` 双轨清理（独立脚本核心逻辑、Alembic 迁移容错包装） |
+
+**验证范围**：
+- 后端单测：`test/test_f017_resource_share_service.py`（31 用例：业务类型 enable 拒绝、disable 允许、SUPPORTED/LEGACY 集合断言）+ `test/tenant/test_revoke_business_resource_share.py`（7 用例：脚本撤回 / dry-run / 幂等 / 不触 llm_server）
+- F020 防回归：`test_enable_sharing_writes_shared_with_tuples_per_child` 改为 llm_server 验证写元组路径仍有效
+- 双库：本次无 schema 变更，仅 OpenFGA 元组撤回 + 普通 `UPDATE ... is_shared` 语句，方言无关
+- 手动 e2e：见对应 PR 描述
+
+**对 spec.md / ac-verification.md 的影响**：
+- AC-01 「Root 创建资源默认下发」语义收窄到仅 llm_server；业务资源已转为 ReBAC 显式授权
+- AC-05 / AC-12 / AC-13 撤回路径不变（disable_sharing 接受 LEGACY 类型）
+- AC-06 跨租户存储 fallback 不受影响（基于 `tenant:{child}#shared_to` 关系，未撤回 tenant-level 元组）
+- D2 / D4 / D6 / D8 失效范围限于 5 类业务资源；D5 / D7 / D9 不动

@@ -38,7 +38,14 @@ from bisheng.tenant.domain.services.resource_share_service import ResourceShareS
 
 @pytest.mark.asyncio
 async def test_ac_01_enable_share_writes_tuples_per_active_child():
-    """AC-01: enabling share writes one tuple per active Child."""
+    """AC-01: enabling share writes one tuple per active Child.
+
+    v2.6.0-beta2: AC-01 scope narrowed to llm_server. Business resources
+    (KS/workflow/assistant/channel/tool) were removed from the write surface
+    in favor of explicit ReBAC grants; the corresponding rejection is
+    asserted by test_enable_sharing_rejects_retired_business_types in
+    test_f017_resource_share_service.py.
+    """
     fga = MagicMock()
     fga.write_tuples = AsyncMock()
     fga.read_tuples = AsyncMock(return_value=[])
@@ -48,7 +55,7 @@ async def test_ac_01_enable_share_writes_tuples_per_active_child():
              AsyncMock(return_value=[5, 7]),
          ):
         result = await ResourceShareService.enable_sharing(
-            'knowledge_space', '42', root_tenant_id=1,
+            'llm_server', '42', root_tenant_id=1,
         )
     assert result == [5, 7]
     writes = fga.write_tuples.await_args.kwargs['writes']

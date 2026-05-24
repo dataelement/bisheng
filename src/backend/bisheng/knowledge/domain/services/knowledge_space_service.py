@@ -1409,16 +1409,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_enabled: bool = False,
         auto_tag_library_id: Optional[int] = None,
         auto_tag_custom_tags: Optional[List[str]] = None,
-        share_to_children: Optional[bool] = None,
         skip_user_limit: bool = False,
     ) -> Knowledge:
-        """Create a new knowledge space (max 30 per user).
-
-        F017: when the creator's leaf tenant is Root, ``share_to_children``
-        controls whether the new space is shared with all active Child Tenants.
-        ``None`` means "use ``Root.share_default_to_children``"; ``True`` / ``False``
-        override. Child-tenant creators never share (caller value ignored).
-        """
+        """Create a new knowledge space (max 30 per user)."""
 
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
@@ -1496,22 +1489,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.id,
                 e,
             )
-
-        # F017: fan out group-sharing for Root-created resources.
-        # share_on_create handles the Root-only gate, FGA writes, is_shared
-        # DB flip, and audit_log in one shot.
-        from bisheng.tenant.domain.services.resource_share_service import (
-            ResourceShareService,
-        )
-
-        await ResourceShareService.share_on_create(
-            "knowledge_space",
-            str(knowledge_space.id),
-            creator_tenant_id=self.login_user.tenant_id,
-            operator_id=self.login_user.user_id,
-            operator_tenant_id=self.login_user.tenant_id,
-            explicit=share_to_children,
-        )
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(

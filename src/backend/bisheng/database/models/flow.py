@@ -98,10 +98,6 @@ class FlowCreate(SQLModelSerializable):
     is_shared: bool = Field(default=False)
     guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     flow_id: Optional[str] = None
-    # F017: whether the new workflow should be shared with all active Child
-    # Tenants. ``None`` → fall back to ``Root.share_default_to_children``.
-    # Ignored when creator's leaf tenant is not Root.
-    share_to_children: Optional[bool] = None
 
     @field_validator('data', mode='before')
     @classmethod
