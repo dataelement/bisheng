@@ -34,9 +34,29 @@ class ApprovalGateResult(BaseModel):
     exception_type: str | None = None
 
 
+class ApprovalPresetValueOption(BaseModel):
+    value: str
+    label: str
+
+
+class ApprovalPresetConditionField(BaseModel):
+    field: str
+    label: str
+    type: str = 'text'
+    values: list[ApprovalPresetValueOption] = Field(default_factory=list)
+    selector_type: str | None = None
+
+
+class ApprovalPresetApproverSource(BaseModel):
+    source_type: str
+    label: str
+
+
 class ApprovalScenarioPreset(BaseModel):
     scenario_code: str
     scenario_name: str
     handler_key: str
     condition_fields: list[str] = Field(default_factory=list)
     approver_source_types: list[str] = Field(default_factory=list)
+    condition_field_options: list[ApprovalPresetConditionField] = Field(default_factory=list)
+    approver_source_options: list[ApprovalPresetApproverSource] = Field(default_factory=list)

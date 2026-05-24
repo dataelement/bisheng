@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -358,6 +358,7 @@ async def test_gate_pass_when_route_direct_approve():
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 201})),
         create_exception=AsyncMock(),
         create_task=AsyncMock(),
+        create_outbox=AsyncMock(return_value=SimpleNamespace(id=401)),
     )
     gate = ApprovalGate(
         registry=registry,
@@ -365,6 +366,7 @@ async def test_gate_pass_when_route_direct_approve():
         instance_repository=instance_repository,
         route_matcher=AsyncMock(return_value=SimpleNamespace(id=11, route_type='pass')),
     )
+    gate._dispatch_outbox_task = Mock()
 
     result = await gate.request_or_pass(
         ApprovalGateRequest(
@@ -385,6 +387,8 @@ async def test_gate_pass_when_route_direct_approve():
     assert result.task_ids == []
     instance_repository.create_exception.assert_not_awaited()
     instance_repository.create_task.assert_not_awaited()
+    instance_repository.create_outbox.assert_awaited_once()
+    gate._dispatch_outbox_task.assert_called_once_with(401)
 
 
 @pytest.mark.asyncio
@@ -424,6 +428,7 @@ async def test_gate_pending_when_route_hits_flow():
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 300})),
         create_exception=AsyncMock(),
         create_task=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': next(task_ids)})),
+        create_action_log=AsyncMock(),
     )
     gate = ApprovalGate(
         registry=registry,
@@ -450,6 +455,7 @@ async def test_gate_pending_when_route_hits_flow():
     assert result.instance_id == 300
     assert result.task_ids == [301, 302]
     assert instance_repository.create_task.await_count == 2
+    instance_repository.create_action_log.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -732,5 +738,7 @@ def test_registry_exposes_default_presets():
         'menu_access_request',
         'channel_subscribe_request',
         'knowledge_space_subscribe_request',
+        'knowledge_space_create_request',
+        'knowledge_space_file_publish_request',
     }
     assert presets['menu_access_request'].handler_key == 'menu_access_request'

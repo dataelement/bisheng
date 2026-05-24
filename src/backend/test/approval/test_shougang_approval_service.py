@@ -502,5 +502,86 @@ def test_shougang_scenarios_registered_in_default_presets():
 
     assert "knowledge_space_create_request" in presets
     assert "knowledge_space_file_publish_request" in presets
-    assert presets["knowledge_space_create_request"].approver_source_types == ["department_admin"]
-    assert presets["knowledge_space_file_publish_request"].approver_source_types == ["department_admin"]
+    assert presets["knowledge_space_create_request"].condition_fields == [
+        "applicant_role",
+        "space_level",
+        "space_visibility",
+    ]
+    assert presets["knowledge_space_create_request"].approver_source_types == [
+        "direct_user",
+        "department_admin",
+    ]
+    assert presets["knowledge_space_file_publish_request"].condition_fields == [
+        "applicant_role",
+        "source_space_level",
+        "target_space_level",
+        "target_space_id",
+    ]
+    assert presets["knowledge_space_file_publish_request"].approver_source_types == [
+        "direct_user",
+        "department_admin",
+        "knowledge_space_owner",
+        "knowledge_space_manager",
+    ]
+    create_field_options = {
+        option.field: option.model_dump()
+        for option in presets["knowledge_space_create_request"].condition_field_options
+    }
+    assert create_field_options["space_level"]["type"] == "select"
+    assert [item["value"] for item in create_field_options["space_level"]["values"]] == [
+        "public",
+        "department",
+        "team",
+        "personal",
+    ]
+    assert create_field_options["space_visibility"]["type"] == "select"
+    assert [item["value"] for item in create_field_options["space_visibility"]["values"]] == [
+        "released",
+        "public",
+        "approval",
+        "private",
+    ]
+    publish_field_options = {
+        option.field: option.model_dump()
+        for option in presets["knowledge_space_file_publish_request"].condition_field_options
+    }
+    assert publish_field_options["target_space_id"]["type"] == "selector"
+    assert publish_field_options["target_space_id"]["selector_type"] == "knowledge_space_publish_target"
+    assert [
+        option.source_type
+        for option in presets["knowledge_space_file_publish_request"].approver_source_options
+    ] == [
+        "direct_user",
+        "department_admin",
+        "knowledge_space_owner",
+        "knowledge_space_manager",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_resolves_target_space_owner_and_manager(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga",
+        AsyncMock(return_value=([31], [32, 33])),
+    )
+
+    approvers = await handler.resolve_approvers(
+        {
+            "sources": [
+                {"type": "direct_user", "user_ids": [33, 34]},
+                {"type": "knowledge_space_owner"},
+                {"type": "knowledge_space_manager"},
+            ]
+        },
+        SimpleNamespace(
+            tenant_id=1,
+            applicant_user_id=11,
+            applicant_department_id=None,
+            payload_snapshot={"target_space_id": 20},
+        ),
+    )
+
+    assert approvers == [33, 34, 31, 32]

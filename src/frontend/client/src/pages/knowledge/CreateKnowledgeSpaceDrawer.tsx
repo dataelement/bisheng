@@ -81,10 +81,14 @@ export interface CreateKnowledgeSpaceFormData {
     autoTagCustomTags: string[] | null;
 }
 
+interface CreateKnowledgeSpaceSubmitResult {
+    showSuccess?: boolean;
+}
+
 interface CreateKnowledgeSpaceDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onConfirm?: (data: CreateKnowledgeSpaceFormData) => void | Promise<boolean | void>;
+    onConfirm?: (data: CreateKnowledgeSpaceFormData) => void | boolean | CreateKnowledgeSpaceSubmitResult | Promise<boolean | void | CreateKnowledgeSpaceSubmitResult>;
     onViewSpace?: () => void;
     onManageMembers?: () => void;
     mode?: "create" | "edit";
@@ -440,8 +444,11 @@ export function CreateKnowledgeSpaceDrawer({
             if (result === false) {
                 return;
             }
-            // Only show success page in create mode
-            if (mode === "create") {
+            const shouldShowSuccess =
+                typeof result === "object" && result !== null
+                    ? result.showSuccess !== false
+                    : true;
+            if (mode === "create" && shouldShowSuccess) {
                 setShowSuccess(true);
             } else {
                 onOpenChange(false);

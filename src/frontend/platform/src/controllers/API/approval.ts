@@ -1,11 +1,29 @@
 import axios from "../request";
 
+export interface ApprovalConditionFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface ApprovalConditionFieldDescriptor {
+  field: string;
+  label?: string;
+  type?: "text" | "select" | "selector" | string;
+  values?: ApprovalConditionFieldOption[];
+  selector_type?: string | null;
+}
+
 export interface ApprovalScenarioPreset {
   scenario_code: string;
   scenario_name: string;
   handler_key?: string;
-  condition_fields?: string[];
+  condition_fields?: Array<string | ApprovalConditionFieldDescriptor>;
   approver_source_types?: string[];
+  condition_field_options?: ApprovalConditionFieldDescriptor[];
+  approver_source_options?: Array<{
+    source_type: string;
+    label: string;
+  }>;
 }
 
 export interface ApprovalScenarioItem {

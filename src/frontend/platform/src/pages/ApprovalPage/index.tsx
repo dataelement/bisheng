@@ -41,6 +41,8 @@ import {
   type ApprovalScenarioItem,
   type ApprovalScenarioPreset,
 } from "@/controllers/API/approval";
+import { getDepartmentKnowledgeSpacesApi } from "@/controllers/API/departmentKnowledgeSpace";
+import { getManagedKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
 import { useTranslation } from "react-i18next";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -123,6 +125,16 @@ interface ConditionFieldMeta {
   values?: { value: string; label: string }[];
 }
 
+function conditionFieldCode(field: NonNullable<ApprovalScenarioPreset["condition_fields"]>[number]): string {
+  return typeof field === "string" ? field : field?.field ?? "";
+}
+
+function presetConditionFieldCodes(preset: ApprovalScenarioPreset | null | undefined): string[] {
+  return (preset?.condition_fields ?? [])
+    .map(conditionFieldCode)
+    .filter(Boolean);
+}
+
 // All label strings below are i18n keys resolved with t() at render time.
 
 // Static fixed identity labels (always present regardless of system roles)
@@ -152,6 +164,20 @@ const MENU_KEY_VALUES = [
   { value: 'knowledge_space', label: 'menu.workbench2' },
 ];
 
+const SPACE_LEVEL_VALUES = [
+  { value: 'public',     label: 'approvalPage.spaceLevel.public' },
+  { value: 'department', label: 'approvalPage.spaceLevel.department' },
+  { value: 'team',       label: 'approvalPage.spaceLevel.team' },
+  { value: 'personal',   label: 'approvalPage.spaceLevel.personal' },
+];
+
+const SPACE_VISIBILITY_VALUES = [
+  { value: 'released', label: 'approvalPage.spaceVisibility.released' },
+  { value: 'public',   label: 'approvalPage.spaceVisibility.public' },
+  { value: 'approval', label: 'approvalPage.spaceVisibility.approval' },
+  { value: 'private',  label: 'approvalPage.spaceVisibility.private' },
+];
+
 const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
   applicant_role: {
     label: 'approvalPage.condition.applicant_role',
@@ -168,6 +194,25 @@ const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
       { value: 'department', label: 'approvalPage.spaceType.department' },
       { value: 'team',       label: 'approvalPage.spaceType.team' },
     ],
+  },
+  space_level: {
+    label: 'approvalPage.condition.space_level',
+    values: SPACE_LEVEL_VALUES,
+  },
+  space_visibility: {
+    label: 'approvalPage.condition.space_visibility',
+    values: SPACE_VISIBILITY_VALUES,
+  },
+  source_space_level: {
+    label: 'approvalPage.condition.source_space_level',
+    values: SPACE_LEVEL_VALUES,
+  },
+  target_space_level: {
+    label: 'approvalPage.condition.target_space_level',
+    values: SPACE_LEVEL_VALUES,
+  },
+  target_space_id: {
+    label: 'approvalPage.condition.target_space_id',
   },
 };
 
@@ -193,7 +238,7 @@ function conditionLabel(
   const meta = CONDITION_FIELD_META[matchConfig.field];
   const fieldLabel = meta
     ? t(meta.label, { defaultValue: matchConfig.field })
-    : matchConfig.field;
+    : t(`approvalPage.condition.${matchConfig.field}`, { defaultValue: matchConfig.field });
   const value = matchConfig.value ?? '';
   if (!value) return fieldLabel;
   const staticMatch =
@@ -234,7 +279,7 @@ function AddScenarioDialog({
 
   const preset = available.find((p) => p.scenario_code === selected) ?? null;
 
-  const conditionFieldLabels = (preset?.condition_fields ?? [])
+  const conditionFieldLabels = presetConditionFieldCodes(preset)
     .map((f) => t(`approvalPage.condition.${f}`, { defaultValue: f }))
     .join("、");
 
@@ -305,6 +350,16 @@ function AddScenarioDialog({
   );
 }
 
+type TargetSpaceOption = { value: string; label: string };
+
+function formatTargetSpaceLabel(space: {
+  name?: string | null;
+  department_name?: string | null;
+}): string {
+  const name = space.name || "";
+  return space.department_name ? `${name}（${space.department_name}）` : name;
+}
+
 function RouteDialog({
   open,
   initial,
@@ -334,6 +389,12 @@ function RouteDialog({
   const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
   const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
   const [roleSearch, setRoleSearch] = useState("");
+  const [targetSpaces, setTargetSpaces] = useState<TargetSpaceOption[]>([]);
+  const [targetSpaceSearch, setTargetSpaceSearch] = useState("");
+  const [targetSpacesLoaded, setTargetSpacesLoaded] = useState(false);
+  const [targetSpacesLoading, setTargetSpacesLoading] = useState(false);
+  const [targetSpacesLoadFailed, setTargetSpacesLoadFailed] = useState(false);
+  const [targetSpacesLoadAttempt, setTargetSpacesLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -343,6 +404,12 @@ function RouteDialog({
       setCondField(initial.match_config?.field ?? "");
       setCondValue(initial.match_config?.value ?? "");
       setRoleSearch("");
+      setTargetSpaceSearch("");
+      setTargetSpacesLoaded(false);
+      setTargetSpacesLoading(false);
+      setTargetSpacesLoadFailed(false);
+      setTargetSpacesLoadAttempt(0);
+      setTargetSpaces([]);
       // Load system roles for applicant_role condition values
       getRolesApi("").then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.data ?? []);
@@ -373,11 +440,62 @@ function RouteDialog({
     ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
     : allRoleValues;
   const hasEnumValues = allRoleValues.length > 0;
+  const filteredTargetSpaces = targetSpaceSearch
+    ? targetSpaces.filter((space) =>
+        space.label.toLowerCase().includes(targetSpaceSearch.toLowerCase()),
+      )
+    : targetSpaces;
+
+  useEffect(() => {
+    if (!open || condField !== "target_space_id" || targetSpacesLoaded || targetSpacesLoading) return;
+
+    setTargetSpacesLoading(true);
+    setTargetSpacesLoadFailed(false);
+    Promise.all([
+      getManagedKnowledgeSpacesApi({ order_by: "name" }),
+      getDepartmentKnowledgeSpacesApi({ order_by: "name" }),
+    ]).then(([managedSpaces, departmentSpaces]) => {
+      const map = new Map<string, TargetSpaceOption>();
+      [...managedSpaces, ...departmentSpaces].forEach((space: any) => {
+        if (space?.id == null) return;
+        const value = String(space.id);
+        if (!map.has(value)) {
+          map.set(value, {
+            value,
+            label: formatTargetSpaceLabel(space) || value,
+          });
+        }
+      });
+      setTargetSpaces(Array.from(map.values()));
+      setTargetSpacesLoaded(true);
+    }).catch(() => {
+      setTargetSpaces([]);
+      setTargetSpacesLoadFailed(true);
+      setTargetSpacesLoaded(false);
+    }).finally(() => {
+      setTargetSpacesLoading(false);
+    });
+  }, [open, condField, targetSpacesLoaded, targetSpacesLoading, targetSpacesLoadAttempt]);
+
+  const retryLoadTargetSpaces = () => {
+    setTargetSpacesLoaded(false);
+    setTargetSpacesLoadFailed(false);
+    setTargetSpaces([]);
+    setTargetSpacesLoadAttempt((attempt) => attempt + 1);
+  };
 
   const handleFieldChange = (f: string) => {
     setCondField(f);
     setCondValue(""); // reset value when field changes
+    setTargetSpaceSearch("");
   };
+
+  const targetSpaceConditionInvalid = condField === "target_space_id" && (
+    targetSpacesLoading ||
+    targetSpacesLoadFailed ||
+    !targetSpacesLoaded ||
+    !condValue
+  );
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -410,14 +528,54 @@ function RouteDialog({
                   <option key={f} value={f}>
                     {CONDITION_FIELD_META[f]
                       ? t(CONDITION_FIELD_META[f].label, { defaultValue: f })
-                      : f}
+                      : t(`approvalPage.condition.${f}`, { defaultValue: f })}
                   </option>
                 ))}
               </select>
               {condField && (
                 <>
                   <span className="text-xs text-text-secondary">=</span>
-                  {hasEnumValues ? (
+                  {condField === "target_space_id" ? (
+                    <div className="flex-1 space-y-2">
+                      {targetSpacesLoading ? (
+                        <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
+                      ) : targetSpacesLoadFailed ? (
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-red-500">{t("approvalPage.targetSpaceLoadFailed", { defaultValue: "目标知识空间加载失败" })}</p>
+                          <button
+                            type="button"
+                            onClick={retryLoadTargetSpaces}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {t("approvalPage.retry", { defaultValue: "重试" })}
+                          </button>
+                        </div>
+                      ) : targetSpaces.length > 0 ? (
+                        <>
+                          <input
+                            value={targetSpaceSearch}
+                            onChange={(e) => setTargetSpaceSearch(e.target.value)}
+                            placeholder={t("approvalPage.searchTargetSpace", { defaultValue: "搜索知识空间" })}
+                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                          />
+                          <select
+                            value={condValue}
+                            onChange={(e) => setCondValue(e.target.value)}
+                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                          >
+                            <option value="">{t("approvalPage.pleaseSelect")}</option>
+                            {filteredTargetSpaces.map((space) => (
+                              <option key={space.value} value={space.value}>
+                                {space.label}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      ) : (
+                        <p className="text-xs text-text-secondary">{t("approvalPage.noTargetSpaces", { defaultValue: "暂无可用目标知识空间" })}</p>
+                      )}
+                    </div>
+                  ) : hasEnumValues ? (
                     condField === 'applicant_role' ? (
                       // Searchable dropdown for applicant_role (may have many system roles)
                       <div className="flex-1">
@@ -504,7 +662,7 @@ function RouteDialog({
           </button>
           <button
             type="button"
-            disabled={!name.trim() || (type === "flow" && !flowId)}
+            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid}
             onClick={() =>
               onConfirm({
                 route_name: name.trim(),
@@ -982,9 +1140,8 @@ export default function ApprovalPage() {
       return dedup([...ALWAYS_INCLUDED, ...Object.keys(CONDITION_FIELD_META)]);
     }
     const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
-    // Filter preset fields by what CONDITION_FIELD_META knows about;
-    // then prepend the always-included fields so they appear first.
-    const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
+    // preset 字段是前端展示来源；未知字段也保留，并用通用文本输入兜底。
+    const presetFields = presetConditionFieldCodes(preset);
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
   }, [selectedScenario, presets]);
   // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)

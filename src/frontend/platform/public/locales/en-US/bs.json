@@ -2343,7 +2343,12 @@
     "condition": {
       "applicant_role": "Applicant Identity",
       "menu_key": "Applied Menu",
-      "space_type": "Knowledge Space Type"
+      "space_type": "Knowledge Space Type",
+      "space_level": "Knowledge Space Level",
+      "space_visibility": "Space Visibility",
+      "source_space_level": "Source Space Level",
+      "target_space_level": "Target Space Level",
+      "target_space_id": "Target Knowledge Space"
     },
     "approverSource": {
       "direct_user": "Specified User",
@@ -2365,6 +2370,18 @@
       "public": "Public",
       "department": "Department",
       "team": "Team"
+    },
+    "spaceLevel": {
+      "public": "Public",
+      "department": "Department",
+      "team": "Team",
+      "personal": "Personal"
+    },
+    "spaceVisibility": {
+      "released": "Published to Square",
+      "public": "Public",
+      "approval": "Approval Required",
+      "private": "Private"
     },
     "menuKeyLabel": {
       "workstation": "Workstation",
@@ -2465,7 +2482,11 @@
     "tabException": "Exception List",
     "tabFlow": "Flow Management",
     "searchRole": "Search role…",
+    "searchTargetSpace": "Search knowledge space",
     "searchUser": "Search username…",
+    "targetSpaceLoadFailed": "Failed to load target knowledge spaces",
+    "retry": "Retry",
+    "noTargetSpaces": "No target knowledge spaces available",
     "menuNeedsApproval": "Menu requires approval",
     "menuApprovalDesc": "Your role does not include this menu permission. Click the button below to apply; access will be granted after approval.",
     "menuApply": "Apply for Access",

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
+from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
@@ -38,6 +39,43 @@ async def _resolve_approvers(node_config: dict, req) -> list[int]:
         return await resolve_approvers_from_sources(sources, req)
     approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
     return [int(one) for one in approver_ids]
+
+
+async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
+    sources = node_config.get('sources') or []
+    if not sources:
+        approver_ids = node_config.get('approver_user_ids') or node_config.get('user_ids') or []
+        return [int(one) for one in approver_ids]
+
+    seen: set[int] = set()
+    result: list[int] = []
+
+    def _add(uid: int) -> None:
+        if uid not in seen:
+            seen.add(uid)
+            result.append(uid)
+
+    space_source_types = {'knowledge_space_owner', 'knowledge_space_manager', 'space_admin'}
+    has_space_source = any(source.get('type') in space_source_types for source in sources)
+    owner_ids: list[int] = []
+    manager_ids: list[int] = []
+    if has_space_source:
+        target_space_id = (getattr(req, 'payload_snapshot', {}) or {}).get('target_space_id')
+        if target_space_id:
+            owner_ids, manager_ids = await _resolve_space_roles_via_fga(int(target_space_id))
+
+    for source in sources:
+        source_type = source.get('type', '')
+        if source_type == 'knowledge_space_owner':
+            for uid in owner_ids:
+                _add(int(uid))
+        elif source_type in ('knowledge_space_manager', 'space_admin'):
+            for uid in manager_ids:
+                _add(int(uid))
+        else:
+            for uid in await resolve_approvers_from_sources([source], req):
+                _add(int(uid))
+    return result
 
 
 def _approval_instance_id_from_metadata(metadata: Any) -> int | None:
@@ -163,7 +201,7 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         }
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
-        return await _resolve_approvers(node_config, req)
+        return await _resolve_file_publish_approvers(node_config, req)
 
     def _copy_file(
         self,

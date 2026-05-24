@@ -2293,7 +2293,12 @@
     "condition": {
       "applicant_role": "申请人身份",
       "menu_key": "申请菜单",
-      "space_type": "知识空间类型"
+      "space_type": "知识空间类型",
+      "space_level": "知识空间等级",
+      "space_visibility": "空间可见性",
+      "source_space_level": "来源知识空间等级",
+      "target_space_level": "目标知识空间等级",
+      "target_space_id": "目标知识空间"
     },
     "approverSource": {
       "direct_user": "指定用户",
@@ -2315,6 +2320,18 @@
       "public": "公共",
       "department": "部门",
       "team": "团队"
+    },
+    "spaceLevel": {
+      "public": "公共",
+      "department": "部门",
+      "team": "团队",
+      "personal": "个人"
+    },
+    "spaceVisibility": {
+      "released": "发布到广场",
+      "public": "公开",
+      "approval": "需审核",
+      "private": "私有"
     },
     "menuKeyLabel": {
       "workstation": "工作台",
@@ -2415,7 +2432,11 @@
     "tabException": "异常流程列表",
     "tabFlow": "流程管理",
     "searchRole": "搜索身份 / 角色名…",
+    "searchTargetSpace": "搜索知识空间",
     "searchUser": "搜索用户名…",
+    "targetSpaceLoadFailed": "目标知识空间加载失败",
+    "retry": "重试",
+    "noTargetSpaces": "暂无可用目标知识空间",
     "menuNeedsApproval": "菜单需审批开通",
     "menuApprovalDesc": "你的角色当前未包含该菜单权限，点击下方按钮发起申请，审批通过后即可访问。",
     "menuApply": "申请菜单权限",

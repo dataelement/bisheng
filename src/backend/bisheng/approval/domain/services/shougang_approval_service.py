@@ -81,6 +81,12 @@ class ShougangApprovalService:
             and not bool(params.get('is_released'))
         )
 
+    @classmethod
+    def _space_visibility_for_payload(cls, params: dict) -> str:
+        if bool(params.get('is_released')):
+            return 'released'
+        return str(cls._enum_value(params.get('auth_type')) or AuthTypeEnum.PRIVATE.value)
+
     async def _requires_create_approval(self, *, login_user, params: dict) -> bool:
         if self._is_private_personal_space_create(params):
             return False
@@ -207,6 +213,7 @@ class ShougangApprovalService:
                     'applicant_user_name': login_user.user_name,
                     'applicant_department_id': applicant_department_id,
                     'space_level': params.get('space_level'),
+                    'space_visibility': self._space_visibility_for_payload(params),
                     'auth_type': params.get('auth_type'),
                     'is_released': params.get('is_released'),
                     'department_id': params.get('department_id'),

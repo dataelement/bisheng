@@ -20,7 +20,6 @@ import {
     SpaceSortType,
     getSpaceInfoApi,
     getMineSpacesApi,
-    createSpaceApi,
     updateSpaceApi,
 } from "~/api/knowledge";
 import { checkPermission } from "~/api/permission";
@@ -39,6 +38,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
+import { submitKnowledgeSpaceCreateWithApproval } from "./createKnowledgeSpaceApproval";
 
 function reloadKnowledgePage() {
     if (typeof window === "undefined") return;
@@ -519,36 +519,32 @@ export default function Knowledge() {
                 showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
             } else {
                 // ── Create mode ──
-                const newSpace = await createSpaceApi({
-                    name: form.name,
-                    description: form.description,
-                    auth_type,
-                    is_released,
-                    space_level: form.spaceLevel,
-                    department_id: form.departmentId,
-                    user_group_id: form.userGroupId,
-                    auto_tag_enabled: form.autoTagEnabled,
-                    auto_tag_library_id: form.autoTagLibraryId,
-                    auto_tag_custom_tags: form.autoTagCustomTags,
-                });
-                setActiveSpace(newSpace);
+                const result = await submitKnowledgeSpaceCreateWithApproval(form);
+                if (result.created && result.space) {
+                    const newSpace = result.space;
+                    setActiveSpace(newSpace);
 
-                // Optimistically update cached "mine created" lists so subsequent "create limit check"
-                // doesn't rely on backend propagation timing.
-                const createdKeys: Array<[string, string, SpaceSortType]> = [
-                    ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
-                    ["knowledgeSpaces", "mine", SpaceSortType.NAME],
-                ];
-                for (const key of createdKeys) {
-                    queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
-                        if (!prev) return [newSpace];
-                        if (prev.some((s) => s.id === newSpace.id)) return prev;
-                        return [newSpace, ...prev];
-                    });
+                    // Optimistically update cached "mine created" lists so subsequent "create limit check"
+                    // doesn't rely on backend propagation timing.
+                    const createdKeys: Array<[string, string, SpaceSortType]> = [
+                        ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
+                        ["knowledgeSpaces", "mine", SpaceSortType.NAME],
+                    ];
+                    for (const key of createdKeys) {
+                        queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
+                            if (!prev) return [newSpace];
+                            if (prev.some((s) => s.id === newSpace.id)) return prev;
+                            return [newSpace, ...prev];
+                        });
+                    }
+
+                    queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                    showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
+                    return { showSuccess: true };
                 }
-
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-                showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
+                showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
+                return { showSuccess: false };
             }
             return true;
         } catch (error) {
@@ -878,6 +874,7 @@ export default function Knowledge() {
                 onConfirm={handleConfirmCreateSpace}
                 mode={editingSpace ? "edit" : "create"}
                 editingSpace={editingSpace}
+                showApprovalReason
                 onViewSpace={() => setShowCreateDrawer(false)}
                 onManageMembers={() => {
                     setShowCreateDrawer(false);

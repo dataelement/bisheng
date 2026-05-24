@@ -2293,7 +2293,12 @@
     "condition": {
       "applicant_role": "申請者の権限",
       "menu_key": "申請メニュー",
-      "space_type": "ナレッジスペースタイプ"
+      "space_type": "ナレッジスペースタイプ",
+      "space_level": "ナレッジスペースレベル",
+      "space_visibility": "スペース公開範囲",
+      "source_space_level": "元スペースレベル",
+      "target_space_level": "対象スペースレベル",
+      "target_space_id": "対象ナレッジスペース"
     },
     "approverSource": {
       "direct_user": "指定ユーザー",
@@ -2315,6 +2320,18 @@
       "public": "パブリック",
       "department": "部署",
       "team": "チーム"
+    },
+    "spaceLevel": {
+      "public": "パブリック",
+      "department": "部署",
+      "team": "チーム",
+      "personal": "個人"
+    },
+    "spaceVisibility": {
+      "released": "広場に公開",
+      "public": "公開",
+      "approval": "承認が必要",
+      "private": "非公開"
     },
     "menuKeyLabel": {
       "workstation": "ワークスペース",
@@ -2415,7 +2432,11 @@
     "tabException": "例外フロー一覧",
     "tabFlow": "フロー管理",
     "searchRole": "ロールを検索…",
+    "searchTargetSpace": "ナレッジスペースを検索",
     "searchUser": "ユーザー名を検索…",
+    "targetSpaceLoadFailed": "対象ナレッジスペースの読み込みに失敗しました",
+    "retry": "再試行",
+    "noTargetSpaces": "利用可能な対象ナレッジスペースはありません",
     "menuNeedsApproval": "メニューの承認が必要です",
     "menuApprovalDesc": "あなたのロールにはこのメニュー権限が含まれていません。下のボタンをクリックして申請してください。承認後にアクセスできます。",
     "menuApply": "アクセスを申請",
