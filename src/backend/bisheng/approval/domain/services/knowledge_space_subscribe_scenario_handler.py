@@ -147,3 +147,10 @@ class KnowledgeSpaceSubscribeScenarioHandler:
             return
         member.status = MembershipStatusEnum.REJECTED
         await self.update_member(member)
+
+    async def on_cancelled(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        member = await self.find_member(int(payload_snapshot['space_id']), int(payload_snapshot['applicant_user_id']))
+        if not member:
+            return
+        member.status = MembershipStatusEnum.REJECTED
+        await self.update_member(member)
