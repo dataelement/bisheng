@@ -170,12 +170,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     async def create_assistant(
         cls, request: Request, login_user: UserPayload, assistant: Assistant,
-        share_to_children: Optional[bool] = None,
     ) -> AssistantInfo:
-        """F017: ``share_to_children`` controls Root→Child sharing of the new
-        assistant. ``None`` → fall back to ``Root.share_default_to_children``.
-        Child creators never share (parameter ignored)."""
-
         # Check if there are any duplicate names under
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
             raise AssistantNameRepeatError()
@@ -205,20 +200,6 @@ class AssistantService(BaseService, AssistantUtils):
                                           ))
 
         await cls.create_assistant_hook_async(request, assistant, login_user)
-
-        # F017: fan out group-sharing for Root-created assistants (D6).
-        # share_on_create owns the Root-only gate + FGA + is_shared flip +
-        # audit_log; we reload assistant.is_shared from the orchestrator flag.
-        from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
-        shared_children = await ResourceShareService.share_on_create(
-            'assistant', str(assistant.id),
-            creator_tenant_id=login_user.tenant_id,
-            operator_id=login_user.user_id,
-            operator_tenant_id=login_user.tenant_id,
-            explicit=share_to_children,
-        )
-        if shared_children:
-            assistant.is_shared = True
 
         can_share = await user_may_share_app(login_user, 'assistant', str(assistant.id))
         return AssistantInfo(**assistant.model_dump(),

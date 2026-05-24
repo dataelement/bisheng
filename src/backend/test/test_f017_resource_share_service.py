@@ -3,15 +3,19 @@
 Mocks FGAClient + TenantDao to verify write/read/delete parameter shapes.
 Follows F013 test style: AsyncMock + patch, no real OpenFGA store.
 
+v2.6.0-beta2: business resources retired from SUPPORTED_SHAREABLE_TYPES.
+Only ``llm_server`` retains the write path (F020); the legacy types remain in
+``LEGACY_SHAREABLE_TYPES`` so the revoke script can clean them up without
+re-enabling the write surface.
+
 Covered behaviors:
-- ``enable_sharing`` writes one shared_with tuple per active Child
+- ``enable_sharing`` writes one shared_with tuple per active Child (llm_server)
 - ``enable_sharing`` returns empty + does not call FGA when no active Children
-- ``disable_sharing`` deletes only ``shared_with → tenant:*`` tuples, ignoring
-  other relations (e.g. owner) present on the same object
+- ``enable_sharing`` rejects legacy business types with ValueError
+- ``disable_sharing`` accepts legacy types so cleanup can purge stale tuples
 - ``distribute_to_child`` / ``revoke_from_child`` write / delete Tenant-level
   ``shared_to`` tuple with correct (user, relation, object)
 - ``list_sharing_children`` returns the Child ids parsed from read_tuples
-- Unsupported resource type raises ValueError
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.tenant.domain.services.resource_share_service import (
+    LEGACY_SHAREABLE_TYPES,
     SUPPORTED_SHAREABLE_TYPES,
     ResourceShareService,
 )
@@ -58,7 +63,7 @@ async def test_enable_sharing_writes_shared_with_tuples_per_child():
     fga = _make_fga()
     with _patch_fga(fga), _patch_children([5, 7, 9]):
         result = await ResourceShareService.enable_sharing(
-            'knowledge_space', '42', root_tenant_id=1,
+            'llm_server', '42', root_tenant_id=1,
         )
 
     assert result == [5, 7, 9]
@@ -67,7 +72,7 @@ async def test_enable_sharing_writes_shared_with_tuples_per_child():
     assert len(writes) == 3
     assert {w['user'] for w in writes} == {'tenant:5', 'tenant:7', 'tenant:9'}
     assert {w['relation'] for w in writes} == {'shared_with'}
-    assert {w['object'] for w in writes} == {'knowledge_space:42'}
+    assert {w['object'] for w in writes} == {'llm_server:42'}
 
 
 @pytest.mark.asyncio
@@ -76,10 +81,21 @@ async def test_enable_sharing_no_active_children_returns_empty():
     fga = _make_fga()
     with _patch_fga(fga), _patch_children([]):
         result = await ResourceShareService.enable_sharing(
-            'workflow', 'abc-123', root_tenant_id=1,
+            'llm_server', 'abc-123', root_tenant_id=1,
         )
     assert result == []
     fga.write_tuples.assert_not_awaited()
+
+
+@pytest.mark.parametrize('retired_type', [
+    'knowledge_space', 'workflow', 'assistant', 'channel', 'tool',
+])
+@pytest.mark.asyncio
+async def test_enable_sharing_rejects_retired_business_types(retired_type):
+    """v2.6.0-beta2: enable_sharing must reject business types so callers
+    can't re-introduce default Root→Child fan-out by mistake."""
+    with pytest.raises(ValueError, match='Unsupported resource type'):
+        await ResourceShareService.enable_sharing(retired_type, '1')
 
 
 # ── disable_sharing ──────────────────────────────────────────────
@@ -178,11 +194,33 @@ async def test_unsupported_resource_type_raises_on_disable():
         await ResourceShareService.disable_sharing('dashboard', '1')
 
 
-def test_supported_types_constant_matches_spec():
-    """SUPPORTED_SHAREABLE_TYPES must stay aligned with the live DSL set."""
-    assert SUPPORTED_SHAREABLE_TYPES == {
+def test_supported_types_only_llm_server():
+    """v2.6.0-beta2: business resources retired; only llm_server writes tuples."""
+    assert SUPPORTED_SHAREABLE_TYPES == {'llm_server'}
+
+
+def test_legacy_types_cover_all_historic_targets():
+    """LEGACY must include every type the revoke script needs to clean up."""
+    assert LEGACY_SHAREABLE_TYPES == {
         'knowledge_space', 'workflow', 'assistant', 'channel', 'tool', 'llm_server',
     }
+
+
+@pytest.mark.parametrize('retired_type', [
+    'knowledge_space', 'workflow', 'assistant', 'channel', 'tool',
+])
+@pytest.mark.asyncio
+async def test_disable_sharing_accepts_retired_types_for_cleanup(retired_type):
+    """Cleanup path must reach the historic types even though their write
+    surface is retired — otherwise the revoke script can't purge stale tuples.
+    """
+    fga = _make_fga(read_return=[])
+    with _patch_fga(fga):
+        result = await ResourceShareService.disable_sharing(retired_type, '1')
+    assert result == []
+    fga.read_tuples.assert_awaited_once_with(
+        relation='shared_with', object=f'{retired_type}:1',
+    )
 
 
 # ── OpenFGA-disabled degradation ─────────────────────────────────
@@ -193,7 +231,7 @@ async def test_enable_sharing_noop_when_fga_disabled():
     """When get_fga_client() returns None (OpenFGA disabled in local dev),
     enable_sharing returns empty without crashing."""
     with patch.object(ResourceShareService, '_get_fga', return_value=None):
-        result = await ResourceShareService.enable_sharing('assistant', '1')
+        result = await ResourceShareService.enable_sharing('llm_server', '1')
     assert result == []
 
 
@@ -216,7 +254,7 @@ async def test_enable_sharing_prefers_async_fga_accessor():
         '_get_fga',
         return_value=None,
     ), _patch_children([5]):
-        result = await ResourceShareService.enable_sharing('assistant', '1')
+        result = await ResourceShareService.enable_sharing('llm_server', '1')
 
     assert result == [5]
     async_get_fga.assert_awaited_once()

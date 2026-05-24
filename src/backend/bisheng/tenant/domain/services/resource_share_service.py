@@ -39,17 +39,28 @@ from bisheng.utils.async_utils import run_async_safe
 
 logger = logging.getLogger(__name__)
 
-# Resource types that support group-sharing. Must stay aligned with the DSL
-# (authorization_model.py) — adding a new type here without updating the model
-# causes OpenFGA to reject writes with "unknown object type".
+# Resource types that currently support group-sharing via FGA fan-out.
+# Business resources (knowledge_space / workflow / assistant / channel / tool)
+# were removed in v2.6.0-beta2: owners now grant access through ReBAC (per-user)
+# instead of bulk Root→Child default-share. Only llm_server keeps the
+# write path because it backs F020 platform-level LLM inheritance.
+# Must stay aligned with the DSL (authorization_model.py) — adding a new type
+# here without updating the model causes OpenFGA to reject writes with
+# "unknown object type".
 SUPPORTED_SHAREABLE_TYPES: set[str] = {
+    'llm_server',
+}
+
+# Resource types that historically wrote ``shared_with`` tuples and may still
+# have stale tuples in production OpenFGA stores. Used by the revoke-side APIs
+# (disable_sharing / list_sharing_children / set_is_shared) so the cleanup
+# script can purge legacy tuples without re-enabling business-resource sharing.
+LEGACY_SHAREABLE_TYPES: set[str] = SUPPORTED_SHAREABLE_TYPES | {
     'knowledge_space',
     'workflow',
     'assistant',
     'channel',
     'tool',
-    # llm_model follows its parent llm_server and is not shared directly.
-    'llm_server',
 }
 
 
@@ -147,7 +158,7 @@ class ResourceShareService:
         tuples first to produce a precise delete list (safe even if some
         Children were added mid-flight).
         """
-        cls._validate_type(object_type)
+        cls._validate_type(object_type, legacy=True)
         fga = await cls._aget_fga()
         if fga is None:
             return []
@@ -187,7 +198,7 @@ class ResourceShareService:
         Reads the FGA side (ground truth), not the ``is_shared`` DB column —
         useful for audit/UI and for reconciling after a manual tuple edit.
         """
-        cls._validate_type(object_type)
+        cls._validate_type(object_type, legacy=True)
         fga = await cls._aget_fga()
         if fga is None:
             return []
@@ -265,7 +276,7 @@ class ResourceShareService:
         snapshots don't need an FGA scan per row. Callers that toggle sharing
         must call this so the two views stay consistent.
         """
-        cls._validate_type(object_type)
+        cls._validate_type(object_type, legacy=True)
         if object_type == 'knowledge_space':
             from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
             rows = await KnowledgeDao.aget_list_by_ids([int(object_id)])
@@ -331,8 +342,14 @@ class ResourceShareService:
 
         Returns the list of Child tenant_ids the resource was actually shared
         with (empty when creator is Child / explicit=False / default=false /
-        no active children).
+        no active children / object_type not in SUPPORTED_SHAREABLE_TYPES).
         """
+        # v2.6.0-beta2: business resources no longer fan out — silently noop
+        # so any leftover caller in a stale plugin keeps working without
+        # crashing on the now-stricter _validate_type check below.
+        if object_type not in SUPPORTED_SHAREABLE_TYPES:
+            return []
+
         # Child creators never fan out — share is a Root-only concept.
         if creator_tenant_id != ROOT_TENANT_ID:
             return []
@@ -419,9 +436,17 @@ class ResourceShareService:
     # ── Helpers ──────────────────────────────────────────────────
 
     @staticmethod
-    def _validate_type(object_type: str) -> None:
-        if object_type not in SUPPORTED_SHAREABLE_TYPES:
+    def _validate_type(object_type: str, *, legacy: bool = False) -> None:
+        """Reject unknown object types.
+
+        ``legacy=True`` widens the allow-list to historically shareable
+        business resources so the cleanup path (disable_sharing /
+        list_sharing_children / set_is_shared) can purge stale tuples
+        without re-introducing the write path.
+        """
+        allowed = LEGACY_SHAREABLE_TYPES if legacy else SUPPORTED_SHAREABLE_TYPES
+        if object_type not in allowed:
             raise ValueError(
                 f'Unsupported resource type for sharing: {object_type!r}; '
-                f'supported={sorted(SUPPORTED_SHAREABLE_TYPES)}'
+                f'supported={sorted(allowed)}'
             )
